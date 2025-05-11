@@ -2,28 +2,61 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>My GitHub Page</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Pretty Page</title>
   <style>
     body {
+      background-color: #6a0dad; /* Pretty purple */
+      color: white;
       font-family: Arial, sans-serif;
-      background: #f5f5f5;
-      color: #333;
+      margin: 0;
+      padding: 2em;
       text-align: center;
-      padding: 50px;
     }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .textbox {
+      background-color: rgba(255, 255, 255, 0.1);
+      border: 2px solid white;
+      border-radius: 15px;
+      padding: 1em;
+      margin: 1em 0;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+    }
+
+    img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 10px;
+      margin: 1em 0;
+    }
+
     h1 {
-      color: #0366d6;
-    }
-    a {
-      color: #0366d6;
-      text-decoration: none;
+      font-size: 2.5em;
     }
   </style>
 </head>
 <body>
-  <h1>Welcome to My GitHub Page</h1>
-  <p>This is a basic example hosted with GitHub Pages.</p>
-  <p>Check out my <a href="https://github.com/yourusername" target="_blank">GitHub profile</a>.</p>
+  <div class="container">
+    <h1>Welcome to My Pretty Page</h1>
+
+    <img src="https://placekitten.com/600/300" alt="Cute kitten" />
+
+    <div class="textbox">
+      <h2>About Me</h2>
+      <p>Hello! I made this site look cool with a purple theme. I like pretty designs and soft color palettes.</p>
+    </div>
+
+    <div class="textbox">
+      <h2>My Projects</h2>
+      <p>I work on fun web projects. Here's a space where I’ll list them soon!</p>
+    </div>
+
+    <img src="https://placebear.com/600/300" alt="Cute bear" />
+  </div>
 </body>
 </html>
