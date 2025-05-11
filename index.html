@@ -16,6 +16,12 @@
       cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ctext y='50%25' font-size='24'%3E%F0%9F%90%BE%3C/text%3E%3C/svg%3E") 0 0, auto;
     }
 
+    .link-button,
+    #blog-button,
+    #bark-test {
+      cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ctext y='50%25' font-size='24'%3E%F0%9F%9A%80%3C/text%3E%3C/svg%3E") 0 0, pointer;
+    }
+
     .container {
       max-width: 800px;
       margin: 0 auto;
@@ -25,17 +31,12 @@
       z-index: 1;
     }
 
-    h1 {
-      font-size: 2.5em;
-    }
-
     .textbox {
       background-color: rgba(255, 255, 255, 0.1);
       border: 2px solid white;
       border-radius: 15px;
       padding: 1em;
       margin: 1em 0;
-      box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
     }
 
     img {
@@ -45,12 +46,7 @@
       margin: 1em 0;
     }
 
-    .link-button,
-    #blog-button {
-      cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ctext y='50%25' font-size='24'%3E%F0%9F%9A%80%3C/text%3E%3C/svg%3E") 0 0, pointer;
-    }
-
-    .link-button {
+    .link-button, #bark-test {
       display: inline-block;
       margin: 0.5em;
       padding: 0.7em 1.4em;
@@ -63,13 +59,12 @@
       transition: background-color 0.3s ease, color 0.3s ease;
     }
 
-    .link-button:hover {
+    .link-button:hover, #bark-test:hover {
       background-color: #dabfff;
       color: #4b0082;
       border-color: #dabfff;
     }
 
-    /* Blog Panel */
     #blog-panel {
       position: fixed;
       top: 0;
@@ -78,18 +73,17 @@
       width: 80vw;
       max-width: 700px;
       background-color: #5a0080;
-      transform: translateX(30vw); /* pulltab stays visible */
+      transform: translateX(30vw);
       transition: transform 0.4s ease;
-      box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
       z-index: 1000;
-      padding: 2em 1em 2em 2em;
+      padding: 2em;
+      box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
     }
 
     #blog-panel.open {
       transform: translateX(0);
     }
 
-    /* Pulltab blog toggle button */
     #blog-button {
       position: absolute;
       top: 40%;
@@ -104,19 +98,65 @@
       border-radius: 15px 0 0 15px;
       padding: 0.5em;
       box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
-      transition: background-color 0.3s ease;
     }
 
     #blog-button:hover {
       background-color: #dabfff;
       color: #4b0082;
     }
+
+    #cookie-popup {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      color: #6a0dad;
+      border: 2px solid #dabfff;
+      border-radius: 15px;
+      padding: 1em 2em;
+      box-shadow: 0 0 15px rgba(0,0,0,0.4);
+      z-index: 9999;
+      text-align: center;
+    }
+
+    #cookie-popup button {
+      margin: 1em 1em 0 1em;
+      padding: 0.5em 1.2em;
+      font-weight: bold;
+      background-color: #dabfff;
+      color: #4b0082;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    #cookie-popup button:hover {
+      background-color: #f0e0ff;
+    }
+
+    /* Blur overlay when popup active */
+    body.blur .container,
+    body.blur #blog-panel {
+      filter: blur(5px);
+      pointer-events: none;
+      user-select: none;
+    }
   </style>
 </head>
-<body>
+<body class="blur">
 
   <!-- Bark sound -->
-  <audio id="bark-sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_3c8fef7f49.mp3?filename=dog-bark-1-80774.mp3" preload="auto"></audio>
+  <audio id="bark-sound" preload="auto">
+    <source src="https://cdn.jsdelivr.net/gh/thatguyintech/sound-library/dog-bark.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- Cookie Consent Popup -->
+  <div id="cookie-popup">
+    <p><strong>I like cookies :3</strong></p>
+    <button id="cookie-no">no (leave page)</button>
+    <button id="cookie-yes">yes I do</button>
+  </div>
 
   <!-- Blog Panel -->
   <div id="blog-panel">
@@ -130,6 +170,7 @@
   <!-- Main Page Content -->
   <div class="container">
     <h1>Puppy pillow fortress</h1>
+
     <img src="IMG_9672(1).png" alt="Kiki snoot" />
 
     <div class="textbox">
@@ -161,28 +202,53 @@
       </iframe>
     </div>
 
+    <div class="textbox">
+      <h2>🔊 Bark Test</h2>
+      <button id="bark-test">Test Bark</button>
+    </div>
+
     <img src="https://placebear.com/600/300" alt="Cute bear" />
   </div>
 
+  <!-- JavaScript -->
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const blogPanel = document.getElementById('blog-panel');
-      const blogButton = document.getElementById('blog-button');
-      const bark = document.getElementById('bark-sound');
+    const cookiePopup = document.getElementById('cookie-popup');
+    const cookieYes = document.getElementById('cookie-yes');
+    const cookieNo = document.getElementById('cookie-no');
+    const bark = document.getElementById('bark-sound');
+    const blogPanel = document.getElementById('blog-panel');
+    const blogButton = document.getElementById('blog-button');
+    const barkTest = document.getElementById('bark-test');
+    let barksEnabled = false;
 
-      function playBark() {
-        bark.currentTime = 0;
-        bark.play().catch(() => {});
-      }
+    function playBark() {
+      if (!barksEnabled) return;
+      bark.currentTime = 0;
+      bark.play().catch(console.warn);
+    }
 
-      blogButton.addEventListener('click', () => {
-        blogPanel.classList.toggle('open');
-        playBark();
-      });
+    cookieYes.addEventListener('click', () => {
+      barksEnabled = true;
+      cookiePopup.style.display = 'none';
+      document.body.classList.remove('blur');
+    });
 
-      document.querySelectorAll('.link-button').forEach(btn => {
-        btn.addEventListener('click', playBark);
-      });
+    cookieNo.addEventListener('click', () => {
+      window.open('', '_self')?.close();
+      window.location.href = 'https://www.google.com/search?q=cookies';
+    });
+
+    document.querySelectorAll('.link-button, #blog-button').forEach(btn => {
+      btn.addEventListener('click', playBark);
+    });
+
+    blogButton.addEventListener('click', () => {
+      blogPanel.classList.toggle('open');
+    });
+
+    barkTest.addEventListener('click', () => {
+      bark.currentTime = 0;
+      bark.play().catch(() => alert("Browser blocked the sound 😢"));
     });
   </script>
 </body>
