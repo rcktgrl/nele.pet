@@ -3,82 +3,63 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RCKT GRL (@nele.pet) - Bluesky Profile</title>
+  <title>RCKT GRL - Overview</title>
   <style>
-    :root {
-      --purple-light: #f3e5ff;
-      --purple-base: #7b1fa2;
-      --purple-dark: #4a0072;
-      --text: #333;
-      --bg: #fff;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: var(--purple-light); color: var(--text); font-family: Arial, sans-serif; }
-    a { color: var(--purple-dark); text-decoration: none; }
-    header { position: relative; width: 100%; height: 250px; background: #ddd; }
-    header img.banner { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.7); }
-    .profile-card { max-width: 800px; margin: -70px auto 20px; background: var(--bg); padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-    .avatar { width: 140px; height: 140px; border: 4px solid var(--bg); border-radius: 50%; object-fit: cover; }
-    .profile-info { display: flex; align-items: center; gap: 20px; }
-    .profile-details { }
-    .profile-details h1 { font-size: 2rem; color: var(--purple-dark); }
-    .profile-details p.handle { color: var(--purple-base); margin-bottom: 10px; }
-    .description { margin: 15px 0; font-size: 1rem; }
-    .stats { display: flex; gap: 15px; font-size: 0.9rem; }
-    .stats div { background: var(--purple-base); color: #fff; padding: 8px 12px; border-radius: 8px; }
-    .posts { max-width: 800px; margin: 20px auto; }
-    .posts h2 { margin-bottom: 15px; color: var(--purple-dark); }
-    .post-card { background: var(--bg); margin-bottom: 20px; padding: 15px; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
-    .post-card .post-text { margin-bottom: 10px; white-space: pre-wrap; }
-    .post-card img.post-image { max-width: 100%; border-radius: 8px; }
-    .post-meta { font-size: 0.8rem; color: #666; margin-top: 8px; }
+    body { background-color: #6a0dad; color: #ffffff; font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+    .banner { width: 100%; height: 200px; background-image: url('https://cdn.bsky.app/img/banner/plain/did:plc:2q2wg3rvj3viecgmjkfaleol/bafkreiagt54mfhh7tb3wmb4fuekitsdaafl4cspsre65iidizvmk77r3xe@jpeg'); background-size: cover; background-position: center; border-bottom: 5px solid #ffffff; }
+    .profile { display: flex; align-items: center; margin-top: -60px; }
+    .avatar { width: 120px; height: 120px; border-radius: 50%; border: 5px solid #ffffff; background-image: url('https://cdn.bsky.app/img/avatar/plain/did:plc:2q2wg3rvj3viecgmjkfaleol/bafkreidxjkzmd2p3g4xakchx6slrtsyjspfa2h4p2bmdj5edwwt37stq7q@jpeg'); background-size: cover; background-position: center; }
+    .info { margin-left: 20px; }
+    .info h1 { margin: 0; font-size: 2rem; }
+    .info p { margin: 5px 0; line-height: 1.4; }
+    .stats { margin-top: 10px; }
+    .stats span { margin-right: 15px; font-weight: bold; }
+    a { color: #ffd700; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .about, .posts { margin-top: 30px; }
+    .about h2, .posts h2 { border-bottom: 2px solid #ffffff; padding-bottom: 5px; }
+    .posts .post { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .posts .post p { margin: 0 0 10px; }
   </style>
 </head>
 <body>
-  <header>
-    <img class="banner" src="https://cdn.bsky.app/img/banner/plain/did:plc:2q2wg3rvj3viecgmjkfaleol/bafkreiagt54mfhh7tb3wmb4fuekitsdaafl4cspsre65iidizvmk77r3xe@jpeg" alt="Banner">
-  </header>
-  <div class="profile-card">
-    <div class="profile-info">
-      <img class="avatar" src="https://cdn.bsky.app/img/avatar/plain/did:plc:2q2wg3rvj3viecgmjkfaleol/bafkreidxjkzmd2p3g4xakchx6slrtsyjspfa2h4p2bmdj5edwwt37stq7q@jpeg" alt="Avatar">
-      <div class="profile-details">
-        <h1>RCKT GRL</h1>
-        <p class="handle">@nele.pet</p>
+  <div class="banner"></div>
+  <div class="container">
+    <div class="profile">
+      <div class="avatar"></div>
+      <div class="info">
+        <h1>RCKT GRL (@nele.pet)</h1>
+        <p>Married to <a href="https://bsky.app/profile/kikami-chan.bsky.social">@kikami-chan.bsky.social</a> | 🔞 | 🚩🏴🛠️🏳️‍⚧️🏳️‍🌈🇺🇦🇵🇸 | Sapphic/bi | poly | succubus puppy girl | 💜 | 🚀 | 🔌🚗 | 🚂 | 161cm | “fuck elon musk” | be yourself especially if it’s weird</p>
+        <div class="stats">
+          <span>Followers: 431</span>
+          <span>Following: 285</span>
+          <span>Posts: 1101</span>
+        </div>
+        <p><a href="https://bsky.app/profile/nele.pet" target="_blank">Visit my Bluesky profile</a></p>
       </div>
     </div>
-    <p class="description">Married to @kikami-chan.bsky.social | 🚩🏴🛠️🏳️‍⚧️🏳️‍🌈🇺🇦🇵🇸 | Sapphic/bi | poly | 💜 | 🚀 | 🔌🚗 | 🚂 | 161 | be yourself especially if it's weird</p>
-    <div class="stats">
-      <div>Followers: 431</div>
-      <div>Following: 285</div>
-      <div>Posts: 1101</div>
-    </div>
+
+    <section class="about">
+      <h2>About Me</h2>
+      <p>I’m RCKT GRL, also known as @nele.pet, a passionate, boundary-pushing creator on Bluesky. Proudly sapphic/bi and poly, I embrace all facets of identity and champion inclusivity—waving flags for LGBTQ+, trans rights, Ukraine, and Palestine. I believe in a world without borders: “No countries, No Borders — Free People, One humanity.” An aficionado of mobility solutions, I explore everything from electric cars (🔌🚗) to trains (🚂) and rockets (🚀). I’m unafraid to speak my mind (“fuck elon musk”) and celebrate the weird—because being yourself, especially if it’s weird, is the best way to live.</p>
+    </section>
+
+    <section class="posts">
+      <h2>Recent Highlights</h2>
+      <div class="post">
+        <p>“No countries<br>No Borders<br>Free People<br>One humanity”</p>
+        <p><a href="https://bsky.app/profile/nele.pet/post/3lhaznof56k2b" target="_blank">Read on Bluesky</a></p>
+      </div>
+      <div class="post">
+        <p>new @ who dis</p>
+        <p><a href="https://bsky.app/profile/nele.pet/post/3louedl3qx226" target="_blank">Read on Bluesky</a></p>
+      </div>
+      <div class="post">
+        <p>omg same</p>
+        <p><a href="https://bsky.app/profile/nele.pet/post/3loudkj3wr22s" target="_blank">Read on Bluesky</a></p>
+      </div>
+    </section>
   </div>
-  <section class="posts">
-    <h2>Recent Posts</h2>
-    <div class="post-card">
-      <p class="post-text">new @ who dis</p>
-      <div class="post-meta"><a href="https://bsky.app/profile/nele.pet/post/3louedl3qx226" target="_blank">View on Bluesky</a> &middot; May 11, 2025</div>
-    </div>
-    <div class="post-card">
-      <p class="post-text">omg same</p>
-      <div class="post-meta"><a href="https://bsky.app/profile/nele.pet/post/3loudkj3wr22s" target="_blank">View on Bluesky</a> &middot; May 11, 2025</div>
-    </div>
-    <div class="post-card">
-      <p class="post-text">NAH this is actually good</p>
-      <div class="post-meta"><a href="https://bsky.app/profile/nele.pet/post/3lotttjt67k23" target="_blank">View on Bluesky</a> &middot; May 10, 2025</div>
-    </div>
-    <div class="post-card">
-      <p class="post-text">Just in case my political views weren’t obvious:
-
-No countries
-No Borders 
-Free People 
-One humanity
-
-I can’t just get a new car because the CEO is a nazi. I’m paying off the loan and then I can look into it but it’s also the only car fitting my needs right now for that price.</p>
-      <img class="post-image" src="https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:2q2wg3rvj3viecgmjkfaleol/bafkreidonk7wcc35hztmfm2dz3wy2o4s5oi5doszccss2fyl3mvnucyvxy@jpeg" alt="Post image">
-      <div class="post-meta"><a href="https://bsky.app/profile/nele.pet/post/3lhaznof56k2b" target="_blank">View on Bluesky</a> &middot; Feb 3, 2025</div>
-    </div>
-  </section>
 </body>
 </html>
