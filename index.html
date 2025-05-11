@@ -60,7 +60,6 @@
       border-color: #dabfff;
     }
 
-    /* Floating blog button */
     #blog-button {
       position: fixed;
       top: 50%;
@@ -89,25 +88,26 @@
   </style>
 </head>
 <body>
+
   <!-- Bark sound -->
-  <audio id="bark-sound" src="https://www.fesliyanstudios.com/play-mp3/6555" preload="auto"></audio>
+  <audio id="bark-sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_3c8fef7f49.mp3?filename=dog-bark-1-80774.mp3" preload="auto"></audio>
 
   <!-- Floating Blog Button -->
   <button id="blog-button">📓 Blog</button>
 
   <div class="container">
     <h1>Puppy pillow fortress</h1>
-
     <img src="IMG_9672(1).png" alt="Kiki snoot" />
 
     <div class="textbox">
       <h2>About Me</h2>
-      <p>Hello! I am Nele the succubus puppy girl.<br> I do a lot of lewd things so minors do not Interact |
-         I am a committed anti-fascist and Communist | I'm trans and on Estrogen since 04.02.2025🏳️‍⚧️ |
-         I am considering myself as Sapphic/bi though I definitely prefer Women | I am poly and happily married |
-         💜 Purple is my favourite colour | 🚀 Rockets are pretty cool I guess | 🔌🚗 Electric car enthusiast,
-         currently have a Tesla Model Y (fuck Elon) and a 95’ Mazda Miata | 🚂 Train enthusiast | fuck elon musk |
-         be yourself especially if it's weird</p>
+      <p>Hello! I am Nele the succubus puppy girl.<br>
+        I do a lot of lewd things so minors do not Interact |
+        I am a committed anti-fascist and Communist | I'm trans and on Estrogen since 04.02.2025🏳️‍⚧️ |
+        I am considering myself as Sapphic/bi though I definitely prefer Women | I am poly and happily married |
+        💜 Purple is my favourite colour | 🚀 Rockets are pretty cool I guess |
+        🔌🚗 Electric car enthusiast, currently have a Tesla Model Y (fuck Elon) and a 95’ Mazda Miata |
+        🚂 Train enthusiast | fuck elon musk | be yourself especially if it's weird</p>
     </div>
 
     <div class="textbox">
@@ -130,34 +130,40 @@
 
     <img src="https://placebear.com/600/300" alt="Cute bear" />
 
-    <!-- Blog Section -->
     <div id="blog" class="textbox">
       <h2>📓 Blog Posts</h2>
-      <p><strong>10 May 2025:</strong> this is the first post of my trans sapphic communist train blog 🐾</p>
-      <!-- Add more posts here -->
+      <p><strong>10 May 2025:</strong> This is the first post of my trans sapphic communist train blog 🐾</p>
     </div>
   </div>
 
-  <!-- Scripts: Bark and Random Cursor and Blog Scroll -->
+  <!-- SCRIPT GOES HERE -->
   <script>
-    // Play bark sound on button click
     document.addEventListener('DOMContentLoaded', () => {
+      // Bark sound
       const barkSound = document.getElementById('bark-sound');
-      const buttons = document.querySelectorAll('.link-button, #blog-button');
-      buttons.forEach(btn => {
-        btn.addEventListener('click', () => {
+      document.querySelectorAll('.link-button, #blog-button').forEach(button => {
+        button.addEventListener('click', () => {
           barkSound.currentTime = 0;
           barkSound.play();
         });
       });
 
-      // Random cursor
+      // Smooth scroll to blog
+      const blogBtn = document.getElementById('blog-button');
+      const blogSection = document.getElementById('blog');
+      blogBtn.addEventListener('click', () => {
+        blogSection.scrollIntoView({ behavior: 'smooth' });
+      });
+
+      // Random cursors (hosted somewhere with CORS support)
       const cursors = [
-        'https://www.cursor.cc/cursor3d/93133.png', // 🐾 paw
-        'https://www.cursor.cc/cursor3d/170108.png', // 🚀 rocket
-        'https://www.cursor.cc/cursor3d/97452.png'  // 💜 star
+        'https://cur.cursors-4u.net/animals/ani-9/ani843.cur',     // paw
+        'https://cur.cursors-4u.net/toons/too-4/too369.cur',       // rocket style
+        'https://cur.cursors-4u.net/symbols/sym-7/sym603.cur'      // star
       ];
       const chosen = cursors[Math.floor(Math.random() * cursors.length)];
       document.body.style.cursor = `url(${chosen}), auto`;
-
-      // Smooth scroll to
+    });
+  </script>
+</body>
+</html>
