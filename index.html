@@ -45,6 +45,11 @@
       margin: 1em 0;
     }
 
+    .link-button,
+    #blog-button {
+      cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ctext y='50%25' font-size='24'%3E%F0%9F%9A%80%3C/text%3E%3C/svg%3E") 0 0, pointer;
+    }
+
     .link-button {
       display: inline-block;
       margin: 0.5em;
@@ -64,7 +69,7 @@
       border-color: #dabfff;
     }
 
-    /* Blog Panel - Hidden but button visible */
+    /* Blog Panel */
     #blog-panel {
       position: fixed;
       top: 0;
@@ -73,20 +78,18 @@
       width: 80vw;
       max-width: 700px;
       background-color: #5a0080;
-      transform: translateX(calc(100% - 60px)); /* show tab only */
+      transform: translateX(30vw); /* pulltab stays visible */
       transition: transform 0.4s ease;
       box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
       z-index: 1000;
-      padding-left: 2em;
-      padding-top: 2em;
-      padding-right: 1em;
+      padding: 2em 1em 2em 2em;
     }
 
     #blog-panel.open {
       transform: translateX(0);
     }
 
-    /* Pulltab style blog toggle button */
+    /* Pulltab blog toggle button */
     #blog-button {
       position: absolute;
       top: 40%;
@@ -100,7 +103,6 @@
       border: 2px solid white;
       border-radius: 15px 0 0 15px;
       padding: 0.5em;
-      cursor: pointer;
       box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
       transition: background-color 0.3s ease;
     }
@@ -160,9 +162,8 @@
     </div>
 
     <img src="https://placebear.com/600/300" alt="Cute bear" />
-  </div> <!-- closing container -->
+  </div>
 
-  <!-- JavaScript -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const blogPanel = document.getElementById('blog-panel');
