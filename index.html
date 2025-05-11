@@ -13,6 +13,7 @@
       margin: 0;
       padding: 2em;
       text-align: center;
+      scroll-behavior: smooth;
     }
 
     .container {
@@ -58,11 +59,41 @@
       color: #4b0082;
       border-color: #dabfff;
     }
+
+    /* Floating blog button */
+    #blog-button {
+      position: fixed;
+      top: 50%;
+      right: 10px;
+      transform: translateY(-50%);
+      background-color: white;
+      color: #6a0dad;
+      font-weight: bold;
+      border: 2px solid #ffffff;
+      border-radius: 20px;
+      padding: 0.7em 1.2em;
+      cursor: pointer;
+      z-index: 1000;
+      box-shadow: 0 0 10px #dabfff;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    #blog-button:hover {
+      background-color: #dabfff;
+      color: #4b0082;
+    }
+
+    #blog {
+      padding-top: 4em;
+    }
   </style>
 </head>
 <body>
   <!-- Bark sound -->
   <audio id="bark-sound" src="https://www.fesliyanstudios.com/play-mp3/6555" preload="auto"></audio>
+
+  <!-- Floating Blog Button -->
+  <button id="blog-button">📓 Blog</button>
 
   <div class="container">
     <h1>Puppy pillow fortress</h1>
@@ -85,7 +116,6 @@
       <a class="link-button" href="https://bsky.app/profile/nele.pet" target="_blank">Bluesky</a>
       <a class="link-button" href="https://www.tumblr.com/nele-likes-stuff" target="_blank">Tumblr</a>
       <a class="link-button" href="https://www.reddit.com/user/CapFuture_/" target="_blank">Reddit</a>
-      <a class="link-button" href="blog.html">Blog</a>
     </div>
 
     <div class="textbox">
@@ -99,14 +129,21 @@
     </div>
 
     <img src="https://placebear.com/600/300" alt="Cute bear" />
+
+    <!-- Blog Section -->
+    <div id="blog" class="textbox">
+      <h2>📓 Blog Posts</h2>
+      <p><strong>10 May 2025:</strong> this is the first post of my trans sapphic communist train blog 🐾</p>
+      <!-- Add more posts here -->
+    </div>
   </div>
 
-  <!-- Scripts: Bark and Random Cursor -->
+  <!-- Scripts: Bark and Random Cursor and Blog Scroll -->
   <script>
-    // Play bark sound on link-button click
+    // Play bark sound on button click
     document.addEventListener('DOMContentLoaded', () => {
       const barkSound = document.getElementById('bark-sound');
-      const buttons = document.querySelectorAll('.link-button');
+      const buttons = document.querySelectorAll('.link-button, #blog-button');
       buttons.forEach(btn => {
         btn.addEventListener('click', () => {
           barkSound.currentTime = 0;
@@ -122,7 +159,5 @@
       ];
       const chosen = cursors[Math.floor(Math.random() * cursors.length)];
       document.body.style.cursor = `url(${chosen}), auto`;
-    });
-  </script>
-</body>
-</html>
+
+      // Smooth scroll to
