@@ -13,10 +13,6 @@
       background-color: #6a0dad;
       color: white;
       overflow-x: hidden;
-      cursor: default; /* fallback if SVG breaks */
-    }
-
-    body {
       cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ctext y='50%25' font-size='24'%3E%F0%9F%90%BE%3C/text%3E%3C/svg%3E") 0 0, auto;
     }
 
@@ -68,26 +64,29 @@
       border-color: #dabfff;
     }
 
-    /* Slide-in Blog Panel */
+    /* Blog Panel - Hidden but button visible */
     #blog-panel {
       position: fixed;
       top: 0;
-      right: -600px;
-      width: 600px;
-      max-width: 90%;
+      right: 0;
       height: 100%;
+      width: 80vw;
+      max-width: 700px;
       background-color: #5a0080;
-      padding: 2em 1em 2em 2em;
+      transform: translateX(calc(100% - 60px)); /* show tab only */
+      transition: transform 0.4s ease;
       box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
-      transition: right 0.5s ease;
-      z-index: 10;
+      z-index: 1000;
+      padding-left: 2em;
+      padding-top: 2em;
+      padding-right: 1em;
     }
 
     #blog-panel.open {
-      right: 0;
+      transform: translateX(0);
     }
 
-    /* Pulltab blog button */
+    /* Pulltab style blog toggle button */
     #blog-button {
       position: absolute;
       top: 40%;
@@ -110,34 +109,23 @@
       background-color: #dabfff;
       color: #4b0082;
     }
-
-    #close-blog {
-      background: none;
-      border: 2px solid white;
-      color: white;
-      font-size: 1.2em;
-      border-radius: 10px;
-      padding: 0.5em 1em;
-      cursor: pointer;
-      margin-bottom: 1em;
-    }
   </style>
 </head>
 <body>
+
   <!-- Bark sound -->
   <audio id="bark-sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_3c8fef7f49.mp3?filename=dog-bark-1-80774.mp3" preload="auto"></audio>
 
   <!-- Blog Panel -->
   <div id="blog-panel">
     <button id="blog-button">📓 Blog</button>
-    <button id="close-blog">❌ Close</button>
     <h2>📓 Blog Posts</h2>
     <div class="textbox">
       <p><strong>10 May 2025:</strong> First post of my trans sapphic communist train blog 🐾</p>
     </div>
   </div>
 
-  <!-- Main Content -->
+  <!-- Main Page Content -->
   <div class="container">
     <h1>Puppy pillow fortress</h1>
     <img src="IMG_9672(1).png" alt="Kiki snoot" />
@@ -172,13 +160,13 @@
     </div>
 
     <img src="https://placebear.com/600/300" alt="Cute bear" />
-  </div>
+  </div> <!-- closing container -->
 
+  <!-- JavaScript -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const blogPanel = document.getElementById('blog-panel');
       const blogButton = document.getElementById('blog-button');
-      const closeBlog = document.getElementById('close-blog');
       const bark = document.getElementById('bark-sound');
 
       function playBark() {
@@ -187,12 +175,7 @@
       }
 
       blogButton.addEventListener('click', () => {
-        blogPanel.classList.add('open');
-        playBark();
-      });
-
-      closeBlog.addEventListener('click', () => {
-        blogPanel.classList.remove('open');
+        blogPanel.classList.toggle('open');
         playBark();
       });
 
