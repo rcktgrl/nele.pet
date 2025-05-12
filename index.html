@@ -111,7 +111,7 @@
       border-radius: 15px;
       padding: 1em 2em;
       box-shadow: 0 0 15px rgba(0,0,0,0.4);
-      z-index: 9999;
+      z-index: 10001;
       text-align: center;
     }
 
@@ -126,18 +126,13 @@
       cursor: pointer;
     }
 
-    body.blur .container,
-    body.blur #blog-panel,
-    body.blur #blog-open {
-      filter: blur(5px);
-      pointer-events: none;
-      user-select: none;
-    }
-
-    body.blur #cookie-popup {
-      pointer-events: auto;
-      user-select: auto;
-      filter: none;
+    #blur-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(5px);
+      z-index: 9999;
+      display: none;
     }
 
     #volume-wrapper {
@@ -162,7 +157,9 @@
     }
   </style>
 </head>
-<body class="blur">
+<body>
+
+  <div id="blur-overlay"></div>
 
   <!-- 🔊 Bark Sound -->
   <audio id="bark-sound" preload="auto">
@@ -244,6 +241,7 @@
     const volumeControl = document.getElementById('volume-control');
     const volumeLabel = document.getElementById('volume-label');
     const volumeIcon = document.getElementById('volume-icon');
+    const blurOverlay = document.getElementById('blur-overlay');
 
     let barksEnabled = false;
 
@@ -272,7 +270,7 @@
     cookieYes.addEventListener('click', () => {
       barksEnabled = true;
       cookiePopup.style.display = 'none';
-      document.body.classList.remove('blur');
+      blurOverlay.style.display = 'none';
     });
 
     cookieNo.addEventListener('click', () => {
@@ -307,6 +305,9 @@
     volumeControl.value = savedVol;
     bark.volume = savedVol / 100;
     updateVolumeDisplay(savedVol);
+
+    // Show blur overlay on load
+    blurOverlay.style.display = 'block';
   </script>
 </body>
 </html>
