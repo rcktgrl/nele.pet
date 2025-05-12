@@ -102,7 +102,12 @@
   text-orientation: mixed;
   transform: rotate(180deg);
 }
-
+.vertical-text {
+  display: inline-block;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+}
     #cookie-popup {
       position: fixed;
       bottom: 20px;
@@ -174,7 +179,7 @@
   </div>
 
   <!-- 📓 Blog UI -->
-  <button id="blog-open">📓 Blog</button>
+  <button id="blog-open"><span class="vertical-text">📓 Blog</span></button>
   <div id="blog-panel">
     <button id="blog-close">❌ Close</button>
     <h2>📓 Blog Posts</h2>
