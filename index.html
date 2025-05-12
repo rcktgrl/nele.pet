@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Puppy pillow fortress</title>
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     html, body {
       margin: 0;
@@ -42,8 +41,9 @@
     }
 
     .link-button,
-    #bark-test {
-      cursor: pointer;
+    #bark-test,
+    #blog-open {
+      cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ctext y='50%25' font-size='24'%3E%F0%9F%9A%80%3C/text%3E%3C/svg%3E") 0 0, pointer;
       display: inline-block;
       margin: 0.5em;
       padding: 0.7em 1.4em;
@@ -58,59 +58,30 @@
 
     .link-button:hover,
     #bark-test:hover,
-    .sidebar-button:hover {
+    #blog-open:hover {
       background-color: #dabfff;
       color: #4b0082;
     }
 
-    .sidebar-button {
-      background-color: white;
-      color: #6a0dad;
-      font-weight: bold;
-      border: 2px solid white;
-      padding: 0.7em 1.2em;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
-    }
-
-    #blog-open {
-      position: fixed;
-      top: 40%;
-      right: 0;
-      z-index: 1001;
-      border-radius: 15px 0 0 15px;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
-    }
-
-    #visitor-open {
-      position: fixed;
-      top: 40%;
-      left: 0;
-      z-index: 1001;
-      border-radius: 0 15px 15px 0;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
-    }
-
-    #blog-panel, #visitor-panel {
+    #blog-panel {
       position: fixed;
       top: 0;
+      right: 0;
       height: 100%;
       width: clamp(300px, 70vw, 700px);
       background-color: #5a0080;
+      transform: translateX(100%);
       transition: transform 0.4s ease;
       z-index: 1000;
       padding: 2em;
-      box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+      box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
     }
 
-    #blog-panel { right: 0; transform: translateX(100%); }
-    #visitor-panel { left: 0; transform: translateX(-100%); }
-    #blog-panel.open { transform: translateX(0); }
-    #visitor-panel.open { transform: translateX(0); }
+    #blog-panel.open {
+      transform: translateX(0);
+    }
 
-    #blog-close, #visitor-close {
+    #blog-close {
       background: white;
       color: #6a0dad;
       border: 2px solid white;
@@ -119,6 +90,14 @@
       padding: 0.5em 1em;
       margin-bottom: 1em;
       cursor: pointer;
+    }
+
+    #blog-open {
+      position: fixed;
+      top: 40%;
+      right: 0;
+      border-radius: 15px 0 0 15px;
+      z-index: 900;
     }
 
     #cookie-popup {
@@ -132,9 +111,8 @@
       border-radius: 15px;
       padding: 1em 2em;
       box-shadow: 0 0 15px rgba(0,0,0,0.4);
-      z-index: 10001;
+      z-index: 9999;
       text-align: center;
-      display: none;
     }
 
     #cookie-popup button {
@@ -148,13 +126,12 @@
       cursor: pointer;
     }
 
-    #blur-overlay {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.3);
-      backdrop-filter: blur(5px);
-      z-index: 9999;
-      display: none;
+    body.blur .container,
+    body.blur #blog-panel,
+    body.blur #blog-open {
+      filter: blur(5px);
+      pointer-events: none;
+      user-select: none;
     }
 
     #volume-wrapper {
@@ -177,64 +154,29 @@
       margin-top: 0.5em;
       display: block;
     }
-
-    #visitor-form {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5em;
-      margin-bottom: 1em;
-    }
-
-    #visitor-form input {
-      padding: 0.5em;
-      border-radius: 10px;
-      border: none;
-      font-size: 1em;
-    }
-
-    #visitor-form button {
-      background: #dabfff;
-      color: #4b0082;
-      border: none;
-      padding: 0.5em;
-      border-radius: 10px;
-      font-weight: bold;
-      cursor: pointer;
-    }
   </style>
 </head>
-<body>
-  <div id="blur-overlay"></div>
+<body class="blur">
+
+  <!-- 🔊 Bark Sound -->
   <audio id="bark-sound" preload="auto">
     <source src="mimi-the-puppy-barks.mp3" type="audio/mp3">
   </audio>
 
-  <button id="blog-open" class="sidebar-button">📓 Blog</button>
-  <button id="visitor-open" class="sidebar-button">📖 Visitor</button>
+  <!-- 🍪 Cookie Consent -->
+  <div id="cookie-popup">
+    <p><strong>I like cookies :3</strong></p>
+    <button id="cookie-no">no (leave page)</button>
+    <button id="cookie-yes">yes I do</button>
+  </div>
 
+  <!-- 📓 Blog UI -->
+  <button id="blog-open">📓 Blog</button>
   <div id="blog-panel">
     <button id="blog-close">❌ Close</button>
     <h2>📓 Blog Posts</h2>
     <div class="textbox">
       <p><strong>10 May 2025:</strong> Web design is difficult 🐾</p>
-    </div>
-  </div>
-
-  <div id="visitor-panel">
-    <button id="visitor-close">❌ Close</button>
-    <h2>📖 Visitor Book</h2>
-    <form id="visitor-form">
-      <input type="text" id="visitor-message" maxlength="100" placeholder="Write a short message..." required>
-      <button type="submit">Submit</button>
-    </form>
-    <div id="visitor-entries"></div>
-  </div>
-
-  <div id="cookie-popup">
-    <p><strong>I like cookies :3</strong></p>
-    <div>
-      <button id="cookie-no" type="button">no (leave page)</button>
-      <button id="cookie-yes" type="button">yes I do</button>
     </div>
   </div>
 
@@ -285,10 +227,80 @@
   </div>
 
   <script>
-    window.addEventListener('load', () => {
-      document.getElementById('cookie-popup').style.display = 'block';
-      document.getElementById('blur-overlay').style.display = 'block';
+    const bark = document.getElementById('bark-sound');
+    const barkTest = document.getElementById('bark-test');
+    const cookiePopup = document.getElementById('cookie-popup');
+    const cookieYes = document.getElementById('cookie-yes');
+    const cookieNo = document.getElementById('cookie-no');
+    const blogPanel = document.getElementById('blog-panel');
+    const blogOpen = document.getElementById('blog-open');
+    const blogClose = document.getElementById('blog-close');
+    const volumeControl = document.getElementById('volume-control');
+    const volumeLabel = document.getElementById('volume-label');
+    const volumeIcon = document.getElementById('volume-icon');
+
+    let barksEnabled = false;
+
+    function playBark() {
+      if (!barksEnabled) return;
+      bark.load();
+      bark.currentTime = 0;
+      bark.play().catch(err => {
+        console.warn("Bark playback failed", err);
+      });
+    }
+
+    function updateVolumeDisplay(vol) {
+      if (vol <= 33) {
+        volumeLabel.textContent = 'Volume: Arf';
+        volumeIcon.textContent = '🔈';
+      } else if (vol <= 66) {
+        volumeLabel.textContent = 'Volume: Woof';
+        volumeIcon.textContent = '🔉';
+      } else {
+        volumeLabel.textContent = 'Volume: Bark';
+        volumeIcon.textContent = '🔊';
+      }
+    }
+
+    cookieYes.addEventListener('click', () => {
+      barksEnabled = true;
+      cookiePopup.style.display = 'none';
+      document.body.classList.remove('blur');
     });
+
+    cookieNo.addEventListener('click', () => {
+      window.open('', '_self')?.close();
+      window.location.href = 'https://www.google.com/search?q=cookies';
+    });
+
+    barkTest.addEventListener('click', playBark);
+
+    document.querySelectorAll('.link-button, #blog-open, #blog-close').forEach(btn => {
+      btn.addEventListener('click', playBark);
+    });
+
+    blogOpen.addEventListener('click', () => {
+      blogPanel.classList.add('open');
+      blogOpen.style.display = 'none';
+    });
+
+    blogClose.addEventListener('click', () => {
+      blogPanel.classList.remove('open');
+      blogOpen.style.display = 'inline-block';
+    });
+
+    volumeControl.addEventListener('input', () => {
+      const vol = volumeControl.value;
+      bark.volume = vol / 100;
+      localStorage.setItem('barkVolume', vol);
+      updateVolumeDisplay(vol);
+    });
+
+    const savedVol = localStorage.getItem('barkVolume') || 100;
+    volumeControl.value = savedVol;
+    bark.volume = savedVol / 100;
+    updateVolumeDisplay(savedVol);
   </script>
 </body>
 </html>
