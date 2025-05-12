@@ -92,23 +92,28 @@
       cursor: pointer;
     }
 
-#blog-open {
+    #blog-open {
   position: fixed;
   top: 50%;
   right: 0;
   transform: translateY(-50%);
   border-radius: 15px 0 0 15px;
   z-index: 800;
-  padding: 0.5em;
+  padding: 0;
   background-color: white;
   color: #6a0dad;
+  height: 120px;       /* Explicit height for vertical space */
+  width: 40px;         /* Narrow, but enough for one vertical character */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .vertical-text {
-  display: inline-block;
   writing-mode: vertical-rl;
   text-orientation: mixed;
   transform: rotate(180deg);
   font-weight: bold;
+  white-space: nowrap; /* Prevent wrapping */
 }
     #cookie-popup {
       position: fixed;
