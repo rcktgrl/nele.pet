@@ -83,7 +83,6 @@
   border-radius: 15px 0 0 15px;
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  transform: rotate(180deg);
 }
 
     #visitor-open {
@@ -235,10 +234,12 @@
   </div>
 
   <div id="cookie-popup">
-    <p><strong>I like cookies :3</strong></p>
-    <button id="cookie-no">no (leave page)</button>
-    <button id="cookie-yes">yes I do</button>
+  <p><strong>I like cookies :3</strong></p>
+  <div>
+    <button id="cookie-no" type="button">no (leave page)</button>
+    <button id="cookie-yes" type="button">yes I do</button>
   </div>
+</div>
 
   <div class="container">
     <h1>Puppy pillow fortress</h1>
@@ -356,15 +357,19 @@ function updateVolumeDisplay(vol) {
   }
 }
 
-cookieYes.addEventListener('click', () => {
-  barksEnabled = true;
-  cookiePopup.style.display = 'none';
-  blurOverlay.style.display = 'none';
-  console.log('Cookie consent accepted');
+cookieYes?.addEventListener('click', () => {
+  const popup = document.getElementById('cookie-popup');
+  const blur = document.getElementById('blur-overlay');
+
+  if (popup && blur) {
+    popup.style.display = 'none';
+    blur.style.display = 'none';
+    barksEnabled = true;
+  }
 });
 
-cookieNo.addEventListener('click', () => {
-  alert('Leaving page due to cookie rejection');
+cookieNo?.addEventListener('click', () => {
+  alert('You declined cookies. Redirecting...');
   window.location.href = 'https://www.google.com/search?q=cookies';
 });
 
@@ -407,11 +412,18 @@ volumeControl.addEventListener('input', () => {
   updateVolumeDisplay(vol);
 });
 
-window.addEventListener('DOMContentLoaded', () => {
-  cookiePopup.style.display = 'block';
-  blurOverlay.style.display = 'block';
-  console.log('Cookie popup and blur overlay activated.');
+cookieYes.addEventListener('click', () => {
+  barksEnabled = true;
+  cookiePopup.style.display = 'none';
+  blurOverlay.style.display = 'none';
 });
+
+cookieNo.addEventListener('click', () => {
+  window.location.href = 'https://www.google.com/search?q=cookies';
+});
+
+blurOverlay.style.display = 'block';
+cookiePopup.style.display = 'block';
 </script>
 </body>
 </html>
