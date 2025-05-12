@@ -76,20 +76,25 @@
     }
 
     #blog-open {
-      position: fixed;
-      top: 40%;
-      right: 0;
-      z-index: 1001;
-      border-radius: 15px 0 0 15px;
-    }
+  position: fixed;
+  top: 40%;
+  right: 0;
+  z-index: 1001;
+  border-radius: 15px 0 0 15px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+}
 
     #visitor-open {
-      position: fixed;
-      top: 40%;
-      left: 0;
-      z-index: 1001;
-      border-radius: 0 15px 15px 0;
-    }
+  position: fixed;
+  top: 40%;
+  left: 0;
+  z-index: 1001;
+  border-radius: 0 15px 15px 0;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
 
     #blog-panel, #visitor-panel {
       position: fixed;
@@ -355,9 +360,11 @@ cookieYes.addEventListener('click', () => {
   barksEnabled = true;
   cookiePopup.style.display = 'none';
   blurOverlay.style.display = 'none';
+  console.log('Cookie consent accepted');
 });
 
 cookieNo.addEventListener('click', () => {
+  alert('Leaving page due to cookie rejection');
   window.location.href = 'https://www.google.com/search?q=cookies';
 });
 
