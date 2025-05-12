@@ -66,16 +66,18 @@
       color: #4b0082;
     }
 
-    #blog-panel, #visitor-panel {
+   #blog-panel, #visitor-panel {
       position: fixed;
       top: 0;
+      left: 0;
       height: 100%;
       width: clamp(300px, 70vw, 700px);
       background-color: #5a0080;
+      transform: translateX(-100%);
       transition: transform 0.4s ease;
-      z-index: 1000;
+      z-index: 999;
       padding: 2em;
-      box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+      box-shadow: 5px 0 15px rgba(0, 0, 0, 0.5);
     }
 
     #blog-panel { right: 0; transform: translateX(100%); }
