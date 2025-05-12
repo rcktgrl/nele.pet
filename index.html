@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Puppy pillow fortress</title>
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     html, body {
       margin: 0;
@@ -42,7 +43,8 @@
 
     .link-button,
     #bark-test,
-    #blog-open {
+    #blog-open,
+    #visitor-open {
       cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ctext y='50%25' font-size='24'%3E%F0%9F%9A%80%3C/text%3E%3C/svg%3E") 0 0, pointer;
       display: inline-block;
       margin: 0.5em;
@@ -58,30 +60,30 @@
 
     .link-button:hover,
     #bark-test:hover,
-    #blog-open:hover {
+    #blog-open:hover,
+    #visitor-open:hover {
       background-color: #dabfff;
       color: #4b0082;
     }
 
-    #blog-panel {
+    #blog-panel, #visitor-panel {
       position: fixed;
       top: 0;
-      right: 0;
       height: 100%;
       width: clamp(300px, 70vw, 700px);
       background-color: #5a0080;
-      transform: translateX(100%);
       transition: transform 0.4s ease;
       z-index: 1000;
       padding: 2em;
-      box-shadow: -5px 0 15px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
     }
 
-    #blog-panel.open {
-      transform: translateX(0);
-    }
+    #blog-panel { right: 0; transform: translateX(100%); }
+    #visitor-panel { left: 0; transform: translateX(-100%); }
+    #blog-panel.open { transform: translateX(0); }
+    #visitor-panel.open { transform: translateX(0); }
 
-    #blog-close {
+    #blog-close, #visitor-close {
       background: white;
       color: #6a0dad;
       border: 2px solid white;
@@ -97,6 +99,14 @@
       top: 40%;
       right: 0;
       border-radius: 15px 0 0 15px;
+      z-index: 900;
+    }
+
+    #visitor-open {
+      position: fixed;
+      top: 50%;
+      left: 0;
+      border-radius: 0 15px 15px 0;
       z-index: 900;
     }
 
@@ -155,25 +165,43 @@
       margin-top: 0.5em;
       display: block;
     }
+
+    #visitor-form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5em;
+      margin-bottom: 1em;
+    }
+
+    #visitor-form input {
+      padding: 0.5em;
+      border-radius: 10px;
+      border: none;
+      font-size: 1em;
+    }
+
+    #visitor-form button {
+      background: #dabfff;
+      color: #4b0082;
+      border: none;
+      padding: 0.5em;
+      border-radius: 10px;
+      font-weight: bold;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-
   <div id="blur-overlay"></div>
-
-  <!-- 🔊 Bark Sound -->
   <audio id="bark-sound" preload="auto">
     <source src="mimi-the-puppy-barks.mp3" type="audio/mp3">
   </audio>
-
-  <!-- 🍪 Cookie Consent -->
   <div id="cookie-popup">
     <p><strong>I like cookies :3</strong></p>
     <button id="cookie-no">no (leave page)</button>
     <button id="cookie-yes">yes I do</button>
   </div>
 
-  <!-- 📓 Blog UI -->
   <button id="blog-open">📓 Blog</button>
   <div id="blog-panel">
     <button id="blog-close">❌ Close</button>
@@ -181,6 +209,17 @@
     <div class="textbox">
       <p><strong>10 May 2025:</strong> Web design is difficult 🐾</p>
     </div>
+  </div>
+
+  <button id="visitor-open">📖 Visitor Book</button>
+  <div id="visitor-panel">
+    <button id="visitor-close">❌ Close</button>
+    <h2>📖 Visitor Book</h2>
+    <form id="visitor-form">
+      <input type="text" id="visitor-message" maxlength="100" placeholder="Write a short message..." required>
+      <button type="submit">Submit</button>
+    </form>
+    <div id="visitor-entries"></div>
   </div>
 
   <div class="container">
@@ -230,6 +269,34 @@
   </div>
 
   <script>
+    const supabase = supabase.createClient('https://lglcvsptwkqxykapepey.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnbGN2c3B0d2txeHlrYXBlcGV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwNzQ1NDcsImV4cCI6MjA2MjY1MDU0N30.ci7v2g-5wixuPKnG6wUUO87AsbI1bQ8wzRnHHG9QzIQ');
+
+    async function submitMessage(msg) {
+      const ipRes = await fetch('https://api64.ipify.org?format=json');
+      const ip = (await ipRes.json()).ip;
+
+      const { data: existing } = await supabase.from('visitor_book').select('id').eq('ip', ip);
+      if (existing.length > 0) {
+        alert("You've already submitted a message!");
+        return;
+      }
+
+      const { error } = await supabase.from('visitor_book').insert({ message: msg, ip });
+      if (error) {
+        alert("Submission failed.");
+        console.error(error);
+      } else {
+        alert("Thanks for your message!");
+        loadMessages();
+      }
+    }
+
+    async function loadMessages() {
+      const { data, error } = await supabase.from('visitor_book').select('message, created_at').order('created_at', { ascending: false });
+      if (error) return console.error(error);
+      visitorEntries.innerHTML = data.map(entry => `<p><em>${new Date(entry.created_at).toLocaleString()}:</em> ${entry.message}</p>`).join('');
+    }
+
     const bark = document.getElementById('bark-sound');
     const barkTest = document.getElementById('bark-test');
     const cookiePopup = document.getElementById('cookie-popup');
@@ -242,6 +309,12 @@
     const volumeLabel = document.getElementById('volume-label');
     const volumeIcon = document.getElementById('volume-icon');
     const blurOverlay = document.getElementById('blur-overlay');
+    const visitorOpen = document.getElementById('visitor-open');
+    const visitorClose = document.getElementById('visitor-close');
+    const visitorPanel = document.getElementById('visitor-panel');
+    const visitorForm = document.getElementById('visitor-form');
+    const visitorMessage = document.getElementById('visitor-message');
+    const visitorEntries = document.getElementById('visitor-entries');
 
     let barksEnabled = false;
 
@@ -249,9 +322,7 @@
       if (!barksEnabled) return;
       bark.load();
       bark.currentTime = 0;
-      bark.play().catch(err => {
-        console.warn("Bark playback failed", err);
-      });
+      bark.play().catch(err => console.warn("Bark playback failed", err));
     }
 
     function updateVolumeDisplay(vol) {
@@ -274,13 +345,11 @@
     });
 
     cookieNo.addEventListener('click', () => {
-      window.open('', '_self')?.close();
       window.location.href = 'https://www.google.com/search?q=cookies';
     });
 
     barkTest.addEventListener('click', playBark);
-
-    document.querySelectorAll('.link-button, #blog-open, #blog-close').forEach(btn => {
+    document.querySelectorAll('.link-button, #blog-open, #blog-close, #visitor-open, #visitor-close').forEach(btn => {
       btn.addEventListener('click', playBark);
     });
 
@@ -294,6 +363,27 @@
       blogOpen.style.display = 'inline-block';
     });
 
+    visitorOpen.addEventListener('click', () => {
+      visitorPanel.classList.add('open');
+      visitorOpen.style.display = 'none';
+      loadMessages();
+    });
+
+    visitorClose.addEventListener('click', () => {
+      visitorPanel.classList.remove('open');
+      visitorOpen.style.display = 'inline-block';
+    });
+
+    visitorForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const msg = visitorMessage.value.trim();
+      if (msg.length > 0) submitMessage(msg);
+    });
+
+    const savedVol = localStorage.getItem('barkVolume') || 100;
+    volumeControl.value = savedVol;
+    bark.volume = savedVol / 100;
+    updateVolumeDisplay(savedVol);
     volumeControl.addEventListener('input', () => {
       const vol = volumeControl.value;
       bark.volume = vol / 100;
@@ -301,12 +391,6 @@
       updateVolumeDisplay(vol);
     });
 
-    const savedVol = localStorage.getItem('barkVolume') || 100;
-    volumeControl.value = savedVol;
-    bark.volume = savedVol / 100;
-    updateVolumeDisplay(savedVol);
-
-    // Show blur overlay on load
     blurOverlay.style.display = 'block';
   </script>
 </body>
