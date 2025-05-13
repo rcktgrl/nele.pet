@@ -375,33 +375,39 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
     }
   }
 
-  async function fetchPawPrints() {
-    console.log('Fetching pawprints...');
-    const { data, error } = await supabase
-      .from('pawprints')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(10);
+ async function fetchPawPrints() {
+  console.log('Fetching pawprints...');
 
-    if (error) {
-      console.error('Error fetching pawprints:', error);
-      pawPrints.innerHTML = '<p>Could not load paw prints.</p>';
-      return;
-    }
+  pawPrints.innerHTML = '<p>Fetching pawprints...</p>'; // Add visual loading
 
-    if (!data || data.length === 0) {
-      pawPrints.innerHTML = '<p>No paw prints yet.</p>';
-      return;
-    }
+  const { data, error } = await supabase
+    .from('pawprints')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(10);
 
-    pawPrints.innerHTML = '';
-    data.forEach(p => {
-      const box = document.createElement('div');
-      box.className = 'textbox';
-      box.innerHTML = `<p>${escapeHTML(p.message)}</p>`;
-      pawPrints.appendChild(box);
-    });
+  console.log({ data, error }); // Log response
+
+  if (error) {
+    console.error('Error fetching pawprints:', error);
+    pawPrints.innerHTML = '<p>Could not load paw prints.</p>';
+    return;
   }
+
+  if (!data || data.length === 0) {
+    pawPrints.innerHTML = '<p>No paw prints yet.</p>';
+    return;
+  }
+
+  pawPrints.innerHTML = '';
+  data.forEach(p => {
+    const box = document.createElement('div');
+    box.className = 'textbox';
+    box.innerHTML = `<p>${escapeHTML(p.message)}</p>`;
+    pawPrints.appendChild(box);
+  });
+}
+
 
   pawOpen.onclick = () => {
     pawPanel.classList.add('open');
