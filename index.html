@@ -266,7 +266,7 @@ body.blur #paw-open {
     const bark = document.getElementById('bark-sound');
     if (!bark) return;
 
-    const target = e.target.closest('button, .link-button, vertical-text');
+    const target = e.target.closest('button, .link-button, span');
     if (target) {
       bark.currentTime = 0;
       bark.play();
