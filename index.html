@@ -4,8 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Puppy pillow fortress</title>
-
-  <!-- Supabase module import -->
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/+esm';
     window.supabase = createClient(
@@ -13,7 +12,6 @@
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnbGN2c3B0d2txeHlrYXBlcGV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwNzQ1NDcsImV4cCI6MjA2MjY1MDU0N30.ci7v2g-5wixuPKnG6wUUO87AsbI1bQ8wzRnHHG9QzIQ'
     );
   </script>
-
   <style>
     html, body {
       margin: 0;
@@ -23,12 +21,14 @@
       color: white;
       overflow-x: hidden;
     }
+
     .container {
       max-width: 800px;
       margin: 0 auto;
       padding: 2em;
       text-align: center;
     }
+
     .textbox {
       background-color: rgba(255,255,255,0.1);
       border: 2px solid white;
@@ -36,12 +36,28 @@
       padding: 1em;
       margin: 1em 0;
     }
-    button {
-      font-weight: bold;
+
+    img {
+      max-width: 100%;
+      max-height: 60vh;
+      height: auto;
       border-radius: 10px;
-      padding: 0.5em 1em;
-      cursor: pointer;
+      margin: 1em 0;
     }
+
+    .link-button, #bark-test, #blog-open, #paw-open {
+      cursor: pointer;
+      display: inline-block;
+      margin: 0.5em;
+      padding: 0.7em 1.4em;
+      background-color: white;
+      color: #6a0dad;
+      font-weight: bold;
+      border: 2px solid white;
+      border-radius: 25px;
+      text-decoration: none;
+    }
+
     #blog-panel, #paw-panel {
       position: fixed;
       top: 0;
@@ -54,20 +70,12 @@
       overflow-y: auto;
       transition: transform 0.3s ease;
     }
-    #blog-panel {
-      right: 0;
-      transform: translateX(100%);
-    }
-    #blog-panel.open {
-      transform: translateX(0);
-    }
-    #paw-panel {
-      left: 0;
-      transform: translateX(-100%);
-    }
-    #paw-panel.open {
-      transform: translateX(0);
-    }
+
+    #blog-panel { right: 0; transform: translateX(100%); }
+    #blog-panel.open { transform: translateX(0); }
+    #paw-panel { left: 0; transform: translateX(-100%); }
+    #paw-panel.open { transform: translateX(0); }
+
     #blog-open, #paw-open {
       position: fixed;
       top: 50%;
@@ -82,19 +90,50 @@
       font-weight: bold;
       z-index: 1000;
     }
-    #blog-open {
-      right: 0;
-      border-radius: 15px 0 0 15px;
-    }
-    #paw-open {
-      left: 0;
-      border-radius: 0 15px 15px 0;
-    }
+
+    #blog-open { right: 0; border-radius: 15px 0 0 15px; }
+    #paw-open { left: 0; border-radius: 0 15px 15px 0; }
+
     .vertical-text {
       writing-mode: vertical-rl;
       text-orientation: mixed;
       transform: rotate(180deg);
     }
+
+    #cookie-popup {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      color: #6a0dad;
+      border: 2px solid #dabfff;
+      border-radius: 15px;
+      padding: 1em 2em;
+      z-index: 9999;
+      text-align: center;
+    }
+
+    #cookie-popup button {
+      margin: 1em 1em 0 1em;
+      padding: 0.5em 1.2em;
+      font-weight: bold;
+      background-color: #dabfff;
+      color: #4b0082;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    #volume-wrapper { margin-top: 1em; }
+    #volume-icon { font-size: 1.5em; margin-top: 0.5em; }
+    #volume-control {
+      width: 80%;
+      margin-top: 0.3em;
+      accent-color: #dabfff;
+    }
+    #volume-label { font-size: 1em; margin-top: 0.5em; display: block; }
+
     #paw-input {
       width: 100%;
       height: 60px;
@@ -104,21 +143,40 @@
       margin-bottom: 1em;
       resize: none;
     }
+
+    #paw-submit {
+      background-color: #dabfff;
+      color: #4b0082;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      padding: 0.5em 1em;
+      cursor: pointer;
+    }
+
     #paw-feedback {
       margin-top: 0.5em;
       font-style: italic;
     }
-    img {
-  max-width: 100%;
-  max-height: 60vh;
-  height: auto;
-  border-radius: 10px;
-  margin: 1em 0;
-}
   </style>
 </head>
 <body>
-  <!-- Paw Print Sidebar -->
+  <!-- Cookie Popup -->
+  <div id="cookie-popup">
+    <p><strong>I like cookies :3</strong></p>
+    <button id="cookie-no">no (leave page)</button>
+    <button id="cookie-yes">yes I do</button>
+  </div>
+
+  <!-- Blog Sidebar -->
+  <div id="blog-open"><span class="vertical-text">📓 Blog</span></div>
+  <div id="blog-panel">
+    <button id="blog-close">❌ Close</button>
+    <h2>📓 Blog Posts</h2>
+    <div id="blog-posts"></div>
+  </div>
+
+  <!-- Paw Print Panel -->
   <div id="paw-open"><span class="vertical-text">🐾 Paw</span></div>
   <div id="paw-panel">
     <button id="paw-close">❌ Close</button>
@@ -130,40 +188,124 @@
     <div id="paw-prints"></div>
   </div>
 
-  <!-- Blog Sidebar -->
-  <div id="blog-open"><span class="vertical-text">📓 Blog</span></div>
-  <div id="blog-panel">
-    <button id="blog-close">❌ Close</button>
-    <h2>📓 Blog Posts</h2>
-    <div id="blog-posts"></div>
-  </div>
+  <!-- Bark Sound -->
+  <audio id="bark-sound" preload="auto">
+    <source src="https://upload.wikimedia.org/wikipedia/commons/6/6e/Dog-bark.wav" type="audio/wav">
+  </audio>
 
   <!-- Main Content -->
   <div class="container">
     <h1>Puppy pillow fortress</h1>
     <img src="IMG_96721.webp" alt="Kiki snoot" />
+    
     <div class="textbox">
-      <p>Hello! I am Nele the succubus puppy girl. Minors DNI. Trans, anti-fascist, poly. Purple-loving rocket pup. Let's bark at trains together!</p>
+      <h2>About Me</h2>
+      <p>Hello! I am Nele the succubus puppy girl.<br>
+        I do a lot of lewd things so minors do not Interact |
+        I am a committed anti-fascist and Communist | I'm trans and on Estrogen since 04.02.2025🏳️‍⚧️ |
+        I am considering myself as Sapphic/bi though I definitely prefer Women | I am poly and happily married |
+        💜 Purple is my favourite colour | 🚀 Rockets are pretty cool I guess |
+        🔌🚗 Electric car enthusiast, currently have a Tesla Model Y (fuck Elon) and a 95’ Mazda Miata |
+        🚂 Train enthusiast | fuck elon musk | be yourself especially if it's weird
+      </p>
     </div>
+
+    <div class="textbox">
+      <h2>Links</h2>
+      <a class="link-button" href="https://discord.gg/Jhj2znHaEB" target="_blank">Discord Server</a>
+      <a class="link-button" href="https://bsky.app/profile/nele.pet" target="_blank">Bluesky</a>
+      <a class="link-button" href="https://www.tumblr.com/nele-likes-stuff" target="_blank">Tumblr</a>
+      <a class="link-button" href="https://www.reddit.com/user/CapFuture_/" target="_blank">Reddit</a>
+    </div>
+
+    <div class="textbox">
+      <h2>Playlist Vibes</h2>
+      <iframe style="border-radius:12px"
+        src="https://open.spotify.com/embed/playlist/2wjQcW9o0hHiWqchz5XuzF?utm_source=generator&theme=0"
+        width="100%" height="352" frameBorder="0" allowfullscreen=""
+        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+        loading="lazy">
+      </iframe>
+    </div>
+
+    <div class="textbox">
+      <h2>🔊 Bark Test</h2>
+      <button id="bark-test">Test Bark</button>
+      <div id="volume-wrapper">
+        <div id="volume-icon">🔊</div>
+        <input type="range" id="volume-control" min="0" max="100" step="1">
+        <div id="volume-label">Volume: Bark</div>
+      </div>
+    </div>
+
+    <img src="https://placebear.com/600/300" alt="Cute bear" />
   </div>
 
-  <!-- JS -->
+  <!-- JavaScript -->
   <script>
-    // Blog Panel
+    const blogPanel = document.getElementById('blog-panel');
     const blogOpen = document.getElementById('blog-open');
     const blogClose = document.getElementById('blog-close');
-    const blogPanel = document.getElementById('blog-panel');
+    const pawPanel = document.getElementById('paw-panel');
+    const pawOpen = document.getElementById('paw-open');
+    const pawClose = document.getElementById('paw-close');
+    const bark = document.getElementById('bark-sound');
+    const barkTest = document.getElementById('bark-test');
+    const cookiePopup = document.getElementById('cookie-popup');
+    const cookieYes = document.getElementById('cookie-yes');
+    const cookieNo = document.getElementById('cookie-no');
+    const volumeControl = document.getElementById('volume-control');
+    const volumeLabel = document.getElementById('volume-label');
+    const volumeIcon = document.getElementById('volume-icon');
 
-    blogOpen.addEventListener('click', () => {
-      blogPanel.classList.add('open');
-      blogOpen.style.display = 'none';
-    });
-
-    blogClose.addEventListener('click', () => {
+    function closeBlog() {
       blogPanel.classList.remove('open');
       blogOpen.style.display = 'flex';
+    }
+
+    function closePaw() {
+      pawPanel.classList.remove('open');
+      pawOpen.style.display = 'flex';
+    }
+
+    blogOpen.onclick = () => {
+      closePaw();
+      blogPanel.classList.add('open');
+      blogOpen.style.display = 'none';
+    };
+
+    blogClose.onclick = closeBlog;
+
+    pawOpen.onclick = () => {
+      closeBlog();
+      pawPanel.classList.add('open');
+      pawOpen.style.display = 'none';
+      fetchPawPrints();
+    };
+
+    pawClose.onclick = closePaw;
+
+    cookieYes.onclick = () => cookiePopup.remove();
+    cookieNo.onclick = () => window.location.href = "https://www.google.com/search?q=cookies";
+
+    barkTest?.addEventListener('click', () => {
+      bark.currentTime = 0;
+      bark.play();
     });
 
+    volumeControl?.addEventListener('input', () => {
+      const vol = volumeControl.value;
+      bark.volume = vol / 100;
+      localStorage.setItem('barkVolume', vol);
+      volumeLabel.textContent = vol <= 33 ? 'Volume: Arf' : vol <= 66 ? 'Volume: Woof' : 'Volume: Bark';
+      volumeIcon.textContent = vol <= 33 ? '🔈' : vol <= 66 ? '🔉' : '🔊';
+    });
+
+    const savedVol = localStorage.getItem('barkVolume') || 100;
+    bark.volume = savedVol / 100;
+    volumeControl.value = savedVol;
+
+    // Load blog posts
     fetch('blog.json')
       .then(r => r.json())
       .then(posts => {
@@ -179,42 +321,10 @@
 
   <script type="module">
     const supabase = window.supabase;
-
-    const pawOpen = document.getElementById('paw-open');
-    const pawClose = document.getElementById('paw-close');
-    const pawPanel = document.getElementById('paw-panel');
     const pawInput = document.getElementById('paw-input');
     const pawSubmit = document.getElementById('paw-submit');
     const pawFeedback = document.getElementById('paw-feedback');
     const pawPrints = document.getElementById('paw-prints');
-
-    pawOpen.addEventListener('click', () => {
-      pawPanel.classList.add('open');
-      pawOpen.style.display = 'none';
-      fetchPawPrints();
-    });
-
-    pawClose.addEventListener('click', () => {
-      pawPanel.classList.remove('open');
-      pawOpen.style.display = 'flex';
-    });
-
-    pawSubmit.addEventListener('click', async () => {
-      const message = pawInput.value.trim().slice(0, 100);
-      if (!message) {
-        pawFeedback.textContent = 'Your paw print is empty!';
-        return;
-      }
-
-      const { error } = await supabase.from('pawprints').insert({ message });
-      if (error) {
-        pawFeedback.textContent = 'Something went wrong.';
-      } else {
-        pawFeedback.textContent = 'Paw print submitted!';
-        pawInput.value = '';
-        fetchPawPrints();
-      }
-    });
 
     async function fetchPawPrints() {
       const { data, error } = await supabase
@@ -237,6 +347,23 @@
       });
     }
 
+    pawSubmit.addEventListener('click', async () => {
+      const message = pawInput.value.trim().slice(0, 100);
+      if (!message) {
+        pawFeedback.textContent = 'Your paw print is empty!';
+        return;
+      }
+
+      const { error } = await supabase.from('pawprints').insert({ message });
+      if (error) {
+        pawFeedback.textContent = 'Something went wrong.';
+      } else {
+        pawFeedback.textContent = 'Paw print submitted!';
+        pawInput.value = '';
+        fetchPawPrints();
+      }
+    });
+
     function escapeHTML(str) {
       return str.replace(/[&<>"']/g, tag => ({
         '&': '&amp;',
@@ -246,27 +373,6 @@
         "'": '&#39;',
       }[tag]));
     }
-    // Ensure only one panel is open at a time
-function closeBlog() {
-  blogPanel.classList.remove('open');
-  blogOpen.style.display = 'flex';
-}
-function closePaw() {
-  pawPanel.classList.remove('open');
-  pawOpen.style.display = 'flex';
-}
-
-blogOpen.addEventListener('click', () => {
-  closePaw();
-  blogPanel.classList.add('open');
-  blogOpen.style.display = 'none';
-});
-
-pawOpen.addEventListener('click', () => {
-  closeBlog();
-  pawPanel.classList.add('open');
-  pawOpen.style.display = 'none';
-});
   </script>
 </body>
 </html>
