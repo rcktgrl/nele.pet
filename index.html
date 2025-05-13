@@ -190,9 +190,7 @@
   <div id="blog-panel">
     <button id="blog-close">❌ Close</button>
     <h2>📓 Blog Posts</h2>
-    <div class="textbox">
-      <p><strong>10 May 2025:</strong> First post of my trans sapphic communist train blog 🐾</p>
-    </div>
+    <div id="blog-posts"></div>
   </div>
 
   <div class="container">
@@ -316,6 +314,22 @@
     volumeControl.value = savedVol;
     bark.volume = savedVol / 100;
     updateVolumeDisplay(savedVol);
+    // Fetch blog posts from blog.json and inject into blog panel
+fetch('blog.json')
+  .then(response => response.json())
+  .then(posts => {
+    const blogPostsContainer = document.getElementById('blog-posts');
+    posts.forEach(post => {
+      const box = document.createElement('div');
+      box.className = 'textbox';
+      box.innerHTML = `<p><strong>${post.date}:</strong> ${post.content}</p>`;
+      blogPostsContainer.appendChild(box);
+    });
+  })
+  .catch(err => {
+    console.error('Error loading blog posts:', err);
+    document.getElementById('blog-posts').innerHTML = '<p>Could not load blog posts.</p>';
+  });
   </script>
 </body>
 </html>
