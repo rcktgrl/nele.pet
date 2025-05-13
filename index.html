@@ -361,6 +361,19 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
   const pawSubmit = document.getElementById('paw-submit');
   const pawFeedback = document.getElementById('paw-feedback');
   const pawPrints = document.getElementById('paw-prints');
+  const pawOpen = document.getElementById('paw-open');
+  const pawClose = document.getElementById('paw-close');
+  const pawPanel = document.getElementById('paw-panel');
+
+  function escapeHTML(str) {
+    return str.replace(/[&<>"']/g, tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[tag]));
+  }
 
   async function getUserIP() {
     try {
@@ -374,6 +387,7 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
   }
 
   async function fetchPawPrints() {
+    console.log('Fetching pawprints...');
     const { data, error } = await supabase
       .from('pawprints')
       .select('*')
@@ -381,8 +395,13 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
       .limit(10);
 
     if (error) {
-      pawPrints.innerHTML = '<p>Error loading paw prints.</p>';
-      console.error(error);
+      console.error('Error fetching pawprints:', error);
+      pawPrints.innerHTML = '<p>Could not load paw prints.</p>';
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      pawPrints.innerHTML = '<p>No paw prints yet.</p>';
       return;
     }
 
@@ -395,6 +414,17 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
     });
   }
 
+  pawOpen.onclick = () => {
+    pawPanel.classList.add('open');
+    pawOpen.style.display = 'none';
+    fetchPawPrints();
+  };
+
+  pawClose.onclick = () => {
+    pawPanel.classList.remove('open');
+    pawOpen.style.display = 'flex';
+  };
+
   pawSubmit.addEventListener('click', async () => {
     const message = pawInput.value.trim().slice(0, 100);
     if (!message) {
@@ -404,10 +434,7 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
 
     const ip = await getUserIP();
 
-    const { error } = await supabase.from('pawprints').insert({
-      message,
-      ip
-    });
+    const { error } = await supabase.from('pawprints').insert({ message, ip });
 
     if (error) {
       pawFeedback.textContent = 'Something went wrong.';
@@ -418,16 +445,6 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
       fetchPawPrints();
     }
   });
-
-  function escapeHTML(str) {
-    return str.replace(/[&<>"']/g, tag => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    }[tag]));
-  }
 </script>
   <script>
   window.addEventListener('DOMContentLoaded', () => {
