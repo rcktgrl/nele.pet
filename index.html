@@ -309,12 +309,7 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
 
     blogClose.onclick = closeBlog;
 
-    pawOpen.onclick = () => {
-      closeBlog();
-      pawPanel.classList.add('open');
-      pawOpen.style.display = 'none';
-      fetchPawPrints();
-    };
+    
 
     pawClose.onclick = closePaw;
 
@@ -445,6 +440,12 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
       fetchPawPrints();
     }
   });
+  pawOpen.onclick = () => {
+      closeBlog();
+      pawPanel.classList.add('open');
+      pawOpen.style.display = 'none';
+      fetchPawPrints();
+    };
 </script>
   <script>
   window.addEventListener('DOMContentLoaded', () => {
