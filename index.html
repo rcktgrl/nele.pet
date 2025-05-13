@@ -187,8 +187,9 @@ body.blur #paw-open {
   </div>
 
   <!-- Blog Sidebar -->
-  <div id="blog-open"><span class="vertical-text">📓 Blog</span></div>
-  <div id="blog-panel">
+    <div id="blog-open" class="bark-trigger link-button" role="button" tabindex="0" aria-label="Open Blog">
+  <span class="vertical-text">📓 Blog</span>
+</div>
     <button id="blog-close">❌ Close</button>
     <h2>📓 Blog Posts</h2>
     <div id="blog-posts"></div>
@@ -260,16 +261,28 @@ body.blur #paw-open {
   </div>
 
   <!-- JavaScript -->
-  <script>
-  // Trigger bark on all button or link-button presses
-  function triggerBarkOnInteraction(e) {
+<script>
+  function playBarkSound() {
     const bark = document.getElementById('bark-sound');
-    if (!bark) return;
-
-    const target = e.target.closest('button, .link-button');
-    if (target) {
+    if (bark) {
       bark.currentTime = 0;
       bark.play();
+    }
+  }
+
+  // Handle mouse/touch interaction
+  function triggerBarkOnInteraction(e) {
+    const target = e.target.closest('.bark-trigger, button, a');
+    if (target) {
+      playBarkSound();
+    }
+  }
+
+  // Handle keyboard interaction
+  function handleKeyPressForBark(e) {
+    if ((e.key === 'Enter' || e.key === ' ') &&
+        e.target.matches('.bark-trigger, button, a')) {
+      playBarkSound();
     }
   }
 
@@ -278,7 +291,11 @@ body.blur #paw-open {
 
   // Touch input (for mobile)
   document.addEventListener('touchstart', triggerBarkOnInteraction);
+
+  // Keyboard input
+  document.addEventListener('keydown', handleKeyPressForBark);
 </script>
+
   <script>
     const blogPanel = document.getElementById('blog-panel');
     const blogOpen = document.getElementById('blog-open');
