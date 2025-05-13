@@ -91,9 +91,10 @@
       z-index: 1000;
     }
 
-    #blog-open { right: 0; border-radius: 15px 0 0 15px; }
-    #paw-open { left: 0; border-radius: 0 15px 15px 0; }
-
+    #blog-open, #paw-open {
+  width: 24px; /* or even 20px for super slim */
+  font-size: 0.8em;
+}
     .vertical-text {
       writing-mode: vertical-rl;
       text-orientation: mixed;
@@ -158,6 +159,15 @@
       margin-top: 0.5em;
       font-style: italic;
     }
+    body.blur .container,
+body.blur #blog-panel,
+body.blur #blog-open,
+body.blur #paw-panel,
+body.blur #paw-open {
+  filter: blur(5px);
+  pointer-events: none;
+  user-select: none;
+}
   </style>
 </head>
 <body>
@@ -177,7 +187,7 @@
   </div>
 
   <!-- Paw Print Panel -->
-  <div id="paw-open"><span class="vertical-text">🐾 Paw</span></div>
+  <div id="paw-open"><span class="vertical-text">🐾 Pawprints</span></div>
   <div id="paw-panel">
     <button id="paw-close">❌ Close</button>
     <h2>🐾 Leave a Paw Print</h2>
@@ -267,7 +277,16 @@
       pawPanel.classList.remove('open');
       pawOpen.style.display = 'flex';
     }
+cookieYes.onclick = () => {
+  document.body.classList.remove('blur');
+  cookiePopup.remove();
+};
 
+cookieNo.onclick = () => {
+  window.location.href = "https://www.google.com/search?q=cookies";
+};
+
+document.body.classList.add('blur'); // Add this right after defining all elements
     blogOpen.onclick = () => {
       closePaw();
       blogPanel.classList.add('open');
