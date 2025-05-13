@@ -410,10 +410,12 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
 
 
   pawOpen.onclick = () => {
-    pawPanel.classList.add('open');
-    pawOpen.style.display = 'none';
-    fetchPawPrints();
-  };
+  closeBlog(); // optional if blog can be open
+  pawPanel.classList.add('open');
+  pawOpen.style.display = 'none';
+  fetchPawPrints(); // always fetch fresh paw prints when opened
+};
+
 
   pawClose.onclick = () => {
     pawPanel.classList.remove('open');
@@ -441,11 +443,7 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
 }
 
   });
-  pawOpen.onclick = () => {
-      closeBlog();
-      pawPanel.classList.add('open');
-      pawOpen.style.display = 'none';
-    };
+  
 </script>
   <script>
   window.addEventListener('DOMContentLoaded', () => {
