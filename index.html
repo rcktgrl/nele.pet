@@ -355,83 +355,80 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
       });
   </script>
 
-  <script type="module">
-    const supabase = window.supabase;
-    const pawInput = document.getElementById('paw-input');
-    const pawSubmit = document.getElementById('paw-submit');
-    const pawFeedback = document.getElementById('paw-feedback');
-    const pawPrints = document.getElementById('paw-prints');
+<script type="module">
+  const supabase = window.supabase;
+  const pawInput = document.getElementById('paw-input');
+  const pawSubmit = document.getElementById('paw-submit');
+  const pawFeedback = document.getElementById('paw-feedback');
+  const pawPrints = document.getElementById('paw-prints');
 
-    async function getUserIP() {
-  try {
-    const res = await fetch('https://api64.ipify.org?format=json');
-    const json = await res.json();
-    return json.ip;
-  } catch (err) {
-    console.warn('IP fetch failed:', err);
-    return null;
-  }
-}
-
-pawSubmit.addEventListener('click', async () => {
-  const message = pawInput.value.trim().slice(0, 100);
-  if (!message) {
-    pawFeedback.textContent = 'Your paw print is empty!';
-    return;
+  async function getUserIP() {
+    try {
+      const res = await fetch('https://api64.ipify.org?format=json');
+      const json = await res.json();
+      return json.ip;
+    } catch (err) {
+      console.warn('IP fetch failed:', err);
+      return null;
+    }
   }
 
-  const ip = await getUserIP();
+  async function fetchPawPrints() {
+    const { data, error } = await supabase
+      .from('pawprints')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10);
 
-  const { error } = await supabase.from('pawprints').insert({
-    message,
-    ip
-  });
-
-  if (error) {
-    pawFeedback.textContent = 'Something went wrong.';
-    console.error(error);
-  } else {
-    pawFeedback.textContent = 'Paw print submitted!';
-    pawInput.value = '';
-    fetchPawPrints();
-  }
-});
-      pawPrints.innerHTML = '';
-      data.forEach(p => {
-        const box = document.createElement('div');
-        box.className = 'textbox';
-        box.innerHTML = `<p>${escapeHTML(p.message)}</p>`;
-        pawPrints.appendChild(box);
-      });
+    if (error) {
+      pawPrints.innerHTML = '<p>Error loading paw prints.</p>';
+      console.error(error);
+      return;
     }
 
-    pawSubmit.addEventListener('click', async () => {
-      const message = pawInput.value.trim().slice(0, 100);
-      if (!message) {
-        pawFeedback.textContent = 'Your paw print is empty!';
-        return;
-      }
+    pawPrints.innerHTML = '';
+    data.forEach(p => {
+      const box = document.createElement('div');
+      box.className = 'textbox';
+      box.innerHTML = `<p>${escapeHTML(p.message)}</p>`;
+      pawPrints.appendChild(box);
+    });
+  }
 
-      const { error } = await supabase.from('pawprints').insert({ message });
-      if (error) {
-        pawFeedback.textContent = 'Something went wrong.';
-      } else {
-        pawFeedback.textContent = 'Paw print submitted!';
-        pawInput.value = '';
-        fetchPawPrints();
-      }
+  pawSubmit.addEventListener('click', async () => {
+    const message = pawInput.value.trim().slice(0, 100);
+    if (!message) {
+      pawFeedback.textContent = 'Your paw print is empty!';
+      return;
+    }
+
+    const ip = await getUserIP();
+
+    const { error } = await supabase.from('pawprints').insert({
+      message,
+      ip
     });
 
-    function escapeHTML(str) {
-      return str.replace(/[&<>"']/g, tag => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;',
-      }[tag]));
+    if (error) {
+      pawFeedback.textContent = 'Something went wrong.';
+      console.error(error);
+    } else {
+      pawFeedback.textContent = 'Paw print submitted!';
+      pawInput.value = '';
+      fetchPawPrints();
     }
-  </script>
+  });
+
+  function escapeHTML(str) {
+    return str.replace(/[&<>"']/g, tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[tag]));
+  }
+</script>
   <script>
   window.addEventListener('DOMContentLoaded', () => {
     document.body.classList.add('blur');
