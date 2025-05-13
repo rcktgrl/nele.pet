@@ -109,11 +109,20 @@
 #blog-open { right: 0; border-radius: 15px 0 0 15px; }
 #paw-open { left: 0; border-radius: 0 15px 15px 0; }
 }
-    .vertical-text {
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
-      transform: rotate(180deg);
-    }
+/* Generic vertical text settings */
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+/* Specific rotation for each button */
+#paw-open .vertical-text {
+  transform: rotate(180deg); /* Bottom to top */
+}
+
+#blog-open .vertical-text {
+  transform: none; /* Top to bottom (default vertical-rl) */
+}
 
     #cookie-popup {
       position: fixed;
