@@ -239,6 +239,27 @@
         "'": '&#39;',
       }[tag]));
     }
+    // Ensure only one panel is open at a time
+function closeBlog() {
+  blogPanel.classList.remove('open');
+  blogOpen.style.display = 'flex';
+}
+function closePaw() {
+  pawPanel.classList.remove('open');
+  pawOpen.style.display = 'flex';
+}
+
+blogOpen.addEventListener('click', () => {
+  closePaw();
+  blogPanel.classList.add('open');
+  blogOpen.style.display = 'none';
+});
+
+pawOpen.addEventListener('click', () => {
+  closeBlog();
+  pawPanel.classList.add('open');
+  pawOpen.style.display = 'none';
+});
   </script>
 </body>
 </html>
