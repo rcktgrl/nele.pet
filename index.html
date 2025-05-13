@@ -261,6 +261,25 @@ body.blur #paw-open {
 
   <!-- JavaScript -->
   <script>
+  // Trigger bark on all button or link-button presses
+  function triggerBarkOnInteraction(e) {
+    const bark = document.getElementById('bark-sound');
+    if (!bark) return;
+
+    const target = e.target.closest('button, .link-button');
+    if (target) {
+      bark.currentTime = 0;
+      bark.play();
+    }
+  }
+
+  // Mouse click
+  document.addEventListener('click', triggerBarkOnInteraction);
+
+  // Touch input (for mobile)
+  document.addEventListener('touchstart', triggerBarkOnInteraction);
+</script>
+  <script>
     const blogPanel = document.getElementById('blog-panel');
     const blogOpen = document.getElementById('blog-open');
     const blogClose = document.getElementById('blog-close');
