@@ -425,14 +425,15 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
 
     const { error } = await supabase.from('pawprints').insert({ message, ip });
 
-    if (error) {
-      pawFeedback.textContent = 'Something went wrong.';
-      console.error(error);
-    } else {
-      pawFeedback.textContent = 'Paw print submitted!';
-      pawInput.value = '';
-      fetchPawPrints();
-    }
+  if (error) {
+  pawFeedback.textContent = 'Something went wrong.';
+  console.error(error);
+} else {
+  pawFeedback.textContent = 'Paw print submitted!';
+  pawInput.value = '';
+  setTimeout(fetchPawPrints, 2000); // wait 2 seconds before fetching
+}
+
   });
   pawOpen.onclick = () => {
       closeBlog();
