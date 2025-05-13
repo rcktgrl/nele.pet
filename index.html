@@ -374,6 +374,81 @@ fetch('blog.json')
     console.error('Error loading blog posts:', err);
     document.getElementById('blog-posts').innerHTML = '<p>Could not load blog posts.</p>';
   });
+  <!-- Add this before any Supabase code -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/+esm"></script>
+  <script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/+esm';
+
+  const supabase = createClient('https://YOUR_PROJECT_ID.supabase.co', 'YOUR_PUBLIC_ANON_KEY');
+
+  const pawOpen = document.getElementById('paw-open');
+  const pawClose = document.getElementById('paw-close');
+  const pawPanel = document.getElementById('paw-panel');
+  const pawInput = document.getElementById('paw-input');
+  const pawSubmit = document.getElementById('paw-submit');
+  const pawFeedback = document.getElementById('paw-feedback');
+  const pawPrints = document.getElementById('paw-prints');
+
+  pawOpen.addEventListener('click', () => {
+    pawPanel.classList.add('open');
+    pawOpen.style.display = 'none';
+    fetchPawPrints();
+  });
+
+  pawClose.addEventListener('click', () => {
+    pawPanel.classList.remove('open');
+    pawOpen.style.display = 'inline-block';
+  });
+
+  pawSubmit.addEventListener('click', async () => {
+    const message = pawInput.value.trim().slice(0, 100);
+    if (!message) {
+      pawFeedback.textContent = 'Your paw print is empty!';
+      return;
+    }
+
+    const { error } = await supabase.from('pawprints').insert({ message });
+    if (error) {
+      pawFeedback.textContent = 'Something went wrong.';
+      console.error(error);
+    } else {
+      pawFeedback.textContent = 'Paw print submitted!';
+      pawInput.value = '';
+      fetchPawPrints();
+    }
+  });
+
+  async function fetchPawPrints() {
+    const { data, error } = await supabase
+      .from('pawprints')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      pawPrints.innerHTML = '<p>Error loading paw prints.</p>';
+      return;
+    }
+
+    pawPrints.innerHTML = '';
+    data.forEach(p => {
+      const div = document.createElement('div');
+      div.className = 'textbox';
+      div.innerHTML = `<p>${escapeHTML(p.message)}</p>`;
+      pawPrints.appendChild(div);
+    });
+  }
+
+  function escapeHTML(str) {
+    return str.replace(/[&<>"']/g, tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[tag]));
+  }
+</script>
   </script>
 </body>
 </html>
