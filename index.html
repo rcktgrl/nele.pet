@@ -91,9 +91,23 @@
       z-index: 1000;
     }
 
-    #blog-open, #paw-open {
-  width: 24px; /* or even 20px for super slim */
+#blog-open, #paw-open {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  background: white;
+  color: #6a0dad;
+  height: 80px;
+  width: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
   font-size: 0.8em;
+  z-index: 1000;
+}
+#blog-open { right: 0; border-radius: 15px 0 0 15px; }
+#paw-open { left: 0; border-radius: 0 15px 15px 0; }
 }
     .vertical-text {
       writing-mode: vertical-rl;
@@ -304,7 +318,10 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
 
     pawClose.onclick = closePaw;
 
-    cookieYes.onclick = () => cookiePopup.remove();
+    cookieYes.onclick = () => {
+  document.body.classList.remove('blur');
+  cookiePopup.remove();
+};
     cookieNo.onclick = () => window.location.href = "https://www.google.com/search?q=cookies";
 
     barkTest?.addEventListener('click', () => {
@@ -393,5 +410,10 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
       }[tag]));
     }
   </script>
+  <script>
+  window.addEventListener('DOMContentLoaded', () => {
+    document.body.classList.add('blur');
+  });
+</script>
 </body>
 </html>
