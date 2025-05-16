@@ -349,18 +349,21 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
     bark.volume = savedVol / 100;
     volumeControl.value = savedVol;
 
-    // Load blog posts
-    fetch('blog.json')
-      .then(r => r.json())
-      .then(posts => {
-        const blogPosts = document.getElementById('blog-posts');
-        posts.forEach(post => {
-          const box = document.createElement('div');
-          box.className = 'textbox';
-          box.innerHTML = `<p><strong>${post.date}:</strong> ${post.content}</p>`;
-          blogPosts.appendChild(box);
-        });
-      });
+// Load blog posts
+fetch('blog.json')
+  .then(r => r.json())
+  .then(posts => {
+    const blogPosts = document.getElementById('blog-posts');
+    posts.forEach(post => {
+      const box = document.createElement('div');
+      box.className = 'textbox';
+      box.innerHTML = `
+        <p><strong>${post.date}:</strong> ${post.content}</p>
+        <p><a href="${post.link}" target="_blank">${post.linkText}</a></p>
+      `;
+      blogPosts.appendChild(box);
+    });
+  });
   </script>
 
 <script type="module">
