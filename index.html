@@ -357,11 +357,7 @@ fetch('blog.json')
     posts.forEach(post => {
       const box = document.createElement('div');
       box.className = 'textbox';
-    // Reverse the order of posts
-    posts.reverse();
-    posts.forEach(post => {
-      const box = document.createElement('div');
-      box.className = 'textbox';
+
       // Check if a link exists; only include it if both link and linkText are present
       const linkHTML = post.link && post.linkText
         ? `<p><a href="${post.link}" target="_blank">${post.linkText}</a></p>`
