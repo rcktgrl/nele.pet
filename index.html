@@ -354,6 +354,10 @@ fetch('blog.json')
   .then(r => r.json())
   .then(posts => {
     const blogPosts = document.getElementById('blog-posts');
+    
+    // Reverse the order of posts
+    posts.reverse();
+    
     posts.forEach(post => {
       const box = document.createElement('div');
       box.className = 'textbox';
