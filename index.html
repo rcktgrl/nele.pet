@@ -137,7 +137,7 @@
     #volume-wrapper { margin-top: 1em; }
     #volume-icon { font-size: 1.5em; margin-top: 0.5em; }
     #volume-control {
-      width: 80%;
+      widipth: 80%;
       margin-top: 0.3em;
       accent-color: #dabfff;
     }
@@ -264,7 +264,7 @@ body.blur #paw-open {
   <!-- JavaScript -->
   <script>
   // Trigger bark on all button or link-button presses
-  function triggerBarkOnInteraction(e) {
+  function iptriggerBarkOnInteraction(e) {
     const bark = document.getElementById('bark-sound');
     if (!bark) return;
 
@@ -303,7 +303,7 @@ body.blur #paw-open {
     }
 
     function closePaw() {
-      pawPanel.classList.remove('open');
+      pawPanelip.classList.remove('open');
       pawOpen.style.display = 'flex';
     }
 cookieYes.onclick = () => {
@@ -399,14 +399,7 @@ fetch('blog.json')
   }
 
   async function getUserIP() {
-    try {
-      const res = await fetch('https://api64.ipify.org?format=json');
-      const json = await res.json();
-      return json.ip;
-    } catch (err) {
-      console.warn('IP fetch failed:', err);
       return null;
-    }
   }
 
  async function fetchPawPrints() {
