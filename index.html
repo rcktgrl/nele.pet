@@ -60,27 +60,47 @@
     }
 
     .side-button {
-      position: fixed;
-      right: 0;
-      transform: translateY(-50%);
       background: white;
       color: #6a0dad;
-      height: 140px;
-      width: 5px;
+      min-height: 140px;
       display: flex;
       justify-content: center;
       align-items: center;
       font-weight: bold;
       font-size: 0.8em;
       border: 2px solid white;
-      border-radius: 15px 0 0 15px;
       text-decoration: none;
       padding: 0.7em 1.4em;
+      border-radius: 15px;
+    }
+
+    .side-button--right {
+      border-radius: 15px 0 0 15px;
+    }
+
+    #right-side-buttons {
+      position: fixed;
+      top: 50%;
+      right: 0;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5em;
       z-index: 1000;
     }
 
-    #blog-link { top: 45%; }
-    #paw-open { top: 65%; }
+    .side-button--left {
+      position: fixed;
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      border-radius: 0 15px 15px 0;
+      z-index: 1000;
+    }
+
+    .side-button--left .vertical-text {
+      writing-mode: vertical-lr;
+    }
 
     #paw-panel {
       position: fixed;
@@ -165,15 +185,10 @@
 
     .vertical-text {
       writing-mode: vertical-rl;
-      text-orientation: mixed;
-    }
-
-    #paw-open .vertical-text {
-      transform: rotate(90deg);
-    }
-
-    #blog-link .vertical-text {
-      transform: rotate(270deg);
+      text-orientation: upright;
+      display: inline-block;
+      letter-spacing: 0.15em;
+      white-space: nowrap;
     }
 
     body.blur .container,
@@ -194,8 +209,11 @@
   </div>
 
   <!-- Side Buttons -->
-  <a id="blog-link" class="side-button" href="blog.html"><span class="vertical-text">📓 Blog</span></a>
-  <div id="paw-open" class="side-button"><span class="vertical-text">🐾 Pawprints</span></div>
+  <div id="right-side-buttons">
+    <a id="blog-link" class="side-button side-button--right" href="blog.html"><span class="vertical-text">📓 Blog</span></a>
+    <a id="story-link" class="side-button side-button--right" href="story.html"><span class="vertical-text">📖 Story</span></a>
+  </div>
+  <div id="paw-open" class="side-button side-button--left"><span class="vertical-text">🐾 Pawprints</span></div>
 
   <!-- Paw Print Panel -->
   <div id="paw-panel">
@@ -239,8 +257,6 @@
       <a class="link-button" href="https://www.tumblr.com/nele-likes-stuff" target="_blank">Tumblr</a>
       <a class="link-button" href="https://www.reddit.com/user/CapFuture_/" target="_blank">Reddit</a>
       <a class="link-button" href="https://steamcommunity.com/id/RCKT_GRL/" target="_blank">Steam</a>
-      <a class="link-button" href="story.html">Read our story</a>
-      <a class="link-button" href="blog.html">Blog archive</a>
     </div>
 
     <div class="textbox">
