@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Puppy pillow fortress – Story</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: comic sans, sans-serif;
+      background-color: #8a2be2;
+      color: white;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2em;
+      text-align: center;
+    }
+
+    .textbox {
+      background-color: rgba(255,255,255,0.1);
+      border: 2px solid white;
+      border-radius: 15px;
+      padding: 1.5em;
+      margin: 1em 0;
+      text-align: left;
+    }
+
+    .link-button {
+      display: inline-block;
+      margin: 0.5em;
+      padding: 0.7em 1.4em;
+      background-color: white;
+      color: #6a0dad;
+      font-weight: bold;
+      border: 2px solid white;
+      border-radius: 25px;
+      text-decoration: none;
+    }
+
+    a { color: #dabfff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Story Time</h1>
+    <p>Grab a blanket, get comfy, and enjoy the latest adventure from the Puppy Pillow Fortress!</p>
+    <div id="story-content" class="textbox">Loading story…</div>
+    <a class="link-button" href="index.html">⬅️ Back home</a>
+  </div>
+
+  <script>
+    const storyContent = document.getElementById('story-content');
+
+    // NOTE: Replace the IDs below with the values from Google Docs and keep the doc published to the web.
+    const publishedDocId = 'YOUR_PUBLISHED_DOC_ID_HERE';
+    const fallbackDocId = 'YOUR_GOOGLE_DOC_ID_HERE';
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>"']/g, tag => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[tag]));
+    }
+
+    if (publishedDocId === 'YOUR_PUBLISHED_DOC_ID_HERE') {
+      storyContent.innerHTML = '<p>Please publish your Google Doc and replace the placeholder IDs in <code>story.html</code>.</p>';
+    } else {
+      const docUrl = `https://docs.google.com/document/d/e/${publishedDocId}/pub?output=txt`;
+      const fallbackUrl = fallbackDocId === 'YOUR_GOOGLE_DOC_ID_HERE'
+        ? null
+        : `https://docs.google.com/document/d/${fallbackDocId}/view`;
+
+      fetch(docUrl)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Story could not be fetched');
+          }
+          return response.text();
+        })
+        .then(text => {
+          const trimmed = text.trim();
+          if (!trimmed) {
+            throw new Error('Story is empty');
+          }
+
+          const paragraphs = trimmed.split(/\n\s*\n/);
+          storyContent.innerHTML = paragraphs
+            .map(paragraph => `<p>${escapeHTML(paragraph)}</p>`)
+            .join('');
+        })
+        .catch(error => {
+          console.error(error);
+          storyContent.innerHTML = `
+            <p>We couldn't load the story automatically. ${fallbackUrl
+              ? `<a href="${fallbackUrl}" target="_blank" rel="noopener">Read it on Google Docs</a>.`
+              : 'Please double-check that the Google Doc is published and publicly accessible.'}
+            </p>`;
+        });
+    }
+  </script>
+</body>
+</html>

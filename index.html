@@ -45,7 +45,8 @@
       margin: 1em 0;
     }
 
-    .link-button, #bark-test, #blog-open, #paw-open {
+    .link-button,
+    #bark-test {
       cursor: pointer;
       display: inline-block;
       margin: 0.5em;
@@ -58,9 +59,33 @@
       text-decoration: none;
     }
 
-    #blog-panel, #paw-panel {
+    .side-button {
+      position: fixed;
+      right: 0;
+      transform: translateY(-50%);
+      background: white;
+      color: #6a0dad;
+      height: 140px;
+      width: 5px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      font-size: 0.8em;
+      border: 2px solid white;
+      border-radius: 15px 0 0 15px;
+      text-decoration: none;
+      padding: 0.7em 1.4em;
+      z-index: 1000;
+    }
+
+    #blog-link { top: 45%; }
+    #paw-open { top: 65%; }
+
+    #paw-panel {
       position: fixed;
       top: 0;
+      right: 0;
       height: 100%;
       width: clamp(300px, 70vw, 500px);
       background-color: #6a5acd;
@@ -69,45 +94,40 @@
       z-index: 999;
       overflow-y: auto;
       transition: transform 0.3s ease;
+      transform: translateX(100%);
     }
 
-    #blog-panel { right: 0; transform: translateX(100%); }
-    #blog-panel.open { transform: translateX(0); }
-    #paw-panel { left: 0; transform: translateX(-100%); }
     #paw-panel.open { transform: translateX(0); }
 
-#blog-open, #paw-open {
-  position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
-  background: white;
-  color: #6a0dad;
-  height: 120px;
-  width: 5px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-weight: bold;
-  font-size: 0.8em;
-  z-index: 1000;
-}
-#blog-open { right: 0; border-radius: 15px 0 0 15px; }
-#paw-open { left: 0; border-radius: 0 15px 15px 0; }
-}
-/* Generic vertical text settings */
-.vertical-text {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-}
+    #paw-name,
+    #paw-input {
+      width: 100%;
+      border-radius: 10px;
+      padding: 0.5em;
+      font-size: 1em;
+      margin-bottom: 1em;
+      border: none;
+    }
 
-/* Specific rotation for each button */
-#paw-open .vertical-text {
-  transform: rotate(90deg); /* Bottom to top */
-}
+    #paw-input {
+      height: 60px;
+      resize: none;
+    }
 
-#blog-open .vertical-text {
-  transform: rotate(270deg); /* Top to bottom (default vertical-rl) */
-}
+    #paw-submit {
+      background-color: #dabfff;
+      color: #4b0082;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      padding: 0.5em 1em;
+      cursor: pointer;
+    }
+
+    #paw-feedback {
+      margin-top: 0.5em;
+      font-style: italic;
+    }
 
     #cookie-popup {
       position: fixed;
@@ -137,45 +157,32 @@
     #volume-wrapper { margin-top: 1em; }
     #volume-icon { font-size: 1.5em; margin-top: 0.5em; }
     #volume-control {
-      widipth: 80%;
+      width: 80%;
       margin-top: 0.3em;
       accent-color: #dabfff;
     }
     #volume-label { font-size: 1em; margin-top: 0.5em; display: block; }
 
-    #paw-input {
-      width: 100%;
-      height: 60px;
-      border-radius: 10px;
-      padding: 0.5em;
-      font-size: 1em;
-      margin-bottom: 1em;
-      resize: none;
+    .vertical-text {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
     }
 
-    #paw-submit {
-      background-color: #dabfff;
-      color: #4b0082;
-      font-weight: bold;
-      border: none;
-      border-radius: 10px;
-      padding: 0.5em 1em;
-      cursor: pointer;
+    #paw-open .vertical-text {
+      transform: rotate(90deg);
     }
 
-    #paw-feedback {
-      margin-top: 0.5em;
-      font-style: italic;
+    #blog-link .vertical-text {
+      transform: rotate(270deg);
     }
+
     body.blur .container,
-body.blur #blog-panel,
-body.blur #blog-open,
-body.blur #paw-panel,
-body.blur #paw-open {
-  filter: blur(5px);
-  pointer-events: none;
-  user-select: none;
-}
+    body.blur #paw-panel,
+    body.blur .side-button {
+      filter: blur(5px);
+      pointer-events: none;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
@@ -186,19 +193,15 @@ body.blur #paw-open {
     <button id="cookie-yes">yes I do</button>
   </div>
 
-  <!-- Blog Sidebar -->
-  <div id="blog-open"><span class="vertical-text">📓 Blog</span></div>
-  <div id="blog-panel">
-    <button id="blog-close">❌ Close</button>
-    <h2>📓 Blog Posts</h2>
-    <div id="blog-posts"></div>
-  </div>
+  <!-- Side Buttons -->
+  <a id="blog-link" class="side-button" href="blog.html"><span class="vertical-text">📓 Blog</span></a>
+  <div id="paw-open" class="side-button"><span class="vertical-text">🐾 Pawprints</span></div>
 
   <!-- Paw Print Panel -->
-  <div id="paw-open"><span class="vertical-text">🐾 Pawprints</span></div>
   <div id="paw-panel">
     <button id="paw-close">❌ Close</button>
     <h2>🐾 Leave a Paw Print</h2>
+    <input id="paw-name" maxlength="50" placeholder="Your name (required)" />
     <textarea id="paw-input" maxlength="100" placeholder="Say something cute (max 100 chars)"></textarea>
     <button id="paw-submit">Submit</button>
     <div id="paw-feedback"></div>
@@ -216,7 +219,7 @@ body.blur #paw-open {
     <h1>Puppy pillow fortress</h1>
     <img src="Untitled_Artwork.jpeg" alt="3 Puppy girls Nele, Pumpkin and Nyx" />
     <img src="Pumpkin and Nyx.jpg" alt="Pumpkin and Nyx" />
-    
+
     <div class="textbox">
       <h2>About Me</h2>
       <p>Hello! We are the Puppy Pillow Fortress System Pumpkin (She/it/pup),Nyx (She/her),Nele (She/her),Catt (She/her) .<br>
@@ -236,6 +239,8 @@ body.blur #paw-open {
       <a class="link-button" href="https://www.tumblr.com/nele-likes-stuff" target="_blank">Tumblr</a>
       <a class="link-button" href="https://www.reddit.com/user/CapFuture_/" target="_blank">Reddit</a>
       <a class="link-button" href="https://steamcommunity.com/id/RCKT_GRL/" target="_blank">Steam</a>
+      <a class="link-button" href="story.html">Read our story</a>
+      <a class="link-button" href="blog.html">Blog archive</a>
     </div>
 
     <div class="textbox">
@@ -264,7 +269,7 @@ body.blur #paw-open {
   <!-- JavaScript -->
   <script>
   // Trigger bark on all button or link-button presses
-  function iptriggerBarkOnInteraction(e) {
+  function triggerBarkOnInteraction(e) {
     const bark = document.getElementById('bark-sound');
     if (!bark) return;
 
@@ -282,12 +287,6 @@ body.blur #paw-open {
   document.addEventListener('touchstart', triggerBarkOnInteraction);
 </script>
   <script>
-    const blogPanel = document.getElementById('blog-panel');
-    const blogOpen = document.getElementById('blog-open');
-    const blogClose = document.getElementById('blog-close');
-    const pawPanel = document.getElementById('paw-panel');
-    const pawOpen = document.getElementById('paw-open');
-    const pawClose = document.getElementById('paw-close');
     const bark = document.getElementById('bark-sound');
     const barkTest = document.getElementById('bark-test');
     const cookiePopup = document.getElementById('cookie-popup');
@@ -297,42 +296,14 @@ body.blur #paw-open {
     const volumeLabel = document.getElementById('volume-label');
     const volumeIcon = document.getElementById('volume-icon');
 
-    function closeBlog() {
-      blogPanel.classList.remove('open');
-      blogOpen.style.display = 'flex';
-    }
+    cookieYes?.addEventListener('click', () => {
+      document.body.classList.remove('blur');
+      cookiePopup?.remove();
+    });
 
-    function closePaw() {
-      pawPanel.classList.remove('open');
-      pawOpen.style.display = 'flex';
-    }
-cookieYes.onclick = () => {
-  document.body.classList.remove('blur');
-  cookiePopup.remove();
-};
-
-cookieNo.onclick = () => {
-  window.location.href = "https://www.google.com/search?q=cookies";
-};
-
-document.body.classList.add('blur'); // Add this right after defining all elements
-    blogOpen.onclick = () => {
-      closePaw();
-      blogPanel.classList.add('open');
-      blogOpen.style.display = 'none';
-    };
-
-    blogClose.onclick = closeBlog;
-
-    
-
-    pawClose.onclick = closePaw;
-
-    cookieYes.onclick = () => {
-  document.body.classList.remove('blur');
-  cookiePopup.remove();
-};
-    cookieNo.onclick = () => window.location.href = "https://www.google.com/search?q=cookies";
+    cookieNo?.addEventListener('click', () => {
+      window.location.href = 'https://www.google.com/search?q=cookies';
+    });
 
     barkTest?.addEventListener('click', () => {
       bark.currentTime = 0;
@@ -348,38 +319,17 @@ document.body.classList.add('blur'); // Add this right after defining all elemen
     });
 
     const savedVol = localStorage.getItem('barkVolume') || 100;
-    bark.volume = savedVol / 100;
-    volumeControl.value = savedVol;
-
-// Load blog posts
-fetch('blog.json')
-  .then(r => r.json())
-  .then(posts => {
-    const blogPosts = document.getElementById('blog-posts');
-    
-    // Reverse the order of posts
-    posts.reverse();
-    
-    posts.forEach(post => {
-      const box = document.createElement('div');
-      box.className = 'textbox';
-
-      // Check if a link exists; only include it if both link and linkText are present
-      const linkHTML = post.link && post.linkText
-        ? `<p><a href="${post.link}" target="_blank">${post.linkText}</a></p>`
-        : '';
-
-      box.innerHTML = `
-        <p><strong>${post.date}:</strong> ${post.content}</p>
-        ${linkHTML}
-      `;
-      blogPosts.appendChild(box);
-    });
-  });
+    if (bark && volumeControl) {
+      bark.volume = savedVol / 100;
+      volumeControl.value = savedVol;
+      volumeLabel.textContent = savedVol <= 33 ? 'Volume: Arf' : savedVol <= 66 ? 'Volume: Woof' : 'Volume: Bark';
+      volumeIcon.textContent = savedVol <= 33 ? '🔈' : savedVol <= 66 ? '🔉' : '🔊';
+    }
   </script>
 
 <script type="module">
   const supabase = window.supabase;
+  const pawName = document.getElementById('paw-name');
   const pawInput = document.getElementById('paw-input');
   const pawSubmit = document.getElementById('paw-submit');
   const pawFeedback = document.getElementById('paw-feedback');
@@ -398,79 +348,101 @@ fetch('blog.json')
     }[tag]));
   }
 
+  function normalisePawPrint(pawPrint) {
+    const rawMessage = pawPrint.message || '';
+    if (pawPrint.name && pawPrint.name.trim()) {
+      return {
+        name: pawPrint.name.trim(),
+        message: rawMessage.trim(),
+      };
+    }
+
+    const colonIndex = rawMessage.indexOf(':');
+    if (colonIndex > -1) {
+      const possibleName = rawMessage.slice(0, colonIndex).trim();
+      const possibleMessage = rawMessage.slice(colonIndex + 1).trim();
+      if (possibleName && possibleMessage) {
+        return { name: possibleName, message: possibleMessage };
+      }
+    }
+
+    return { name: 'Anonymous', message: rawMessage.trim() };
+  }
+
   async function getUserIP() {
-      return null;
+    return null;
   }
 
- async function fetchPawPrints() {
-  console.log('Fetching pawprints...');
+  async function fetchPawPrints() {
+    pawPrints.innerHTML = '<p>Fetching pawprints...</p>';
 
-  pawPrints.innerHTML = '<p>Fetching pawprints...</p>'; // Add visual loading
+    const { data, error } = await supabase
+      .from('pawprints')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10);
 
-  const { data, error } = await supabase
-    .from('pawprints')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(10);
+    if (error) {
+      console.error('Error fetching pawprints:', error);
+      pawPrints.innerHTML = '<p>Could not load paw prints.</p>';
+      return;
+    }
 
-  console.log({ data, error }); // Log response
+    if (!data || data.length === 0) {
+      pawPrints.innerHTML = '<p>No paw prints yet.</p>';
+      return;
+    }
 
-  if (error) {
-    console.error('Error fetching pawprints:', error);
-    pawPrints.innerHTML = '<p>Could not load paw prints.</p>';
-    return;
+    pawPrints.innerHTML = '';
+    data.forEach(p => {
+      const { name, message } = normalisePawPrint(p);
+      const box = document.createElement('div');
+      box.className = 'textbox';
+      box.innerHTML = `<p><strong>${escapeHTML(name)}</strong>: ${escapeHTML(message)}</p>`;
+      pawPrints.appendChild(box);
+    });
   }
 
-  if (!data || data.length === 0) {
-    pawPrints.innerHTML = '<p>No paw prints yet.</p>';
-    return;
-  }
-
-  pawPrints.innerHTML = '';
-  data.forEach(p => {
-    const box = document.createElement('div');
-    box.className = 'textbox';
-    box.innerHTML = `<p>${escapeHTML(p.message)}</p>`;
-    pawPrints.appendChild(box);
+  pawOpen?.addEventListener('click', () => {
+    pawPanel.classList.add('open');
+    pawOpen.style.display = 'none';
+    fetchPawPrints();
   });
-}
 
-
-  pawOpen.onclick = () => {
-  closeBlog(); // optional if blog can be open
-  pawPanel.classList.add('open');
-  pawOpen.style.display = 'none';
-  fetchPawPrints(); // always fetch fresh paw prints when opened
-};
-
-
-  pawClose.onclick = () => {
+  pawClose?.addEventListener('click', () => {
     pawPanel.classList.remove('open');
     pawOpen.style.display = 'flex';
-  };
+  });
 
-  pawSubmit.addEventListener('click', async () => {
+  pawSubmit?.addEventListener('click', async () => {
+    const name = pawName.value.trim().slice(0, 50);
     const message = pawInput.value.trim().slice(0, 100);
+
+    if (!name) {
+      pawFeedback.textContent = 'Please add your name!';
+      return;
+    }
+
     if (!message) {
       pawFeedback.textContent = 'Your paw print is empty!';
       return;
     }
 
     const ip = await getUserIP();
+    const combinedMessage = `${name}: ${message}`;
 
-    const { error } = await supabase.from('pawprints').insert({ message, ip });
+    const { error } = await supabase.from('pawprints').insert({ message: combinedMessage, ip });
 
-  if (error) {
-  pawFeedback.textContent = 'Something went wrong.';
-  console.error(error);
-} else {
-  pawFeedback.textContent = 'Paw print submitted!';
-  pawInput.value = '';
-  setTimeout(fetchPawPrints, 2000); // wait 2 seconds before fetching
-}
-
+    if (error) {
+      pawFeedback.textContent = 'Something went wrong.';
+      console.error(error);
+    } else {
+      pawFeedback.textContent = 'Paw print submitted!';
+      pawInput.value = '';
+      pawName.value = '';
+      setTimeout(fetchPawPrints, 2000);
+    }
   });
-  
 </script>
   <script>
   window.addEventListener('DOMContentLoaded', () => {
