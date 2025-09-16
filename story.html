@@ -17,7 +17,7 @@
     .container {
       max-width: 800px;
       margin: 0 auto;
-      padding: 2em;
+      padding: 4.5em 2em 2em;
       text-align: center;
     }
 
@@ -42,15 +42,33 @@
       text-decoration: none;
     }
 
+    .back-button {
+      position: fixed;
+      top: 1.5em;
+      left: 1.5em;
+      z-index: 1000;
+    }
+
     a { color: #dabfff; }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 5em 1.5em 2em;
+      }
+
+      .back-button {
+        top: 1em;
+        left: 1em;
+      }
+    }
   </style>
 </head>
 <body>
+  <a class="link-button back-button" href="index.html">⬅️ Back home</a>
   <div class="container">
     <h1>Story Time</h1>
     <p>Grab a blanket, get comfy, and enjoy the latest adventure from the Puppy Pillow Fortress!</p>
     <div id="story-content" class="textbox">Loading story…</div>
-    <a class="link-button" href="index.html">⬅️ Back home</a>
   </div>
 
   <script>
@@ -59,24 +77,42 @@
     // NOTE: Replace the IDs below with the values from Google Docs and keep the doc published to the web.
     const publishedDocId = 'YOUR_PUBLISHED_DOC_ID_HERE';
     const fallbackDocId = 'YOUR_GOOGLE_DOC_ID_HERE';
+    const fallbackUrl = fallbackDocId === 'YOUR_GOOGLE_DOC_ID_HERE'
+      ? null
+      : `https://docs.google.com/document/d/${fallbackDocId}/view`;
 
-    function escapeHTML(str) {
-      return str.replace(/[&<>"']/g, tag => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;',
-      }[tag]));
+    function renderParagraphs(paragraphs) {
+      storyContent.innerHTML = '';
+      let appended = false;
+
+      paragraphs.forEach(text => {
+        const trimmed = text.trim();
+        if (!trimmed) {
+          return;
+        }
+
+        const paragraphEl = document.createElement('p');
+        paragraphEl.textContent = trimmed;
+        storyContent.appendChild(paragraphEl);
+        appended = true;
+      });
+
+      if (!appended) {
+        storyContent.innerHTML = '<p>The story is currently empty.</p>';
+      }
+    }
+
+    function showError(extraMessage = '') {
+      const details = fallbackUrl
+        ? `<a href="${fallbackUrl}" target="_blank" rel="noopener">Read it on Google Docs</a>.`
+        : 'Please double-check that the Google Doc is published and publicly accessible.';
+      storyContent.innerHTML = `<p>We couldn't load the story automatically. ${details}${extraMessage}</p>`;
     }
 
     if (publishedDocId === 'YOUR_PUBLISHED_DOC_ID_HERE') {
-      storyContent.innerHTML = '<p>Please publish your Google Doc and replace the placeholder IDs in <code>story.html</code>.</p>';
+      showError(' Please publish your Google Doc and replace the placeholder IDs in <code>story.html</code>.');
     } else {
       const docUrl = `https://docs.google.com/document/d/e/${publishedDocId}/pub?output=txt`;
-      const fallbackUrl = fallbackDocId === 'YOUR_GOOGLE_DOC_ID_HERE'
-        ? null
-        : `https://docs.google.com/document/d/${fallbackDocId}/view`;
 
       fetch(docUrl)
         .then(response => {
@@ -87,22 +123,37 @@
         })
         .then(text => {
           const trimmed = text.trim();
+
           if (!trimmed) {
-            throw new Error('Story is empty');
+            renderParagraphs([]);
+            return;
           }
 
-          const paragraphs = trimmed.split(/\n\s*\n/);
-          storyContent.innerHTML = paragraphs
-            .map(paragraph => `<p>${escapeHTML(paragraph)}</p>`)
-            .join('');
+          if (/^<!doctype html/i.test(trimmed) || /^<html/i.test(trimmed)) {
+            const htmlError = new Error('html-response');
+            htmlError.isHTMLResponse = true;
+            throw htmlError;
+          }
+
+          let paragraphs = trimmed.split(/\n\s*\n/).map(part => part.trim()).filter(Boolean);
+
+          if (!paragraphs.length && trimmed.includes('\n')) {
+            paragraphs = trimmed.split(/\r?\n/).map(part => part.trim()).filter(Boolean);
+          }
+
+          if (!paragraphs.length) {
+            renderParagraphs([trimmed]);
+            return;
+          }
+
+          renderParagraphs(paragraphs);
         })
         .catch(error => {
           console.error(error);
-          storyContent.innerHTML = `
-            <p>We couldn't load the story automatically. ${fallbackUrl
-              ? `<a href="${fallbackUrl}" target="_blank" rel="noopener">Read it on Google Docs</a>.`
-              : 'Please double-check that the Google Doc is published and publicly accessible.'}
-            </p>`;
+          const extra = error?.isHTMLResponse
+            ? ' Please make sure the document is published to the web and that you are using the ID from the published link.'
+            : '';
+          showError(extra);
         });
     }
   </script>

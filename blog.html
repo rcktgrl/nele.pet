@@ -17,7 +17,7 @@
     .container {
       max-width: 800px;
       margin: 0 auto;
-      padding: 2em;
+      padding: 4.5em 2em 2em;
       text-align: center;
     }
 
@@ -42,17 +42,35 @@
       text-decoration: none;
     }
 
+    .back-button {
+      position: fixed;
+      top: 1.5em;
+      left: 1.5em;
+      z-index: 1000;
+    }
+
     a { color: #dabfff; }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 5em 1.5em 2em;
+      }
+
+      .back-button {
+        top: 1em;
+        left: 1em;
+      }
+    }
   </style>
 </head>
 <body>
+  <a class="link-button back-button" href="index.html">⬅️ Back home</a>
   <div class="container">
     <h1>📓 Blog Pupdates</h1>
     <p>All the cozy ramblings, collected in one snuggly spot.</p>
     <div id="blog-posts">
       <p>Loading posts…</p>
     </div>
-    <a class="link-button" href="index.html">⬅️ Back home</a>
   </div>
 
   <script>
