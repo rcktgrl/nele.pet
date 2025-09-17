@@ -194,16 +194,16 @@
     .side-button {
       background: white;
       color: #6a0dad;
-      min-height: 140px;
-      width: 60px;
+      min-height: 120px;
+      width: 48px;
       display: flex;
       justify-content: center;
       align-items: center;
       font-weight: bold;
-      font-size: 0.85em;
+      font-size: 0.8em;
       border: 2px solid white;
       text-decoration: none;
-      padding: 0.7em 0.5em;
+      padding: 0.55em 0.35em;
       border-radius: 15px;
     }
 
@@ -480,6 +480,50 @@
       transform: rotate(90deg);
     }
 
+    .ocs-gallery {
+      display: grid;
+      gap: 1.5em;
+      margin: 1.5em auto 0;
+      justify-items: center;
+    }
+
+    .ocs-gallery__item {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6em;
+      width: 100%;
+      max-width: min(var(--hero-canvas-width, 640px), 100%);
+      text-align: center;
+    }
+
+    .ocs-gallery__frame {
+      width: min(var(--hero-canvas-width, 640px), 100%);
+      aspect-ratio: var(--hero-canvas-aspect, 4 / 3);
+      border-radius: 20px;
+      overflow: hidden;
+      border: 2px solid rgba(230, 210, 255, 0.5);
+      box-shadow: 0 18px 40px rgba(16, 2, 37, 0.35);
+      background: linear-gradient(135deg, rgba(54, 18, 92, 0.4), rgba(101, 45, 168, 0.2));
+    }
+
+    .ocs-gallery__image {
+      width: 100%;
+      height: 100%;
+      max-height: none;
+      object-fit: cover;
+      display: block;
+    }
+
+    .ocs-gallery__caption {
+      margin: 0;
+      font-style: italic;
+      color: #f5e6ff;
+      text-shadow: 0 2px 6px rgba(16, 2, 37, 0.5);
+    }
+
     body.blur .container,
     body.blur #paw-panel,
     body.blur .side-button,
@@ -632,6 +676,33 @@
     </div>
 
     <div class="textbox">
+      <h2>🌙 Snuggle Squad Gallery</h2>
+      <p>Peek at the cozy OCs keeping our pillow fort canvas dreamy and bright.</p>
+      <div class="ocs-gallery" role="list">
+        <figure class="ocs-gallery__item" role="listitem">
+          <div class="ocs-gallery__frame">
+            <img
+              class="ocs-gallery__image"
+              src="Untitled_Artwork.jpeg"
+              alt="Pastel illustration of Pumpkin and Nyx snuggling amongst pillows."
+            />
+          </div>
+          <figcaption class="ocs-gallery__caption">Pumpkin &amp; Nyx melting into pastel pillows.</figcaption>
+        </figure>
+        <figure class="ocs-gallery__item" role="listitem">
+          <div class="ocs-gallery__frame">
+            <img
+              class="ocs-gallery__image"
+              src="Pumpkin and Nyx.jpg"
+              alt="Pumpkin and Nyx cuddling together on a cozy sofa."
+            />
+          </div>
+          <figcaption class="ocs-gallery__caption">Lazy sofa cuddles from Pumpkin and Nyx.</figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <div class="textbox">
       <h2>🔊 Bark Test </br> (credit to <a href="https://lucy.moe">Lucy</a> for the cute sound)</h2>
       <button id="bark-test">Test Bark</button>
       <div id="volume-wrapper">
@@ -751,6 +822,15 @@
 
       heroSlider.style.width = `${width}px`;
       heroSlider.style.height = `${height}px`;
+
+      const rootStyle = document.documentElement?.style;
+      if (rootStyle) {
+        rootStyle.setProperty('--hero-canvas-width', `${width}px`);
+        rootStyle.setProperty('--hero-canvas-height', `${height}px`);
+        if (height > 0) {
+          rootStyle.setProperty('--hero-canvas-aspect', (width / height).toString());
+        }
+      }
     };
 
     const ensureHeroImageWillResizeSlider = (image) => {
