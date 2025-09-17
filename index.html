@@ -13,6 +13,10 @@
     );
   </script>
   <style>
+    :root {
+      --hero-gap: 1.5em;
+    }
+
     html, body {
       margin: 0;
       padding: 0;
@@ -22,11 +26,47 @@
       overflow-x: hidden;
     }
 
+    body {
+      position: relative;
+      min-height: 100vh;
+    }
+
     .container {
+      position: relative;
       max-width: 800px;
-      margin: 0 auto;
-      padding: 2em;
+      margin: calc(var(--hero-gap) + 1em) auto 2.5em;
+      padding: calc(1.75em + var(--hero-gap) / 2) 2em 2.5em;
       text-align: center;
+      z-index: 1;
+      background: rgba(32, 0, 58, 0.4);
+      border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .hero-layer {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: clamp(280px, 90vw, 1200px);
+      display: flex;
+      flex-direction: column;
+      gap: var(--hero-gap);
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .hero-layer__image {
+      width: 100%;
+      height: auto;
+      max-height: none;
+      object-fit: contain;
+      border-radius: 20px;
+      margin: 0;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
     }
 
     .textbox {
@@ -63,14 +103,15 @@
       background: white;
       color: #6a0dad;
       min-height: 140px;
+      width: 60px;
       display: flex;
       justify-content: center;
       align-items: center;
       font-weight: bold;
-      font-size: 0.8em;
+      font-size: 0.85em;
       border: 2px solid white;
       text-decoration: none;
-      padding: 0.7em 1.4em;
+      padding: 0.7em 0.5em;
       border-radius: 15px;
     }
 
@@ -184,8 +225,6 @@
       justify-content: center;
       letter-spacing: 0.15em;
       white-space: nowrap;
-      writing-mode: vertical-rl;
-      text-orientation: upright;
       transform-origin: center;
     }
 
@@ -193,22 +232,49 @@
       display: inline-block;
       letter-spacing: 0.15em;
       white-space: nowrap;
+    }
 
+    .vertical-text--bottom-to-top {
+      transform: rotate(-90deg);
+    }
+
+    .vertical-text--top-to-bottom {
+      transform: rotate(90deg);
     }
 
     body.blur .container,
     body.blur #paw-panel,
-    body.blur .side-button {
+    body.blur .side-button,
+    body.blur .hero-layer__image {
       filter: blur(5px);
       pointer-events: none;
       user-select: none;
     }
+
+    @media (max-width: 600px) {
+      :root {
+        --hero-gap: 1em;
+      }
+
+      .container {
+        margin: calc(var(--hero-gap) + 1em) 1em 2em;
+        padding: calc(1.4em + var(--hero-gap) / 2) 1.5em 2em;
+      }
+
+      .hero-layer {
+        width: 90%;
+      }
+    }
   </style>
 </head>
 <body>
+  <div class="hero-layer" aria-hidden="true">
+    <img class="hero-layer__image" src="Untitled_Artwork.jpeg" alt="">
+    <img class="hero-layer__image" src="Pumpkin and Nyx.jpg" alt="">
+  </div>
   <!-- Cookie Popup -->
   <div id="cookie-popup">
-    <p><strong>I like cookies :3 (this site doesn't use any tho lol)</strong></p>
+    <p><strong>I like cookies :3 (we use one to remember your choice!)</strong></p>
     <button id="cookie-no">no (leave page)</button>
     <button id="cookie-yes">yes I do</button>
   </div>
@@ -251,8 +317,6 @@
   <!-- Main Content -->
   <div class="container">
     <h1>Puppy pillow fortress</h1>
-    <img src="Untitled_Artwork.jpeg" alt="3 Puppy girls Nele, Pumpkin and Nyx" />
-    <img src="Pumpkin and Nyx.jpg" alt="Pumpkin and Nyx" />
 
     <div class="textbox">
       <h2>About Me</h2>
@@ -328,7 +392,33 @@
     const volumeLabel = document.getElementById('volume-label');
     const volumeIcon = document.getElementById('volume-icon');
 
+    const COOKIE_NAME = 'cookieConsent';
+    const COOKIE_ACCEPTED_VALUE = 'accepted';
+
+    const getCookie = (name) => {
+      return document.cookie
+        .split('; ')
+        .find(row => row.startsWith(`${name}=`))
+        ?.split('=')[1];
+    };
+
+    const setCookie = (name, value, days) => {
+      const date = new Date();
+      date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
+      document.cookie = `${name}=${value}; expires=${date.toUTCString()}; path=/; SameSite=Lax`;
+    };
+
+    const hasCookieConsent = getCookie(COOKIE_NAME) === COOKIE_ACCEPTED_VALUE;
+
+    if (hasCookieConsent) {
+      document.body.classList.remove('blur');
+      cookiePopup?.remove();
+    } else {
+      document.body.classList.add('blur');
+    }
+
     cookieYes?.addEventListener('click', () => {
+      setCookie(COOKIE_NAME, COOKIE_ACCEPTED_VALUE, 365);
       document.body.classList.remove('blur');
       cookiePopup?.remove();
     });
@@ -478,7 +568,13 @@
 </script>
   <script>
   window.addEventListener('DOMContentLoaded', () => {
-    document.body.classList.add('blur');
+    const hasConsent = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('cookieConsent=')) === 'cookieConsent=accepted';
+
+    if (!hasConsent) {
+      document.body.classList.add('blur');
+    }
   });
 </script>
 </body>
