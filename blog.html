@@ -42,29 +42,71 @@
       text-decoration: none;
     }
 
-    .back-button {
+
+    .side-button {
+      background: white;
+      color: #6a0dad;
+      min-height: 140px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      font-size: 0.8em;
+      border: 2px solid white;
+      text-decoration: none;
+      padding: 0.7em 1.4em;
+      border-radius: 15px;
+    }
+
+    .side-button--left {
       position: fixed;
-      top: 1.5em;
-      left: 1.5em;
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      border-radius: 0 15px 15px 0;
       z-index: 1000;
+    }
+
+    .vertical-text {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: 0.15em;
+      white-space: nowrap;
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      transform-origin: center;
+    }
+
+    .vertical-text__inner {
+      display: inline-block;
+    }
+
+    .vertical-text--bottom-to-top {
+      transform: rotate(180deg);
+    }
+
+    .vertical-text--bottom-to-top .vertical-text__inner {
+      transform: rotate(180deg);
+      display: inline-block;
     }
 
     a { color: #dabfff; }
 
     @media (max-width: 600px) {
       .container {
-        padding: 5em 1.5em 2em;
-      }
 
-      .back-button {
-        top: 1em;
-        left: 1em;
+        padding: 4em 1.5em 2em 4.5em;
       }
     }
   </style>
 </head>
 <body>
-  <a class="link-button back-button" href="index.html">⬅️ Back home</a>
+  <a class="side-button side-button--left" href="index.html">
+    <span class="vertical-text vertical-text--top-to-bottom">
+      <span class="vertical-text__inner">⬅️ Back Home</span>
+    </span>
+  </a>
   <div class="container">
     <h1>📓 Blog Pupdates</h1>
     <p>All the cozy ramblings, collected in one snuggly spot.</p>

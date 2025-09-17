@@ -97,24 +97,19 @@
       border-radius: 0 15px 15px 0;
       z-index: 1000;
     }
-
-    .side-button--left .vertical-text {
-      writing-mode: vertical-lr;
-    }
-
     #paw-panel {
       position: fixed;
       top: 0;
-      right: 0;
+      left: 0;
       height: 100%;
       width: clamp(300px, 70vw, 500px);
       background-color: #6a5acd;
       padding: 2em;
-      box-shadow: 0 0 15px black;
+      box-shadow: 4px 0 15px rgba(0, 0, 0, 0.6);
       z-index: 999;
       overflow-y: auto;
       transition: transform 0.3s ease;
-      transform: translateX(100%);
+      transform: translateX(-100%);
     }
 
     #paw-panel.open { transform: translateX(0); }
@@ -184,11 +179,21 @@
     #volume-label { font-size: 1em; margin-top: 0.5em; display: block; }
 
     .vertical-text {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: 0.15em;
+      white-space: nowrap;
       writing-mode: vertical-rl;
       text-orientation: upright;
+      transform-origin: center;
+    }
+
+    .vertical-text__inner {
       display: inline-block;
       letter-spacing: 0.15em;
       white-space: nowrap;
+
     }
 
     body.blur .container,
@@ -210,11 +215,22 @@
 
   <!-- Side Buttons -->
   <div id="right-side-buttons">
-    <a id="blog-link" class="side-button side-button--right" href="blog.html"><span class="vertical-text">📓 Blog</span></a>
-    <a id="story-link" class="side-button side-button--right" href="story.html"><span class="vertical-text">📖 Story</span></a>
+    <a id="blog-link" class="side-button side-button--right" href="blog.html">
+      <span class="vertical-text vertical-text--bottom-to-top">
+        <span class="vertical-text__inner">📓 Blog</span>
+      </span>
+    </a>
+    <a id="story-link" class="side-button side-button--right" href="story.html">
+      <span class="vertical-text vertical-text--bottom-to-top">
+        <span class="vertical-text__inner">📖 Story</span>
+      </span>
+    </a>
   </div>
-  <div id="paw-open" class="side-button side-button--left"><span class="vertical-text">🐾 Pawprints</span></div>
-
+  <div id="paw-open" class="side-button side-button--left">
+    <span class="vertical-text vertical-text--top-to-bottom">
+      <span class="vertical-text__inner">🐾 Pawprints</span>
+    </span>
+  </div>
   <!-- Paw Print Panel -->
   <div id="paw-panel">
     <button id="paw-close">❌ Close</button>
