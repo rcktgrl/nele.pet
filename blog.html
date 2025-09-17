@@ -15,10 +15,17 @@
     }
 
     .container {
+      position: relative;
       max-width: 800px;
-      margin: 0 auto;
-      padding: 4.5em 2em 2em;
+      margin: 3em auto 2.5em;
+      padding: 4.5em 2.5em 2.5em 6em;
       text-align: center;
+      background: rgba(218, 191, 255, 0.45);
+      border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
     }
 
     .textbox {
@@ -47,14 +54,15 @@
       background: white;
       color: #6a0dad;
       min-height: 140px;
+      width: 60px;
       display: flex;
       justify-content: center;
       align-items: center;
       font-weight: bold;
-      font-size: 0.8em;
+      font-size: 0.85em;
       border: 2px solid white;
       text-decoration: none;
-      padding: 0.7em 1.4em;
+      padding: 0.7em 0.5em;
       border-radius: 15px;
     }
 
@@ -73,30 +81,29 @@
       justify-content: center;
       letter-spacing: 0.15em;
       white-space: nowrap;
-      writing-mode: vertical-rl;
-      text-orientation: upright;
       transform-origin: center;
     }
 
     .vertical-text__inner {
       display: inline-block;
+      letter-spacing: 0.15em;
+      white-space: nowrap;
     }
 
     .vertical-text--bottom-to-top {
-      transform: rotate(180deg);
+      transform: rotate(-90deg);
     }
 
-    .vertical-text--bottom-to-top .vertical-text__inner {
-      transform: rotate(180deg);
-      display: inline-block;
+    .vertical-text--top-to-bottom {
+      transform: rotate(90deg);
     }
 
     a { color: #dabfff; }
 
     @media (max-width: 600px) {
       .container {
-
-        padding: 4em 1.5em 2em 4.5em;
+        margin: 2em 1.5em 2em;
+        padding: 4em 1.75em 2em 4.5em;
       }
     }
   </style>
