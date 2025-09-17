@@ -699,7 +699,8 @@
     let activeHeroImage = null;
     let isHeroAnimating = false;
     let heroRotationTimer = null;
-    let pendingHeroAdvance = 0;
+
+    let pendingHeroAdvanceCount = 0;
 
     const createHeroImageElement = (image, additionalClass = '') => {
       const img = document.createElement('img');
@@ -717,6 +718,7 @@
 
     const showHeroImage = (index, { animate = true } = {}) => {
       if (!heroSlider || heroImages.length === 0) {
+        pendingHeroAdvanceCount = 0;
         nextBackgroundButton?.setAttribute('disabled', 'true');
         return;
       }
@@ -725,13 +727,9 @@
       const shouldAnimate = animate && !prefersReducedMotion && !!activeHeroImage;
 
       if (isHeroAnimating && shouldAnimate) {
-        const stepsForward = (targetIndex - currentHeroIndex + heroImages.length) % heroImages.length;
-        pendingHeroAdvance = stepsForward;
+        pendingHeroAdvanceCount += 1;
         return;
       }
-
-      pendingHeroAdvance = 0;
-
       const imageData = heroImages[targetIndex];
       const newImage = createHeroImageElement(
         imageData,
@@ -745,7 +743,7 @@
         }
         activeHeroImage = newImage;
         currentHeroIndex = targetIndex;
-        pendingHeroAdvance = 0;
+        pendingHeroAdvanceCount = 0;
         nextBackgroundButton?.removeAttribute('disabled');
         return;
       }
@@ -774,8 +772,33 @@
 
       const handleTransitionEnd = (event) => {
         if (event.propertyName !== 'transform') return;
+        finalizeTransition();
+      };
 
+      const handleTransitionCancel = () => {
+        finalizeTransition();
+      };
+
+      let hasFinalized = false;
+      let transitionTimeout = window.setTimeout(() => {
+        finalizeTransition();
+      }, 900);
+
+      function cleanupAfterTransition() {
         newImage.removeEventListener('transitionend', handleTransitionEnd);
+        newImage.removeEventListener('transitioncancel', handleTransitionCancel);
+        if (transitionTimeout !== null) {
+          window.clearTimeout(transitionTimeout);
+          transitionTimeout = null;
+        }
+      }
+
+      function finalizeTransition() {
+        if (hasFinalized) {
+          return;
+        }
+        hasFinalized = true;
+        cleanupAfterTransition();
         newImage.classList.remove('hero-layer__image--incoming', 'hero-layer__image--slide-in');
         newImage.classList.add('hero-layer__image--current');
 
@@ -788,14 +811,19 @@
         isHeroAnimating = false;
         nextBackgroundButton?.removeAttribute('disabled');
 
-        if (pendingHeroAdvance > 0) {
-          const queuedIndex = currentHeroIndex + pendingHeroAdvance;
-          pendingHeroAdvance = 0;
-          showHeroImage(queuedIndex, { animate: true });
+        if (pendingHeroAdvanceCount > 0) {
+          if (heroImages.length > 1) {
+            pendingHeroAdvanceCount -= 1;
+            const nextIndex = (currentHeroIndex + 1) % heroImages.length;
+            showHeroImage(nextIndex, { animate: true });
+          } else {
+            pendingHeroAdvanceCount = 0;
+          }
         }
-      };
+      }
 
       newImage.addEventListener('transitionend', handleTransitionEnd);
+      newImage.addEventListener('transitioncancel', handleTransitionCancel);
     };
 
     function stopHeroRotation() {
