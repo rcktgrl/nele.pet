@@ -85,6 +85,35 @@
       margin: 1em 0;
     }
 
+    .bear-cookie-button {
+      background: none;
+      border: none;
+      padding: 0;
+      margin: 1em 0;
+      display: block;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .bear-cookie-button:focus-visible {
+      outline: 3px solid #dabfff;
+      outline-offset: 4px;
+      border-radius: 15px;
+    }
+
+    .bear-cookie-button img {
+      margin: 0;
+      display: block;
+      width: 100%;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .bear-cookie-button:hover img,
+    .bear-cookie-button:focus-visible img {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 26px rgba(0, 0, 0, 0.35);
+    }
+
     .link-button,
     #bark-test {
       cursor: pointer;
@@ -194,13 +223,29 @@
       color: #6a0dad;
       border: 2px solid #dabfff;
       border-radius: 15px;
-      padding: 1em 2em;
+      padding: 1.4em 2.5em 1.2em;
       z-index: 9999;
       text-align: center;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
+      min-width: min(90vw, 320px);
+      outline: none;
+    }
+
+    #cookie-popup:focus-visible {
+      outline: 3px solid #dabfff;
+      outline-offset: 6px;
+    }
+
+    #cookie-popup.hidden {
+      display: none !important;
+    }
+
+    #cookie-popup p {
+      margin: 0;
     }
 
     #cookie-popup button {
-      margin: 1em 1em 0 1em;
+      margin: 0.8em 0.6em 0 0.6em;
       padding: 0.5em 1.2em;
       font-weight: bold;
       background-color: #dabfff;
@@ -208,6 +253,114 @@
       border: none;
       border-radius: 10px;
       cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    #cookie-popup button:hover,
+    #cookie-popup button:focus-visible {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 15px rgba(106, 13, 173, 0.25);
+    }
+
+    .cookie-popup__actions {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.5em;
+      margin-top: 1em;
+    }
+
+    .cookie-info-button {
+      position: absolute;
+      top: -12px;
+      right: -12px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2px solid #4b0082;
+      background: #dabfff;
+      color: #4b0082;
+      font-weight: 900;
+      font-size: 1.2em;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .cookie-info-button:hover,
+    .cookie-info-button:focus-visible {
+      transform: translateY(-2px) rotate(-6deg);
+      box-shadow: 0 12px 22px rgba(106, 13, 173, 0.35);
+    }
+
+    #cookie-info-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(20, 0, 40, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 1.5em;
+    }
+
+    #cookie-info-modal.open {
+      display: flex;
+    }
+
+    .cookie-info-card {
+      background: white;
+      color: #4b0082;
+      border-radius: 18px;
+      border: 2px solid #dabfff;
+      padding: 1.5em;
+      max-width: min(480px, 90vw);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+      text-align: left;
+    }
+
+    .cookie-info-card h2 {
+      margin-top: 0;
+      text-align: center;
+    }
+
+    .cookie-info-card p {
+      margin: 0.75em 0;
+      line-height: 1.4;
+    }
+
+    .cookie-info-card ul {
+      padding-left: 1.2em;
+      margin: 0.75em 0 1em;
+    }
+
+    .cookie-info-card li {
+      margin-bottom: 0.5em;
+    }
+
+    .cookie-info-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: #dabfff;
+      color: #4b0082;
+      font-weight: bold;
+      border-radius: 999px;
+      padding: 0.5em 1.5em;
+      cursor: pointer;
+      margin: 0 auto;
+      display: block;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .cookie-info-close:hover,
+    .cookie-info-close:focus-visible {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(106, 13, 173, 0.35);
     }
 
     #volume-wrapper { margin-top: 1em; }
@@ -273,10 +426,51 @@
     <img class="hero-layer__image" src="Pumpkin and Nyx.jpg" alt="">
   </div>
   <!-- Cookie Popup -->
-  <div id="cookie-popup">
-    <p><strong>I like cookies :3 (we use one to remember your choice!)</strong></p>
-    <button id="cookie-no">no (leave page)</button>
-    <button id="cookie-yes">yes I do</button>
+  <div
+    id="cookie-popup"
+    role="dialog"
+    aria-live="polite"
+    aria-modal="true"
+    aria-labelledby="cookie-popup-title"
+    tabindex="-1"
+  >
+    <button
+      type="button"
+      id="cookie-info-button"
+      class="cookie-info-button"
+      title="What cookies do we use? 🍪 Click for the full list!"
+      aria-label="Open the list of cookies we use"
+      aria-haspopup="dialog"
+      aria-controls="cookie-info-modal"
+    >
+      ?
+    </button>
+    <p id="cookie-popup-title"><strong>I like cookies :3 (we use one to remember your choice!)</strong></p>
+    <div class="cookie-popup__actions">
+      <button id="cookie-no">no (leave page)</button>
+      <button id="cookie-yes">yes I do</button>
+    </div>
+  </div>
+
+  <div
+    id="cookie-info-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="cookie-info-title"
+    aria-hidden="true"
+  >
+    <div class="cookie-info-card">
+      <h2 id="cookie-info-title">Our cookie jar 🍪</h2>
+      <p>Here&apos;s the teeny list Firefox spotted:</p>
+      <ul>
+        <li><strong>cookieConsent</strong> &ndash; our only first-party cookie. It remembers that you said yes so the blur and banner stay gone for a year.</li>
+        <li><strong>sp_t</strong> &ndash; set by the Spotify playlist iframe so the embed can keep your Spotify session happy.</li>
+        <li><strong>sp_landing</strong> &ndash; another Spotify helper that recalls which Spotify page the iframe last loaded.</li>
+        <li><strong>__cf_bm</strong> &ndash; Cloudflare&apos;s bot-fairy from Supabase, making sure the paw-print data is requested by a real pupper-lover.</li>
+      </ul>
+      <p>Firefox usually counts three right away because our <code>cookieConsent</code> cookie only appears after you press “yes”.</p>
+      <button type="button" class="cookie-info-close" id="cookie-info-close">Close cookie peek</button>
+    </div>
   </div>
 
   <!-- Side Buttons -->
@@ -359,7 +553,15 @@
       </div>
     </div>
 
-    <img src="https://placebear.com/600/300" alt="Cute bear" />
+    <button
+      type="button"
+      id="cookie-bear-button"
+      class="bear-cookie-button"
+      title="Removes: cookieConsent (our remember-me cookie). Spotify & Cloudflare cookies stay snuggled on their own sites."
+      aria-label="Ask the bear to remove the cookies we can"
+    >
+      <img src="https://placebear.com/600/300" alt="A cute bear ready to tidy up cookies" />
+    </button>
   </div>
 
   <!-- JavaScript -->
@@ -388,12 +590,17 @@
     const cookiePopup = document.getElementById('cookie-popup');
     const cookieYes = document.getElementById('cookie-yes');
     const cookieNo = document.getElementById('cookie-no');
+    const cookieInfoButton = document.getElementById('cookie-info-button');
+    const cookieInfoModal = document.getElementById('cookie-info-modal');
+    const cookieInfoClose = document.getElementById('cookie-info-close');
+    const cookieBearButton = document.getElementById('cookie-bear-button');
     const volumeControl = document.getElementById('volume-control');
     const volumeLabel = document.getElementById('volume-label');
     const volumeIcon = document.getElementById('volume-icon');
 
     const COOKIE_NAME = 'cookieConsent';
     const COOKIE_ACCEPTED_VALUE = 'accepted';
+    const COOKIE_NAMES_TO_CLEAR = ['cookieConsent', 'sp_t', 'sp_landing', '__cf_bm'];
 
     const getCookie = (name) => {
       return document.cookie
@@ -408,23 +615,87 @@
       document.cookie = `${name}=${value}; expires=${date.toUTCString()}; path=/; SameSite=Lax`;
     };
 
+    const deleteCookie = (name) => {
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+    };
+
+    const hideCookiePopup = () => {
+      cookiePopup?.classList.add('hidden');
+      cookiePopup?.setAttribute('aria-hidden', 'true');
+    };
+
+    const showCookiePopup = () => {
+      cookiePopup?.classList.remove('hidden');
+      cookiePopup?.setAttribute('aria-hidden', 'false');
+    };
+
+    let lastFocusedElement = null;
+
+    const openCookieInfo = () => {
+      if (!cookieInfoModal) return;
+      lastFocusedElement = document.activeElement;
+      cookieInfoModal.classList.add('open');
+      cookieInfoModal.setAttribute('aria-hidden', 'false');
+      cookieInfoClose?.focus();
+    };
+
+    const closeCookieInfo = () => {
+      if (!cookieInfoModal) return;
+      cookieInfoModal.classList.remove('open');
+      cookieInfoModal.setAttribute('aria-hidden', 'true');
+      if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+        lastFocusedElement.focus();
+      } else {
+        cookieInfoButton?.focus();
+      }
+      lastFocusedElement = null;
+    };
+
     const hasCookieConsent = getCookie(COOKIE_NAME) === COOKIE_ACCEPTED_VALUE;
 
     if (hasCookieConsent) {
       document.body.classList.remove('blur');
-      cookiePopup?.remove();
+      hideCookiePopup();
     } else {
       document.body.classList.add('blur');
+      showCookiePopup();
     }
 
     cookieYes?.addEventListener('click', () => {
       setCookie(COOKIE_NAME, COOKIE_ACCEPTED_VALUE, 365);
       document.body.classList.remove('blur');
-      cookiePopup?.remove();
+      hideCookiePopup();
     });
 
     cookieNo?.addEventListener('click', () => {
       window.location.href = 'https://www.google.com/search?q=cookies';
+    });
+
+    cookieInfoButton?.addEventListener('click', () => {
+      openCookieInfo();
+    });
+
+    cookieInfoClose?.addEventListener('click', () => {
+      closeCookieInfo();
+    });
+
+    cookieInfoModal?.addEventListener('click', (event) => {
+      if (event.target === cookieInfoModal) {
+        closeCookieInfo();
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && cookieInfoModal?.classList.contains('open')) {
+        closeCookieInfo();
+      }
+    });
+
+    cookieBearButton?.addEventListener('click', () => {
+      COOKIE_NAMES_TO_CLEAR.forEach(deleteCookie);
+      document.body.classList.add('blur');
+      showCookiePopup();
+      cookiePopup?.focus({ preventScroll: true });
     });
 
     barkTest?.addEventListener('click', () => {
