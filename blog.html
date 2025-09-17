@@ -17,7 +17,7 @@
     .container {
       max-width: 800px;
       margin: 0 auto;
-      padding: 2em;
+      padding: 4.5em 2em 2em;
       text-align: center;
     }
 
@@ -42,17 +42,97 @@
       text-decoration: none;
     }
 
+    .side-button {
+      background: white;
+      color: #6a0dad;
+      min-height: 140px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      font-size: 0.8em;
+      border: 2px solid white;
+      text-decoration: none;
+      padding: 0.7em 1.4em;
+      border-radius: 15px;
+    }
+
+    .side-button--left {
+      position: fixed;
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      border-radius: 0 15px 15px 0;
+      z-index: 1000;
+    }
+
+    .vertical-text {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: 0.15em;
+      white-space: nowrap;
+    }
+
+    .vertical-text__inner {
+      display: inline-block;
+    }
+
+    .vertical-text--top-to-bottom {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+    }
+
+    .vertical-text--bottom-to-top {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      transform: rotate(180deg);
+    }
+
+    .vertical-text--bottom-to-top .vertical-text__inner {
+      transform: rotate(180deg);
+      display: inline-block;
+    }
+
     a { color: #dabfff; }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 5em 1.5em 2em;
+      }
+
+      .side-button--left {
+        top: auto;
+        bottom: 1em;
+        transform: none;
+      }
+
+      .vertical-text,
+      .vertical-text--top-to-bottom,
+      .vertical-text--bottom-to-top {
+        writing-mode: horizontal-tb;
+        letter-spacing: normal;
+        transform: none;
+      }
+
+      .vertical-text--bottom-to-top .vertical-text__inner {
+        transform: none;
+      }
+    }
   </style>
 </head>
 <body>
+  <a class="side-button side-button--left" href="index.html">
+    <span class="vertical-text vertical-text--top-to-bottom">
+      <span class="vertical-text__inner">⬅️ Back Home</span>
+    </span>
+  </a>
   <div class="container">
     <h1>📓 Blog Pupdates</h1>
     <p>All the cozy ramblings, collected in one snuggly spot.</p>
     <div id="blog-posts">
       <p>Loading posts…</p>
     </div>
-    <a class="link-button" href="index.html">⬅️ Back home</a>
   </div>
 
   <script>
