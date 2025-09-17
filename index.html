@@ -104,7 +104,7 @@
       inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       border-radius: 20px;
       margin: 0;
       opacity: 0;
@@ -694,7 +694,15 @@
     ];
 
     const HERO_ROTATION_INTERVAL = 20000;
+    const HERO_DESKTOP_MAX_WIDTH = 1500;
+    const HERO_DESKTOP_MAX_HEIGHT = 1125;
+    const HERO_MOBILE_MAX_DIMENSION = 640;
+    const HERO_DESKTOP_WIDTH_RATIO = 0.98;
+    const HERO_DESKTOP_HEIGHT_RATIO = 0.95;
+    const HERO_MOBILE_WIDTH_RATIO = 0.96;
+    const HERO_MOBILE_HEIGHT_RATIO = 0.85;
     const reduceMotionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+    const heroSmallScreenQuery = window.matchMedia ? window.matchMedia('(max-width: 600px)') : null;
     let prefersReducedMotion = reduceMotionQuery?.matches ?? false;
     let currentHeroIndex = heroImages.length ? Math.floor(Math.random() * heroImages.length) : 0;
     let activeHeroImage = null;
@@ -703,11 +711,96 @@
 
     let pendingHeroAdvanceCount = 0;
 
+    const getHeroSliderBounds = () => {
+      const isSmallScreen = heroSmallScreenQuery?.matches ?? false;
+      const maxWidth = Math.min(
+        isSmallScreen ? HERO_MOBILE_MAX_DIMENSION : HERO_DESKTOP_MAX_WIDTH,
+        window.innerWidth * (isSmallScreen ? HERO_MOBILE_WIDTH_RATIO : HERO_DESKTOP_WIDTH_RATIO),
+      );
+      const maxHeight = Math.min(
+        isSmallScreen ? HERO_MOBILE_MAX_DIMENSION : HERO_DESKTOP_MAX_HEIGHT,
+        window.innerHeight * (isSmallScreen ? HERO_MOBILE_HEIGHT_RATIO : HERO_DESKTOP_HEIGHT_RATIO),
+      );
+
+      return {
+        maxWidth: Math.max(1, maxWidth),
+        maxHeight: Math.max(1, maxHeight),
+      };
+    };
+
+    const updateHeroSliderSize = (image = activeHeroImage) => {
+      if (!heroSlider) {
+        return;
+      }
+
+      const { maxWidth, maxHeight } = getHeroSliderBounds();
+
+      let width = maxWidth;
+      let height = maxHeight;
+
+      if (image?.naturalWidth > 0 && image?.naturalHeight > 0) {
+        const aspectRatio = image.naturalWidth / image.naturalHeight;
+        width = maxWidth;
+        height = width / aspectRatio;
+
+        if (height > maxHeight) {
+          height = maxHeight;
+          width = height * aspectRatio;
+        }
+      }
+
+      heroSlider.style.width = `${width}px`;
+      heroSlider.style.height = `${height}px`;
+    };
+
+    const ensureHeroImageWillResizeSlider = (image) => {
+      if (!image) {
+        return;
+      }
+
+      if (image.complete && image.naturalWidth > 0 && image.naturalHeight > 0) {
+        updateHeroSliderSize(image);
+        return;
+      }
+
+      const handleLoad = () => {
+        updateHeroSliderSize(image);
+      };
+
+      const handleError = () => {
+        updateHeroSliderSize();
+      };
+
+      image.addEventListener('load', handleLoad, { once: true });
+      image.addEventListener('error', handleError, { once: true });
+    };
+
+    const handleViewportResize = () => {
+      updateHeroSliderSize();
+    };
+
+    window.addEventListener('resize', handleViewportResize);
+
+    if (heroSmallScreenQuery) {
+      const handleSmallScreenChange = () => {
+        updateHeroSliderSize();
+      };
+
+      if (typeof heroSmallScreenQuery.addEventListener === 'function') {
+        heroSmallScreenQuery.addEventListener('change', handleSmallScreenChange);
+      } else if (typeof heroSmallScreenQuery.addListener === 'function') {
+        heroSmallScreenQuery.addListener(handleSmallScreenChange);
+      }
+    }
+
+    updateHeroSliderSize();
+
     const createHeroImageElement = (image, additionalClass = '') => {
       const img = document.createElement('img');
       img.className = `hero-layer__image ${additionalClass}`.trim();
       img.src = image.src;
       img.alt = image.alt;
+      ensureHeroImageWillResizeSlider(img);
       return img;
     };
 
