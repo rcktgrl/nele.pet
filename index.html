@@ -94,8 +94,8 @@
       height: min(900px, 90vh);
       border-radius: 20px;
       overflow: hidden;
-      box-shadow: 0 16px 60px rgba(70, 20, 130, 0.55);
-      background: linear-gradient(135deg, rgba(54, 18, 92, 0.9), rgba(101, 45, 168, 0.7));
+      box-shadow: 0 16px 50px rgba(70, 20, 130, 0.45);
+      background: linear-gradient(135deg, rgba(54, 18, 92, 0.55), rgba(101, 45, 168, 0.35));
     }
 
     .hero-layer__image {
@@ -692,22 +692,13 @@
       { src: 'Pumpkin and Nyx.jpg', alt: 'Pumpkin and Nyx cuddling together on a cozy sofa.' },
     ];
 
+    const HERO_ROTATION_INTERVAL = 20000;
     const reduceMotionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
     let prefersReducedMotion = reduceMotionQuery?.matches ?? false;
-    if (reduceMotionQuery) {
-      const updateMotionPreference = (event) => {
-        prefersReducedMotion = event.matches;
-      };
-
-      if (typeof reduceMotionQuery.addEventListener === 'function') {
-        reduceMotionQuery.addEventListener('change', updateMotionPreference);
-      } else if (typeof reduceMotionQuery.addListener === 'function') {
-        reduceMotionQuery.addListener(updateMotionPreference);
-      }
-    }
     let currentHeroIndex = heroImages.length ? Math.floor(Math.random() * heroImages.length) : 0;
     let activeHeroImage = null;
     let isHeroAnimating = false;
+    let heroRotationTimer = null;
 
     const createHeroImageElement = (image, additionalClass = '') => {
       const img = document.createElement('img');
@@ -788,6 +779,56 @@
       newImage.addEventListener('transitionend', handleTransitionEnd);
     };
 
+    function stopHeroRotation() {
+      if (heroRotationTimer !== null) {
+        clearInterval(heroRotationTimer);
+        heroRotationTimer = null;
+      }
+    }
+
+    function startHeroRotation() {
+      if (!heroSlider || heroImages.length <= 1 || prefersReducedMotion) {
+        stopHeroRotation();
+        return;
+      }
+
+      stopHeroRotation();
+
+      heroRotationTimer = window.setInterval(() => {
+        if (document.hidden) {
+          return;
+        }
+
+        const nextIndex = (currentHeroIndex + 1) % heroImages.length;
+        showHeroImage(nextIndex, { animate: true });
+      }, HERO_ROTATION_INTERVAL);
+    }
+
+    if (reduceMotionQuery) {
+      const updateMotionPreference = (event) => {
+        prefersReducedMotion = event.matches;
+        if (prefersReducedMotion) {
+          stopHeroRotation();
+        } else {
+          startHeroRotation();
+        }
+      };
+
+      if (typeof reduceMotionQuery.addEventListener === 'function') {
+        reduceMotionQuery.addEventListener('change', updateMotionPreference);
+      } else if (typeof reduceMotionQuery.addListener === 'function') {
+        reduceMotionQuery.addListener(updateMotionPreference);
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        stopHeroRotation();
+      } else {
+        startHeroRotation();
+      }
+    });
+
     const initialiseHeroSlider = () => {
       if (!heroSlider || heroImages.length === 0) {
         nextBackgroundButton?.setAttribute('disabled', 'true');
@@ -799,7 +840,10 @@
       nextBackgroundButton?.addEventListener('click', () => {
         const nextIndex = (currentHeroIndex + 1) % heroImages.length;
         showHeroImage(nextIndex, { animate: true });
+        startHeroRotation();
       });
+
+      startHeroRotation();
     };
 
     initialiseHeroSlider();
