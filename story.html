@@ -17,6 +17,7 @@
     .container {
       max-width: 800px;
       margin: 0 auto;
+
       padding: 4.5em 2em 2em 5.5em;
       text-align: center;
     }
@@ -107,12 +108,17 @@
     .doc-instructions li {
       margin-bottom: 0.5em;
     }
-
     a { color: #dabfff; }
 
     @media (max-width: 600px) {
       .container {
         padding: 4em 1.5em 2em 4.5em;
+      }
+
+      .back-button {
+        top: 1em;
+        left: 1em;
+
       }
     }
   </style>
@@ -142,6 +148,7 @@
       ? null
       : `https://docs.google.com/document/d/${fallbackDocId}/view`;
 
+
     const docSetupGuide = `
       <div class="doc-instructions">
         <p><strong>How to link your Google Doc:</strong></p>
@@ -153,7 +160,6 @@
         <p>After saving the file, refresh this page to load the story automatically.</p>
       </div>
     `;
-
     function renderParagraphs(paragraphs) {
       storyContent.innerHTML = '';
       let appended = false;
@@ -174,7 +180,6 @@
         storyContent.innerHTML = '<p>The story is currently empty.</p>';
       }
     }
-
     function showError(extraMessage = '', includeSetup = false) {
       const details = fallbackUrl
         ? `<a href="${fallbackUrl}" target="_blank" rel="noopener">Read it on Google Docs</a>.`

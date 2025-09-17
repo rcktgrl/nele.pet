@@ -97,7 +97,6 @@
       border-radius: 0 15px 15px 0;
       z-index: 1000;
     }
-
     #paw-panel {
       position: fixed;
       top: 0;
@@ -192,15 +191,9 @@
 
     .vertical-text__inner {
       display: inline-block;
-    }
+      letter-spacing: 0.15em;
+      white-space: nowrap;
 
-    .vertical-text--bottom-to-top {
-      transform: rotate(180deg);
-    }
-
-    .vertical-text--bottom-to-top .vertical-text__inner {
-      transform: rotate(180deg);
-      display: inline-block;
     }
 
     body.blur .container,
@@ -238,7 +231,6 @@
       <span class="vertical-text__inner">🐾 Pawprints</span>
     </span>
   </div>
-
   <!-- Paw Print Panel -->
   <div id="paw-panel">
     <button id="paw-close">❌ Close</button>
