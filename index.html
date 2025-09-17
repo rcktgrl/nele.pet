@@ -289,7 +289,8 @@
       z-index: 9999;
       text-align: center;
       box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
-      min-width: min(90vw, 320px);
+      width: min(92vw, 360px);
+      box-sizing: border-box;
       outline: none;
     }
 
@@ -356,6 +357,27 @@
     .cookie-info-button:focus-visible {
       transform: translateY(-2px) rotate(-6deg);
       box-shadow: 0 12px 22px rgba(106, 13, 173, 0.35);
+    }
+
+    @media (max-width: 480px) {
+      #cookie-popup {
+        padding: 1.1em 1.4em 1em;
+      }
+
+      #cookie-popup button {
+        width: 100%;
+        margin: 0.6em 0 0 0;
+      }
+
+      .cookie-popup__actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .cookie-info-button {
+        top: -10px;
+        right: -10px;
+      }
     }
 
     #cookie-info-modal {
@@ -661,7 +683,7 @@
     const cookieBearButton = document.getElementById('cookie-bear-button');
     const volumeControl = document.getElementById('volume-control');
     const volumeLabel = document.getElementById('volume-label');
-    const volumeIcon = document.getElementById('volume-icon');koni 
+    const volumeIcon = document.getElementById('volume-icon');
     const heroSlider = document.querySelector('.hero-layer__slider');
     const nextBackgroundButton = document.getElementById('next-background');
 
