@@ -60,41 +60,57 @@
     }
 
     .side-button {
-      position: fixed;
-      right: 0;
-      transform: translateY(-50%);
       background: white;
       color: #6a0dad;
-      height: 140px;
-      width: 5px;
+      min-height: 140px;
       display: flex;
       justify-content: center;
       align-items: center;
       font-weight: bold;
       font-size: 0.8em;
       border: 2px solid white;
-      border-radius: 15px 0 0 15px;
       text-decoration: none;
       padding: 0.7em 1.4em;
+      border-radius: 15px;
+    }
+
+    .side-button--right {
+      border-radius: 15px 0 0 15px;
+    }
+
+    #right-side-buttons {
+      position: fixed;
+      top: 50%;
+      right: 0;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5em;
       z-index: 1000;
     }
 
-    #blog-link { top: 45%; }
-    #paw-open { top: 65%; }
+    .side-button--left {
+      position: fixed;
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      border-radius: 0 15px 15px 0;
+      z-index: 1000;
+    }
 
     #paw-panel {
       position: fixed;
       top: 0;
-      right: 0;
+      left: 0;
       height: 100%;
       width: clamp(300px, 70vw, 500px);
       background-color: #6a5acd;
       padding: 2em;
-      box-shadow: 0 0 15px black;
+      box-shadow: 4px 0 15px rgba(0, 0, 0, 0.6);
       z-index: 999;
       overflow-y: auto;
       transition: transform 0.3s ease;
-      transform: translateX(100%);
+      transform: translateX(-100%);
     }
 
     #paw-panel.open { transform: translateX(0); }
@@ -164,16 +180,27 @@
     #volume-label { font-size: 1em; margin-top: 0.5em; display: block; }
 
     .vertical-text {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: 0.15em;
+      white-space: nowrap;
       writing-mode: vertical-rl;
-      text-orientation: mixed;
+      text-orientation: upright;
+      transform-origin: center;
     }
 
-    #paw-open .vertical-text {
-      transform: rotate(90deg);
+    .vertical-text__inner {
+      display: inline-block;
     }
 
-    #blog-link .vertical-text {
-      transform: rotate(270deg);
+    .vertical-text--bottom-to-top {
+      transform: rotate(180deg);
+    }
+
+    .vertical-text--bottom-to-top .vertical-text__inner {
+      transform: rotate(180deg);
+      display: inline-block;
     }
 
     body.blur .container,
@@ -194,8 +221,23 @@
   </div>
 
   <!-- Side Buttons -->
-  <a id="blog-link" class="side-button" href="blog.html"><span class="vertical-text">📓 Blog</span></a>
-  <div id="paw-open" class="side-button"><span class="vertical-text">🐾 Pawprints</span></div>
+  <div id="right-side-buttons">
+    <a id="blog-link" class="side-button side-button--right" href="blog.html">
+      <span class="vertical-text vertical-text--bottom-to-top">
+        <span class="vertical-text__inner">📓 Blog</span>
+      </span>
+    </a>
+    <a id="story-link" class="side-button side-button--right" href="story.html">
+      <span class="vertical-text vertical-text--bottom-to-top">
+        <span class="vertical-text__inner">📖 Story</span>
+      </span>
+    </a>
+  </div>
+  <div id="paw-open" class="side-button side-button--left">
+    <span class="vertical-text vertical-text--top-to-bottom">
+      <span class="vertical-text__inner">🐾 Pawprints</span>
+    </span>
+  </div>
 
   <!-- Paw Print Panel -->
   <div id="paw-panel">
@@ -239,8 +281,6 @@
       <a class="link-button" href="https://www.tumblr.com/nele-likes-stuff" target="_blank">Tumblr</a>
       <a class="link-button" href="https://www.reddit.com/user/CapFuture_/" target="_blank">Reddit</a>
       <a class="link-button" href="https://steamcommunity.com/id/RCKT_GRL/" target="_blank">Steam</a>
-      <a class="link-button" href="story.html">Read our story</a>
-      <a class="link-button" href="blog.html">Blog archive</a>
     </div>
 
     <div class="textbox">
