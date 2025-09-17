@@ -198,17 +198,7 @@
     let embedUrl = null;
     let fallbackUrl = null;
 
-    const docSetupGuide = `
-      <div class="doc-instructions">
-        <p><strong>How to link your Google Doc:</strong></p>
-        <ol>
-          <li>Open your story in Google Docs and choose <strong>File → Share → Publish to web</strong>, then press <em>Publish</em>.</li>
-          <li>Copy the long ID from the published link (the part between <code>/d/e/</code> and <code>/pub</code>) and replace <code>${placeholderPublishedId}</code> above.</li>
-          <li>Copy the document ID from your browser URL (between <code>/d/</code> and <code>/edit</code>) and replace <code>${placeholderEditId}</code> so the backup button works.</li>
-        </ol>
-        <p>After saving the file, refresh this page to load the embedded viewer and text automatically.</p>
-      </div>
-    `;
+   
     function toggleEmbed(shouldShow, url = '') {
       if (!storyEmbedWrapper || !storyIframe) {
         return;
