@@ -37,6 +37,34 @@
       text-align: left;
     }
 
+    .story-embed {
+      margin: 1.5em 0;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      background: rgba(32, 0, 58, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+    }
+
+    .story-embed__frame {
+      width: 100%;
+      min-height: clamp(420px, 70vh, 880px);
+      border: 0;
+      background-color: white;
+    }
+
+    .story-links {
+      margin-bottom: 1em;
+    }
+
+    .story-links .link-button {
+      margin-top: 0;
+    }
+
+    .is-hidden {
+      display: none;
+    }
+
     .link-button {
       display: inline-block;
       margin: 0.5em;
@@ -133,34 +161,86 @@
   <div class="container">
     <h1>Story Time</h1>
     <p>Grab a blanket, get comfy, and enjoy the latest adventure from the Puppy Pillow Fortress!</p>
-    <div id="story-content" class="textbox">Loading story…</div>
+    <div id="story-embed-wrapper" class="story-embed is-hidden" aria-hidden="true">
+      <iframe
+        id="story-iframe"
+        class="story-embed__frame"
+        title="Embedded story from Google Docs"
+        loading="lazy"
+        allowfullscreen
+      ></iframe>
+    </div>
+    <div id="story-links" class="story-links is-hidden" aria-hidden="true">
+      <a id="story-manual-link" class="link-button" target="_blank" rel="noopener">
+        Open the story in Google Docs
+      </a>
+    </div>
+    <div id="story-content" class="textbox">Loading text version…</div>
   </div>
 
   <script>
     const storyContent = document.getElementById('story-content');
+    const storyEmbedWrapper = document.getElementById('story-embed-wrapper');
+    const storyIframe = document.getElementById('story-iframe');
+    const manualLinkWrapper = document.getElementById('story-links');
+    const manualLink = document.getElementById('story-manual-link');
+
+    const placeholderPublishedId = 'YOUR_PUBLISHED_DOC_ID_HERE';
+    const placeholderEditId = 'YOUR_GOOGLE_DOC_ID_HERE';
 
     // HOW TO LINK A GOOGLE DOC:
     // 1. In Google Docs pick File → Share → Publish to web and press Publish.
     // 2. Copy the ID between /d/e/ and /pub from the published link and paste it into publishedDocId.
-    // 3. Copy the ID between /d/ and /edit in the normal URL and paste it into fallbackDocId for the manual link.
+    // 3. Copy the ID between /d/ and /edit in the normal URL and paste it into editDocId for the manual button.
     const publishedDocId = '2PACX-1vS1eQuDaGmANcv9ODOl5XD5nJdw14U3DG46xQPJd32HXzfot2Ul_LR6Qyhh9W33mmRnFvfoQlWbdP8P';
-    const fallbackDocId = '2PACX-1vS1eQuDaGmANcv9ODOl5XD5nJdw14U3DG46xQPJd32HXzfot2Ul_LR6Qyhh9W33mmRnFvfoQlWbdP8P';
-    const fallbackUrl = fallbackDocId === '13_zTWp_cWnmwHUGpvco56Cj-GCbmQKmFdurH-WKjAs8'
-      ? null
-      : `https://docs.google.com/document/d/${fallbackDocId}/view`;
+    const editDocId = 'YOUR_GOOGLE_DOC_ID_HERE';
 
+    let embedUrl = null;
+    let fallbackUrl = null;
 
     const docSetupGuide = `
       <div class="doc-instructions">
         <p><strong>How to link your Google Doc:</strong></p>
         <ol>
           <li>Open your story in Google Docs and choose <strong>File → Share → Publish to web</strong>, then press <em>Publish</em>.</li>
-          <li>Copy the long ID from the published link (the part between <code>/d/e/</code> and <code>/pub</code>) and replace <code>YOUR_PUBLISHED_DOC_ID_HERE</code> above.</li>
-          <li>Copy the document ID from your browser URL (between <code>/d/</code> and <code>/edit</code>) and replace <code>YOUR_GOOGLE_DOC_ID_HERE</code> so the fallback link works.</li>
+          <li>Copy the long ID from the published link (the part between <code>/d/e/</code> and <code>/pub</code>) and replace <code>${placeholderPublishedId}</code> above.</li>
+          <li>Copy the document ID from your browser URL (between <code>/d/</code> and <code>/edit</code>) and replace <code>${placeholderEditId}</code> so the backup button works.</li>
         </ol>
-        <p>After saving the file, refresh this page to load the story automatically.</p>
+        <p>After saving the file, refresh this page to load the embedded viewer and text automatically.</p>
       </div>
     `;
+    function toggleEmbed(shouldShow, url = '') {
+      if (!storyEmbedWrapper || !storyIframe) {
+        return;
+      }
+
+      if (shouldShow && url) {
+        storyIframe.src = url;
+        storyEmbedWrapper.classList.remove('is-hidden');
+        storyEmbedWrapper.removeAttribute('aria-hidden');
+      } else {
+        storyIframe.removeAttribute('src');
+        storyEmbedWrapper.classList.add('is-hidden');
+        storyEmbedWrapper.setAttribute('aria-hidden', 'true');
+      }
+    }
+
+    function setManualLink(url) {
+      if (!manualLinkWrapper || !manualLink) {
+        return;
+      }
+
+      if (url) {
+        manualLink.href = url;
+        manualLinkWrapper.classList.remove('is-hidden');
+        manualLinkWrapper.removeAttribute('aria-hidden');
+      } else {
+        manualLink.removeAttribute('href');
+        manualLinkWrapper.classList.add('is-hidden');
+        manualLinkWrapper.setAttribute('aria-hidden', 'true');
+      }
+    }
+
     function renderParagraphs(paragraphs) {
       storyContent.innerHTML = '';
       let appended = false;
@@ -183,13 +263,28 @@
     }
     function showError(extraMessage = '', includeSetup = false) {
       const details = fallbackUrl
-        ? `<a href="${fallbackUrl}" target="_blank" rel="noopener">Read it on Google Docs</a>.`
+        ? `<a href="${fallbackUrl}" target="_blank" rel="noopener">Open the story on Google Docs</a>.`
         : 'Please double-check that the Google Doc is published and publicly accessible.';
+      const embedNote = embedUrl ? ' You can also try the embedded viewer above.' : '';
       const setup = includeSetup ? docSetupGuide : '';
-      storyContent.innerHTML = `<p>We couldn't load the story automatically. ${details}${extraMessage}</p>${setup}`;
+      storyContent.innerHTML = `<p>We couldn't load the plain-text story automatically.${embedNote} ${details}${extraMessage}</p>${setup}`;
     }
 
-    if (publishedDocId === 'YOUR_PUBLISHED_DOC_ID_HERE') {
+    if (publishedDocId !== placeholderPublishedId) {
+      embedUrl = `https://docs.google.com/document/d/e/${publishedDocId}/pub?embedded=true`;
+      toggleEmbed(true, embedUrl);
+
+      fallbackUrl = editDocId !== placeholderEditId
+        ? `https://docs.google.com/document/d/${editDocId}/view`
+        : `https://docs.google.com/document/d/e/${publishedDocId}/pub`;
+
+      setManualLink(fallbackUrl);
+    } else {
+      toggleEmbed(false);
+      setManualLink(null);
+    }
+
+    if (!embedUrl) {
       showError(' Once you replace the placeholder IDs in <code>story.html</code>, refresh this page.', true);
     } else {
       const docUrl = `https://docs.google.com/document/d/e/${publishedDocId}/pub?output=txt`;
