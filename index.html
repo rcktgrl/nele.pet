@@ -21,7 +21,9 @@
       margin: 0;
       padding: 0;
       font-family: comic sans, sans-serif;
-      background-color: #8a2be2;
+      background: radial-gradient(circle at 18% 20%, rgba(155, 93, 229, 0.8), rgba(26, 5, 52, 0.85) 60%, #120025 100%),
+        linear-gradient(135deg, #2f0a57, #150028 55%, #290a4d);
+      background-attachment: fixed;
       color: white;
       overflow-x: hidden;
     }
@@ -29,6 +31,59 @@
     body {
       position: relative;
       min-height: 100vh;
+      color: white;
+    }
+
+    .background-canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -2;
+      background-image:
+        radial-gradient(circle at 12% 25%, rgba(210, 180, 255, 0.35), transparent 58%),
+        radial-gradient(circle at 85% 18%, rgba(134, 87, 210, 0.32), transparent 62%),
+        radial-gradient(circle at 78% 74%, rgba(255, 168, 255, 0.25), transparent 60%),
+        radial-gradient(circle at 28% 80%, rgba(177, 101, 255, 0.3), transparent 58%);
+      filter: saturate(110%);
+    }
+
+    .background-canvas::before,
+    .background-canvas::after {
+      content: "";
+      position: absolute;
+      inset: -20%;
+      background:
+        radial-gradient(ellipse at 35% 30%, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 60%),
+        radial-gradient(ellipse at 75% 65%, rgba(200, 162, 255, 0.35), rgba(255, 255, 255, 0) 68%),
+        radial-gradient(ellipse at 50% 85%, rgba(149, 102, 226, 0.28), rgba(149, 102, 226, 0) 70%);
+      opacity: 0.5;
+      mix-blend-mode: screen;
+      animation: nebula-shift 26s linear infinite;
+    }
+
+    .background-canvas::after {
+      opacity: 0.35;
+      filter: blur(20px);
+      animation-direction: reverse;
+      animation-duration: 32s;
+    }
+
+    @keyframes nebula-shift {
+      0% {
+        transform: translate3d(-3%, -2%, 0) scale(1);
+      }
+      25% {
+        transform: translate3d(2%, -4%, 0) scale(1.04);
+      }
+      50% {
+        transform: translate3d(4%, 3%, 0) scale(1.02);
+      }
+      75% {
+        transform: translate3d(-2%, 4%, 0) scale(1.06);
+      }
+      100% {
+        transform: translate3d(-3%, -2%, 0) scale(1);
+      }
     }
 
     .container {
@@ -551,6 +606,7 @@
   </style>
 </head>
 <body>
+  <div class="background-canvas" aria-hidden="true"></div>
   <div class="hero-layer" aria-hidden="true">
     <div class="hero-layer__slider"></div>
   </div>
