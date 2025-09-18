@@ -1,3 +1,8 @@
+/**
+ * The hero slider is responsible for swapping the large background artwork on
+ * the landing page. These constants define how often the image should rotate
+ * and the maximum canvas size for different viewport scenarios.
+ */
 const HERO_ROTATION_INTERVAL = 20000;
 const HERO_DESKTOP_MAX_WIDTH = 1500;
 const HERO_DESKTOP_MAX_HEIGHT = 1125;
@@ -7,6 +12,11 @@ const HERO_DESKTOP_HEIGHT_RATIO = 0.95;
 const HERO_MOBILE_WIDTH_RATIO = 0.96;
 const HERO_MOBILE_HEIGHT_RATIO = 0.85;
 
+/**
+ * Encapsulates all behaviour for the rotating hero artwork, including sizing,
+ * automatic rotation, manual navigation, and respecting reduced motion
+ * preferences.
+ */
 class HeroSlider {
   constructor({ sliderElement, nextButton, images }) {
     this.sliderElement = sliderElement;
@@ -16,6 +26,7 @@ class HeroSlider {
     this.reduceMotionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)') ?? null;
     this.smallScreenQuery = window.matchMedia?.('(max-width: 600px)') ?? null;
 
+    // Track viewer preferences and the current state of the slider.
     this.prefersReducedMotion = this.reduceMotionQuery?.matches ?? false;
     this.currentIndex = this.images.length ? Math.floor(Math.random() * this.images.length) : 0;
     this.activeImage = null;
@@ -23,6 +34,7 @@ class HeroSlider {
     this.rotationTimer = null;
     this.pendingAdvanceCount = 0;
 
+    // Bind instance methods once so they can be safely added/removed as listeners.
     this.handleResize = this.updateSliderSize.bind(this);
     this.handleSmallScreenChange = this.updateSliderSize.bind(this);
     this.handleNextButtonClick = this.handleNextButtonClick.bind(this);
@@ -30,6 +42,7 @@ class HeroSlider {
     this.handleReduceMotionChange = this.handleReduceMotionChange.bind(this);
   }
 
+  /** Attach DOM listeners and render the initial hero image. */
   init() {
     if (!this.sliderElement) {
       this.nextButton?.setAttribute('disabled', 'true');
@@ -66,6 +79,7 @@ class HeroSlider {
     this.startRotation();
   }
 
+  /** Tear down any timers and event listeners created during init(). */
   destroy() {
     window.removeEventListener('resize', this.handleResize);
 
@@ -89,6 +103,7 @@ class HeroSlider {
     this.stopRotation();
   }
 
+  /** Called by the rotation timer to advance to the next image. */
   handleRotationTick() {
     if (this.prefersReducedMotion || this.images.length <= 1) {
       return;
@@ -98,6 +113,7 @@ class HeroSlider {
     this.showImage(nextIndex, { animate: true });
   }
 
+  /** Start the automatic slideshow unless motion should be reduced. */
   startRotation() {
     if (this.prefersReducedMotion || this.images.length <= 1) {
       this.stopRotation();
@@ -108,6 +124,7 @@ class HeroSlider {
     this.rotationTimer = window.setInterval(this.handleRotationTick, HERO_ROTATION_INTERVAL);
   }
 
+  /** Clear the rotation timer if one is running. */
   stopRotation() {
     if (this.rotationTimer !== null) {
       window.clearInterval(this.rotationTimer);
@@ -115,6 +132,7 @@ class HeroSlider {
     }
   }
 
+  /** Advance to the next hero image when the "next" button is pressed. */
   handleNextButtonClick() {
     if (this.images.length <= 1) {
       return;
@@ -126,6 +144,7 @@ class HeroSlider {
     this.startRotation();
   }
 
+  /** Respect changes to the user's reduced motion preference immediately. */
   handleReduceMotionChange(event) {
     this.prefersReducedMotion = event.matches;
     if (this.prefersReducedMotion) {
@@ -135,6 +154,10 @@ class HeroSlider {
     }
   }
 
+  /**
+   * Resize the slider container so it closely matches the current image while
+   * staying within the allowed bounds for the viewport size.
+   */
   updateSliderSize(image = this.activeImage) {
     if (!this.sliderElement) {
       return;
@@ -169,6 +192,7 @@ class HeroSlider {
     }
   }
 
+  /** Calculate the maximum allowed width and height for the hero slider. */
   getSliderBounds() {
     const isSmallScreen = this.smallScreenQuery?.matches ?? false;
     const maxWidth = Math.min(
@@ -187,6 +211,10 @@ class HeroSlider {
     };
   }
 
+  /**
+   * Build a DOM element for the given image data and ensure that the slider is
+   * resized once the image dimensions are known.
+   */
   createImageElement(image, additionalClass = '') {
     const element = document.createElement('img');
     element.className = `hero-layer__image ${additionalClass}`.trim();
@@ -196,6 +224,10 @@ class HeroSlider {
     return element;
   }
 
+  /**
+   * Ensure the slider resizes when the provided image loads or fails to load.
+   * This keeps the layout stable as images change.
+   */
   ensureImageResizesSlider(image) {
     if (!image) {
       return;
@@ -218,6 +250,7 @@ class HeroSlider {
     image.addEventListener('error', handleError, { once: true });
   }
 
+  /** Wrap any index so that it always falls within the available image range. */
   normaliseIndex(index) {
     if (!this.images.length) {
       return 0;
@@ -227,6 +260,11 @@ class HeroSlider {
     return mod < 0 ? mod + this.images.length : mod;
   }
 
+  /**
+   * Display the image at the provided index. When animation is enabled the
+   * method orchestrates a small slide transition and queues any additional
+   * navigation requests so they play one after another.
+   */
   showImage(index, { animate = true } = {}) {
     if (!this.sliderElement || !this.images.length) {
       this.pendingAdvanceCount = 0;
@@ -238,6 +276,7 @@ class HeroSlider {
     const shouldAnimate = animate && !this.prefersReducedMotion && !!this.activeImage;
 
     if (this.isAnimating && shouldAnimate) {
+      // Queue the request so it runs after the current animation completes.
       this.pendingAdvanceCount += 1;
       return;
     }
@@ -283,6 +322,8 @@ class HeroSlider {
     }
 
     let hasFinalised = false;
+    // Fallback timeout so we do not get stuck if the transitionend event
+    // never fires (for example if styles change).
     let transitionTimeout = window.setTimeout(() => {
       finaliseTransition();
     }, 900);
@@ -341,6 +382,10 @@ class HeroSlider {
   }
 }
 
+/**
+ * Convenience helper used by index.js to create and initialise a slider while
+ * returning a cleanup callback for teardown.
+ */
 export function initHeroSlider(options) {
   const slider = new HeroSlider(options);
   slider.init();

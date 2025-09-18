@@ -1,7 +1,12 @@
+/**
+ * Handles the cookie consent modal, including storing consent, showing extra
+ * info, and letting the visitor change their mind.
+ */
 const COOKIE_NAME = 'cookieConsent';
 const COOKIE_ACCEPTED_VALUE = 'accepted';
 const COOKIE_NAMES_TO_CLEAR = ['cookieConsent'];
 
+/** Read a cookie value by name. Returns undefined if it cannot be found. */
 function getCookie(name) {
   return document.cookie
     .split('; ')
@@ -9,26 +14,35 @@ function getCookie(name) {
     ?.split('=')[1];
 }
 
+/** Write a cookie that stays valid for the provided number of days. */
 function setCookie(name, value, daysValid) {
   const expiryDate = new Date();
   expiryDate.setTime(expiryDate.getTime() + daysValid * 24 * 60 * 60 * 1000);
   document.cookie = `${name}=${value}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax`;
 }
 
+/** Remove a cookie immediately by setting an expired date. */
 function deleteCookie(name) {
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
 }
 
+/** Hide the popup from both visuals and assistive technologies. */
 function hidePopup(popup) {
   popup?.classList.add('hidden');
   popup?.setAttribute('aria-hidden', 'true');
 }
 
+/** Show the popup and make it accessible to screen readers. */
 function showPopup(popup) {
   popup?.classList.remove('hidden');
   popup?.setAttribute('aria-hidden', 'false');
 }
 
+/**
+ * Wire up the consent popup and return a function that removes all listeners.
+ * The UI intentionally focuses on clarity rather than persistence so most
+ * behaviour is expressed through small, self-describing helpers.
+ */
 export function initCookieConsent({
   popup,
   acceptButton,
@@ -60,6 +74,7 @@ export function initCookieConsent({
       return;
     }
 
+    // Preserve focus so we can return the visitor to where they left off.
     lastFocusedElement = document.activeElement;
     infoModal.classList.add('open');
     infoModal.setAttribute('aria-hidden', 'false');
@@ -112,11 +127,13 @@ export function initCookieConsent({
   };
 
   const handleBearButtonClick = () => {
+    // The bear acts as a "reset" to let visitors reconsider their choice.
     COOKIE_NAMES_TO_CLEAR.forEach(deleteCookie);
     disablePageInteraction();
     popup?.focus({ preventScroll: true });
   };
 
+  // Show or hide the popup depending on whether consent is already stored.
   const hasConsent = getCookie(COOKIE_NAME) === COOKIE_ACCEPTED_VALUE;
   if (hasConsent) {
     enablePageInteraction();

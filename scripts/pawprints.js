@@ -1,11 +1,19 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/+esm';
 
+/**
+ * Handles the "paw print" guestbook that stores short visitor messages in a
+ * Supabase table.
+ */
 const SUPABASE_URL = 'https://lglcvsptwkqxykapepey.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnbGN2c3B0d2txeHlrYXBlcGV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwNzQ1NDcsImV4cCI6MjA2MjY1MDU0N30.ci7v2g-5wixuPKnG6wUUO87AsbI1bQ8wzRnHHG9QzIQ';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+/**
+ * Escape HTML entities to avoid injecting markup when rendering user supplied
+ * values. A small handcrafted map keeps the function dependency free.
+ */
 function escapeHTML(value) {
   return value.replace(/[&<>"']/g, (tag) => ({
     '&': '&amp;',
@@ -16,6 +24,10 @@ function escapeHTML(value) {
   }[tag] ?? tag));
 }
 
+/**
+ * Ensure we always have both a name and message. If the user leaves the name
+ * blank we attempt to infer it from a "Name: message" pattern.
+ */
 function normalisePawPrint(pawPrint) {
   const rawMessage = pawPrint.message ?? '';
 
@@ -38,10 +50,16 @@ function normalisePawPrint(pawPrint) {
   return { name: 'Anonymous', message: rawMessage.trim() };
 }
 
+// Placeholder that can be expanded in the future if IP tracking is needed for moderation.
 async function getUserIP() {
   return null;
 }
 
+/**
+ * Initialise the paw print panel. The function renders messages from Supabase,
+ * validates submissions, and returns a cleanup callback that detaches all
+ * listeners.
+ */
 export function initPawprints({
   nameInput,
   messageInput,
@@ -77,6 +95,7 @@ export function initPawprints({
 
   const fetchPawPrints = async () => {
     if (isFetching) {
+      // Avoid overlapping requests when the panel is opened repeatedly.
       return;
     }
 
@@ -121,6 +140,7 @@ export function initPawprints({
   };
 
   const handleSubmit = async () => {
+    // Keep inputs tidy and avoid excessively long entries.
     const name = nameInput?.value.trim().slice(0, 50) ?? '';
     const message = messageInput?.value.trim().slice(0, 100) ?? '';
 
@@ -142,6 +162,7 @@ export function initPawprints({
       feedbackElement.textContent = 'Sending your paw print…';
     }
 
+    // IP collection is optional for now but the hook keeps the call site tidy.
     const ip = await getUserIP();
     const combinedMessage = `${name}: ${message}`;
 
@@ -167,6 +188,7 @@ export function initPawprints({
       messageInput.value = '';
     }
 
+    // Give Supabase a moment to persist the entry before refreshing the list.
     window.setTimeout(fetchPawPrints, 2000);
   };
 
