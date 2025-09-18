@@ -1,3 +1,4 @@
+// Bootstraps all interactive modules that power the landing page.
 import { initAudioControls } from './audioControls.js';
 import { initCookieConsent } from './cookieConsent.js';
 import { initHeroSlider } from './heroSlider.js';
@@ -8,6 +9,7 @@ const heroImages = [
   { src: 'Pumpkin and Nyx.jpg', alt: 'Pumpkin and Nyx cuddling together on a cozy sofa.' },
 ];
 
+// Each init function returns a cleanup callback so we can tidy up on unload.
 const heroCleanup = initHeroSlider({
   sliderElement: document.querySelector('.hero-layer__slider'),
   nextButton: document.getElementById('next-background'),

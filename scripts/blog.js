@@ -1,3 +1,8 @@
+/**
+ * Fetch and render lightweight blog entries stored in blog.json. The UI keeps
+ * messaging friendly so the blog page does not feel empty while loading or on
+ * errors.
+ */
 const blogPostsContainer = document.getElementById('blog-posts');
 
 if (blogPostsContainer) {

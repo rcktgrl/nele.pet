@@ -1,3 +1,8 @@
+/**
+ * Fetches a story stored in Google Docs and renders it into the story page.
+ * The code focuses on graceful fallbacks so visitors can still access the
+ * document when automatic fetching fails.
+ */
 const storyContent = document.getElementById('story-content');
 
 if (storyContent) {
@@ -5,6 +10,7 @@ if (storyContent) {
   const fallbackUrl = `https://docs.google.com/document/d/${googleDocId}/view`;
   const docTextUrl = `https://docs.google.com/document/d/${googleDocId}/export?format=txt`;
 
+  // Replace the content area with a series of <p> elements, skipping empties.
   const renderParagraphs = (paragraphs) => {
     storyContent.innerHTML = '';
     let appended = false;
@@ -45,6 +51,7 @@ if (storyContent) {
         return;
       }
 
+      // The export occasionally returns HTML (for example when access is denied).
       if (/^<!doctype html/i.test(trimmed) || /^<html/i.test(trimmed)) {
         const htmlError = new Error('html-response');
         htmlError.isHTMLResponse = true;
@@ -56,6 +63,8 @@ if (storyContent) {
         .map((part) => part.trim())
         .filter(Boolean);
 
+      // If the document used single newlines instead of blank lines, fall back
+      // to a looser split to keep the story readable.
       if (!paragraphs.length && trimmed.includes('\n')) {
         paragraphs = trimmed
           .split(/\r?\n/)
