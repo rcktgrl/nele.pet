@@ -98,7 +98,7 @@
       position: relative;
       z-index: 1;
       display: flex;
-      justify-content: flex-end;
+      justify-content: flex-start;
       padding: 1.5em clamp(1.25em, 3vw, 2.75em) 0;
     }
 
@@ -234,47 +234,6 @@
       margin-bottom: 0;
     }
 
-    .embed-note {
-      margin: 0;
-      padding: 1.25em 1.4em;
-      border-radius: 16px;
-      background: rgba(244, 232, 255, 0.14);
-      border: 1px dashed rgba(244, 232, 255, 0.35);
-      color: rgba(245, 232, 255, 0.82);
-      text-align: left;
-      line-height: 1.6;
-    }
-
-    .doc-instructions {
-      margin-top: 1.25em;
-      padding: 1.25em 1.5em;
-      border-radius: 18px;
-      background: rgba(244, 232, 255, 0.14);
-      border: 1px dashed rgba(244, 232, 255, 0.4);
-      color: rgba(245, 232, 255, 0.88);
-    }
-
-    .doc-instructions__title {
-      margin: 0 0 0.75em;
-      font-size: 1.1rem;
-    }
-
-    .doc-instructions ol {
-      margin: 0;
-      padding-left: 1.2em;
-      display: grid;
-      gap: 0.65em;
-    }
-
-    .doc-instructions code {
-      font-size: 0.95em;
-      color: #fff;
-    }
-
-    .is-hidden {
-      display: none;
-    }
-
     footer {
       padding: 0 0 2em;
       text-align: center;
@@ -291,7 +250,7 @@
 
     @media (max-width: 720px) {
       .page-header {
-        justify-content: center;
+        justify-content: flex-start;
         padding-top: 1.25em;
       }
 
@@ -344,21 +303,22 @@
       <h1>Story Time</h1>
       <p>Grab a blanket, get comfy, and enjoy the latest adventure from the Puppy Pillow Fortress!</p>
       <div class="story-sections">
-        <section id="story-embed-wrapper" class="story-embed is-hidden" aria-hidden="true">
+        <section class="story-embed" aria-label="Story embedded from Google Docs">
           <iframe
-            id="story-iframe"
             class="story-embed__frame"
+            src="https://docs.google.com/document/d/13_zTWp_cWnmwHUGpvco56Cj-GCbmQKmFdurH-WKjAs8/preview?embedded=true"
             title="Embedded story from Google Docs"
             loading="lazy"
             allowfullscreen
           ></iframe>
         </section>
-        <p id="embed-availability-note" class="embed-note is-hidden" aria-hidden="true">
-          The Google Docs preview is best on larger screens, so we hid it on this device. Use the button below or keep
-          scrolling to read the cozy plain-text version. 💜
-        </p>
-        <div id="story-links" class="story-links is-hidden" aria-hidden="true">
-          <a id="story-manual-link" class="link-button" target="_blank" rel="noopener">
+        <div class="story-links">
+          <a
+            class="link-button"
+            href="https://docs.google.com/document/d/13_zTWp_cWnmwHUGpvco56Cj-GCbmQKmFdurH-WKjAs8/view"
+            target="_blank"
+            rel="noopener"
+          >
             Open the story in Google Docs
           </a>
         </div>
@@ -373,150 +333,42 @@
   </footer>
 
   <script>
-    const storyContent = document.getElementById('story-content');
-    const storyEmbedWrapper = document.getElementById('story-embed-wrapper');
-    const storyIframe = document.getElementById('story-iframe');
-    const manualLinkWrapper = document.getElementById('story-links');
-    const manualLink = document.getElementById('story-manual-link');
-    const embedAvailabilityNote = document.getElementById('embed-availability-note');
-
-    const placeholderPublishedId = 'YOUR_PUBLISHED_DOC_ID_HERE';
-    const placeholderEditId = 'YOUR_GOOGLE_DOC_ID_HERE';
-    const publishedDocId = '2PACX-1vS1eQuDaGmANcv9ODOl5XD5nJdw14U3DG46xQPJd32HXzfot2Ul_LR6Qyhh9W33mmRnFvfoQlWbdP8P';
-    const editDocId = 'YOUR_GOOGLE_DOC_ID_HERE';
-
-    const docSetupGuide = `
-      <div class="doc-instructions" role="note">
-        <h2 class="doc-instructions__title">How to connect your Google Doc</h2>
-        <ol>
-          <li>Open your story in Google Docs and choose <strong>File → Share → Publish to web</strong>, then press <em>Publish</em>.</li>
-          <li>Copy the ID between <code>/d/e/</code> and <code>/pub</code> from the published link and replace <code>${placeholderPublishedId}</code> in <code>story.html</code>.</li>
-          <li>Copy the ID between <code>/d/</code> and <code>/edit</code> from the regular link to replace <code>${placeholderEditId}</code> so the button above opens the doc directly.</li>
-        </ol>
-      </div>
-    `;
-
-    let embedUrl = null;
-    let fallbackUrl = null;
-
-    const embedBreakpoint = window.matchMedia('(min-width: 720px)');
-
-    function setEmbedNoteVisibility(shouldHide) {
-      if (!embedAvailabilityNote) {
-        return;
-      }
-
-      if (shouldHide) {
-        embedAvailabilityNote.classList.add('is-hidden');
-        embedAvailabilityNote.setAttribute('aria-hidden', 'true');
-      } else {
-        embedAvailabilityNote.classList.remove('is-hidden');
-        embedAvailabilityNote.removeAttribute('aria-hidden');
-      }
-    }
-
-    function toggleEmbed(shouldShow, url = '') {
-      if (!storyEmbedWrapper || !storyIframe) {
-        return;
-      }
-
-      if (shouldShow && url) {
-        storyIframe.src = url;
-        storyEmbedWrapper.classList.remove('is-hidden');
-        storyEmbedWrapper.removeAttribute('aria-hidden');
-      } else {
-        storyIframe.removeAttribute('src');
-        storyEmbedWrapper.classList.add('is-hidden');
-        storyEmbedWrapper.setAttribute('aria-hidden', 'true');
-      }
-    }
-
-    function setManualLink(url) {
-      if (!manualLinkWrapper || !manualLink) {
-        return;
-      }
-
-      if (url) {
-        manualLink.href = url;
-        manualLinkWrapper.classList.remove('is-hidden');
-        manualLinkWrapper.removeAttribute('aria-hidden');
-      } else {
-        manualLink.removeAttribute('href');
-        manualLinkWrapper.classList.add('is-hidden');
-        manualLinkWrapper.setAttribute('aria-hidden', 'true');
-      }
-    }
-
-    function renderParagraphs(paragraphs) {
+    (function () {
+      const storyContent = document.getElementById('story-content');
       if (!storyContent) {
         return;
       }
 
-      storyContent.innerHTML = '';
-      let appended = false;
+      const googleDocId = '13_zTWp_cWnmwHUGpvco56Cj-GCbmQKmFdurH-WKjAs8';
+      const fallbackUrl = `https://docs.google.com/document/d/${googleDocId}/view`;
+      const docTextUrl = `https://docs.google.com/document/d/${googleDocId}/export?format=txt`;
 
-      paragraphs.forEach(text => {
-        const trimmed = text.trim();
-        if (!trimmed) {
-          return;
+      function renderParagraphs(paragraphs) {
+        storyContent.innerHTML = '';
+        let appended = false;
+
+        paragraphs.forEach(text => {
+          const trimmed = text.trim();
+          if (!trimmed) {
+            return;
+          }
+
+          const paragraphEl = document.createElement('p');
+          paragraphEl.textContent = trimmed;
+          storyContent.appendChild(paragraphEl);
+          appended = true;
+        });
+
+        if (!appended) {
+          storyContent.innerHTML = '<p>The story is currently empty.</p>';
         }
-
-        const paragraphEl = document.createElement('p');
-        paragraphEl.textContent = trimmed;
-        storyContent.appendChild(paragraphEl);
-        appended = true;
-      });
-
-      if (!appended) {
-        storyContent.innerHTML = '<p>The story is currently empty.</p>';
-      }
-    }
-
-    function showError(extraMessage = '', includeSetup = false) {
-      if (!storyContent) {
-        return;
       }
 
-      const details = fallbackUrl
-        ? `<a href="${fallbackUrl}" target="_blank" rel="noopener">Open the story on Google Docs</a>.`
-        : 'Please double-check that the Google Doc is published and publicly accessible.';
-      const embedNote = embedUrl ? ' You can also try the embedded viewer above.' : '';
-      const setup = includeSetup ? docSetupGuide : '';
-      storyContent.innerHTML = `<p>We couldn't load the plain-text story automatically.${embedNote} ${details}${extraMessage}</p>${setup}`;
-    }
-
-    function applyEmbedPreference() {
-      const shouldShowEmbed = Boolean(embedUrl && embedBreakpoint.matches);
-      toggleEmbed(shouldShowEmbed, shouldShowEmbed ? embedUrl : '');
-      setEmbedNoteVisibility(!shouldShowEmbed && Boolean(embedUrl));
-    }
-
-    if (publishedDocId !== placeholderPublishedId) {
-      embedUrl = `https://docs.google.com/document/d/e/${publishedDocId}/pub?embedded=true`;
-      fallbackUrl = editDocId !== placeholderEditId
-        ? `https://docs.google.com/document/d/${editDocId}/view`
-        : `https://docs.google.com/document/d/e/${publishedDocId}/pub`;
-
-      setManualLink(fallbackUrl);
-      applyEmbedPreference();
-
-      if (typeof embedBreakpoint.addEventListener === 'function') {
-        embedBreakpoint.addEventListener('change', applyEmbedPreference);
-      } else if (typeof embedBreakpoint.addListener === 'function') {
-        embedBreakpoint.addListener(applyEmbedPreference);
+      function showError(extraMessage = '') {
+        storyContent.innerHTML = `<p>We couldn't load the plain-text story automatically. <a href="${fallbackUrl}" target="_blank" rel="noopener">Open the story on Google Docs</a>.${extraMessage}</p>`;
       }
-    } else {
-      toggleEmbed(false);
-      setEmbedNoteVisibility(true);
-      setManualLink(null);
-    }
 
-    if (!embedUrl) {
-      showError(' Once you replace the placeholder IDs in <code>story.html</code>, refresh this page.', true);
-    } else {
-      const docUrl = `https://docs.google.com/document/d/e/${publishedDocId}/pub?output=txt`;
-
-      fetch(docUrl)
+      fetch(docTextUrl)
         .then(response => {
           if (!response.ok) {
             throw new Error('Story could not be fetched');
@@ -553,11 +405,11 @@
         .catch(error => {
           console.error(error);
           const extra = error?.isHTMLResponse
-            ? ' Please make sure the document is published to the web and that you are using the ID from the published link.'
+            ? ' Please make sure the document sharing settings allow anyone with the link to view it.'
             : '';
-          showError(extra, Boolean(error?.isHTMLResponse));
+          showError(extra);
         });
-    }
+    })();
   </script>
 </body>
 </html>
