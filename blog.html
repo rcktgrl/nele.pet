@@ -267,40 +267,6 @@
     Powered by puppy cuddles &amp; stardust ✨
   </footer>
 
-  <script>
-    const blogPostsContainer = document.getElementById('blog-posts');
-
-    fetch('blog.json')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Blog posts could not be fetched');
-        }
-        return response.json();
-      })
-      .then(posts => {
-        if (!Array.isArray(posts) || posts.length === 0) {
-          blogPostsContainer.innerHTML = '<p class="empty-state">No blog posts yet.</p>';
-          return;
-        }
-
-        blogPostsContainer.innerHTML = '';
-        posts.slice().reverse().forEach(post => {
-          const entry = document.createElement('div');
-          entry.className = 'blog-entry';
-          const linkHTML = post.link && post.linkText
-            ? `<p><a href="${post.link}" target="_blank" rel="noopener">${post.linkText}</a></p>`
-            : '';
-          entry.innerHTML = `
-            <p><strong>${post.date}:</strong> ${post.content}</p>
-            ${linkHTML}
-          `;
-          blogPostsContainer.appendChild(entry);
-        });
-      })
-      .catch(error => {
-        console.error(error);
-        blogPostsContainer.innerHTML = '<p class="empty-state">Could not load blog posts. Please try again later.</p>';
-      });
-  </script>
+  <script type="module" src="scripts/blog.js"></script>
 </body>
 </html>
