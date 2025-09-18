@@ -6,12 +6,59 @@
   <title>Puppy pillow fortress – Blog</title>
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <style>
+    :root {
+      --glass-background: rgba(255, 255, 255, 0.16);
+      --glass-background-hover: rgba(255, 255, 255, 0.28);
+      --glass-border: rgba(255, 255, 255, 0.5);
+      --glass-border-strong: rgba(255, 255, 255, 0.65);
+      --glass-shadow: 0 14px 38px rgba(16, 2, 37, 0.32);
+    }
+
     html, body {
       margin: 0;
       padding: 0;
       font-family: comic sans, sans-serif;
       background-color: #8a2be2;
       color: white;
+    }
+
+    .link-button,
+    .side-button {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.3em;
+      padding: 0.55em 1.6em;
+      font-weight: 700;
+      line-height: 1.2;
+      color: #fdf9ff;
+      text-decoration: none;
+      background: linear-gradient(135deg, var(--glass-background), rgba(255, 255, 255, 0.08));
+      border: 1.5px solid var(--glass-border);
+      border-radius: 18px;
+      box-shadow: var(--glass-shadow);
+      backdrop-filter: blur(14px) saturate(170%);
+      -webkit-backdrop-filter: blur(14px) saturate(170%);
+      text-shadow: 0 1px 3px rgba(16, 2, 37, 0.45);
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease,
+        background 0.25s ease;
+    }
+
+    .link-button:hover,
+    .side-button:hover,
+    .link-button:focus-visible,
+    .side-button:focus-visible {
+      background: linear-gradient(135deg, var(--glass-background-hover), rgba(255, 255, 255, 0.18));
+      border-color: var(--glass-border-strong);
+      box-shadow: 0 18px 44px rgba(16, 2, 37, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .link-button:focus-visible,
+    .side-button:focus-visible {
+      outline: 3px solid rgba(230, 210, 255, 0.55);
+      outline-offset: 3px;
     }
 
     .container {
@@ -38,32 +85,21 @@
     }
 
     .link-button {
-      display: inline-block;
       margin: 0.5em;
-      padding: 0.7em 1.4em;
-      background-color: white;
-      color: #6a0dad;
-      font-weight: bold;
-      border: 2px solid white;
-      border-radius: 25px;
-      text-decoration: none;
+      border-radius: 999px;
+      letter-spacing: 0.08em;
     }
 
 
     .side-button {
-      background: white;
-      color: #6a0dad;
-      min-height: 140px;
-      width: 60px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-weight: bold;
-      font-size: 0.85em;
-      border: 2px solid white;
-      text-decoration: none;
-      padding: 0.7em 0.5em;
-      border-radius: 15px;
+      flex-direction: column;
+      min-height: 120px;
+      width: 30px;
+      padding: 0.45em 0.28em;
+      font-size: 0.75em;
+      letter-spacing: 0.18em;
+      border-radius: 18px;
+      box-shadow: 0 14px 40px rgba(16, 2, 37, 0.38);
     }
 
     .side-button--left {
@@ -71,7 +107,7 @@
       top: 50%;
       left: 0;
       transform: translateY(-50%);
-      border-radius: 0 15px 15px 0;
+      border-radius: 0 18px 18px 0;
       z-index: 1000;
     }
 
@@ -99,6 +135,10 @@
     }
 
     a { color: #dabfff; }
+
+    a.link-button {
+      color: #fdf9ff;
+    }
 
     @media (max-width: 600px) {
       .container {
