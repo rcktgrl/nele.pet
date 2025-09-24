@@ -19,16 +19,7 @@
       <h1>Story Time</h1>
       <p>Grab a blanket, get comfy, and enjoy the latest adventure from the Puppy Pillow Fortress!</p>
       <div class="story-sections">
-        <section class="story-embed" aria-label="Story embedded from Google Docs">
-          <iframe
-            class="story-embed__frame"
-            src="https://docs.google.com/document/d/13_zTWp_cWnmwHUGpvco56Cj-GCbmQKmFdurH-WKjAs8/preview?embedded=true"
-            title="Embedded story from Google Docs"
-            loading="lazy"
-            allowfullscreen
-          ></iframe>
-        </section>
-        <div class="story-links">
+        <div id="story-links" class="story-links" hidden>
           <a
             class="link-button"
             href="https://docs.google.com/document/d/13_zTWp_cWnmwHUGpvco56Cj-GCbmQKmFdurH-WKjAs8/view"
@@ -42,6 +33,18 @@
           <p>Gathering the story magic…</p>
         </section>
       </div>
+      <noscript>
+        <div class="story-links">
+          <a
+            class="link-button"
+            href="https://docs.google.com/document/d/13_zTWp_cWnmwHUGpvco56Cj-GCbmQKmFdurH-WKjAs8/view"
+            target="_blank"
+            rel="noopener"
+          >
+            Open the story in Google Docs
+          </a>
+        </div>
+      </noscript>
     </div>
   </main>
   <footer>

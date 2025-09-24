@@ -4,10 +4,18 @@
  * document when automatic fetching fails.
  */
 const storyContent = document.getElementById('story-content');
+const backupLinks = document.getElementById('story-links');
+
+const setBackupVisibility = (visible) => {
+  if (!backupLinks) {
+    return;
+  }
+
+  backupLinks.hidden = !visible;
+};
 
 if (storyContent) {
   const googleDocId = '13_zTWp_cWnmwHUGpvco56Cj-GCbmQKmFdurH-WKjAs8';
-  const fallbackUrl = `https://docs.google.com/document/d/${googleDocId}/view`;
   const docTextUrl = `https://docs.google.com/document/d/${googleDocId}/export?format=txt`;
 
   // Replace the content area with a series of <p> elements, skipping empties.
@@ -30,10 +38,13 @@ if (storyContent) {
     if (!appended) {
       storyContent.innerHTML = '<p>The story is currently empty.</p>';
     }
+
+    setBackupVisibility(false);
   };
 
   const showError = (extraMessage = '') => {
-    storyContent.innerHTML = `<p>We couldn't load the plain-text story automatically. <a href="${fallbackUrl}" target="_blank" rel="noopener">Open the story on Google Docs</a>.${extraMessage}</p>`;
+    storyContent.innerHTML = `<p>We couldn't load the plain-text story automatically. Use the backup button below to open it on Google Docs.${extraMessage}</p>`;
+    setBackupVisibility(true);
   };
 
   const fetchStory = async () => {
@@ -88,5 +99,6 @@ if (storyContent) {
   };
 
   storyContent.innerHTML = '<p>Gathering the story magic…</p>';
+  setBackupVisibility(false);
   fetchStory();
 }
