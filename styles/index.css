@@ -293,6 +293,11 @@ img {
   border-radius: 0 18px 18px 0;
   z-index: 1000;
 }
+
+.side-button--left:hover,
+.side-button--left:focus-visible {
+  transform: translateY(-50%) translateX(10px);
+}
 #paw-panel {
   position: fixed;
   top: 0;
