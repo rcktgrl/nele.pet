@@ -41,10 +41,24 @@ export function initOcsGallerySlider() {
   prevButton?.addEventListener('click', showPrevious);
   nextButton?.addEventListener('click', showNext);
 
+  const handleImageClick = (event) => {
+    const midpoint = imageEl.clientWidth / 2;
+    const clickX = event.offsetX;
+
+    if (clickX <= midpoint) {
+      showPrevious();
+    } else {
+      showNext();
+    }
+  };
+
+  imageEl.addEventListener('click', handleImageClick);
+
   render();
 
   return () => {
     prevButton?.removeEventListener('click', showPrevious);
     nextButton?.removeEventListener('click', showNext);
+    imageEl.removeEventListener('click', handleImageClick);
   };
 }
