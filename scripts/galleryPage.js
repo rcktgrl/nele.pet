@@ -69,18 +69,6 @@ function renderGrid() {
     tile.appendChild(thumb);
     tile.appendChild(label);
     tile.addEventListener('click', () => openLightbox(artwork, index));
-    tile.addEventListener('mouseenter', () => setBackgroundForArtwork(artwork));
-    tile.addEventListener('focus', () => setBackgroundForArtwork(artwork));
-    tile.addEventListener('mouseleave', () => {
-      if (!lightbox?.classList.contains('open')) {
-        setBackgroundForArtwork(null);
-      }
-    });
-    tile.addEventListener('blur', () => {
-      if (!lightbox?.classList.contains('open')) {
-        setBackgroundForArtwork(null);
-      }
-    });
 
     grid.appendChild(tile);
   });
