@@ -19,4 +19,9 @@ export const galleryArtworks = [
     alt: "Pumpkin and Nyx leaning together with Nyx holding Pumpkin's leash on a pink gradient background.",
     caption: "Pumpkin and Nyx with Nyx holding Pumpkin's leash.",
   },
+  {
+    src: 'The gang.jpg',
+    alt: 'Pumpkin, Nyx, and Kiki posing together in a lively group portrait.',
+    caption: 'The gang hanging out together.',
+  },
 ];
