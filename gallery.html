@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snuggle Squad Gallery</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="stylesheet" href="styles/index.css">
+  <link rel="stylesheet" href="styles/gallery.css">
+</head>
+<body>
+  <div class="background-canvas" aria-hidden="true"></div>
+  <div class="container container--gallery-page">
+    <h1>Snuggle Squad Gallery</h1>
+    <p>Browse the full collection of our cozy OC art in one place.</p>
+    <div class="gallery-actions">
+      <a class="link-button" href="index.html">⬅ Back to home</a>
+    </div>
+    <div id="gallery-grid" class="gallery-grid" aria-live="polite"></div>
+  </div>
+
+  <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Artwork preview">
+    <div class="lightbox__card">
+      <div class="lightbox__header">
+        <button id="lightbox-close" type="button">Close</button>
+      </div>
+      <div class="lightbox__body">
+        <img id="lightbox-image" alt="" />
+      </div>
+      <p id="lightbox-caption" class="lightbox__caption"></p>
+    </div>
+  </div>
+
+  <script type="module" src="scripts/galleryPage.js"></script>
+</body>
+</html>

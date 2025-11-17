@@ -72,6 +72,11 @@
         <span class="vertical-text__inner">📖 Story</span>
       </span>
     </a>
+    <a id="gallery-link" class="side-button side-button--right" href="gallery.html">
+      <span class="vertical-text vertical-text--bottom-to-top">
+        <span class="vertical-text__inner">🎨 Gallery</span>
+      </span>
+    </a>
   </div>
   <div id="paw-open" class="side-button side-button--left">
     <span class="vertical-text vertical-text--top-to-bottom">
@@ -97,9 +102,6 @@
 
   <!-- Main Content -->
   <div class="container">
-    <div class="background-controls">
-      <button id="next-background" class="next-background-button" type="button">Next background</button>
-    </div>
     <h1>Puppy pillow fortress</h1>
 
     <div class="textbox">
@@ -136,28 +138,15 @@
     <div class="textbox">
       <h2>🌙 Snuggle Squad Gallery</h2>
       <p>Peek at the cozy OCs keeping our pillow fort canvas dreamy and bright.</p>
-      <div class="ocs-gallery" role="list">
-        <figure class="ocs-gallery__item" role="listitem">
-          <div class="ocs-gallery__frame">
-            <img
-              class="ocs-gallery__image"
-              src="Untitled_Artwork.jpeg"
-              alt="The whole gang from left to right Nele, Pumpkin and Nyx."
-            />
-          </div>
-          <figcaption class="ocs-gallery__caption">The whole gang from left to right Nele, Pumpkin and Nyx.</figcaption>
+      <div class="ocs-gallery" data-gallery-slider>
+        <button class="ocs-gallery__nav" type="button" data-gallery-prev aria-label="View previous artwork">◀</button>
+        <figure class="ocs-gallery__figure">
+          <img class="ocs-gallery__image" data-gallery-image alt="" />
+          <figcaption class="ocs-gallery__caption" data-gallery-caption></figcaption>
         </figure>
-        <figure class="ocs-gallery__item" role="listitem">
-          <div class="ocs-gallery__frame">
-            <img
-              class="ocs-gallery__image"
-              src="Pumpkin and Nyx.jpg"
-              alt="Pumpkin and Nyx with Nyx holding Pumpkin's leash."
-            />
-          </div>
-          <figcaption class="ocs-gallery__caption">Pumpkin and Nyx with Nyx holding Pumpkin's leash.</figcaption>
-        </figure>
+        <button class="ocs-gallery__nav" type="button" data-gallery-next aria-label="View next artwork">▶</button>
       </div>
+      <a class="link-button" href="gallery.html">Open full gallery</a>
     </div>
 
     <div class="textbox">
