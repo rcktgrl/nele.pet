@@ -122,9 +122,9 @@ button:focus-visible,
 
 .container {
   position: relative;
-  max-width: 800px;
+  max-width: min(1200px, calc(100vw - 2.5rem));
   margin: calc(var(--hero-gap) + 1em) auto 2.5em;
-  padding: calc(1.75em + var(--hero-gap) / 2) 2em 2.5em;
+  padding: calc(1.75em + var(--hero-gap) / 2) clamp(1.5em, 3vw, 2.75em) 2.5em;
   text-align: center;
   z-index: 1;
   background: rgba(32, 6, 63, 0.48);
@@ -530,7 +530,7 @@ img {
   align-items: center;
   gap: 1em;
   margin: 1.5em auto 0;
-  width: min(var(--hero-canvas-width, 760px), 100%);
+  width: 100%;
   padding: 1em 1.25em;
   border-radius: 20px;
   border: 1.5px solid rgba(230, 210, 255, 0.5);
@@ -555,6 +555,7 @@ img {
   border-radius: 16px;
   border: 1.5px solid rgba(230, 210, 255, 0.35);
   box-shadow: 0 10px 26px rgba(16, 2, 37, 0.35);
+  cursor: pointer;
 }
 
 .ocs-gallery__caption {
