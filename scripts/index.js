@@ -3,18 +3,17 @@ import { initAudioControls } from './audioControls.js';
 import { initCookieConsent } from './cookieConsent.js';
 import { initHeroSlider } from './heroSlider.js';
 import { initPawprints } from './pawprints.js';
-
-const heroImages = [
-  { src: 'Untitled_Artwork.jpeg', alt: 'Pastel illustration of Pumpkin and Nyx snuggling amongst pillows.' },
-  { src: 'Pumpkin and Nyx.jpg', alt: 'Pumpkin and Nyx cuddling together on a cozy sofa.' },
-];
+import { initOcsGallerySlider } from './ocsGallerySlider.js';
+import { galleryArtworks } from './galleryData.js';
 
 // Each init function returns a cleanup callback so we can tidy up on unload.
 const heroCleanup = initHeroSlider({
   sliderElement: document.querySelector('.hero-layer__slider'),
-  nextButton: document.getElementById('next-background'),
-  images: heroImages,
+  nextButton: null,
+  images: galleryArtworks,
 });
+
+const ocsGalleryCleanup = initOcsGallerySlider();
 
 const cookieCleanup = initCookieConsent({
   popup: document.getElementById('cookie-popup'),
@@ -51,4 +50,5 @@ window.addEventListener('beforeunload', () => {
   cookieCleanup?.();
   audioCleanup?.();
   pawprintsCleanup?.();
+  ocsGalleryCleanup?.();
 });
