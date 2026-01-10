@@ -18,6 +18,6 @@ jobs:
           curl -sS -f \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
-            "https://lglcvsptwkqxykapepey.supabase.co/auth/v1/health" \
+            "https://lglcvsptwkqxykapepey.supabase.co/rest/v1/" \
             > /dev/null
           echo "OK"
