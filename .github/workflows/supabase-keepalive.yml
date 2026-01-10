@@ -1,0 +1,23 @@
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: "0 10 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase (wakes if paused)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          curl -sS -f \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            "https://lglcvsptwkqxykapepey.supabase.co/auth/v1/health" \
+            > /dev/null
+          echo "OK"
