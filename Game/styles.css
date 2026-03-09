@@ -1,0 +1,72 @@
+:root {
+  --glass-background: rgba(255, 255, 255, 0.16);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --glass-shadow: 0 14px 38px rgba(16, 2, 37, 0.32);
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: comic sans, sans-serif;
+  background: radial-gradient(circle at 18% 20%, rgba(155, 93, 229, 0.8), rgba(26, 5, 52, 0.85) 60%, #120025 100%),
+    linear-gradient(135deg, #2f0a57, #150028 55%, #290a4d);
+  color: #fff;
+}
+
+.background-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image: radial-gradient(circle at 12% 25%, rgba(210, 180, 255, 0.35), transparent 58%),
+    radial-gradient(circle at 85% 18%, rgba(134, 87, 210, 0.32), transparent 62%);
+}
+
+.game-shell {
+  width: min(900px, calc(100vw - 2rem));
+  margin: 1.5rem auto;
+  padding: 1.5rem;
+  border-radius: 24px;
+  background: rgba(32, 6, 63, 0.48);
+  border: 1px solid rgba(230, 210, 255, 0.25);
+  text-align: center;
+}
+
+.link-button,
+button {
+  display: inline-block;
+  padding: 0.55em 1.4em;
+  border: 1.5px solid var(--glass-border);
+  border-radius: 999px;
+  color: #fff;
+  text-decoration: none;
+  background: linear-gradient(135deg, var(--glass-background), rgba(255, 255, 255, 0.08));
+  box-shadow: var(--glass-shadow);
+  font-weight: 700;
+}
+
+.hud {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.hud p {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.game-board-wrap {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+#game-board {
+  width: min(640px, 100%);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 14px;
+}
