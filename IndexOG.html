@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Puppy pillow fortress</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="stylesheet" href="styles/index.css">
+</head>
+<body>
+  <div class="background-canvas" aria-hidden="true"></div>
+  <div class="hero-layer" aria-hidden="true">
+    <div class="hero-layer__slider"></div>
+  </div>
+  <!-- Cookie Popup -->
+  <div
+    id="cookie-popup"
+    role="dialog"
+    aria-live="polite"
+    aria-modal="true"
+    aria-labelledby="cookie-popup-title"
+    tabindex="-1"
+  >
+    <button
+      type="button"
+      id="cookie-info-button"
+      class="cookie-info-button"
+      title="What cookies do we use? 🍪 Click for the full list!"
+      aria-label="Open the list of cookies we use"
+      aria-haspopup="dialog"
+      aria-controls="cookie-info-modal"
+    >
+      ?
+    </button>
+    <p id="cookie-popup-title"><strong>I like cookies :3 (we use one to remember your choice!)</strong></p>
+    <div class="cookie-popup__actions">
+      <button id="cookie-no">no (leave page)</button>
+      <button id="cookie-yes">yes I do</button>
+    </div>
+  </div>
+
+  <div
+    id="cookie-info-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="cookie-info-title"
+    aria-hidden="true"
+  >
+    <div class="cookie-info-card">
+      <h2 id="cookie-info-title">Our cookie jar 🍪</h2>
+      <p>Here&apos;s the teeny list Firefox spotted:</p>
+      <ul>
+        <li><strong>cookieConsent</strong> &ndash; our only first-party cookie. It remembers that you said yes so the blur and banner stay gone for a year.</li>
+        <li><strong>sp_t</strong> &ndash; set by the Spotify playlist iframe so the embed can keep your Spotify session happy.</li>
+        <li><strong>sp_landing</strong> &ndash; another Spotify helper that recalls which Spotify page the iframe last loaded.</li>
+        <li><strong>__cf_bm</strong> &ndash; Cloudflare&apos;s bot-fairy from Supabase, making sure the paw-print data is requested by a real pupper-lover.</li>
+      </ul>
+      <p>Firefox usually counts three right away because our <code>cookieConsent</code> cookie only appears after you press “yes”.</p>
+      <button type="button" class="cookie-info-close" id="cookie-info-close">Close cookie peek</button>
+    </div>
+  </div>
+
+  <!-- Side Buttons -->
+  <div id="right-side-buttons">
+    <a id="blog-link" class="side-button side-button--right" href="blog.html">
+      <span class="vertical-text vertical-text--bottom-to-top">
+        <span class="vertical-text__inner">📓 Blog</span>
+      </span>
+    </a>
+    <a id="story-link" class="side-button side-button--right" href="story.html">
+      <span class="vertical-text vertical-text--bottom-to-top">
+        <span class="vertical-text__inner">📖 Story</span>
+      </span>
+    </a>
+    <a id="game-link" class="side-button side-button--right" href="Game/">
+      <span class="vertical-text vertical-text--bottom-to-top">
+        <span class="vertical-text__inner">🎮 Game</span>
+      </span>
+    </a>
+    <a id="gallery-link" class="side-button side-button--right" href="gallery.html">
+      <span class="vertical-text vertical-text--bottom-to-top">
+        <span class="vertical-text__inner">🎨 Gallery</span>
+      </span>
+    </a>
+  </div>
+  <div id="paw-open" class="side-button side-button--left">
+    <span class="vertical-text vertical-text--top-to-bottom">
+      <span class="vertical-text__inner">🐾 Pawprints</span>
+    </span>
+  </div>
+  <!-- Paw Print Panel -->
+  <div id="paw-panel">
+    <button id="paw-close">❌ Close</button>
+    <h2>🐾 Leave a Paw Print</h2>
+    <input id="paw-name" maxlength="50" placeholder="Your name (required)" />
+    <textarea id="paw-input" maxlength="100" placeholder="Say something cute (max 100 chars)"></textarea>
+    <button id="paw-submit">Submit</button>
+    <div id="paw-feedback"></div>
+    <h3>Recent Paw Prints</h3>
+    <div id="paw-prints"></div>
+  </div>
+
+  <!-- Bark Sound -->
+  <audio id="bark-sound" preload="auto">
+    <source src="Lucy.aac" type="audio/aac">
+  </audio>
+
+  <!-- Main Content -->
+  <div class="container">
+    <h1>Puppy pillow fortress</h1>
+
+    <div class="textbox">
+      <h2>About Me</h2>
+      <p>Hello! We are the Puppy Pillow Fortress System Pumpkin (She/it/pup),Nyx (She/her),Nele (She/her),Catt (She/her) .<br>
+        We hail from the ancient past of the 22nd day from the Second Month in the year 1998 | I do a lot of lewd things, so minors do not Interact |
+        I am a committed anti-fascist and Communist | I'm trans and on Estrogen since 04.02.2025🏳️‍⚧️ |
+        I am considering myself as Sapphic/bi though I definitely prefer Women | I am poly and happily married |
+        💜 Purple is my favourite colour | 🚀 Rockets are pretty cool I guess |
+        🔌🚗 Electric car enthusiast, currently have a Tesla Model Y (fuck Elon) and a 95’ Mazda Miata |
+        🚂 Train enthusiast | fuck elon musk | be yourself especially if it's weird
+      </p>
+    </div>
+
+    <div class="textbox">
+      <h2>Links</h2>
+      <a class="link-button" href="https://discord.gg/Jhj2znHaEB" target="_blank">Discord Server</a>
+      <a class="link-button" href="https://bsky.app/profile/nele.pet" target="_blank">Bluesky</a>
+      <a class="link-button" href="https://www.tumblr.com/nele-likes-stuff" target="_blank">Tumblr</a>
+      <a class="link-button" href="https://www.reddit.com/user/CapFuture_/" target="_blank">Reddit</a>
+      <a class="link-button" href="https://steamcommunity.com/id/RCKT_GRL/" target="_blank">Steam</a>
+    </div>
+
+    <div class="textbox">
+      <h2>Playlist Vibes</h2>
+      <iframe style="border-radius:12px"
+        src="https://open.spotify.com/embed/playlist/2wjQcW9o0hHiWqchz5XuzF?utm_source=generator&theme=0"
+        width="100%" height="352" frameBorder="0" allowfullscreen=""
+        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+        loading="lazy">
+      </iframe>
+    </div>
+
+    <div class="textbox">
+      <h2>🌙 Snuggle Squad Gallery</h2>
+      <p>Peek at the cozy OCs keeping our pillow fort canvas dreamy and bright.</p>
+      <div class="ocs-gallery" data-gallery-slider>
+        <button class="ocs-gallery__nav" type="button" data-gallery-prev aria-label="View previous artwork">◀</button>
+        <figure class="ocs-gallery__figure">
+          <img class="ocs-gallery__image" data-gallery-image alt="" />
+          <figcaption class="ocs-gallery__caption" data-gallery-caption></figcaption>
+        </figure>
+        <button class="ocs-gallery__nav" type="button" data-gallery-next aria-label="View next artwork">▶</button>
+      </div>
+      <a class="link-button" href="gallery.html">Open full gallery</a>
+    </div>
+
+    <div class="textbox">
+      <h2>🔊 Bark Test </br> (credit to <a href="https://lucy.moe">Lucy</a> for the cute sound)</h2>
+      <button id="bark-test">Test Bark</button>
+      <div id="volume-wrapper">
+        <div id="volume-icon">🔊</div>
+        <input type="range" id="volume-control" min="0" max="100" step="1">
+        <div id="volume-label">Volume: Bark</div>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      id="cookie-bear-button"
+      class="bear-cookie-button"
+      title="Removes: cookieConsent (our remember-me cookie). Spotify & Cloudflare cookies stay snuggled on their own sites."
+      aria-label="Ask the bear to remove the cookies we can"
+    >
+      <img src="https://placebear.com/600/300" alt="A cute bear ready to tidy up cookies" />
+    </button>
+  </div>
+
+  <!-- JavaScript -->
+  <script type="module" src="scripts/index.js"></script>
+</body>
+</html>
