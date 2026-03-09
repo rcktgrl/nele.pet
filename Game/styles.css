@@ -1,0 +1,92 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#fff;user-select:none;}
+#gc{position:fixed;top:0;left:0;width:100%;height:100%;}
+#dc{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;display:none;}
+#hud{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;display:none;}
+#raceTop{position:absolute;top:16px;left:50%;transform:translateX(-50%);text-align:center;font-family:'Orbitron',monospace;}
+#lapNum{font-size:13px;color:#666;letter-spacing:3px;text-transform:uppercase;}
+#lapVal{font-size:26px;font-weight:700;color:#ffd700;text-shadow:0 0 20px #ffd700aa;}
+#timer{font-size:18px;color:#ccc;letter-spacing:2px;margin-top:2px;}
+#pos{position:absolute;top:16px;left:20px;font-family:'Orbitron',monospace;}
+#posNum{font-size:46px;font-weight:900;color:#00ffaa;text-shadow:0 0 25px #00ffaa88;line-height:1;}
+#posLabel{font-size:11px;color:#666;letter-spacing:3px;}
+#speedBox{position:absolute;bottom:200px;right:20px;text-align:right;font-family:'Orbitron',monospace;}
+#speedNum{font-size:52px;font-weight:900;color:#fff;text-shadow:0 0 15px #0088ffaa;line-height:1;}
+#speedUnit{font-size:12px;color:#668;letter-spacing:3px;}
+#gearBox{position:absolute;bottom:200px;left:20px;font-family:'Orbitron',monospace;}
+#gearNum{font-size:52px;font-weight:900;color:#ffd700;text-shadow:0 0 20px #ffd700aa;line-height:1;}
+#gearLabel{font-size:11px;color:#666;letter-spacing:3px;}
+#camLabel{position:absolute;bottom:180px;left:50%;transform:translateX(-50%);font-size:11px;color:#445;letter-spacing:3px;}
+#mm{position:absolute;top:14px;right:14px;width:150px;height:150px;border-radius:50%;overflow:hidden;border:1px solid #223;}
+#mmc{width:100%;height:100%;}
+#notif{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);font-family:'Orbitron',monospace;font-size:32px;font-weight:900;color:#00ffaa;text-shadow:0 0 30px #00ffaa;pointer-events:none;display:none;opacity:0;text-align:center;}
+#cd{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Orbitron',monospace;font-size:110px;font-weight:900;color:#ffd700;text-shadow:0 0 50px #ffd700;pointer-events:none;display:none;}
+#hint{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);font-size:11px;color:#333;letter-spacing:2px;display:none;pointer-events:none;}
+/* Screens */
+.screen{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 60%,#0e0e1e,#050508);z-index:100;}
+.screen h1{font-family:'Orbitron',monospace;font-size:78px;font-weight:900;letter-spacing:10px;text-transform:uppercase;background:linear-gradient(135deg,#ff5500,#ffcc00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px;line-height:1;}
+.screen .sub{font-size:13px;color:#333;letter-spacing:5px;text-transform:uppercase;margin-bottom:44px;}
+.screen h2{font-family:'Orbitron',monospace;font-size:24px;letter-spacing:6px;color:#556;text-transform:uppercase;margin-bottom:32px;}
+.btn{padding:13px 36px;font-family:'Orbitron',monospace;font-size:13px;font-weight:700;border:none;border-radius:4px;cursor:pointer;text-transform:uppercase;letter-spacing:3px;transition:all .15s;margin:6px;}
+.btn-p{background:linear-gradient(135deg,#ff5500,#ff2200);color:#fff;box-shadow:0 0 20px #ff550066;}
+.btn-p:hover{transform:translateY(-2px);box-shadow:0 0 35px #ff5500aa;}
+.btn-p:disabled{opacity:.3;cursor:not-allowed;transform:none;}
+.btn-s{background:rgba(255,255,255,.05);color:#778;border:1px solid #223;}
+.btn-s:hover{background:rgba(255,255,255,.1);color:#aab;}
+.cards{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin:0 0 24px;}
+.card{width:196px;padding:18px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);cursor:pointer;transition:all .15s;text-align:center;}
+.card:hover,.card.sel{border-color:#ff5500;background:rgba(255,85,0,.07);transform:translateY(-4px);box-shadow:0 8px 30px rgba(255,85,0,.2);}
+.card h3{font-family:'Orbitron',monospace;font-size:14px;margin-bottom:6px;color:#ffcc00;}
+.card p{font-size:12px;color:#556;margin-bottom:12px;line-height:1.5;}
+.stat{display:flex;align-items:center;gap:6px;margin:3px 0;font-size:11px;}
+.sl{width:52px;text-align:right;color:#445;letter-spacing:1px;}
+.st{flex:1;height:4px;background:rgba(255,255,255,.07);border-radius:2px;}
+.sf{height:100%;border-radius:2px;background:linear-gradient(90deg,#ff5500,#ffcc00);}
+.dot{width:32px;height:32px;border-radius:6px;margin:0 auto 10px;}
+#results{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.94);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:200;}
+#results h1{font-family:'Orbitron',monospace;font-size:50px;font-weight:900;margin-bottom:28px;}
+#podium{display:flex;gap:16px;margin-bottom:24px;}
+.pi{text-align:center;padding:18px 22px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid #223;min-width:130px;}
+.pm{font-size:40px;margin-bottom:4px;}
+.pn{font-size:14px;font-weight:700;margin-bottom:4px;}
+.pt{font-size:12px;color:#556;}
+#ptime{font-size:16px;color:#556;margin-bottom:24px;font-family:'Orbitron',monospace;letter-spacing:2px;}
+/* Pause Menu */
+#pauseMenu{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.82);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:300;}
+#pauseMenu h2{font-family:'Orbitron',monospace;font-size:42px;font-weight:900;letter-spacing:8px;color:#ffd700;text-shadow:0 0 30px #ffd700aa;margin-bottom:36px;}
+/* Settings Modal */
+#settingsModal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:480px;background:#0a0a14;border:1px solid #223;border-radius:12px;padding:40px;z-index:400;display:none;}
+#settingsModal h2{font-family:'Orbitron',monospace;font-size:20px;letter-spacing:5px;color:#556;text-transform:uppercase;margin-bottom:32px;text-align:center;}
+.vol-row{display:flex;align-items:center;gap:16px;margin-bottom:22px;}
+.vol-lbl{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:#445;width:110px;text-align:right;}
+.vol-slider{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,.12);outline:none;}
+.vol-slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#ff5500;cursor:pointer;box-shadow:0 0 8px #ff5500aa;}
+.vol-val{width:38px;text-align:center;font-family:'Orbitron',monospace;font-size:12px;color:#667;}
+.ctrl-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 22px;margin:22px 0;padding:18px;background:rgba(255,255,255,.025);border-radius:8px;font-size:12px;color:#556;}
+.ctrl-grid span:nth-child(odd){color:#445;letter-spacing:1px;}
+.ctrl-grid span:nth-child(even){color:#778;}
+.s-sep{height:1px;background:rgba(255,255,255,.06);margin:22px 0;}
+.tcard{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px;border-radius:10px;background:rgba(255,255,255,.03);border:2px solid rgba(255,255,255,.06);cursor:pointer;transition:all .15s;}
+.tcard:hover,.tcard.sel{border-color:#ff5500;background:rgba(255,85,0,.07);transform:translateY(-4px);box-shadow:0 8px 30px rgba(255,85,0,.25);}
+.tcard h3{font-family:'Orbitron',monospace;font-size:13px;color:#ffcc00;letter-spacing:2px;text-transform:uppercase;}
+.tcard p{font-size:11px;color:#445;letter-spacing:1px;}
+#touchControls{position:fixed;left:0;right:0;bottom:0;display:none;justify-content:space-between;align-items:flex-end;padding:18px 20px 22px;pointer-events:none;z-index:250;}
+.touchCluster{display:flex;gap:12px;pointer-events:auto;}
+.touchCluster-left{align-items:flex-end;}
+.touchCluster-right{align-items:flex-end;}
+.touchBtn{min-width:84px;height:84px;border-radius:18px;border:1px solid rgba(255,255,255,.14);background:rgba(10,14,24,.68);backdrop-filter:blur(8px);color:#fff;font-family:'Orbitron',monospace;font-size:14px;font-weight:700;letter-spacing:1px;box-shadow:0 10px 30px rgba(0,0,0,.28);touch-action:none;cursor:pointer;transition:transform .08s ease,background .12s ease,border-color .12s ease,box-shadow .12s ease;}
+.touchBtn:hover{background:rgba(18,24,40,.82);}
+.touchBtn:active,.touchBtn.active{transform:translateY(2px) scale(.98);background:rgba(255,85,0,.24);border-color:rgba(255,170,120,.65);box-shadow:0 0 0 1px rgba(255,120,60,.2),0 10px 28px rgba(255,85,0,.18);}
+.touchBtn-small{min-width:68px;width:68px;height:68px;font-size:20px;padding:0 10px;}
+.touchBtn-primary{min-width:116px;background:rgba(80,18,8,.78);}
+@media (max-width:900px){
+  #hint{bottom:120px;}
+  #speedBox,#gearBox{bottom:230px;}
+  #camLabel{bottom:210px;}
+  #touchControls{padding:16px;}
+  .touchCluster{gap:10px;}
+  .touchBtn{min-width:74px;height:74px;font-size:12px;}
+  .touchBtn-small{min-width:62px;width:62px;height:62px;font-size:18px;}
+  .touchBtn-primary{min-width:98px;}
+}
