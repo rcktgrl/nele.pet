@@ -34,8 +34,7 @@
   <div class="touchCluster touchCluster-right">
     <button class="touchBtn touchBtn-small" data-tap="camera" aria-label="Toggle camera">CAM</button>
     <button class="touchBtn touchBtn-small" data-tap="pause" aria-label="Pause">⏸</button>
-    <button class="touchBtn" data-control="brake" aria-label="Brake or reverse">BRAKE</button>
-    <button class="touchBtn touchBtn-primary" data-control="throttle" aria-label="Throttle">THROTTLE</button>
+    <button class="touchBtn touchBtn-primary" data-control="brake" aria-label="Brake or reverse">BRAKE</button>
   </div>
 </div>
 
@@ -64,6 +63,12 @@
     <input class="vol-slider" type="range" id="sfxVolSlider" min="0" max="100" value="80" oninput="onSfxVol(this.value)">
     <span class="vol-val" id="sfxVolVal">80</span>
   </div>
+  <div class="s-sep"></div>
+  <label class="toggleRow" for="touchToggleInput">
+    <span class="toggleLbl">TOUCH CONTROLS</span>
+    <input type="checkbox" id="touchToggleInput" onchange="onTouchControlsToggle(this.checked)">
+  </label>
+  <div class="touchCfgHint">Auto-throttle on touch. Hold BRAKE for slowing down or reverse.</div>
   <div class="s-sep"></div>
   <div class="ctrl-grid">
     <span>THROTTLE</span><span>W / ↑</span>
@@ -543,6 +548,8 @@ let aiControllers=[];
 let cityCorridors=null; // For city tracks: array of {x,z,hw,hd} axis-aligned driveable rectangles
 let cityAiPts=null;    // For city tracks: dense waypoints following grid roads exactly
 let settingsFromPause=false;
+const TOUCH_TOGGLE_KEY='turborace_touch_controls';
+let touchControlsEnabled=false;
 
 const keys={};
 const touchState={throttle:false,brake:false,left:false,right:false};
@@ -563,6 +570,33 @@ document.addEventListener('pointermove',e=>{
     raceCamOrbit.lastInput=performance.now();
   }
 });
+
+
+function isTouchControlsVisibleInState(state){
+  return touchControlsEnabled&&(state==='racing'||state==='cooldown');
+}
+
+function updateTouchControlsVisibility(){
+  const root=document.getElementById('touchControls');
+  if(!root)return;
+  root.style.display=isTouchControlsVisibleInState(gState)?'flex':'none';
+}
+
+function onTouchControlsToggle(enabled){
+  touchControlsEnabled=!!enabled;
+  const input=document.getElementById('touchToggleInput');
+  if(input&&input.checked!==touchControlsEnabled)input.checked=touchControlsEnabled;
+  localStorage.setItem(TOUCH_TOGGLE_KEY,touchControlsEnabled?'1':'0');
+  if(!touchControlsEnabled)releaseAllTouchControls();
+  updateTouchControlsVisibility();
+}
+
+function initTouchSettings(){
+  const saved=localStorage.getItem(TOUCH_TOGGLE_KEY);
+  touchControlsEnabled=(saved==='1');
+  const input=document.getElementById('touchToggleInput');
+  if(input)input.checked=touchControlsEnabled;
+}
 
 function setTouchControl(name,active){
   touchState[name]=active;
@@ -2154,7 +2188,7 @@ function initRace(){
   raceTime=0; gState='countdown';
   document.getElementById('hud').style.display='block';
   document.getElementById('hint').style.display='block';
-  document.getElementById('touchControls').style.display='flex';
+  updateTouchControlsVisibility();
   document.getElementById('camLabel').textContent='[ C ] COCKPIT VIEW';
   camMode='chase'; dc.style.display='none';
   document.getElementById('speedBox').style.display='block';
@@ -2181,7 +2215,7 @@ function doCountdown(){
     } else {
       el.textContent='GO!'; playBeep(880,.45,.4,'square'); announce('Go go go!');
       clearInterval(iv);
-      setTimeout(()=>{el.style.display='none'; gState='racing'; startMusic();},700);
+      setTimeout(()=>{el.style.display='none'; gState='racing'; updateTouchControlsVisibility(); startMusic();},700);
     }
   },1000);
 }
@@ -2191,14 +2225,14 @@ function pauseRace(){
   _prePauseState=gState;
   gState='paused'; stopAudio(); stopMusic();
   document.getElementById('pauseMenu').style.display='flex';
-  document.getElementById('touchControls').style.display='none';
+  updateTouchControlsVisibility();
   releaseAllTouchControls();
 }
 function resumeRace(){
   gState=_prePauseState==='cooldown'?'cooldown':'racing';
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
-  document.getElementById('touchControls').style.display=(gState==='racing'||gState==='cooldown')?'flex':'none';
+  updateTouchControlsVisibility();
   initAudio(); startMusic();
 }
 
@@ -2430,7 +2464,8 @@ function animate(){
   const dt=Math.min(clock.getDelta(),.05);
   if(gState==='racing'){
     raceTime+=dt;
-    const thr=(keys['ArrowUp']||keys['KeyW']||touchState.throttle)?1:0;
+    const autoTouchThrottle=isTouchControlsVisibleInState(gState)&&('ontouchstart' in window||navigator.maxTouchPoints>0);
+    const thr=(keys['ArrowUp']||keys['KeyW']||touchState.throttle||autoTouchThrottle)?1:0;
     const brk=(keys['ArrowDown']||keys['KeyS']||touchState.brake)?1:0;
     const left=(keys['ArrowLeft']||keys['KeyA']||touchState.left);
     const right=(keys['ArrowRight']||keys['KeyD']||touchState.right);
@@ -2484,11 +2519,12 @@ function showMain(){
   document.getElementById('sMain').style.display='flex';
   document.getElementById('hud').style.display='none';
   document.getElementById('hint').style.display='none';
-  document.getElementById('touchControls').style.display='none';
+  gState='menu';
+  updateTouchControlsVisibility();
   releaseAllTouchControls();
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
-  dc.style.display='none'; gState='menu';
+  dc.style.display='none';
   editorPreviewMode=false;
   const epb=document.getElementById('editorPreviewBanner'); if(epb)epb.style.display='none';
   const epbtn=document.getElementById('editorPreviewBtn'); if(epbtn)epbtn.textContent='3D PREVIEW';
@@ -2609,6 +2645,7 @@ function restartRace(){
 // ═══════════════════════════════════════════════════════
 scene.background=new THREE.Color(0x050510);
 setupTouchControls();
+initTouchSettings();
 setupLights(); animate(); showMain();
 </script>
 </body>
