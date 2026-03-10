@@ -2464,7 +2464,9 @@ function animate(){
   const dt=Math.min(clock.getDelta(),.05);
   if(gState==='racing'){
     raceTime+=dt;
-    const autoTouchThrottle=isTouchControlsVisibleInState(gState)&&('ontouchstart' in window||navigator.maxTouchPoints>0);
+    const autoTouchThrottle=isTouchControlsVisibleInState(gState)
+      && ('ontouchstart' in window||navigator.maxTouchPoints>0)
+      && !touchState.brake;
     const thr=(keys['ArrowUp']||keys['KeyW']||touchState.throttle||autoTouchThrottle)?1:0;
     const brk=(keys['ArrowDown']||keys['KeyS']||touchState.brake)?1:0;
     const left=(keys['ArrowLeft']||keys['KeyA']||touchState.left);
