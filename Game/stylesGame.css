@@ -92,9 +92,10 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
   .touchBtn-primary{min-width:98px;}
 }
 @media (orientation:portrait){
-  #touchControls{padding:20px 18px 26px;}
-  .touchCluster{gap:14px;}
-  .touchBtn{min-width:92px;height:92px;font-size:15px;border-radius:20px;}
-  .touchBtn-small{min-width:78px;width:78px;height:78px;font-size:23px;}
-  .touchBtn-primary{min-width:134px;}
+  #touchControls{padding:12px max(12px,env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));align-items:center;}
+  .touchCluster{gap:10px;}
+  .touchCluster-right{flex-direction:column;align-items:flex-end;}
+  .touchBtn{min-width:76px;height:76px;font-size:13px;border-radius:18px;}
+  .touchBtn-small{min-width:64px;width:64px;height:64px;font-size:20px;}
+  .touchBtn-primary{min-width:112px;}
 }
