@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>TurboRace 3D</title>
 <link rel="stylesheet" href="stylesGame.css">
 </head>
@@ -560,14 +561,16 @@ function setupTouchControls(){
     btn.addEventListener('contextmenu',e=>e.preventDefault());
   });
   root.querySelectorAll('[data-tap]').forEach(btn=>{
-    btn.addEventListener('click',e=>{
+    const onTap=(e)=>{
       e.preventDefault();
       if(btn.dataset.tap==='camera' && (gState==='racing'||gState==='cooldown')) toggleCam();
       if(btn.dataset.tap==='pause'){
         if(gState==='racing'||gState==='cooldown') pauseRace();
         else if(gState==='paused') resumeRace();
       }
-    });
+    };
+    btn.addEventListener('pointerup',onTap);
+    btn.addEventListener('contextmenu',e=>e.preventDefault());
   });
   window.addEventListener('pointerup',releaseAllTouchControls);
   window.addEventListener('blur',releaseAllTouchControls);
