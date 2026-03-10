@@ -109,3 +109,21 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .editorCanvasPanel{background:rgba(6,10,18,.38);overflow:hidden;}
 #trackEditorCanvas{background:transparent;cursor:crosshair;}
 .editorPreviewBanner{display:block;background:rgba(70,180,255,.12);border:1px solid rgba(70,180,255,.25);color:#d8efff;}
+
+.toggleRow{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);}
+.toggleLbl{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:#667;}
+.touchCfgHint{margin:10px 4px 0;font-size:11px;color:#556;letter-spacing:1px;}
+#touchToggleInput{width:20px;height:20px;accent-color:#ff5500;cursor:pointer;}
+#touchControls{position:fixed;inset:0;display:none;justify-content:space-between;align-items:flex-end;padding:12px;pointer-events:none;z-index:250;}
+.touchCluster{display:flex;gap:10px;pointer-events:none;}
+.touchCluster-left{align-items:flex-end;}
+.touchCluster-right{align-items:flex-end;}
+.touchBtn{pointer-events:auto;touch-action:none;min-width:80px;min-height:54px;padding:0 14px;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:rgba(7,10,20,.72);color:#eef2ff;font-family:'Orbitron',monospace;font-size:12px;letter-spacing:1px;}
+.touchBtn-small{min-width:58px;min-height:58px;padding:0 8px;font-size:13px;}
+.touchBtn-primary{background:rgba(255,90,20,.78);border-color:rgba(255,140,100,.8);}
+.touchBtn.active{transform:translateY(1px) scale(.98);background:rgba(80,140,255,.78);border-color:rgba(140,180,255,.9);}
+@media (max-width: 700px){
+  #touchControls{padding:10px;}
+  .touchBtn{min-width:74px;min-height:52px;font-size:11px;}
+  .touchBtn-small{min-width:54px;min-height:54px;}
+}
