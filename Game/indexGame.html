@@ -39,10 +39,14 @@
 
 <!-- PAUSE MENU -->
 <div id="pauseMenu">
-  <h2>PAUSED</h2>
-  <button class="btn btn-p" onclick="resumeRace()">RESUME</button>
-  <button class="btn btn-s" onclick="showSettings(true)">SETTINGS</button>
-  <button class="btn btn-s" onclick="showMain()">QUIT TO MENU</button>
+  <div class="menuPanel">
+    <h2>PAUSED</h2>
+    <div class="menuActions">
+      <button class="btn btn-p" onclick="resumeRace()">RESUME</button>
+      <button class="btn btn-s" onclick="showSettings(true)">SETTINGS</button>
+      <button class="btn btn-s" onclick="showMain()">QUIT TO MENU</button>
+    </div>
+  </div>
 </div>
 
 <!-- SETTINGS MODAL -->
@@ -77,8 +81,10 @@
   <div class="screenInner">
   <h1>TurboRace</h1>
   <div class="sub">3D Racing · Multiple Circuits · Full Cockpit</div>
-  <button class="btn btn-p" onclick="tryStartMenuMusic();showCarSel()">START RACE</button>
-  <button class="btn btn-s" onclick="tryStartMenuMusic();showSettings(false)">SETTINGS</button>
+  <div class="menuActions">
+    <button class="btn btn-p" onclick="tryStartMenuMusic();showCarSel()">START RACE</button>
+    <button class="btn btn-s" onclick="tryStartMenuMusic();showSettings(false)">SETTINGS</button>
+  </div>
   </div>
 </div>
 
@@ -87,7 +93,7 @@
   <div class="screenInner">
   <h2>Select Your Car</h2>
   <div class="cards" id="carCards"></div>
-  <div><button class="btn btn-s" onclick="showMain()">BACK</button><button class="btn btn-p" id="btnNxt" onclick="showTrkSel()" disabled>NEXT</button></div>
+  <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showMain()">BACK</button><button class="btn btn-p" id="btnNxt" onclick="showTrkSel()" disabled>NEXT</button></div>
   </div>
 </div>
 
@@ -95,8 +101,8 @@
 <div class="screen" id="sTrk" style="display:none">
   <div class="screenInner">
   <h2>Select Circuit</h2>
-  <div id="trkCards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;"></div>
-  <div><button class="btn btn-s" onclick="showCarSel()">BACK</button><button class="btn btn-p" id="btnGo" onclick="startRace()" disabled>RACE!</button></div>
+  <div id="trkCards" class="trackCards"></div>
+  <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showCarSel()">BACK</button><button class="btn btn-p" id="btnGo" onclick="startRace()" disabled>RACE!</button></div>
   </div>
 </div>
 
@@ -106,7 +112,7 @@
   <h1 id="rTitle" style="color:#ffd700">RACE OVER</h1>
   <div id="podium"></div>
   <div id="ptime"></div>
-  <div><button class="btn btn-p" onclick="showMain()">MENU</button><button class="btn btn-s" onclick="restartRace()">RACE AGAIN</button></div>
+  <div class="menuActions menuActions-inline"><button class="btn btn-p" onclick="showMain()">MENU</button><button class="btn btn-s" onclick="restartRace()">RACE AGAIN</button></div>
   </div>
 </div>
 
