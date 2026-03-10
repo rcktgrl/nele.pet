@@ -82,7 +82,7 @@
   <h1>TurboRace</h1>
   <div class="sub">3D Racing · Multiple Circuits · Full Cockpit</div>
   <div class="menuActions">
-    <button class="btn btn-p" onclick="tryStartMenuMusic();showCarSel()">START RACE</button>
+    <button class="btn btn-p" onclick="tryStartMenuMusic();showTrkSel()">START RACE</button>
     <button class="btn btn-s" onclick="tryStartMenuMusic();showTrackEditor()">TRACK EDITOR</button>
     <button class="btn btn-s" onclick="tryStartMenuMusic();showSettings(false)">SETTINGS</button>
   </div>
@@ -94,8 +94,8 @@
   <div class="screenInner">
   <h2>Select Your Car</h2>
   <div class="cards" id="carCards"></div>
-  <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showTrkSel()">BACK</button><button class="btn btn-p" id="btnNxt" onclick="showTrkSel()" disabled>NEXT</button></div>
-  </div>
+  <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showTrkSel()">BACK</button><button class="btn btn-p" id="btnGo" onclick="startRace()" disabled>RACE!</button></div>
+    </div>
 </div>
 
 <!-- TRACK SELECT -->
@@ -103,7 +103,7 @@
   <div class="screenInner">
   <h2>Select Circuit</h2>
   <div id="trkCards" class="trackCards"></div>
-  <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showMain()">BACK</button><button class="btn btn-p" id="btnGo" onclick="startRace()" disabled>RACE!</button></div>
+  <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showMain()">BACK</button><button class="btn btn-p" id="btnNxt" onclick="showCarSel()" disabled>NEXT</button></div>
   </div>
 </div>
 
