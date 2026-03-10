@@ -76,7 +76,7 @@
 <div class="screen" id="sMain">
   <h1>TurboRace</h1>
   <div class="sub">3D Racing · Multiple Circuits · Full Cockpit</div>
-  <button class="btn btn-p" onclick="tryStartMenuMusic();showTrkSel()">START RACE</button>
+  <button class="btn btn-p" onclick="tryStartMenuMusic();showCarSel()">START RACE</button>
   <button class="btn btn-s" onclick="tryStartMenuMusic();showSettings(false)">SETTINGS</button>
 </div>
 
@@ -84,14 +84,14 @@
 <div class="screen" id="sCar" style="display:none">
   <h2>Select Your Car</h2>
   <div class="cards" id="carCards"></div>
-  <div class="menuActions"><button class="btn btn-s" onclick="showTrkSel(false)">BACK</button><button class="btn btn-p" id="btnGo" onclick="startRace()" disabled>RACE!</button></div>
+  <div><button class="btn btn-s" onclick="showMain()">BACK</button><button class="btn btn-p" id="btnNxt" onclick="showTrkSel()" disabled>NEXT</button></div>
 </div>
 
 <!-- TRACK SELECT -->
 <div class="screen" id="sTrk" style="display:none">
   <h2>Select Circuit</h2>
-  <div id="trkCards" class="trkCards"></div>
-  <div class="menuActions"><button class="btn btn-s" onclick="showMain()">BACK</button><button class="btn btn-p" id="btnNxt" onclick="showCarSel()" disabled>NEXT</button></div>
+  <div id="trkCards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;"></div>
+  <div><button class="btn btn-s" onclick="showCarSel()">BACK</button><button class="btn btn-p" id="btnGo" onclick="startRace()" disabled>RACE!</button></div>
 </div>
 
 <!-- RESULTS -->
@@ -2235,10 +2235,9 @@ function showMain(){
 }
 
 function showCarSel(){
-  if(selTrk===null){showTrkSel(); return;}
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sCar').style.display='flex';
-  selCar=null; document.getElementById('btnGo').disabled=true;
+  selCar=null; document.getElementById('btnNxt').disabled=true;
   const ct=document.getElementById('carCards'); ct.innerHTML='';
   CARS.forEach((c,i)=>{
     const d=document.createElement('div'); d.className='card';
@@ -2249,7 +2248,7 @@ function showCarSel(){
       <div class="stat"><span class="sl">HANDL</span><div class="st"><div class="sf" style="width:${c.stats.h}%"></div></div></div>`;
     d.onclick=()=>{
       document.querySelectorAll('#carCards .card').forEach(x=>x.classList.remove('sel'));
-      d.classList.add('sel'); selCar=i; document.getElementById('btnGo').disabled=false;
+      d.classList.add('sel'); selCar=i; document.getElementById('btnNxt').disabled=false;
     };
     ct.appendChild(d);
   });
@@ -2307,11 +2306,10 @@ function drawTrackPreview(canvas, track, color){
   ctx.fillText('S/F',sfx+12,sfz+4);
 }
 
-function showTrkSel(reset=true){
+function showTrkSel(){
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrk').style.display='flex';
-  if(reset)selTrk=null;
-  document.getElementById('btnNxt').disabled=(selTrk===null);
+  selTrk=null; document.getElementById('btnGo').disabled=true;
   const COLORS=['#4488ff','#44cc66','#ffaa22','#ff4488'];
   const tt=document.getElementById('trkCards'); tt.innerHTML='';
   TRACKS.forEach((t,i)=>{
@@ -2323,17 +2321,14 @@ function showTrkSel(reset=true){
     card.appendChild(canvas); card.appendChild(h3); card.appendChild(p);
     card.onclick=()=>{
       document.querySelectorAll('.tcard').forEach(x=>x.classList.remove('sel'));
-      card.classList.add('sel'); selTrk=i; document.getElementById('btnNxt').disabled=false;
+      card.classList.add('sel'); selTrk=i; document.getElementById('btnGo').disabled=false;
     };
-    if(selTrk===i){card.classList.add('sel');}
     tt.appendChild(card);
     drawTrackPreview(canvas,t,COLORS[i]);
   });
 }
 
 function startRace(){
-  if(selTrk===null){showTrkSel(); return;}
-  if(selCar===null){showCarSel(); return;}
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
   initRace();
 }
