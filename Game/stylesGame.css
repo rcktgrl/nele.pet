@@ -24,7 +24,7 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 #cd{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Orbitron',monospace;font-size:110px;font-weight:900;color:#ffd700;text-shadow:0 0 50px #ffd700;pointer-events:none;display:none;}
 #hint{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);font-size:11px;color:#333;letter-spacing:2px;display:none;pointer-events:none;}
 /* Screens */
-.screen{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 60%,#0e0e1e,#050508);z-index:100;}
+.screen{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 60%,#0e0e1e,#050508);z-index:100;padding:28px 18px;overflow-y:auto;}
 .screen h1{font-family:'Orbitron',monospace;font-size:78px;font-weight:900;letter-spacing:10px;text-transform:uppercase;background:linear-gradient(135deg,#ff5500,#ffcc00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px;line-height:1;}
 .screen .sub{font-size:13px;color:#333;letter-spacing:5px;text-transform:uppercase;margin-bottom:44px;}
 .screen h2{font-family:'Orbitron',monospace;font-size:24px;letter-spacing:6px;color:#556;text-transform:uppercase;margin-bottom:32px;}
@@ -34,7 +34,7 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .btn-p:disabled{opacity:.3;cursor:not-allowed;transform:none;}
 .btn-s{background:rgba(255,255,255,.05);color:#778;border:1px solid #223;}
 .btn-s:hover{background:rgba(255,255,255,.1);color:#aab;}
-.cards{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin:0 0 24px;}
+.cards{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin:0 0 24px;max-width:1080px;width:100%;}
 .card{width:196px;padding:18px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);cursor:pointer;transition:all .15s;text-align:center;}
 .card:hover,.card.sel{border-color:#ff5500;background:rgba(255,85,0,.07);transform:translateY(-4px);box-shadow:0 8px 30px rgba(255,85,0,.2);}
 .card h3{font-family:'Orbitron',monospace;font-size:14px;margin-bottom:6px;color:#ffcc00;}
@@ -71,6 +71,9 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .tcard:hover,.tcard.sel{border-color:#ff5500;background:rgba(255,85,0,.07);transform:translateY(-4px);box-shadow:0 8px 30px rgba(255,85,0,.25);}
 .tcard h3{font-family:'Orbitron',monospace;font-size:13px;color:#ffcc00;letter-spacing:2px;text-transform:uppercase;}
 .tcard p{font-size:11px;color:#445;letter-spacing:1px;}
+.trkCards{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;max-width:1100px;width:100%;}
+.menuActions{display:flex;flex-wrap:wrap;justify-content:center;}
+.tcard canvas{width:min(280px,100%);height:auto;aspect-ratio:280 / 230;border-radius:6px;}
 #touchControls{position:fixed;left:0;right:0;bottom:0;display:none;justify-content:space-between;align-items:flex-end;padding:18px 20px 22px;pointer-events:none;z-index:250;}
 .touchCluster{display:flex;gap:12px;pointer-events:auto;}
 .touchCluster-left{align-items:flex-end;}
@@ -82,6 +85,13 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .touchBtn-small{min-width:68px;width:68px;height:68px;font-size:20px;padding:0 10px;}
 .touchBtn-primary{min-width:116px;background:rgba(80,18,8,.78);}
 @media (max-width:900px){
+  .screen h1{font-size:58px;letter-spacing:6px;}
+  .screen .sub{margin-bottom:24px;letter-spacing:3px;}
+  .screen h2{font-size:20px;letter-spacing:4px;margin-bottom:20px;}
+  .card{width:min(100%,320px);}
+  .trkCards{gap:12px;}
+  .tcard{width:min(100%,360px);padding:12px;}
+  #settingsModal{width:min(92vw,480px);padding:28px 22px;max-height:90vh;overflow-y:auto;}
   #hint{bottom:120px;}
   #speedBox,#gearBox{bottom:230px;}
   #camLabel{bottom:210px;}
@@ -92,6 +102,15 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
   .touchBtn-primary{min-width:98px;}
 }
 @media (orientation:portrait){
+  .screen{justify-content:flex-start;padding-top:24px;padding-bottom:28px;}
+  .screen h1{font-size:44px;letter-spacing:4px;}
+  .screen .sub{font-size:11px;letter-spacing:2px;line-height:1.4;text-align:center;}
+  .btn{padding:12px 24px;font-size:12px;letter-spacing:2px;}
+  .cards{gap:12px;margin-bottom:18px;}
+  .card{padding:14px;}
+  .tcard h3{font-size:12px;}
+  .tcard p{font-size:10px;text-align:center;}
+  .menuActions{position:sticky;bottom:0;padding-top:8px;background:linear-gradient(to top,#050508,rgba(5,5,8,.15));}
   #touchControls{padding:20px 18px 26px;}
   .touchCluster{gap:14px;}
   .touchBtn{min-width:92px;height:92px;font-size:15px;border-radius:20px;}
