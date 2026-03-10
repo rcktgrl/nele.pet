@@ -524,6 +524,7 @@ let settingsFromPause=false;
 
 const keys={};
 const touchState={throttle:false,brake:false,left:false,right:false};
+const touchPointers={throttle:new Set(),brake:new Set(),left:new Set(),right:new Set()};
 document.addEventListener('keydown',e=>{
   keys[e.code]=true;
   if(e.code==='KeyC'&&(gState==='racing'||gState==='cooldown'))toggleCam();
@@ -540,7 +541,12 @@ function setTouchControl(name,active){
   if(btn)btn.classList.toggle('active',!!active);
 }
 
+function syncTouchControlFromPointers(name){
+  setTouchControl(name,touchPointers[name].size>0);
+}
+
 function releaseAllTouchControls(){
+  Object.values(touchPointers).forEach(set=>set.clear());
   setTouchControl('throttle',false);
   setTouchControl('brake',false);
   setTouchControl('left',false);
@@ -552,8 +558,17 @@ function setupTouchControls(){
   if(!root)return;
   root.querySelectorAll('[data-control]').forEach(btn=>{
     const name=btn.dataset.control;
-    const onPress=(e)=>{ e.preventDefault(); setTouchControl(name,true); };
-    const onRelease=(e)=>{ e.preventDefault(); setTouchControl(name,false); };
+    const onPress=(e)=>{
+      e.preventDefault();
+      btn.setPointerCapture(e.pointerId);
+      touchPointers[name].add(e.pointerId);
+      syncTouchControlFromPointers(name);
+    };
+    const onRelease=(e)=>{
+      e.preventDefault();
+      touchPointers[name].delete(e.pointerId);
+      syncTouchControlFromPointers(name);
+    };
     btn.addEventListener('pointerdown',onPress);
     btn.addEventListener('pointerup',onRelease);
     btn.addEventListener('pointercancel',onRelease);
@@ -572,7 +587,14 @@ function setupTouchControls(){
     btn.addEventListener('pointerup',onTap);
     btn.addEventListener('contextmenu',e=>e.preventDefault());
   });
-  window.addEventListener('pointerup',releaseAllTouchControls);
+  window.addEventListener('pointerup',e=>{
+    Object.keys(touchPointers).forEach(name=>{
+      if(touchPointers[name].has(e.pointerId)){
+        touchPointers[name].delete(e.pointerId);
+        syncTouchControlFromPointers(name);
+      }
+    });
+  });
   window.addEventListener('blur',releaseAllTouchControls);
 }
 
