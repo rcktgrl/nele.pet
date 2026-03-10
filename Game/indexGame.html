@@ -2,51 +2,34 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>TurboRace 3D</title>
-<link rel="stylesheet" href="stylesGame.css">
+<link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 <canvas id="gc"></canvas>
 <canvas id="dc"></canvas>
-<div id="hud" role="status" aria-live="polite">
+<div id="hud">
   <div id="raceTop">
     <div id="lapNum">LAP</div>
     <div id="lapVal">1 / 3</div>
     <div id="timer">00:00.000</div>
   </div>
   <div id="pos"><div id="posNum">1<sup style="font-size:20px">ST</sup></div><div id="posLabel">POSITION</div></div>
-  <div id="speedBox" class="hudBottomDock"><div id="speedNum">0</div><div id="speedUnit">KM/H</div></div>
-  <div id="gearBox" class="hudBottomDock"><div id="gearNum">1</div><div id="gearLabel">GEAR</div></div>
-  <div id="camLabel" class="hudBottomDock">[ C ] COCKPIT VIEW</div>
+  <div id="speedBox"><div id="speedNum">0</div><div id="speedUnit">KM/H</div></div>
+  <div id="gearBox"><div id="gearNum">1</div><div id="gearLabel">GEAR</div></div>
+  <div id="camLabel">[ C ] COCKPIT VIEW</div>
   <div id="mm"><canvas id="mmc" width="150" height="150"></canvas></div>
 </div>
 <div id="notif"></div>
 <div id="cd"></div>
-<div id="hint" class="hudBottomDock">W/↑ THROTTLE · S/↓ BRAKE (HOLD WHILE STOPPED = REVERSE) · A/D STEER · C CAMERA · ESC PAUSE</div>
-<div id="touchControls" aria-label="On-screen controls">
-  <div class="touchCluster touchCluster-left">
-    <button class="touchBtn touchBtn-small" data-control="left" aria-label="Steer left">◀</button>
-    <button class="touchBtn touchBtn-small" data-control="right" aria-label="Steer right">▶</button>
-  </div>
-  <div class="touchCluster touchCluster-right">
-    <button class="touchBtn touchBtn-small" data-tap="camera" aria-label="Toggle camera">CAM</button>
-    <button class="touchBtn touchBtn-small" data-tap="pause" aria-label="Pause">⏸</button>
-    <button class="touchBtn" data-control="brake" aria-label="Brake or reverse">BRAKE</button>
-    <button class="touchBtn touchBtn-primary" data-control="throttle" aria-label="Throttle">THROTTLE</button>
-  </div>
-</div>
+<div id="hint">W/↑ THROTTLE · S/↓ BRAKE (HOLD WHILE STOPPED = REVERSE) · A/D STEER · C CAMERA · ESC PAUSE</div>
 
 <!-- PAUSE MENU -->
 <div id="pauseMenu">
-  <div class="menuPanel">
-    <h2>PAUSED</h2>
-    <div class="menuActions">
-      <button class="btn btn-p" onclick="resumeRace()">RESUME</button>
-      <button class="btn btn-s" onclick="showSettings(true)">SETTINGS</button>
-      <button class="btn btn-s" onclick="showMain()">QUIT TO MENU</button>
-    </div>
-  </div>
+  <h2>PAUSED</h2>
+  <button class="btn btn-p" onclick="resumeRace()">RESUME</button>
+  <button class="btn btn-s" onclick="showSettings(true)">SETTINGS</button>
+  <button class="btn btn-s" onclick="showMain()">QUIT TO MENU</button>
 </div>
 
 <!-- SETTINGS MODAL -->
@@ -78,42 +61,133 @@
 
 <!-- MAIN MENU -->
 <div class="screen" id="sMain">
-  <div class="screenInner">
   <h1>TurboRace</h1>
   <div class="sub">3D Racing · Multiple Circuits · Full Cockpit</div>
-  <div class="menuActions">
-    <button class="btn btn-p" onclick="tryStartMenuMusic();showCarSel()">START RACE</button>
-    <button class="btn btn-s" onclick="tryStartMenuMusic();showSettings(false)">SETTINGS</button>
-  </div>
-  </div>
+  <button class="btn btn-p" onclick="tryStartMenuMusic();showTrkSel()">START RACE</button>
+  <button class="btn btn-s" onclick="tryStartMenuMusic();showTrackEditor()">TRACK EDITOR</button>
+  <button class="btn btn-s" onclick="tryStartMenuMusic();showSettings(false)">SETTINGS</button>
 </div>
 
 <!-- CAR SELECT -->
 <div class="screen" id="sCar" style="display:none">
-  <div class="screenInner">
   <h2>Select Your Car</h2>
   <div class="cards" id="carCards"></div>
-  <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showMain()">BACK</button><button class="btn btn-p" id="btnNxt" onclick="showTrkSel()" disabled>NEXT</button></div>
-  </div>
+  <div><button class="btn btn-s" onclick="showTrkSel()">BACK</button><button class="btn btn-p" id="btnGo" onclick="startRace()" disabled>RACE!</button></div>
 </div>
 
 <!-- TRACK SELECT -->
 <div class="screen" id="sTrk" style="display:none">
-  <div class="screenInner">
   <h2>Select Circuit</h2>
-  <div id="trkCards" class="trackCards"></div>
-  <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showCarSel()">BACK</button><button class="btn btn-p" id="btnGo" onclick="startRace()" disabled>RACE!</button></div>
+  <div id="trkCards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;"></div>
+  <div><button class="btn btn-s" onclick="showMain()">BACK</button><button class="btn btn-p" id="btnNxt" onclick="showCarSel()" disabled>NEXT</button></div>
+</div>
+
+<!-- TRACK EDITOR -->
+<div class="screen editorScreen" id="sEditor" style="display:none">
+  <div class="editorWrap">
+    <aside class="editorSidebar">
+      <div class="editorTop">
+        <div>
+          <h2>Track Editor</h2>
+          <div class="editorSub">Bird's-eye 3D editor. WASD moves, mouse rotates, wheel zooms, left drag edits.</div>
+        </div>
+        <button class="btn btn-s btn-tight" onclick="closeTrackEditor()">BACK</button>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Tracks</div>
+        <div class="editorList" id="editorTrackList"></div>
+        <div class="editorRow">
+          <button class="btn btn-p btn-tight" onclick="createNewEditorTrack()">NEW TRACK</button>
+          <button class="btn btn-s btn-tight" onclick="duplicateEditorTrack()">DUPLICATE</button>
+          <button class="btn btn-s btn-tight" onclick="deleteEditorTrack()">DELETE TRACK</button>
+        </div>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Track</div>
+        <label class="editorField"><span>Name</span><input id="editorTrackName" type="text" maxlength="40" oninput="onEditorMetaChanged()"></label>
+        <label class="editorField"><span>Description</span><input id="editorTrackDesc" type="text" maxlength="90" oninput="onEditorMetaChanged()"></label>
+        <div class="editorGrid2">
+          <label class="editorField"><span>Laps</span><input id="editorTrackLaps" type="number" min="1" max="9" value="3" oninput="onEditorMetaChanged()"></label>
+          <label class="editorField"><span>Road Width</span><input id="editorTrackWidth" type="number" min="6" max="30" value="12" oninput="onEditorMetaChanged()"></label>
+        </div>
+        <div class="editorGrid2">
+          <label class="editorField"><span>Preview Colour</span><input id="editorTrackColor" type="color" value="#44aaff" oninput="onEditorMetaChanged()"></label>
+          <label class="editorField editorCheckbox"><span>Bezier Curves</span><input id="editorUseBezier" type="checkbox" checked onchange="onEditorMetaChanged()"></label>
+        </div>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Environment</div>
+        <div class="editorGrid2">
+          <label class="editorField"><span>Ground</span><input id="editorGroundColor" type="color" value="#1a3018" oninput="onEditorMetaChanged()"></label>
+          <label class="editorField"><span>Sky</span><input id="editorSkyColor" type="color" value="#0d1a2e" oninput="onEditorMetaChanged()"></label>
+        </div>
+        <label class="editorField"><span>Time of Day</span><select id="editorTimeOfDay" onchange="onEditorMetaChanged()">
+          <option value="day">Day</option>
+          <option value="sunset">Sunset</option>
+          <option value="night">Night</option>
+        </select></label>
+        <div class="editorGrid2">
+          <label class="editorField editorCheckbox"><span>Street Grid</span><input id="editorStreetGrid" type="checkbox" onchange="onEditorStreetGridChanged()"></label>
+          <label class="editorField"><span>Grid Size</span><input id="editorGridSize" type="number" min="40" max="120" step="5" value="70" oninput="onEditorMetaChanged()"></label>
+        </div>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Selected Node</div>
+        <label class="editorField"><span>Node Type</span><select id="editorNodeType" onchange="onEditorNodeChanged()">
+          <option value="track-node">Track node</option>
+          <option value="start-finish">Start/finish</option>
+          <option value="no-auto">No auto scenery</option>
+        </select></label>
+        <label class="editorField"><span>Curve Steepness</span><input id="editorSteepness" type="range" min="0" max="100" value="40" oninput="onEditorNodeChanged()"></label>
+        <div class="editorHint" id="editorNodeInfo">Select and drag a node in the 3D view.</div>
+        <div class="editorRow editorRowWrap">
+          <button class="btn btn-p btn-tight" onclick="addEditorNode()">ADD NODE</button>
+          <button class="btn btn-s btn-tight" onclick="insertEditorNodeAfter()">INSERT AFTER</button>
+          <button class="btn btn-s btn-tight" onclick="deleteEditorNode()">DELETE NODE</button>
+        </div>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Placed Assets</div>
+        <div class="editorHint">Drag these into the viewport. Existing placed assets also appear in the 3D editor.</div>
+        <div class="editorAssetPalette" id="editorAssetPalette">
+          <div class="assetChip" draggable="true" data-asset="tree">🌲 Tree</div>
+          <div class="assetChip" draggable="true" data-asset="building">🏢 Building</div>
+          <div class="assetChip" draggable="true" data-asset="park">🟩 Park</div>
+        </div>
+        <div class="editorRow">
+          <button class="btn btn-s btn-tight" onclick="deleteSelectedEditorAsset()">DELETE ASSET</button>
+          <button class="btn btn-s btn-tight" onclick="resetEditorCameraToTrack()">RESET CAMERA</button>
+        </div>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Save</div>
+        <div class="editorRow editorRowWrap">
+          <button class="btn btn-p btn-tight" onclick="saveEditorTrack()">SAVE TRACK</button>
+          <button class="btn btn-s btn-tight" onclick="resetEditorTrack()">RESET</button>
+        </div>
+      </div>
+    </aside>
+
+    <section class="editorCanvasPanel">
+      <canvas id="trackEditorCanvas" width="1100" height="720"></canvas>
+      <div class="editorCanvasHint">WASD move · Mouse wheel zoom · Right mouse rotate · Left mouse drag nodes or assets · Shift snaps to grid</div>
+      <div class="editorPreviewBanner" id="editorPreviewBanner">Live 3D editor view</div>
+    </section>
   </div>
 </div>
 
 <!-- RESULTS -->
 <div id="results">
-  <div class="screenInner">
   <h1 id="rTitle" style="color:#ffd700">RACE OVER</h1>
   <div id="podium"></div>
   <div id="ptime"></div>
-  <div class="menuActions menuActions-inline"><button class="btn btn-p" onclick="showMain()">MENU</button><button class="btn btn-s" onclick="restartRace()">RACE AGAIN</button></div>
-  </div>
+  <div><button class="btn btn-p" onclick="showMain()">MENU</button><button class="btn btn-s" onclick="restartRace()">RACE AGAIN</button></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -529,6 +603,14 @@ const mmc=document.getElementById('mmc'),mmctx=mmc.getContext('2d');
 // ═══════════════════════════════════════════════════════
 let gState='menu';
 let selCar=null,selTrk=null;
+let editorTracks=[],editorTrack=null,editorSelectedNode=0,editorSelectedAsset=-1,editorDrag=null,editorPreviewMode=false,editorPreviewOrbit={angle:0,radius:160,center:new THREE.Vector3()};
+const camEditor=new THREE.PerspectiveCamera(55,1,.1,3000);
+const raycaster=new THREE.Raycaster();
+const editorGroundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+let editorNeedsRebuild=false,editorLastRebuild=0;
+let editorCam={target:new THREE.Vector3(),yaw:0,pitch:1.16,distance:260};
+let editorMouse={mode:null,lastX:0,lastY:0};
+let raceCamOrbit={yaw:0,pitch:0,lastInput:0};
 let raceTime=0;
 let pCar=null,aiCars=[],allCars=[],trkData=null,trkCurve=null,trkPts=[],trkCurv=[];
 let aiControllers=[];
@@ -537,8 +619,6 @@ let cityAiPts=null;    // For city tracks: dense waypoints following grid roads 
 let settingsFromPause=false;
 
 const keys={};
-const touchState={throttle:false,brake:false,left:false,right:false};
-const touchPointers={throttle:new Set(),brake:new Set(),left:new Set(),right:new Set()};
 document.addEventListener('keydown',e=>{
   keys[e.code]=true;
   if(e.code==='KeyC'&&(gState==='racing'||gState==='cooldown'))toggleCam();
@@ -548,69 +628,14 @@ document.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('keyup',e=>{ keys[e.code]=false; });
-
-function setTouchControl(name,active){
-  touchState[name]=active;
-  const btn=document.querySelector(`#touchControls [data-control="${name}"]`);
-  if(btn)btn.classList.toggle('active',!!active);
-}
-
-function syncTouchControlFromPointers(name){
-  setTouchControl(name,touchPointers[name].size>0);
-}
-
-function releaseAllTouchControls(){
-  Object.values(touchPointers).forEach(set=>set.clear());
-  setTouchControl('throttle',false);
-  setTouchControl('brake',false);
-  setTouchControl('left',false);
-  setTouchControl('right',false);
-}
-
-function setupTouchControls(){
-  const root=document.getElementById('touchControls');
-  if(!root)return;
-  root.querySelectorAll('[data-control]').forEach(btn=>{
-    const name=btn.dataset.control;
-    const onPress=(e)=>{
-      e.preventDefault();
-      btn.setPointerCapture(e.pointerId);
-      touchPointers[name].add(e.pointerId);
-      syncTouchControlFromPointers(name);
-    };
-    const onRelease=(e)=>{
-      e.preventDefault();
-      touchPointers[name].delete(e.pointerId);
-      syncTouchControlFromPointers(name);
-    };
-    btn.addEventListener('pointerdown',onPress);
-    btn.addEventListener('pointerup',onRelease);
-    btn.addEventListener('pointercancel',onRelease);
-    btn.addEventListener('pointerleave',e=>{ if(e.buttons===0) onRelease(e); });
-    btn.addEventListener('contextmenu',e=>e.preventDefault());
-  });
-  root.querySelectorAll('[data-tap]').forEach(btn=>{
-    const onTap=(e)=>{
-      e.preventDefault();
-      if(btn.dataset.tap==='camera' && (gState==='racing'||gState==='cooldown')) toggleCam();
-      if(btn.dataset.tap==='pause'){
-        if(gState==='racing'||gState==='cooldown') pauseRace();
-        else if(gState==='paused') resumeRace();
-      }
-    };
-    btn.addEventListener('pointerup',onTap);
-    btn.addEventListener('contextmenu',e=>e.preventDefault());
-  });
-  window.addEventListener('pointerup',e=>{
-    Object.keys(touchPointers).forEach(name=>{
-      if(touchPointers[name].has(e.pointerId)){
-        touchPointers[name].delete(e.pointerId);
-        syncTouchControlFromPointers(name);
-      }
-    });
-  });
-  window.addEventListener('blur',releaseAllTouchControls);
-}
+document.addEventListener('pointermove',e=>{
+  if((gState==='racing'||gState==='cooldown'||gState==='finished'||gState==='countdown')&&e.buttons===2){
+    raceCamOrbit.yaw-=e.movementX*0.004;
+    raceCamOrbit.pitch=Math.max(-0.55,Math.min(0.75,raceCamOrbit.pitch-e.movementY*0.003));
+    raceCamOrbit.lastInput=performance.now();
+  }
+});
+document.addEventListener('contextmenu',e=>{ if(gState==='racing'||gState==='cooldown'||gState==='finished'||gState==='countdown'||gState==='editor') e.preventDefault(); });
 
 // ═══════════════════════════════════════════════════════
 //  CAR CLASS
@@ -1185,6 +1210,7 @@ function buildTrack(data){
   if(!isCity) addGantry(curve,data.rw);
   if(isCity) addCityScenery(curve,data);
   else addScenery(curve,data);
+  applyPlacedAssets(data);
   scene.background=new THREE.Color(data.sky);
   const fogNear=isCity?120:260, fogFar=isCity?420:680;
   scene.fog=new THREE.Fog(data.sky,fogNear,fogFar);
@@ -1353,6 +1379,29 @@ function addGantry(curve,rw){
   ln.position.copy(sp); ln.position.y=.07; ln.rotation.y=ang; ln.userData.trk=true; scene.add(ln);
 }
 
+function distPointToSegment2(px,pz,ax,az,bx,bz){
+  const abx=bx-ax, abz=bz-az;
+  const apx=px-ax, apz=pz-az;
+  const ab2=abx*abx+abz*abz||1;
+  const t=Math.max(0,Math.min(1,(apx*abx+apz*abz)/ab2));
+  const cx=ax+abx*t, cz=az+abz*t;
+  const dx=px-cx, dz=pz-cz;
+  return dx*dx+dz*dz;
+}
+function pointNearTrack(data,px,pz,margin=0){
+  if(!data||!Array.isArray(data.wp)||data.wp.length<2) return false;
+  const maxD=((data.rw||12)/2+margin); const maxD2=maxD*maxD;
+  for(let i=0;i<data.wp.length;i++){
+    const a=data.wp[i],b=data.wp[(i+1)%data.wp.length];
+    if(distPointToSegment2(px,pz,a[0],a[2],b[0],b[2])<=maxD2) return true;
+  }
+  return false;
+}
+function pointInNoAutoZone(data,px,pz,pad=0){
+  const zones=(data&&data.noAutoZones)||[];
+  return zones.some(z=>{ const dx=px-z.x,dz=pz-z.z,r=(z.r||18)+pad; return dx*dx+dz*dz<=r*r; });
+}
+
 function addScenery(curve,data){
   const pts=curve.getSpacedPoints(100);
   const tmk=mat(0x4a2810),tlv=mat(0x1e4a1e);
@@ -1383,7 +1432,7 @@ function addScenery(curve,data){
       // ── Trees (dense, varied sizes) ──
       const treeOff=s*(minOff+2+Math.random()*6);
       const tpos=p.clone().addScaledVector(r,treeOff);
-      if(!onTrack(tpos.x,tpos.z,6)&&!nearSF(tpos.x,tpos.z)){
+      if(!onTrack(tpos.x,tpos.z,6)&&!nearSF(tpos.x,tpos.z)&&!pointInNoAutoZone(data,tpos.x,tpos.z,4)){
         const tg=new THREE.Group();
         const h=1.0+Math.random()*1.2;
         const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.15,.25,h,5),tmk);
@@ -1405,8 +1454,7 @@ function addScenery(curve,data){
         trunk2.position.set(0,h2/2,0); tg2.add(trunk2);
         const cn2=new THREE.Mesh(new THREE.ConeGeometry(1.2+Math.random(),2.5+Math.random()*2,6),tlv);
         cn2.position.set(0,h2+1.5,0); tg2.add(cn2);
-        tg2.position.set(tp2.x,p.y,tp2.z); tg2.rotation.y=Math.random()*Math.PI*2;
-        tg2.userData.trk=true; scene.add(tg2);
+        if(!pointInNoAutoZone(data,tp2.x,tp2.z,4)){ tg2.position.set(tp2.x,p.y,tp2.z); tg2.rotation.y=Math.random()*Math.PI*2; tg2.userData.trk=true; scene.add(tg2); }
       }
 
       // ── Buildings (varied, better quality) ──
@@ -1415,7 +1463,7 @@ function addScenery(curve,data){
         const bpos=p.clone().addScaledVector(r,bOff);
         let bClose=false;
         for(const bl of placed){if((bpos.x-bl.x)**2+(bpos.z-bl.z)**2<144)bClose=true;}
-        if(!bClose&&!onTrack(bpos.x,bpos.z,10)&&!nearSF(bpos.x,bpos.z)){
+        if(!bClose&&!onTrack(bpos.x,bpos.z,10)&&!nearSF(bpos.x,bpos.z)&&!pointInNoAutoZone(data,bpos.x,bpos.z,6)){
           const bw=4+Math.random()*6, bd=3+Math.random()*5, bh=4+Math.random()*8;
           const bm=[bmk,bmk2,bmk3][Math.floor(Math.random()*3)];
           const bld=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),bm);
@@ -1430,7 +1478,7 @@ function addScenery(curve,data){
       }
 
       // ── Grandstands near track (wedge shape, slope facing track) ──
-      if(i%12===0 && Math.random()<0.3 && !nearSF(p.x,p.z)){
+      if(i%12===0 && Math.random()<0.3 && !nearSF(p.x,p.z) && !pointInNoAutoZone(data,p.x,p.z,8)){
         const gOff=s*(data.rw/2+10);
         const gpos=p.clone().addScaledVector(r,gOff);
         const gang=Math.atan2(t.x,t.z);
@@ -1469,7 +1517,7 @@ function addScenery(curve,data){
     }
 
     // ── Gravel runoff areas on outside of tight curves ──
-    if(trkCurv[Math.round(i/pts.length*trkPts.length)%trkPts.length]>0.3 && Math.random()<0.4 && !nearSF(p.x,p.z)){
+    if(trkCurv[Math.round(i/pts.length*trkPts.length)%trkPts.length]>0.3 && Math.random()<0.4 && !nearSF(p.x,p.z) && !pointInNoAutoZone(data,p.x,p.z,6)){
       const gOff=data.rw/2+5;
       for(const s of[-1,1]){
         const gpos=p.clone().addScaledVector(r,s*gOff);
@@ -1670,6 +1718,7 @@ function addCityScenery(curve,data){
         let md=Infinity;
         for(let j=0;j<trkPts.length;j+=5){const d=(px-trkPts[j].x)**2+(pz-trkPts[j].z)**2;if(d<md)md=d;}
         md=Math.sqrt(md); const near=md<50;
+        if(pointInNoAutoZone(data,px,pz,10))continue;
         let bh=near?(28+Math.random()*50):(8+Math.random()*30);
         if(Math.random()<0.06)bh=Math.max(bh,55+Math.random()*30);
         const useLit=Math.random()<0.35;
@@ -1716,6 +1765,7 @@ function addCityScenery(curve,data){
     const p=lPts[i],nx=lPts[(i+1)%lPts.length];
     // Skip if near start/finish
     if(Math.abs(p.x-sfPt.x)<sfExclude&&Math.abs(p.z-sfPt.z)<sfExclude)continue;
+    if(pointInNoAutoZone(data,p.x,p.z,6))continue;
     const t=new THREE.Vector3().subVectors(nx,p).normalize();
     const r=new THREE.Vector3(-t.z,0,t.x).normalize();
     const side=(i%8<4)?-1:1;
@@ -1760,6 +1810,7 @@ function addCityScenery(curve,data){
         }
       }
       if(hasBld)continue;
+      if(pointInNoAutoZone(data,cx,cz,12))continue;
       // This block is empty — make a park
       // Grass patch
       const grass=new THREE.Mesh(new THREE.BoxGeometry(blockW,0.06,blockD),grassMat);
@@ -1774,8 +1825,9 @@ function addCityScenery(curve,data){
       for(let ti=0;ti<nTrees;ti++){
         const tx=cx+(Math.random()-.5)*blockW*0.85;
         const tz=cz+(Math.random()-.5)*blockD*0.85;
-        // Skip if on path
+        // Skip if on path or near start/finish
         if(Math.abs(tx-cx)<1.5||Math.abs(tz-cz)<1.5)continue;
+        if((tx-sfPt.x)*(tx-sfPt.x)+(tz-sfPt.z)*(tz-sfPt.z)<(sfExclude+10)*(sfExclude+10))continue;
         const tg=new THREE.Group();
         const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.15,.25,1.2+Math.random()*.5,5),tmk);
         trunk.position.set(0,.7,0); tg.add(trunk);
@@ -1862,18 +1914,22 @@ function addCityScenery(curve,data){
 function setupLights(){
   const rm=[]; scene.traverse(o=>{if(o.isLight)rm.push(o);}); rm.forEach(l=>scene.remove(l));
   const isCity=trkData&&trkData.type==='city';
-  scene.add(new THREE.AmbientLight(isCity?0x667788:0xffffff,isCity?.35:.55));
-  const sun=new THREE.DirectionalLight(isCity?0x8899bb:0xffffff,isCity?.6:1.1);
+  const ambientCol=trkData&&trkData.ambient!=null?trkData.ambient:(isCity?0x667788:0xffffff);
+  const ambientInt=trkData&&trkData.ambientIntensity!=null?trkData.ambientIntensity:(isCity?.35:.55);
+  const sunCol=trkData&&trkData.sun!=null?trkData.sun:(isCity?0x8899bb:0xffffff);
+  const sunInt=trkData&&trkData.sunIntensity!=null?trkData.sunIntensity:(isCity?.6:1.1);
+  const fillCol=trkData&&trkData.fill!=null?trkData.fill:(isCity?0x334466:0x5566bb);
+  const fillInt=trkData&&trkData.fillIntensity!=null?trkData.fillIntensity:(isCity?.20:.30);
+  scene.add(new THREE.AmbientLight(ambientCol,ambientInt));
+  const sun=new THREE.DirectionalLight(sunCol,sunInt);
   sun.position.set(isCity?-40:80,180,isCity?-60:100); sun.castShadow=true;
   sun.shadow.mapSize.width=sun.shadow.mapSize.height=2048;
   sun.shadow.camera.left=-340;sun.shadow.camera.right=340;sun.shadow.camera.top=340;sun.shadow.camera.bottom=-340;
   sun.shadow.camera.far=700; sun.shadow.camera.updateProjectionMatrix(); scene.add(sun);
-  const fill=new THREE.DirectionalLight(isCity?0x334466:0x5566bb,isCity?.20:.30);
+  const fill=new THREE.DirectionalLight(fillCol,fillInt);
   fill.position.set(-60,70,-80); scene.add(fill);
-  if(isCity){
-    // Extra subtle upward light simulating city light pollution
-    const up=new THREE.DirectionalLight(0x556688,.15);
-    up.position.set(0,-20,0); scene.add(up);
+  if(isCity || (trkData&&trkData.timeOfDay==='night')){
+    const up=new THREE.DirectionalLight(0x556688,.15); up.position.set(0,-20,0); scene.add(up);
   }
 }
 
@@ -1882,20 +1938,29 @@ function setupLights(){
 // ═══════════════════════════════════════════════════════
 function updateCamera(){
   if(!pCar)return;
+  const now=performance.now();
+  if(now-raceCamOrbit.lastInput>2000){
+    raceCamOrbit.yaw*=0.88;
+    raceCamOrbit.pitch*=0.88;
+  }
+  raceCamOrbit.pitch=Math.max(-0.55,Math.min(0.75,raceCamOrbit.pitch));
   const fwd=new THREE.Vector3(Math.sin(pCar.hdg),0,Math.cos(pCar.hdg));
   if(camMode==='chase'){
-    const tgt=pCar.pos.clone().sub(fwd.clone().multiplyScalar(11)).add(new THREE.Vector3(0,5.0,0));
+    const orbitYaw=pCar.hdg+Math.PI+raceCamOrbit.yaw;
+    const back=new THREE.Vector3(Math.sin(orbitYaw),0,Math.cos(orbitYaw));
+    const camHeight=5.0+raceCamOrbit.pitch*3.5;
+    const tgt=pCar.pos.clone().addScaledVector(back,11).add(new THREE.Vector3(0,camHeight,0));
     camChase.position.lerp(tgt,.09);
-    camChase.lookAt(pCar.pos.clone().addScaledVector(fwd,5).add(new THREE.Vector3(0,.8,0)));
+    const look=pCar.pos.clone().addScaledVector(fwd,5).add(new THREE.Vector3(0,.8+raceCamOrbit.pitch*1.2,0));
+    camChase.lookAt(look);
     activeCam=camChase;
   } else {
-    // Use per-car cockpit height — camera above roof, moved forward past windshield
     const camH=pCar.data.camH||1.8;
-    // Position: 1.2m forward (past windshield), camH above car base
     const cp=pCar.pos.clone().addScaledVector(fwd,1.2).add(new THREE.Vector3(0,camH,0));
     camCock.position.copy(cp);
     camCock.near=1.2; camCock.updateProjectionMatrix();
-    camCock.lookAt(cp.clone().addScaledVector(fwd,55).add(new THREE.Vector3(0,-0.6,0)));
+    const lookDir=new THREE.Vector3(Math.sin(pCar.hdg+raceCamOrbit.yaw*0.65),Math.max(-0.25,Math.min(0.25,-0.04-raceCamOrbit.pitch*0.18)),Math.cos(pCar.hdg+raceCamOrbit.yaw*0.65)).normalize();
+    camCock.lookAt(cp.clone().addScaledVector(lookDir,55));
     activeCam=camCock;
   }
 }
@@ -2075,7 +2140,7 @@ function initRace(){
   for(const s of aiSounds)s.silence();
   aiSounds=[];
 
-  trkData=TRACKS[selTrk];
+  trkData=getTrackById(selTrk);
   try{ buildTrack(trkData); }catch(e){ console.error('buildTrack error:',e); }
   setupLights();
 
@@ -2094,7 +2159,6 @@ function initRace(){
   raceTime=0; gState='countdown';
   document.getElementById('hud').style.display='block';
   document.getElementById('hint').style.display='block';
-  document.getElementById('touchControls').style.display='flex';
   document.getElementById('camLabel').textContent='[ C ] COCKPIT VIEW';
   camMode='chase'; dc.style.display='none';
   document.getElementById('speedBox').style.display='block';
@@ -2131,14 +2195,11 @@ function pauseRace(){
   _prePauseState=gState;
   gState='paused'; stopAudio(); stopMusic();
   document.getElementById('pauseMenu').style.display='flex';
-  document.getElementById('touchControls').style.display='none';
-  releaseAllTouchControls();
 }
 function resumeRace(){
   gState=_prePauseState==='cooldown'?'cooldown':'racing';
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
-  document.getElementById('touchControls').style.display=(gState==='racing'||gState==='cooldown')?'flex':'none';
   initAudio(); startMusic();
 }
 
@@ -2164,8 +2225,6 @@ function showResults(){
   updateResultsUI();
   document.getElementById('results').style.display='flex';
   document.getElementById('hud').style.display='none';
-  document.getElementById('touchControls').style.display='none';
-  releaseAllTouchControls();
   dc.style.display='none';
 }
 
@@ -2191,13 +2250,173 @@ function updateResultsUI(){
   document.getElementById('ptime').textContent=`Your time: ${fmtT(pCar.finTime||raceTime)}  ·  P${pp}`;
 }
 
+
+
+// ═══════════════════════════════════════════════════════
+//  TRACK EDITOR
+// ═══════════════════════════════════════════════════════
+function getAllTracks(){ return [...TRACKS, ...editorTracks]; }
+function getTrackById(id){ return getAllTracks().find(t=>String(t.id)===String(id))||TRACKS[0]; }
+function hexNumToCss(n){ return '#'+((n||0)&0xffffff).toString(16).padStart(6,'0'); }
+function cssToHexNum(s){ return parseInt(String(s||'#000000').replace('#',''),16)||0; }
+function deepClone(v){ return JSON.parse(JSON.stringify(v)); }
+function makeTimeOfDayPreset(mode){
+  if(mode==='night') return {sky:0x06060c,gnd:0x0a0a14,ambient:0x667788,ambientIntensity:0.35,sun:0x8899bb,sunIntensity:0.58,fill:0x334466,fillIntensity:0.2};
+  if(mode==='sunset') return {sky:0x462414,gnd:0x3a2616,ambient:0xffc6a0,ambientIntensity:0.42,sun:0xffb066,sunIntensity:0.92,fill:0x884466,fillIntensity:0.24};
+  return {sky:0x0d1a2e,gnd:0x1a3018,ambient:0xffffff,ambientIntensity:0.55,sun:0xffffff,sunIntensity:1.1,fill:0x5566bb,fillIntensity:0.3};
+}
+function makeEditableTrackFromGameTrack(src){
+  const tod = src.timeOfDay || (src.type==='city'?'night':'day');
+  const pts=(src.wp||[]).map((p,i)=>({x:p[0],z:p[2],steepness:40,type:i===0?'start-finish':'track-node'}));
+  if(pts.length && !pts.some(n=>n.type==='start-finish')) pts[0].type='start-finish';
+  return {
+    id:src.id,name:src.name,desc:src.desc||'',laps:src.laps||3,rw:src.rw||12,previewColor:src.previewColor||'#44aaff',
+    useBezier:src.useBezier!==false,timeOfDay:tod,groundColor:hexNumToCss(src.gnd||makeTimeOfDayPreset(tod).gnd),skyColor:hexNumToCss(src.sky||makeTimeOfDayPreset(tod).sky),
+    streetGrid:src.type==='city',gridSize:src.gridSize||70,nodes:pts,assets:deepClone(src.assets||[]),source:src.id,builtin:TRACKS.some(t=>String(t.id)===String(src.id))
+  };
+}
+function loadEditorTracks(){
+  try{ editorTracks=JSON.parse(localStorage.getItem('turborace_custom_tracks')||'[]'); if(!Array.isArray(editorTracks))editorTracks=[]; }catch(e){ editorTracks=[]; }
+}
+function persistEditorTracks(){ localStorage.setItem('turborace_custom_tracks', JSON.stringify(editorTracks)); }
+function ensureEditorBoot(){ loadEditorTracks(); if(!editorTrack) editorTrack=editorTracks[0]?deepClone(editorTracks[0]):makeEditableTrackFromGameTrack(TRACKS[0]); }
+function uniqueTrackId(){ return 'custom-'+Date.now()+'-'+Math.floor(Math.random()*9999); }
+function getEditorStartIndex(){ const idx=(editorTrack.nodes||[]).findIndex(n=>n.type==='start-finish'); return idx>=0?idx:0; }
+function normalizeEditorTrack(){
+  if(!editorTrack) return;
+  if(!Array.isArray(editorTrack.nodes)||editorTrack.nodes.length<3) editorTrack.nodes=[{x:0,z:0,steepness:40,type:'start-finish'},{x:120,z:0,steepness:40,type:'track-node'},{x:120,z:-120,steepness:40,type:'track-node'},{x:0,z:-120,steepness:40,type:'track-node'}];
+  let sfCount=0;
+  editorTrack.nodes.forEach((n,i)=>{ if(typeof n.steepness!=='number') n.steepness=40; n.type=(n.type==='start-finish'&&sfCount++===0)?'start-finish':(n.type==='no-auto'?'no-auto':'track-node'); });
+  if(!editorTrack.nodes.some(n=>n.type==='start-finish')) editorTrack.nodes[0].type='start-finish';
+  if(!Array.isArray(editorTrack.assets)) editorTrack.assets=[];
+  editorTrack.gridSize=Math.max(40,Math.min(120,+editorTrack.gridSize||70));
+}
+function getEditorBounds(){
+  normalizeEditorTrack();
+  const pts=[...editorTrack.nodes.map(n=>({x:n.x,z:n.z})), ...editorTrack.assets.map(a=>({x:a.x,z:a.z}))];
+  let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  pts.forEach(p=>{ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z; });
+  if(!isFinite(minX)){ minX=-150; maxX=150; minZ=-150; maxZ=150; }
+  return {minX,maxX,minZ,maxZ};
+}
+function makeBezierPath(nodes,samplesPerSeg=18){
+  const out=[]; const n=nodes.length;
+  for(let i=0;i<n;i++){
+    const p0=nodes[(i-1+n)%n], p1=nodes[i], p2=nodes[(i+1)%n], p3=nodes[(i+2)%n];
+    const s=Math.max(0,Math.min(1,(p1.steepness||40)/100))*0.55;
+    const h1x=(p2.x-p0.x)*s, h1z=(p2.z-p0.z)*s;
+    const h2x=(p3.x-p1.x)*s, h2z=(p3.z-p1.z)*s;
+    const c1={x:p1.x+h1x,y:0,z:p1.z+h1z};
+    const c2={x:p2.x-h2x,y:0,z:p2.z-h2z};
+    for(let j=0;j<samplesPerSeg;j++){
+      const t=j/samplesPerSeg, mt=1-t;
+      const x=mt*mt*mt*p1.x + 3*mt*mt*t*c1.x + 3*mt*t*t*c2.x + t*t*t*p2.x;
+      const z=mt*mt*mt*p1.z + 3*mt*mt*t*c1.z + 3*mt*t*t*c2.z + t*t*t*p2.z;
+      out.push([x,0,z]);
+    }
+  }
+  return out;
+}
+function makeCityRouteFromNodes(nodes,grid){
+  const snapped=[];
+  nodes.forEach(n=>{ const x=Math.round(n.x/grid)*grid, z=Math.round(n.z/grid)*grid; if(!snapped.length||snapped[snapped.length-1][0]!==x||snapped[snapped.length-1][1]!==z) snapped.push([x,z]); });
+  return snapped.length<4?[[0,70],[0,-70],[-70,-70],[-70,70]]:snapped;
+}
+function makeCityWpFromRoute(route,grid){
+  const pts=[];
+  for(let i=0;i<route.length;i++){
+    const a=route[i], b=route[(i+1)%route.length], dx=b[0]-a[0], dz=b[1]-a[1], len=Math.max(Math.abs(dx),Math.abs(dz));
+    const steps=Math.max(2,Math.round(len/Math.max(18,grid*0.35)));
+    for(let s=0;s<steps;s++){ const t=s/steps; pts.push([a[0]+dx*t,0,a[1]+dz*t]); }
+  }
+  return pts;
+}
+function buildNoAutoZones(ordered){
+  const zones=[];
+  for(let i=0;i<ordered.length;i++){
+    const n=ordered[i]; if(n.type!=='no-auto') continue;
+    const prev=ordered[(i-1+ordered.length)%ordered.length], next=ordered[(i+1)%ordered.length];
+    zones.push({x:n.x,z:n.z,r:26},{x:(n.x+prev.x)/2,z:(n.z+prev.z)/2,r:18},{x:(n.x+next.x)/2,z:(n.z+next.z)/2,r:18});
+  }
+  return zones;
+}
+function editorTrackToGameTrack(){
+  normalizeEditorTrack();
+  const tod=makeTimeOfDayPreset(editorTrack.timeOfDay||'day');
+  const nodes=[...editorTrack.nodes], startIdx=getEditorStartIndex(), ordered=[]; for(let i=0;i<nodes.length;i++) ordered.push(nodes[(startIdx+i)%nodes.length]);
+  let wp, type='circuit', cityRoute=null;
+  if(editorTrack.streetGrid){ cityRoute=makeCityRouteFromNodes(ordered, editorTrack.gridSize||70); wp=makeCityWpFromRoute(cityRoute, editorTrack.gridSize||70); type='city'; }
+  else wp=editorTrack.useBezier?makeBezierPath(ordered,18):ordered.map(n=>[n.x,0,n.z]);
+  return {id:editorTrack.id||uniqueTrackId(),name:editorTrack.name||'Custom Track',desc:editorTrack.desc||'Custom track',laps:+editorTrack.laps||3,rw:+editorTrack.rw||12,wp,previewColor:editorTrack.previewColor||'#44aaff',type,gridSize:editorTrack.gridSize||70,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(editorTrack.groundColor)||tod.gnd,timeOfDay:editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(editorTrack.assets||[]),useBezier:!!editorTrack.useBezier};
+}
+function populateEditorUI(){ normalizeEditorTrack(); document.getElementById('editorTrackName').value=editorTrack.name||''; document.getElementById('editorTrackDesc').value=editorTrack.desc||''; document.getElementById('editorTrackLaps').value=editorTrack.laps||3; document.getElementById('editorTrackWidth').value=editorTrack.rw||12; document.getElementById('editorTrackColor').value=editorTrack.previewColor||'#44aaff'; document.getElementById('editorUseBezier').checked=editorTrack.useBezier!==false; document.getElementById('editorGroundColor').value=editorTrack.groundColor||'#1a3018'; document.getElementById('editorSkyColor').value=editorTrack.skyColor||'#0d1a2e'; document.getElementById('editorTimeOfDay').value=editorTrack.timeOfDay||'day'; document.getElementById('editorStreetGrid').checked=!!editorTrack.streetGrid; document.getElementById('editorGridSize').value=editorTrack.gridSize||70; renderEditorTrackList(); syncSelectedNodeUI(); requestEditorRebuild(true); }
+function renderEditorTrackList(){ const wrap=document.getElementById('editorTrackList'); if(!wrap) return; wrap.innerHTML=''; getAllTracks().forEach(src=>{ const d=document.createElement('div'); d.className='editorListItem'+(String(editorTrack.id)===String(src.id)?' sel':''); d.textContent=src.name+(TRACKS.some(t=>String(t.id)===String(src.id))?' · built-in':''); d.onclick=()=>{ editorTrack=makeEditableTrackFromGameTrack(src); editorSelectedNode=0; editorSelectedAsset=-1; populateEditorUI(); }; wrap.appendChild(d); }); }
+function syncSelectedNodeUI(){ normalizeEditorTrack(); const node=editorTrack.nodes[editorSelectedNode]||editorTrack.nodes[0]; if(!node)return; document.getElementById('editorNodeType').value=node.type||'track-node'; document.getElementById('editorSteepness').value=Math.round(node.steepness||40); document.getElementById('editorNodeInfo').textContent='Node '+(editorSelectedNode+1)+' · '+(node.type==='start-finish'?'Start/finish':node.type==='no-auto'?'No auto scenery':'Track node')+' · Steepness '+Math.round(node.steepness||40); }
+function onEditorMetaChanged(){ if(!editorTrack)return; editorTrack.name=document.getElementById('editorTrackName').value; editorTrack.desc=document.getElementById('editorTrackDesc').value; editorTrack.laps=Math.max(1,Math.min(9,+document.getElementById('editorTrackLaps').value||3)); editorTrack.rw=Math.max(6,Math.min(30,+document.getElementById('editorTrackWidth').value||12)); editorTrack.previewColor=document.getElementById('editorTrackColor').value; editorTrack.useBezier=document.getElementById('editorUseBezier').checked; editorTrack.groundColor=document.getElementById('editorGroundColor').value; editorTrack.skyColor=document.getElementById('editorSkyColor').value; editorTrack.timeOfDay=document.getElementById('editorTimeOfDay').value; editorTrack.streetGrid=document.getElementById('editorStreetGrid').checked; editorTrack.gridSize=Math.max(40,Math.min(120,+document.getElementById('editorGridSize').value||70)); requestEditorRebuild(false); }
+function onEditorStreetGridChanged(){ onEditorMetaChanged(); }
+function onEditorNodeChanged(){ const node=editorTrack.nodes[editorSelectedNode]; if(!node)return; node.type=document.getElementById('editorNodeType').value; if(node.type==='start-finish') editorTrack.nodes.forEach((n,i)=>{ if(i!==editorSelectedNode && n.type==='start-finish') n.type='track-node'; }); node.steepness=+document.getElementById('editorSteepness').value||40; syncSelectedNodeUI(); requestEditorRebuild(false); }
+function createNewEditorTrack(){ editorTrack={id:uniqueTrackId(),name:'New Track',desc:'Custom circuit',laps:3,rw:12,previewColor:'#44aaff',useBezier:true,timeOfDay:'day',groundColor:'#1a3018',skyColor:'#0d1a2e',streetGrid:false,gridSize:70,nodes:[{x:0,z:0,steepness:40,type:'start-finish'},{x:140,z:20,steepness:45,type:'track-node'},{x:160,z:-120,steepness:55,type:'track-node'},{x:20,z:-180,steepness:55,type:'track-node'},{x:-120,z:-90,steepness:35,type:'track-node'}],assets:[]}; editorSelectedNode=0; editorSelectedAsset=-1; populateEditorUI(); }
+function duplicateEditorTrack(){ const data=editorTrackToGameTrack(); editorTrack=makeEditableTrackFromGameTrack(data); editorTrack.id=uniqueTrackId(); editorTrack.name+=' Copy'; populateEditorUI(); }
+function addEditorNode(){ const n=editorTrack.nodes[editorSelectedNode]||editorTrack.nodes[0]; editorTrack.nodes.splice(editorSelectedNode+1,0,{x:n.x+40,z:n.z+20,steepness:n.steepness||40,type:'track-node'}); editorSelectedNode=Math.min(editorSelectedNode+1,editorTrack.nodes.length-1); syncSelectedNodeUI(); requestEditorRebuild(false); }
+function insertEditorNodeAfter(){ addEditorNode(); }
+function deleteEditorNode(){ if(editorTrack.nodes.length<=3) return; editorTrack.nodes.splice(editorSelectedNode,1); editorSelectedNode=Math.max(0,Math.min(editorSelectedNode,editorTrack.nodes.length-1)); normalizeEditorTrack(); syncSelectedNodeUI(); requestEditorRebuild(false); }
+function deleteSelectedEditorAsset(){ if(editorSelectedAsset<0) return; editorTrack.assets.splice(editorSelectedAsset,1); editorSelectedAsset=-1; requestEditorRebuild(false); }
+function resetEditorTrack(){ editorTrack=makeEditableTrackFromGameTrack(getTrackById(editorTrack.source||editorTrack.id)||TRACKS[0]); editorSelectedNode=0; editorSelectedAsset=-1; populateEditorUI(); }
+function saveEditorTrack(){ const data=editorTrackToGameTrack(); data.id=TRACKS.some(t=>String(t.id)===String(editorTrack.id))?uniqueTrackId():(editorTrack.id||uniqueTrackId()); data.name=editorTrack.name||'Custom Track'; editorTrack.id=data.id; editorTrack.source=data.id; editorTrack.builtin=false; const idx=editorTracks.findIndex(t=>String(t.id)===String(data.id)); if(idx>=0) editorTracks[idx]=data; else editorTracks.push(data); persistEditorTracks(); selTrk=data.id; renderEditorTrackList(); notify('TRACK SAVED'); }
+function deleteEditorTrack(){
+  if(!editorTrack) return;
+  if(TRACKS.some(t=>String(t.id)===String(editorTrack.id))){ notify('BUILT-IN TRACKS CANNOT BE DELETED'); return; }
+  const id=String(editorTrack.id);
+  editorTracks=editorTracks.filter(t=>String(t.id)!==id);
+  if(String(selTrk)===id) selTrk=null;
+  persistEditorTracks();
+  const fallback=getAllTracks()[0]||TRACKS[0];
+  editorTrack=makeEditableTrackFromGameTrack(fallback);
+  editorSelectedNode=0; editorSelectedAsset=-1;
+  populateEditorUI();
+  notify('TRACK DELETED');
+}
+function requestEditorRebuild(resetCam){ editorNeedsRebuild=true; if(resetCam) resetEditorCameraToTrack(); }
+function editorRebuildScene(resetCam){ trkData=editorTrackToGameTrack(); buildTrack(trkData); setupLights(); activeCam=camEditor; editorLastRebuild=performance.now(); editorNeedsRebuild=false; if(resetCam) resetEditorCameraToTrack(); }
+function resetEditorCameraToTrack(){ const b=getEditorBounds(); editorCam.target.set((b.minX+b.maxX)/2,0,(b.minZ+b.maxZ)/2); const span=Math.max(180,Math.max(b.maxX-b.minX,b.maxZ-b.minZ)); editorCam.distance=Math.max(180,span*1.15); editorCam.pitch=1.16; }
+function showTrackEditor(){ ensureEditorBoot(); document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none'); document.getElementById('sEditor').style.display='flex'; document.getElementById('hud').style.display='none'; document.getElementById('hint').style.display='none'; bindEditorCanvas(); bindEditorAssetPalette(); populateEditorUI(); document.getElementById('editorPreviewBanner').style.display='block'; gState='editor'; stopAudio(); stopMusic(); activeCam=camEditor; requestEditorRebuild(true); }
+function closeTrackEditor(){ document.getElementById('editorPreviewBanner').style.display='none'; showMain(); }
+function toggleEditorPreview(){}
+function updateEditorPreviewCamera(dt){ const move=(editorCam.distance*0.9+40)*dt; const yaw=editorCam.yaw; const fwdX=Math.sin(yaw), fwdZ=Math.cos(yaw), rightX=Math.sin(yaw+Math.PI/2), rightZ=Math.cos(yaw+Math.PI/2); let mx=0,mz=0; if(keys['KeyW']){mx+=fwdX;mz+=fwdZ;} if(keys['KeyS']){mx-=fwdX;mz-=fwdZ;} if(keys['KeyA']){mx-=rightX;mz-=rightZ;} if(keys['KeyD']){mx+=rightX;mz+=rightZ;} const ml=Math.hypot(mx,mz)||1; if(mx||mz){ editorCam.target.x+=mx/ml*move; editorCam.target.z+=mz/ml*move; } const horiz=Math.cos(editorCam.pitch)*editorCam.distance; const desired=new THREE.Vector3(editorCam.target.x+Math.sin(editorCam.yaw)*horiz, Math.sin(editorCam.pitch)*editorCam.distance, editorCam.target.z+Math.cos(editorCam.yaw)*horiz); camEditor.position.lerp(desired,0.18); camEditor.lookAt(editorCam.target.x,0,editorCam.target.z); activeCam=camEditor; }
+function editorWorldToOverlay(vec,canvas){ const p=vec.clone().project(camEditor); if(p.z<-1||p.z>1) return null; const rr=renderer.domElement.getBoundingClientRect(), cr=canvas.getBoundingClientRect(); const sx=(p.x*0.5+0.5)*rr.width-(cr.left-rr.left), sy=(-p.y*0.5+0.5)*rr.height-(cr.top-rr.top); return {x:sx*(canvas.width/cr.width),y:sy*(canvas.height/cr.height)}; }
+function editorClientToGround(clientX,clientY){ const rr=renderer.domElement.getBoundingClientRect(); const ndc=new THREE.Vector2(((clientX-rr.left)/rr.width)*2-1,-((clientY-rr.top)/rr.height)*2+1); raycaster.setFromCamera(ndc,camEditor); const out=new THREE.Vector3(); return raycaster.ray.intersectPlane(editorGroundPlane,out)?out:null; }
+function editorCanPlaceAssetAt(x,z){ return !pointNearTrack(editorTrackToGameTrack(),x,z,3); }
+function drawEditorCanvas(){ const canvas=document.getElementById('trackEditorCanvas'); if(!canvas||!editorTrack||gState!=='editor') return; const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); const data=editorTrackToGameTrack(); if(data.wp&&data.wp.length){ ctx.strokeStyle=(editorTrack.previewColor||'#44aaff')+'88'; ctx.lineWidth=4; ctx.lineJoin='round'; ctx.beginPath(); data.wp.forEach((p,i)=>{ const q=editorWorldToOverlay(new THREE.Vector3(p[0],0.2,p[2]),canvas); if(!q) return; i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y); }); ctx.closePath(); ctx.stroke(); } editorTrack.assets.forEach((a,i)=>{ const p=editorWorldToOverlay(new THREE.Vector3(a.x,3,a.z),canvas); if(!p) return; ctx.fillStyle=i===editorSelectedAsset?'#ffd166':(a.type==='building'?'#c792ea':a.type==='park'?'#55dd88':'#66cc66'); ctx.strokeStyle='#091018'; ctx.lineWidth=2; if(a.type==='building'){ ctx.fillRect(p.x-8,p.y-8,16,16); ctx.strokeRect(p.x-8,p.y-8,16,16); } else if(a.type==='park'){ ctx.fillRect(p.x-10,p.y-10,20,20); ctx.strokeRect(p.x-10,p.y-10,20,20); } else { ctx.beginPath(); ctx.arc(p.x,p.y,8,0,Math.PI*2); ctx.fill(); ctx.stroke(); } }); editorTrack.nodes.forEach((n,i)=>{ const p=editorWorldToOverlay(new THREE.Vector3(n.x,1,n.z),canvas); if(!p) return; ctx.beginPath(); ctx.fillStyle=n.type==='start-finish'?'#ffffff':(n.type==='no-auto'?'#7cc7ff':(i===editorSelectedNode?'#ffd166':'#ff6b6b')); ctx.arc(p.x,p.y,n.type==='start-finish'?10:8,0,Math.PI*2); ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#091018'; ctx.stroke(); if(n.type==='start-finish'){ ctx.strokeStyle='#111'; ctx.setLineDash([5,3]); ctx.beginPath(); ctx.moveTo(p.x-14,p.y); ctx.lineTo(p.x+14,p.y); ctx.stroke(); ctx.setLineDash([]); } }); }
+function bindEditorAssetPalette(){ document.querySelectorAll('#editorAssetPalette .assetChip').forEach(el=>{ if(el.dataset.bound) return; el.dataset.bound='1'; el.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain', el.dataset.asset); }); }); }
+function bindEditorCanvas(){ const canvas=document.getElementById('trackEditorCanvas'); if(!canvas||canvas.dataset.bound) return; canvas.dataset.bound='1'; canvas.addEventListener('contextmenu',e=>e.preventDefault()); function nearestOverlayObject(e){ const r=canvas.getBoundingClientRect(); const lx=(e.clientX-r.left)*(canvas.width/r.width), ly=(e.clientY-r.top)*(canvas.height/r.height); let best=null,bestD=1e9; editorTrack.assets.forEach((a,i)=>{ const q=editorWorldToOverlay(new THREE.Vector3(a.x,3,a.z),canvas); if(!q) return; const d=(q.x-lx)*(q.x-lx)+(q.y-ly)*(q.y-ly); if(d<bestD&&d<500){ best={kind:'asset',index:i}; bestD=d; } }); editorTrack.nodes.forEach((n,i)=>{ const q=editorWorldToOverlay(new THREE.Vector3(n.x,1,n.z),canvas); if(!q) return; const d=(q.x-lx)*(q.x-lx)+(q.y-ly)*(q.y-ly); if(d<bestD&&d<550){ best={kind:'node',index:i}; bestD=d; } }); return best; } canvas.addEventListener('dragover',e=>e.preventDefault()); canvas.addEventListener('drop',e=>{ e.preventDefault(); const kind=e.dataTransfer.getData('text/plain'); if(!kind) return; const p=editorClientToGround(e.clientX,e.clientY); if(!p||!editorCanPlaceAssetAt(p.x,p.z)) return; editorTrack.assets.push({type:kind,x:p.x,z:p.z}); editorSelectedAsset=editorTrack.assets.length-1; requestEditorRebuild(false); }); canvas.addEventListener('pointerdown',e=>{ canvas.setPointerCapture(e.pointerId); editorMouse.lastX=e.clientX; editorMouse.lastY=e.clientY; if(e.button===2||e.button===1){ editorMouse.mode='orbit'; return; } const hit=nearestOverlayObject(e); if(hit&&hit.kind==='asset'){ editorSelectedAsset=hit.index; editorDrag={kind:'asset',index:hit.index}; requestEditorRebuild(false); return; } if(hit&&hit.kind==='node'){ editorSelectedNode=hit.index; syncSelectedNodeUI(); editorDrag={kind:'node',index:hit.index}; requestEditorRebuild(false); return; } editorMouse.mode='pan'; }); canvas.addEventListener('pointermove',e=>{ if(editorMouse.mode==='orbit'){ const dx=e.clientX-editorMouse.lastX, dy=e.clientY-editorMouse.lastY; editorCam.yaw-=dx*0.006; editorCam.pitch=Math.max(0.72,Math.min(1.45,editorCam.pitch-dy*0.004)); editorMouse.lastX=e.clientX; editorMouse.lastY=e.clientY; return; } if(editorMouse.mode==='pan'){ const dx=e.clientX-editorMouse.lastX, dy=e.clientY-editorMouse.lastY; const factor=editorCam.distance*0.0016; const rightYaw=editorCam.yaw+Math.PI/2; editorCam.target.x+=(-Math.sin(rightYaw)*dx + -Math.sin(editorCam.yaw)*dy)*factor; editorCam.target.z+=(-Math.cos(rightYaw)*dx + -Math.cos(editorCam.yaw)*dy)*factor; editorMouse.lastX=e.clientX; editorMouse.lastY=e.clientY; return; } if(!editorDrag) return; const p=editorClientToGround(e.clientX,e.clientY); if(!p) return; const snap=(e.shiftKey||editorTrack.streetGrid)?(editorTrack.gridSize||70):0; if(snap){ p.x=Math.round(p.x/snap)*snap; p.z=Math.round(p.z/snap)*snap; } if(editorDrag.kind==='node'){ editorTrack.nodes[editorDrag.index].x=p.x; editorTrack.nodes[editorDrag.index].z=p.z; } else if(editorDrag.kind==='asset' && editorCanPlaceAssetAt(p.x,p.z)){ editorTrack.assets[editorDrag.index].x=p.x; editorTrack.assets[editorDrag.index].z=p.z; } requestEditorRebuild(false); }); canvas.addEventListener('wheel',e=>{ e.preventDefault(); editorCam.distance=Math.max(70,Math.min(700,editorCam.distance*(1+Math.sign(e.deltaY)*0.08))); },{passive:false}); ['pointerup','pointerleave','pointercancel'].forEach(ev=>canvas.addEventListener(ev,()=>{ editorDrag=null; editorMouse.mode=null; })); }
+function applyPlacedAssets(data){
+  if(!data||!Array.isArray(data.assets)) return;
+  data.assets.forEach(asset=>{
+    if(pointNearTrack(data,asset.x,asset.z,3)) return;
+    const sf=data.wp&&data.wp[0]?new THREE.Vector3(data.wp[0][0],0,data.wp[0][2]):new THREE.Vector3();
+    const dx=asset.x-sf.x, dz=asset.z-sf.z; if(dx*dx+dz*dz<28*28) return;
+    if(asset.type==='tree'){
+      const g=new THREE.Group();
+      const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.22,.32,2.2,6),mat(0x5a3418)); trunk.position.y=1.1; g.add(trunk);
+      const crown=new THREE.Mesh(new THREE.ConeGeometry(1.4,3.5,7),mat(0x2e6b34)); crown.position.y=3.5; g.add(crown);
+      g.position.set(asset.x,0,asset.z); g.userData.trk=true; scene.add(g);
+    }else if(asset.type==='park'){
+      const park=new THREE.Mesh(new THREE.BoxGeometry(16,0.08,16),new THREE.MeshLambertMaterial({color:0x295a2b})); park.position.set(asset.x,0.04,asset.z); park.userData.trk=true; scene.add(park);
+    }else{
+      const h=8+((Math.abs(asset.x)+Math.abs(asset.z))%18);
+      const b=new THREE.Mesh(new THREE.BoxGeometry(8,h,8),new THREE.MeshLambertMaterial({color:0x4a445d})); b.position.set(asset.x,h/2,asset.z); b.castShadow=true; b.userData.trk=true; scene.add(b);
+      const roof=new THREE.Mesh(new THREE.BoxGeometry(8.5,0.35,8.5),new THREE.MeshLambertMaterial({color:0x22242a})); roof.position.set(asset.x,h+.18,asset.z); roof.userData.trk=true; scene.add(roof);
+    }
+  });
+}
+
 // ═══════════════════════════════════════════════════════
 //  RESIZE
 // ═══════════════════════════════════════════════════════
 function onResize(){
   const W=window.innerWidth,H=window.innerHeight;
   renderer.setSize(W,H);
-  [camChase,camCock].forEach(c=>{c.aspect=W/H;c.updateProjectionMatrix();});
+  [camChase,camCock,camEditor].forEach(c=>{c.aspect=W/H;c.updateProjectionMatrix();});
   resizeDC();
 }
 window.addEventListener('resize',onResize); onResize();
@@ -2210,11 +2429,9 @@ function animate(){
   const dt=Math.min(clock.getDelta(),.05);
   if(gState==='racing'){
     raceTime+=dt;
-    const thr=(keys['ArrowUp']||keys['KeyW']||touchState.throttle)?1:0;
-    const brk=(keys['ArrowDown']||keys['KeyS']||touchState.brake)?1:0;
-    const left=(keys['ArrowLeft']||keys['KeyA']||touchState.left);
-    const right=(keys['ArrowRight']||keys['KeyD']||touchState.right);
-    const str=left&&!right?1:right&&!left?-1:0;
+    const thr=(keys['ArrowUp']||keys['KeyW'])?1:0;
+    const brk=(keys['ArrowDown']||keys['KeyS'])?1:0;
+    const str=(keys['ArrowLeft']||keys['KeyA'])?1:(keys['ArrowRight']||keys['KeyD'])?-1:0;
     pCar.update({thr,brk,str},dt);
     for(const ai of aiControllers)ai.update(dt);
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&aiCars[i])aiSounds[i].update(aiCars[i],pCar);}
@@ -2228,6 +2445,12 @@ function animate(){
     updateAudio(0,0,dt); updateCamera();
     // Live-update results as AI cars finish
     if(document.getElementById('results').style.display==='flex') updateResultsUI();
+  } else if(gState==='editorPreview'){
+    updateEditorPreviewCamera(dt);
+  } else if(gState==='editor'){
+    updateEditorPreviewCamera(dt);
+    if(editorNeedsRebuild&&performance.now()-editorLastRebuild>45){ editorRebuildScene(false); }
+    drawEditorCanvas();
   } else if(gState==='countdown'||gState==='finished'||gState==='paused'){
     if(gState==='finished'){
       raceTime+=dt;
@@ -2258,11 +2481,12 @@ function showMain(){
   document.getElementById('sMain').style.display='flex';
   document.getElementById('hud').style.display='none';
   document.getElementById('hint').style.display='none';
-  document.getElementById('touchControls').style.display='none';
-  releaseAllTouchControls();
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
   dc.style.display='none'; gState='menu';
+  editorPreviewMode=false;
+  const epb=document.getElementById('editorPreviewBanner'); if(epb)epb.style.display='none';
+  const epbtn=document.getElementById('editorPreviewBtn'); if(epbtn)epbtn.textContent='3D PREVIEW';
   stopAudio(); stopMusic();
   // Restart menu music (audio already initialised)
   if(audioReady)startMusic();
@@ -2271,12 +2495,13 @@ function showMain(){
 }
 
 function showCarSel(){
+  if(selTrk==null){ showTrkSel(); return; }
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sCar').style.display='flex';
-  selCar=null; document.getElementById('btnNxt').disabled=true;
   const ct=document.getElementById('carCards'); ct.innerHTML='';
+  document.getElementById('btnGo').disabled=(selCar==null);
   CARS.forEach((c,i)=>{
-    const d=document.createElement('div'); d.className='card';
+    const d=document.createElement('div'); d.className='card'+(selCar===i?' sel':'');
     d.innerHTML=`<div class="dot" style="background:${c.hex};box-shadow:0 0 15px ${c.hex}55"></div>
       <h3>${c.name}</h3><p>${c.desc}</p>
       <div class="stat"><span class="sl">SPEED</span><div class="st"><div class="sf" style="width:${c.stats.s}%"></div></div></div>
@@ -2284,7 +2509,7 @@ function showCarSel(){
       <div class="stat"><span class="sl">HANDL</span><div class="st"><div class="sf" style="width:${c.stats.h}%"></div></div></div>`;
     d.onclick=()=>{
       document.querySelectorAll('#carCards .card').forEach(x=>x.classList.remove('sel'));
-      d.classList.add('sel'); selCar=i; document.getElementById('btnNxt').disabled=false;
+      d.classList.add('sel'); selCar=i; document.getElementById('btnGo').disabled=false;
     };
     ct.appendChild(d);
   });
@@ -2343,24 +2568,25 @@ function drawTrackPreview(canvas, track, color){
 }
 
 function showTrkSel(){
+  loadEditorTracks();
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrk').style.display='flex';
-  selTrk=null; document.getElementById('btnGo').disabled=true;
-  const COLORS=['#4488ff','#44cc66','#ffaa22','#ff4488'];
+  document.getElementById('btnNxt').disabled=(selTrk==null);
+  const COLORS=['#4488ff','#44cc66','#ffaa22','#ff4488','#22ddaa','#dd66ff','#66bbff'];
   const tt=document.getElementById('trkCards'); tt.innerHTML='';
-  TRACKS.forEach((t,i)=>{
-    const card=document.createElement('div'); card.className='tcard';
+  getAllTracks().forEach((t,i)=>{
+    const card=document.createElement('div'); card.className='tcard'+(String(selTrk)===String(t.id)?' sel':'');
     const canvas=document.createElement('canvas'); canvas.width=280; canvas.height=230;
     canvas.style.borderRadius='6px';
     const h3=document.createElement('h3'); h3.textContent=t.name;
-    const p=document.createElement('p'); p.textContent=t.desc+' · '+t.rw+'m wide';
+    const p=document.createElement('p'); p.textContent=t.desc+' · '+t.rw+'m wide'+(TRACKS.some(bt=>String(bt.id)===String(t.id))?'':' · Custom');
     card.appendChild(canvas); card.appendChild(h3); card.appendChild(p);
     card.onclick=()=>{
-      document.querySelectorAll('.tcard').forEach(x=>x.classList.remove('sel'));
-      card.classList.add('sel'); selTrk=i; document.getElementById('btnGo').disabled=false;
+      document.querySelectorAll('#trkCards .tcard').forEach(x=>x.classList.remove('sel'));
+      card.classList.add('sel'); selTrk=t.id; document.getElementById('btnNxt').disabled=false;
     };
     tt.appendChild(card);
-    drawTrackPreview(canvas,t,COLORS[i]);
+    drawTrackPreview(canvas,t,t.previewColor||COLORS[i%COLORS.length]);
   });
 }
 
@@ -2377,7 +2603,6 @@ function restartRace(){
 //  BOOT
 // ═══════════════════════════════════════════════════════
 scene.background=new THREE.Color(0x050510);
-setupTouchControls();
 setupLights(); animate(); showMain();
 </script>
 </body>
