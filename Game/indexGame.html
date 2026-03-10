@@ -78,7 +78,6 @@
 
 <!-- MAIN MENU -->
 <div class="screen" id="sMain">
-  <div class="screenInner">
   <h1>TurboRace</h1>
   <div class="sub">3D Racing · Multiple Circuits · Full Cockpit</div>
   <div class="menuActions">
@@ -91,7 +90,6 @@
 
 <!-- CAR SELECT -->
 <div class="screen" id="sCar" style="display:none">
-  <div class="screenInner">
   <h2>Select Your Car</h2>
   <div class="cards" id="carCards"></div>
   <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showTrkSel()">BACK</button><button class="btn btn-p" id="btnGo" onclick="startRace()" disabled>RACE!</button></div>
@@ -100,9 +98,8 @@
 
 <!-- TRACK SELECT -->
 <div class="screen" id="sTrk" style="display:none">
-  <div class="screenInner">
   <h2>Select Circuit</h2>
-  <div id="trkCards" class="trackCards"></div>
+  <div id="trkCards" class="trackCards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;"></div>
   <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showMain()">BACK</button><button class="btn btn-p" id="btnNxt" onclick="showCarSel()" disabled>NEXT</button></div>
   </div>
 </div>
