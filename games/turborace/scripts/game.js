@@ -1,5 +1,6 @@
 import { TRACKS } from './data/tracks.js';
 import { CARS } from './data/cars.js';
+import { createRenderPipeline } from './render/pipeline.js';
 
 'use strict';
 
@@ -298,9 +299,6 @@ function announce(text){
 //  THREE.JS INIT
 // ═══════════════════════════════════════════════════════
 const gc=document.getElementById('gc');
-const renderer=new THREE.WebGLRenderer({canvas:gc,antialias:true});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 const scene=new THREE.Scene();
 const clock=new THREE.Clock();
 const camChase=new THREE.PerspectiveCamera(72,1,.1,2000);
@@ -2228,20 +2226,7 @@ function applyPlacedAssets(data){
 // ═══════════════════════════════════════════════════════
 //  RESIZE
 // ═══════════════════════════════════════════════════════
-function onResize(){
-  const W=window.innerWidth,H=window.innerHeight;
-  renderer.setSize(W,H);
-  [camChase,camCock,camEditor].forEach(c=>{c.aspect=W/H;c.updateProjectionMatrix();});
-  resizeDC();
-}
-window.addEventListener('resize',onResize); onResize();
-
-// ═══════════════════════════════════════════════════════
-//  MAIN LOOP
-// ═══════════════════════════════════════════════════════
-function animate(){
-  requestAnimationFrame(animate);
-  const dt=Math.min(clock.getDelta(),.05);
+function updateFrame(dt){
   if(gState==='racing'){
     raceTime+=dt;
     const autoTouchThrottle=isTouchControlsVisibleInState(gState)
@@ -2279,7 +2264,6 @@ function animate(){
     }
     updateCamera();
   }
-  renderer.render(scene,activeCam);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2469,4 +2453,14 @@ document.getElementById('raceAgainBtn').addEventListener('click', restartRace);
 scene.background=new THREE.Color(0x050510);
 setupTouchControls();
 initTouchSettings();
-setupLights(); animate(); showMain();
+const { renderer, start:startRenderLoop }=createRenderPipeline({
+  THREE,
+  canvas:gc,
+  scene,
+  clock,
+  cameras:[camChase,camCock,camEditor],
+  resizeOverlays:resizeDC,
+  frameUpdate:updateFrame,
+  getActiveCamera:()=>activeCam
+});
+setupLights(); startRenderLoop(); showMain();
