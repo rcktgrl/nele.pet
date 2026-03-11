@@ -43,9 +43,9 @@
   <div class="menuPanel">
     <h2>PAUSED</h2>
     <div class="menuActions">
-      <button class="btn btn-p" onclick="resumeRace()">RESUME</button>
-      <button class="btn btn-s" onclick="showSettings(true)">SETTINGS</button>
-      <button class="btn btn-s" onclick="showMain()">QUIT TO MENU</button>
+      <button id="resumeBtn" class="btn btn-p">RESUME</button>
+      <button id="showSettingsBtn" class="btn btn-s">SETTINGS</button>
+      <button id="quitToMenuBtn" class="btn btn-s">QUIT TO MENU</button>
     </div>
   </div>
 </div>
@@ -55,18 +55,18 @@
   <h2>Settings</h2>
   <div class="vol-row">
     <span class="vol-lbl">MUSIC VOL</span>
-    <input class="vol-slider" type="range" id="musicVolSlider" min="0" max="100" value="60" oninput="onMusicVol(this.value)">
+    <input id="musicVolSlider" class="vol-slider" type="range" min="0" max="100" value="60">
     <span class="vol-val" id="musicVolVal">60</span>
   </div>
   <div class="vol-row">
     <span class="vol-lbl">SFX VOL</span>
-    <input class="vol-slider" type="range" id="sfxVolSlider" min="0" max="100" value="80" oninput="onSfxVol(this.value)">
+    <input id="sfxVolSlider" class="vol-slider" type="range" min="0" max="100" value="80">
     <span class="vol-val" id="sfxVolVal">80</span>
   </div>
   <div class="s-sep"></div>
   <label class="toggleRow" for="touchToggleInput">
     <span class="toggleLbl">TOUCH CONTROLS</span>
-    <input type="checkbox" id="touchToggleInput" onchange="onTouchControlsToggle(this.checked)">
+    <input type="checkbox" id="touchToggleInput">
   </label>
   <div class="touchCfgHint">Auto-throttle on touch. Hold BRAKE for slowing down or reverse.</div>
   <div class="s-sep"></div>
@@ -79,7 +79,7 @@
     <span>PAUSE / MENU</span><span>ESC</span>
   </div>
   <div style="text-align:center">
-    <button class="btn btn-p" id="settingsCloseBtn" onclick="closeSettings()">CLOSE</button>
+    <button class="btn btn-p" id="settingsCloseBtn">CLOSE</button>
   </div>
 </div>
 
@@ -88,9 +88,9 @@
   <h1>TurboRace</h1>
   <div class="sub">3D Racing · Multiple Circuits · Full Cockpit</div>
   <div class="menuActions">
-    <button class="btn btn-p" onclick="tryStartMenuMusic();showTrkSel()">START RACE</button>
-    <button class="btn btn-s" onclick="tryStartMenuMusic();showTrackEditor()">TRACK EDITOR</button>
-    <button class="btn btn-s" onclick="tryStartMenuMusic();showSettings(false)">SETTINGS</button>
+    <button id="gameStartBtn" class="btn btn-p">START RACE</button>
+    <button id="trackEditorBtn" class="btn btn-s">TRACK EDITOR</button>
+    <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
   </div>
   </div>
 </div>
@@ -99,15 +99,21 @@
 <div class="screen" id="sCar" style="display:none">
   <h2>Select Your Car</h2>
   <div class="cards" id="carCards"></div>
-  <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showTrkSel()">BACK</button><button class="btn btn-p" id="btnGo" onclick="startRace()" disabled>RACE!</button></div>
-    </div>
+  <div class="menuActions menuActions-inline">
+    <button id="showTrkSelBtn" class="btn btn-s">BACK</button>
+    <button id="btnGo" class="btn btn-p" disabled>RACE!</button>
+  </div>
+  </div>
 </div>
 
 <!-- TRACK SELECT -->
 <div class="screen" id="sTrk" style="display:none">
   <h2>Select Circuit</h2>
   <div id="trkCards" class="trackCards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;"></div>
-  <div class="menuActions menuActions-inline"><button class="btn btn-s" onclick="showMain()">BACK</button><button class="btn btn-p" id="btnNxt" onclick="showCarSel()" disabled>NEXT</button></div>
+  <div class="menuActions menuActions-inline">
+    <button id="trkSelBackBtn" class="btn btn-s">BACK</button>
+    <button id="btnNxt" class="btn btn-p" disabled>NEXT</button>
+  </div>
   </div>
 </div>
 
@@ -120,63 +126,102 @@
           <h2>Track Editor</h2>
           <div class="editorSub">Bird's-eye 3D editor. WASD moves, mouse rotates, wheel zooms, left drag edits.</div>
         </div>
-        <button class="btn btn-s btn-tight" onclick="closeTrackEditor()">BACK</button>
+        <button id="closeEditorBtn" class="btn btn-s btn-tight">BACK</button>
       </div>
 
       <div class="editorSection">
         <div class="editorLabel">Tracks</div>
         <div class="editorList" id="editorTrackList"></div>
         <div class="editorRow">
-          <button class="btn btn-p btn-tight" onclick="createNewEditorTrack()">NEW TRACK</button>
-          <button class="btn btn-s btn-tight" onclick="duplicateEditorTrack()">DUPLICATE</button>
-          <button class="btn btn-s btn-tight" onclick="deleteEditorTrack()">DELETE TRACK</button>
+          <button id="newTrackBtn" class="btn btn-p btn-tight">NEW TRACK</button>
+          <button id="dupeTrackBtn" class="btn btn-s btn-tight">DUPLICATE</button>
+          <button id="delTrackBtn" class="btn btn-s btn-tight">DELETE TRACK</button>
         </div>
       </div>
 
       <div class="editorSection">
         <div class="editorLabel">Track</div>
-        <label class="editorField"><span>Name</span><input id="editorTrackName" type="text" maxlength="40" oninput="onEditorMetaChanged()"></label>
-        <label class="editorField"><span>Description</span><input id="editorTrackDesc" type="text" maxlength="90" oninput="onEditorMetaChanged()"></label>
+        <label class="editorField">
+          <span>Name</span>
+          <input id="editorTrackName" type="text" maxlength="40">
+        </label>
+        <label class="editorField">
+          <span>Description</span>
+          <input id="editorTrackDesc" type="text" maxlength="90">
+        </label>
         <div class="editorGrid2">
-          <label class="editorField"><span>Laps</span><input id="editorTrackLaps" type="number" min="1" max="9" value="3" oninput="onEditorMetaChanged()"></label>
-          <label class="editorField"><span>Road Width</span><input id="editorTrackWidth" type="number" min="6" max="30" value="12" oninput="onEditorMetaChanged()"></label>
+          <label class="editorField">
+            <span>Laps</span>
+            <input id="editorTrackLaps" type="number" min="1" max="9" value="3">
+          </label>
+          <label class="editorField">
+            <span>Road Width</span>
+            <input id="editorTrackWidth" type="number" min="6" max="30" value="12">
+          </label>
         </div>
         <div class="editorGrid2">
-          <label class="editorField"><span>Preview Colour</span><input id="editorTrackColor" type="color" value="#44aaff" oninput="onEditorMetaChanged()"></label>
-          <label class="editorField editorCheckbox"><span>Bezier Curves</span><input id="editorUseBezier" type="checkbox" checked onchange="onEditorMetaChanged()"></label>
+          <label class="editorField">
+            <span>Preview Colour</span>
+            <input id="editorTrackColor" type="color" value="#44aaff">
+          </label>
+          <label class="editorField editorCheckbox">
+            <span>Bezier Curves</span>
+            <input id="editorUseBezier" type="checkbox" checked>
+          </label>
         </div>
       </div>
 
       <div class="editorSection">
         <div class="editorLabel">Environment</div>
         <div class="editorGrid2">
-          <label class="editorField"><span>Ground</span><input id="editorGroundColor" type="color" value="#1a3018" oninput="onEditorMetaChanged()"></label>
-          <label class="editorField"><span>Sky</span><input id="editorSkyColor" type="color" value="#0d1a2e" oninput="onEditorMetaChanged()"></label>
+          <label class="editorField">
+            <span>Ground</span>
+            <input id="editorGroundColor" type="color" value="#1a3018">
+          </label>
+          <label class="editorField">
+            <span>Sky</span>
+            <input id="editorSkyColor" type="color" value="#0d1a2e">
+          </label>
         </div>
-        <label class="editorField"><span>Time of Day</span><select id="editorTimeOfDay" onchange="onEditorMetaChanged()">
-          <option value="day">Day</option>
-          <option value="sunset">Sunset</option>
-          <option value="night">Night</option>
-        </select></label>
+        <label class="editorField">
+          <span>Time of Day</span>
+          <select id="editorTimeOfDay">
+            <option value="day">Day</option>
+            <option value="sunset">Sunset</option>
+            <option value="night">Night</option>
+          </select>
+        </label>
         <div class="editorGrid2">
-          <label class="editorField editorCheckbox"><span>Street Grid</span><input id="editorStreetGrid" type="checkbox" onchange="onEditorStreetGridChanged()"></label>
-          <label class="editorField"><span>Grid Size</span><input id="editorGridSize" type="number" min="40" max="120" step="5" value="70" oninput="onEditorMetaChanged()"></label>
+          <label class="editorField editorCheckbox">
+            <span>Street Grid</span>
+            <input id="editorStreetGrid" type="checkbox">
+          </label>
+          <label class="editorField">
+            <span>Grid Size</span>
+            <input id="editorGridSize" type="number" min="40" max="120" step="5" value="70">
+          </label>
         </div>
       </div>
 
       <div class="editorSection">
         <div class="editorLabel">Selected Node</div>
-        <label class="editorField"><span>Node Type</span><select id="editorNodeType" onchange="onEditorNodeChanged()">
-          <option value="track-node">Track node</option>
-          <option value="start-finish">Start/finish</option>
-          <option value="no-auto">No auto scenery</option>
-        </select></label>
-        <label class="editorField"><span>Curve Steepness</span><input id="editorSteepness" type="range" min="0" max="100" value="40" oninput="onEditorNodeChanged()"></label>
+        <label class="editorField">
+          <span>Node Type</span>
+          <select id="editorNodeType">
+            <option value="track-node">Track node</option>
+            <option value="start-finish">Start/finish</option>
+            <option value="no-auto">No auto scenery</option>
+          </select>
+        </label>
+        <label class="editorField">
+          <span>Curve Steepness</span>
+          <input id="editorSteepness" type="range" min="0" max="100" value="40">
+        </label>
         <div class="editorHint" id="editorNodeInfo">Select and drag a node in the 3D view.</div>
         <div class="editorRow editorRowWrap">
-          <button class="btn btn-p btn-tight" onclick="addEditorNode()">ADD NODE</button>
-          <button class="btn btn-s btn-tight" onclick="insertEditorNodeAfter()">INSERT AFTER</button>
-          <button class="btn btn-s btn-tight" onclick="deleteEditorNode()">DELETE NODE</button>
+          <button id="addNodeBtn" class="btn btn-p btn-tight">ADD NODE</button>
+          <button id="insertNodeBtn" class="btn btn-s btn-tight">INSERT AFTER</button>
+          <button id="delNodeBtn" class="btn btn-s btn-tight">DELETE NODE</button>
         </div>
       </div>
 
@@ -189,16 +234,16 @@
           <div class="assetChip" draggable="true" data-asset="park">🟩 Park</div>
         </div>
         <div class="editorRow">
-          <button class="btn btn-s btn-tight" onclick="deleteSelectedEditorAsset()">DELETE ASSET</button>
-          <button class="btn btn-s btn-tight" onclick="resetEditorCameraToTrack()">RESET CAMERA</button>
+          <button id="delAssetBtn" class="btn btn-s btn-tight">DELETE ASSET</button>
+          <button id="resetEditorCamBtn" class="btn btn-s btn-tight">RESET CAMERA</button>
         </div>
       </div>
 
       <div class="editorSection">
         <div class="editorLabel">Save</div>
         <div class="editorRow editorRowWrap">
-          <button class="btn btn-p btn-tight" onclick="saveEditorTrack()">SAVE TRACK</button>
-          <button class="btn btn-s btn-tight" onclick="resetEditorTrack()">RESET</button>
+          <button id="saveEditorTrackBtn" class="btn btn-p btn-tight">SAVE TRACK</button>
+          <button id="resetEditorTrackBtn" class="btn btn-s btn-tight">RESET</button>
         </div>
       </div>
     </aside>
@@ -216,7 +261,10 @@
   <h1 id="rTitle" style="color:#ffd700">RACE OVER</h1>
   <div id="podium"></div>
   <div id="ptime"></div>
-  <div class="menuActions menuActions-inline"><button class="btn btn-p" onclick="showMain()">MENU</button><button class="btn btn-s" onclick="restartRace()">RACE AGAIN</button></div>
+  <div class="menuActions menuActions-inline">
+    <button id="menuBtn" class="btn btn-p">MENU</button>
+    <button id="raceAgainBtn" class="btn btn-s">RACE AGAIN</button>
+  </div>
 </div>
 </body>
 </html>
