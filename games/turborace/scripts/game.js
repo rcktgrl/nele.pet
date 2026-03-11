@@ -709,8 +709,9 @@ function buildTrack(data){
     addRibbon(curve,.30,300,0,0xffffff,0,.028,false);
     addKerbAdaptive(adaptKerb,data.rw,1);
     addKerbAdaptive(adaptKerb,data.rw,-1);
-    addBarriersAdaptive(adaptBarrier,data.rw);
-    addGravelRunoff(curve,data);
+    const runoffProfile=(data.enableRunoff===false)?null:buildRunoffProfile(adaptBarrier,data);
+    addBarriersAdaptive(adaptBarrier,data.rw,runoffProfile);
+    if(runoffProfile) addGravelRunoff(runoffProfile);
   }
   // Ground plane
   const gndCol=isCity?data.gnd:0x1a3018;
@@ -845,7 +846,7 @@ function addKerbAdaptive(pts,rw,side){
   if(allVertsW.length){const m=new THREE.Mesh(mkGeo(allVertsW,allIdxW),matW);m.userData.trk=true;scene.add(m);}
 }
 
-function addBarriersAdaptive(pts,rw){
+function addBarriersAdaptive(pts,rw,runoffProfile){
   const n=pts.length;
   const norms=[];
   for(let i=0;i<n;i++){
@@ -853,11 +854,15 @@ function addBarriersAdaptive(pts,rw){
     const tx=q.x-p.x,tz=q.z-p.z,l=Math.sqrt(tx*tx+tz*tz)||1;
     norms.push(new THREE.Vector3(-tz/l,0,tx/l));
   }
+  const leftExpand=(runoffProfile&&runoffProfile.leftExpand)||[];
+  const rightExpand=(runoffProfile&&runoffProfile.rightExpand)||[];
   for(const side of[-1,1]){
     const vL=[],vT=[],iL=[],iT=[]; let vi=0,ti=0;
-    const off=side*(rw/2+2.0),h=1.15;
+    const h=1.15;
     for(let i=0;i<n-1;i++){
       const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
+      const expand=side<0?(leftExpand[i]||0):(rightExpand[i]||0);
+      const off=side*(rw/2+2.0+expand);
       const b0x=p0.x+r0.x*off,b0z=p0.z+r0.z*off;
       const b1x=p1.x+r1.x*off,b1z=p1.z+r1.z*off;
       vL.push(b0x,p0.y,b0z, b1x,p1.y,b1z, b1x,p1.y+h,b1z, b0x,p0.y+h,b0z);
@@ -928,33 +933,64 @@ function buildSceneryExclusionZones(curve,data){
   return zones;
 }
 
-function addGravelRunoff(curve,data){
-  const pts=curve.getSpacedPoints(600);
+function buildRunoffProfile(pts,data){
   const n=pts.length;
-  if(n<4) return;
+  if(n<6) return null;
+  const curve=new THREE.CatmullRomCurve3(pts,true,'centripetal',.5);
   const zones=buildSceneryExclusionZones(curve,data);
+  const leftExpand=new Array(Math.max(0,n-1)).fill(0);
+  const rightExpand=new Array(Math.max(0,n-1)).fill(0);
+  const slices=[];
+  for(let i=2;i<n-3;i++){
+    const pPrev=pts[i-1], pCur=pts[i], pNext=pts[i+1];
+    const inX=pCur.x-pPrev.x, inZ=pCur.z-pPrev.z;
+    const outX=pNext.x-pCur.x, outZ=pNext.z-pCur.z;
+    const inLen=Math.hypot(inX,inZ)||1, outLen=Math.hypot(outX,outZ)||1;
+    const dot=(inX*outX+inZ*outZ)/(inLen*outLen);
+    if(dot>=0) continue; // only corners sharper than 90°
+    const turn=Math.sign(inX*outZ-inZ*outX)||1;
+    const side=turn>0?-1:1;
+    const sharp=Math.min(1,Math.max(0,-dot));
+    const exitLen=Math.max(6,Math.min(24,Math.round(8+sharp*16)));
+    const start=Math.min(n-3,i+1);
+    const end=Math.min(n-2,start+exitLen);
+    for(let j=start;j<=end;j++){
+      const p=pts[j];
+      if(pointInZoneList(zones,p.x,p.z,10)) continue;
+      const extra=2.8+sharp*3.6;
+      if(side<0) leftExpand[j]=Math.max(leftExpand[j],extra);
+      else rightExpand[j]=Math.max(rightExpand[j],extra);
+      if(j<n-2){
+        const blend=Math.sin(((j-start+1)/(end-start+2))*Math.PI);
+        slices.push({index:j,side,outerExtra:4.6+sharp*4.6*blend});
+      }
+    }
+  }
+  if(!slices.length) return null;
+  return {pts,slices,leftExpand,rightExpand,rw:data.rw};
+}
+
+function addGravelRunoff(profile){
+  const {pts,slices,rw}=profile;
+  const n=pts.length;
   const verts=[]; const idx=[];
   let vi=0;
-  for(let i=1;i<n-2;i++){
-    const pPrev=pts[i-1], p0=pts[i], p1=pts[i+1], pNext=pts[i+2];
-    const a=new THREE.Vector2(p0.x-pPrev.x,p0.z-pPrev.z).normalize();
-    const b=new THREE.Vector2(p1.x-p0.x,p1.z-p0.z).normalize();
-    const cMag=Math.max(0,Math.min(1,Math.abs(a.x*b.y-a.y*b.x)*2.4));
-    if(cMag<0.25) continue;
-    if(pointInZoneList(zones,p0.x,p0.z,8)||pointInZoneList(zones,p1.x,p1.z,8)) continue;
-
-    const turn=Math.sign((p0.x-pPrev.x)*(p1.z-p0.z)-(p0.z-pPrev.z)*(p1.x-p0.x))||1;
-    const side=turn>0?-1:1;
-    const t0=new THREE.Vector3().subVectors(p1,pPrev).normalize();
-    const t1=new THREE.Vector3().subVectors(pNext,p0).normalize();
+  const y=0.011;
+  for(const seg of slices){
+    const i=seg.index;
+    if(i<1||i>=n-2) continue;
+    const p0=pts[i], p1=pts[i+1];
+    const t0=new THREE.Vector3().subVectors(pts[(i+1)%n],pts[(i-1+n)%n]).normalize();
+    const t1=new THREE.Vector3().subVectors(pts[(i+2)%n],pts[i]).normalize();
     const r0=new THREE.Vector3(-t0.z,0,t0.x).normalize();
     const r1=new THREE.Vector3(-t1.z,0,t1.x).normalize();
-    const inner=data.rw/2+1.7;
-    const outer=inner+4.8+cMag*3.8;
-    const in0=new THREE.Vector3(p0.x+r0.x*side*inner,0.012,p0.z+r0.z*side*inner);
-    const out0=new THREE.Vector3(p0.x+r0.x*side*outer,0.012,p0.z+r0.z*side*outer);
-    const in1=new THREE.Vector3(p1.x+r1.x*side*inner,0.012,p1.z+r1.z*side*inner);
-    const out1=new THREE.Vector3(p1.x+r1.x*side*outer,0.012,p1.z+r1.z*side*outer);
+    const inner=rw/2+1.75;
+    const outer=inner+seg.outerExtra;
+    const s=seg.side;
+    const in0=new THREE.Vector3(p0.x+r0.x*s*inner,y,p0.z+r0.z*s*inner);
+    const out0=new THREE.Vector3(p0.x+r0.x*s*outer,y,p0.z+r0.z*s*outer);
+    const in1=new THREE.Vector3(p1.x+r1.x*s*inner,y,p1.z+r1.z*s*inner);
+    const out1=new THREE.Vector3(p1.x+r1.x*s*outer,y,p1.z+r1.z*s*outer);
     verts.push(in0.x,in0.y,in0.z, out0.x,out0.y,out0.z, out1.x,out1.y,out1.z, in1.x,in1.y,in1.z);
     idx.push(vi,vi+1,vi+2,vi,vi+2,vi+3);
     vi+=4;
@@ -964,7 +1000,7 @@ function addGravelRunoff(curve,data){
   geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
   geo.setIndex(idx);
   geo.computeVertexNormals();
-  const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x6f6752,side:THREE.DoubleSide}));
+  const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x6f6752,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1}));
   mesh.userData.trk=true;
   mesh.receiveShadow=true;
   scene.add(mesh);
@@ -1823,7 +1859,7 @@ function makeEditableTrackFromGameTrack(src){
   return {
     id:src.id,name:src.name,desc:src.desc||'',laps:src.laps||3,rw:src.rw||12,previewColor:src.previewColor||'#44aaff',
     useBezier:src.useBezier!==false,timeOfDay:tod,groundColor:hexNumToCss(src.gnd||makeTimeOfDayPreset(tod).gnd),skyColor:hexNumToCss(src.sky||makeTimeOfDayPreset(tod).sky),
-    streetGrid:src.type==='city',gridSize:src.gridSize||70,nodes:pts,assets:deepClone(src.assets||[]),source:src.id,builtin:TRACKS.some(t=>String(t.id)===String(src.id))
+    streetGrid:src.type==='city',gridSize:src.gridSize||70,enableRunoff:src.enableRunoff!==false,nodes:pts,assets:deepClone(src.assets||[]),source:src.id,builtin:TRACKS.some(t=>String(t.id)===String(src.id))
   };
 }
 function loadEditorTracks(){
@@ -1845,6 +1881,7 @@ function normalizeEditorTrack(){
     editorTrack.nodes[lastIdx].type='no-auto';
   }
   if(!Array.isArray(editorTrack.assets)) editorTrack.assets=[];
+  if(typeof editorTrack.enableRunoff!=='boolean') editorTrack.enableRunoff=true;
   editorTrack.gridSize=Math.max(40,Math.min(120,+editorTrack.gridSize||70));
 }
 function getEditorBounds(){
@@ -1926,15 +1963,15 @@ function editorTrackToGameTrack(){
   let wp, type='circuit', cityRoute=null;
   if(editorTrack.streetGrid){ cityRoute=makeCityRouteFromNodes(ordered, editorTrack.gridSize||70); wp=makeCityWpFromRoute(cityRoute, editorTrack.gridSize||70); type='city'; }
   else wp=editorTrack.useBezier?makeBezierPath(ordered,18):ordered.map(n=>[n.x,0,n.z]);
-  return {id:editorTrack.id||uniqueTrackId(),name:editorTrack.name||'Custom Track',desc:editorTrack.desc||'Custom track',laps:+editorTrack.laps||3,rw:+editorTrack.rw||12,wp,previewColor:editorTrack.previewColor||'#44aaff',type,gridSize:editorTrack.gridSize||70,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(editorTrack.groundColor)||tod.gnd,timeOfDay:editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(editorTrack.assets||[]),useBezier:!!editorTrack.useBezier};
+  return {id:editorTrack.id||uniqueTrackId(),name:editorTrack.name||'Custom Track',desc:editorTrack.desc||'Custom track',laps:+editorTrack.laps||3,rw:+editorTrack.rw||12,wp,previewColor:editorTrack.previewColor||'#44aaff',type,gridSize:editorTrack.gridSize||70,enableRunoff:editorTrack.enableRunoff!==false,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(editorTrack.groundColor)||tod.gnd,timeOfDay:editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(editorTrack.assets||[]),useBezier:!!editorTrack.useBezier};
 }
-function populateEditorUI(){ normalizeEditorTrack(); document.getElementById('editorTrackName').value=editorTrack.name||''; document.getElementById('editorTrackDesc').value=editorTrack.desc||''; document.getElementById('editorTrackLaps').value=editorTrack.laps||3; document.getElementById('editorTrackWidth').value=editorTrack.rw||12; document.getElementById('editorTrackColor').value=editorTrack.previewColor||'#44aaff'; document.getElementById('editorUseBezier').checked=editorTrack.useBezier!==false; document.getElementById('editorGroundColor').value=editorTrack.groundColor||'#1a3018'; document.getElementById('editorSkyColor').value=editorTrack.skyColor||'#0d1a2e'; document.getElementById('editorTimeOfDay').value=editorTrack.timeOfDay||'day'; document.getElementById('editorStreetGrid').checked=!!editorTrack.streetGrid; document.getElementById('editorGridSize').value=editorTrack.gridSize||70; renderEditorTrackList(); syncSelectedNodeUI(); requestEditorRebuild(true); }
+function populateEditorUI(){ normalizeEditorTrack(); document.getElementById('editorTrackName').value=editorTrack.name||''; document.getElementById('editorTrackDesc').value=editorTrack.desc||''; document.getElementById('editorTrackLaps').value=editorTrack.laps||3; document.getElementById('editorTrackWidth').value=editorTrack.rw||12; document.getElementById('editorTrackColor').value=editorTrack.previewColor||'#44aaff'; document.getElementById('editorUseBezier').checked=editorTrack.useBezier!==false; document.getElementById('editorGroundColor').value=editorTrack.groundColor||'#1a3018'; document.getElementById('editorSkyColor').value=editorTrack.skyColor||'#0d1a2e'; document.getElementById('editorTimeOfDay').value=editorTrack.timeOfDay||'day'; document.getElementById('editorStreetGrid').checked=!!editorTrack.streetGrid; document.getElementById('editorEnableRunoff').checked=editorTrack.enableRunoff!==false; document.getElementById('editorGridSize').value=editorTrack.gridSize||70; renderEditorTrackList(); syncSelectedNodeUI(); requestEditorRebuild(true); }
 function renderEditorTrackList(){ const wrap=document.getElementById('editorTrackList'); if(!wrap) return; wrap.innerHTML=''; getAllTracks().forEach(src=>{ const d=document.createElement('div'); d.className='editorListItem'+(String(editorTrack.id)===String(src.id)?' sel':''); d.textContent=src.name+(TRACKS.some(t=>String(t.id)===String(src.id))?' · built-in':''); d.onclick=()=>{ editorTrack=makeEditableTrackFromGameTrack(src); editorSelectedNode=0; editorSelectedAsset=-1; populateEditorUI(); }; wrap.appendChild(d); }); }
 function syncSelectedNodeUI(){ normalizeEditorTrack(); const node=editorTrack.nodes[editorSelectedNode]||editorTrack.nodes[0]; if(!node)return; document.getElementById('editorNodeType').value=node.type||'track-node'; document.getElementById('editorSteepness').value=Math.round(node.steepness||40); document.getElementById('editorNodeInfo').textContent='Node '+(editorSelectedNode+1)+' · '+(node.type==='start-finish'?'Start/finish':node.type==='no-auto'?'No auto scenery':'Track node')+' · Steepness '+Math.round(node.steepness||40); }
-function onEditorMetaChanged(){ if(!editorTrack)return; editorTrack.name=document.getElementById('editorTrackName').value; editorTrack.desc=document.getElementById('editorTrackDesc').value; editorTrack.laps=Math.max(1,Math.min(9,+document.getElementById('editorTrackLaps').value||3)); editorTrack.rw=Math.max(6,Math.min(30,+document.getElementById('editorTrackWidth').value||12)); editorTrack.previewColor=document.getElementById('editorTrackColor').value; editorTrack.useBezier=document.getElementById('editorUseBezier').checked; editorTrack.groundColor=document.getElementById('editorGroundColor').value; editorTrack.skyColor=document.getElementById('editorSkyColor').value; editorTrack.timeOfDay=document.getElementById('editorTimeOfDay').value; editorTrack.streetGrid=document.getElementById('editorStreetGrid').checked; editorTrack.gridSize=Math.max(40,Math.min(120,+document.getElementById('editorGridSize').value||70)); requestEditorRebuild(false); }
+function onEditorMetaChanged(){ if(!editorTrack)return; editorTrack.name=document.getElementById('editorTrackName').value; editorTrack.desc=document.getElementById('editorTrackDesc').value; editorTrack.laps=Math.max(1,Math.min(9,+document.getElementById('editorTrackLaps').value||3)); editorTrack.rw=Math.max(6,Math.min(30,+document.getElementById('editorTrackWidth').value||12)); editorTrack.previewColor=document.getElementById('editorTrackColor').value; editorTrack.useBezier=document.getElementById('editorUseBezier').checked; editorTrack.groundColor=document.getElementById('editorGroundColor').value; editorTrack.skyColor=document.getElementById('editorSkyColor').value; editorTrack.timeOfDay=document.getElementById('editorTimeOfDay').value; editorTrack.streetGrid=document.getElementById('editorStreetGrid').checked; editorTrack.enableRunoff=document.getElementById('editorEnableRunoff').checked; editorTrack.gridSize=Math.max(40,Math.min(120,+document.getElementById('editorGridSize').value||70)); requestEditorRebuild(false); }
 function onEditorStreetGridChanged(){ onEditorMetaChanged(); }
 function onEditorNodeChanged(){ const node=editorTrack.nodes[editorSelectedNode]; if(!node)return; node.type=document.getElementById('editorNodeType').value; if(node.type==='start-finish') editorTrack.nodes.forEach((n,i)=>{ if(i!==editorSelectedNode && n.type==='start-finish') n.type='track-node'; }); node.steepness=+document.getElementById('editorSteepness').value||40; syncSelectedNodeUI(); requestEditorRebuild(false); }
-function createNewEditorTrack(){ editorTrack={id:uniqueTrackId(),name:'New Track',desc:'Custom circuit',laps:3,rw:12,previewColor:'#44aaff',useBezier:true,timeOfDay:'day',groundColor:'#1a3018',skyColor:'#0d1a2e',streetGrid:false,gridSize:70,nodes:[{x:0,z:0,steepness:40,type:'start-finish'},{x:140,z:20,steepness:45,type:'track-node'},{x:160,z:-120,steepness:55,type:'track-node'},{x:20,z:-180,steepness:55,type:'track-node'},{x:-120,z:-90,steepness:35,type:'track-node'}],assets:[]}; editorSelectedNode=0; editorSelectedAsset=-1; populateEditorUI(); }
+function createNewEditorTrack(){ editorTrack={id:uniqueTrackId(),name:'New Track',desc:'Custom circuit',laps:3,rw:12,previewColor:'#44aaff',useBezier:true,timeOfDay:'day',groundColor:'#1a3018',skyColor:'#0d1a2e',streetGrid:false,enableRunoff:true,gridSize:70,nodes:[{x:0,z:0,steepness:40,type:'start-finish'},{x:140,z:20,steepness:45,type:'track-node'},{x:160,z:-120,steepness:55,type:'track-node'},{x:20,z:-180,steepness:55,type:'track-node'},{x:-120,z:-90,steepness:35,type:'track-node'}],assets:[]}; editorSelectedNode=0; editorSelectedAsset=-1; populateEditorUI(); }
 function duplicateEditorTrack(){ const data=editorTrackToGameTrack(); editorTrack=makeEditableTrackFromGameTrack(data); editorTrack.id=uniqueTrackId(); editorTrack.name+=' Copy'; populateEditorUI(); }
 function addEditorNode(){ const n=editorTrack.nodes[editorSelectedNode]||editorTrack.nodes[0]; editorTrack.nodes.splice(editorSelectedNode+1,0,{x:n.x+40,z:n.z+20,steepness:n.steepness||40,type:'track-node'}); editorSelectedNode=Math.min(editorSelectedNode+1,editorTrack.nodes.length-1); syncSelectedNodeUI(); requestEditorRebuild(false); }
 function insertEditorNodeAfter(){ addEditorNode(); }
@@ -2201,6 +2238,7 @@ document.getElementById('editorSkyColor').addEventListener('input', onEditorMeta
 document.getElementById('editorTimeOfDay').addEventListener('change', onEditorMetaChanged);
 document.getElementById('editorStreetGrid').addEventListener('change', onEditorStreetGridChanged);
 document.getElementById('editorGridSize').addEventListener('input', onEditorMetaChanged);
+document.getElementById('editorEnableRunoff').addEventListener('change', onEditorMetaChanged);
 document.getElementById('editorNodeType').addEventListener('change', onEditorNodeChanged);
 document.getElementById('editorSteepness').addEventListener('input', onEditorNodeChanged);
 document.getElementById('addNodeBtn').addEventListener('click', addEditorNode);
