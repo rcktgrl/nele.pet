@@ -699,21 +699,9 @@ function buildTrack(data){
 
   // ── Adaptive segment counts: more on curves, fewer on straights ──
   const isCity=data.type==='city';
-  // Generate curvature-adaptive point indices from the uniform trkPts
-  function adaptivePts(maxPts,minStep,maxStep){
-    const res=[trkPts[0]]; let i=0;
-    while(i<N-1){
-      const c=trkCurv[i]||0;
-      const step=Math.round(minStep+(1-c)*(maxStep-minStep));
-      i=Math.min(i+step,N-1);
-      res.push(trkPts[i]);
-    }
-    // NO closing point — leave a gap at S/F for barriers
-    return res;
-  }
-  const adaptRoad=adaptivePts(900,1,4);    // higher baseline detail everywhere
-  const adaptKerb=adaptRoad;
-  const adaptBarrier=adaptRoad;
+  const smoothEdgePts=curve.getSpacedPoints(900);
+  const adaptKerb=smoothEdgePts;
+  const adaptBarrier=smoothEdgePts;
 
   if(!roadTex)roadTex=makeRoadTexture();
   if(!isCity){
@@ -722,6 +710,7 @@ function buildTrack(data){
     addKerbAdaptive(adaptKerb,data.rw,1);
     addKerbAdaptive(adaptKerb,data.rw,-1);
     addBarriersAdaptive(adaptBarrier,data.rw);
+    addGravelRunoff(curve,data);
   }
   // Ground plane
   const gndCol=isCity?data.gnd:0x1a3018;
@@ -922,18 +911,74 @@ function pointInNoAutoZone(data,px,pz,pad=0){
   return zones.some(z=>{ const dx=px-z.x,dz=pz-z.z,r=(z.r||18)+pad; return dx*dx+dz*dz<=r*r; });
 }
 
+function pointInZoneList(zones,px,pz,pad=0){
+  return zones.some(z=>{ const dx=px-z.x,dz=pz-z.z,r=(z.r||18)+pad; return dx*dx+dz*dz<=r*r; });
+}
+
+function buildSceneryExclusionZones(curve,data){
+  const zones=[];
+  const sf=curve.getPoint(0);
+  zones.push({x:sf.x,z:sf.z,r:18});
+  if(Array.isArray(data?.wp)&&data.wp.length){
+    const last=data.wp[data.wp.length-1];
+    if(last) zones.push({x:last[0],z:last[2],r:16});
+  }
+  const noAuto=(data&&data.noAutoZones)||[];
+  noAuto.forEach(z=>zones.push({x:z.x,z:z.z,r:z.r||18}));
+  return zones;
+}
+
+function addGravelRunoff(curve,data){
+  const pts=curve.getSpacedPoints(600);
+  const n=pts.length;
+  if(n<4) return;
+  const zones=buildSceneryExclusionZones(curve,data);
+  const verts=[]; const idx=[];
+  let vi=0;
+  for(let i=1;i<n-2;i++){
+    const pPrev=pts[i-1], p0=pts[i], p1=pts[i+1], pNext=pts[i+2];
+    const a=new THREE.Vector2(p0.x-pPrev.x,p0.z-pPrev.z).normalize();
+    const b=new THREE.Vector2(p1.x-p0.x,p1.z-p0.z).normalize();
+    const cMag=Math.max(0,Math.min(1,Math.abs(a.x*b.y-a.y*b.x)*2.4));
+    if(cMag<0.25) continue;
+    if(pointInZoneList(zones,p0.x,p0.z,8)||pointInZoneList(zones,p1.x,p1.z,8)) continue;
+
+    const turn=Math.sign((p0.x-pPrev.x)*(p1.z-p0.z)-(p0.z-pPrev.z)*(p1.x-p0.x))||1;
+    const side=turn>0?-1:1;
+    const t0=new THREE.Vector3().subVectors(p1,pPrev).normalize();
+    const t1=new THREE.Vector3().subVectors(pNext,p0).normalize();
+    const r0=new THREE.Vector3(-t0.z,0,t0.x).normalize();
+    const r1=new THREE.Vector3(-t1.z,0,t1.x).normalize();
+    const inner=data.rw/2+1.7;
+    const outer=inner+4.8+cMag*3.8;
+    const in0=new THREE.Vector3(p0.x+r0.x*side*inner,0.012,p0.z+r0.z*side*inner);
+    const out0=new THREE.Vector3(p0.x+r0.x*side*outer,0.012,p0.z+r0.z*side*outer);
+    const in1=new THREE.Vector3(p1.x+r1.x*side*inner,0.012,p1.z+r1.z*side*inner);
+    const out1=new THREE.Vector3(p1.x+r1.x*side*outer,0.012,p1.z+r1.z*side*outer);
+    verts.push(in0.x,in0.y,in0.z, out0.x,out0.y,out0.z, out1.x,out1.y,out1.z, in1.x,in1.y,in1.z);
+    idx.push(vi,vi+1,vi+2,vi,vi+2,vi+3);
+    vi+=4;
+  }
+  if(!verts.length) return;
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x6f6752,side:THREE.DoubleSide}));
+  mesh.userData.trk=true;
+  mesh.receiveShadow=true;
+  scene.add(mesh);
+}
+
 function addScenery(curve,data){
   const pts=curve.getSpacedPoints(100);
   const tmk=mat(0x4a2810),tlv=mat(0x1e4a1e);
   const bmk=mat(0x2a2a3a),bmk2=mat(0x3a3a4a),bmk3=mat(0x222238);
   const roofMat=mat(0x333344);
   const standMat=mat(0x444455),standSeat=mat(0x995522);
-  const gravelMat=mat(0x3a3a2a);
   const minOff=data.rw/2+7.0;
   const placed=[];
-  // S/F exclusion zone
-  const sfP=curve.getPoint(0);
-  const sfExcl=18;
+  const exclusionZones=buildSceneryExclusionZones(curve,data);
 
   function onTrack(px,pz,margin){
     const m2=(data.rw/2+margin)**2;
@@ -942,7 +987,7 @@ function addScenery(curve,data){
     }
     return false;
   }
-  function nearSF(px,pz){return Math.abs(px-sfP.x)<sfExcl&&Math.abs(pz-sfP.z)<sfExcl;}
+  function inExclusion(px,pz,pad=0){return pointInZoneList(exclusionZones,px,pz,pad);}
 
   for(let i=0;i<pts.length;i++){
     const p=pts[i],nx=pts[(i+1)%pts.length];
@@ -952,7 +997,7 @@ function addScenery(curve,data){
       // ── Trees (dense, varied sizes) ──
       const treeOff=s*(minOff+2+Math.random()*6);
       const tpos=p.clone().addScaledVector(r,treeOff);
-      if(!onTrack(tpos.x,tpos.z,6)&&!nearSF(tpos.x,tpos.z)&&!pointInNoAutoZone(data,tpos.x,tpos.z,4)){
+      if(!onTrack(tpos.x,tpos.z,6)&&!inExclusion(tpos.x,tpos.z,4)){
         const tg=new THREE.Group();
         const h=1.0+Math.random()*1.2;
         const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.15,.25,h,5),tmk);
@@ -974,7 +1019,7 @@ function addScenery(curve,data){
         trunk2.position.set(0,h2/2,0); tg2.add(trunk2);
         const cn2=new THREE.Mesh(new THREE.ConeGeometry(1.2+Math.random(),2.5+Math.random()*2,6),tlv);
         cn2.position.set(0,h2+1.5,0); tg2.add(cn2);
-        if(!pointInNoAutoZone(data,tp2.x,tp2.z,4)){
+        if(!inExclusion(tp2.x,tp2.z,4)){
           tg2.position.set(tp2.x,p.y,tp2.z); tg2.rotation.y=Math.random()*Math.PI*2;
           tg2.userData.trk=true; scene.add(tg2);
         }
@@ -986,7 +1031,7 @@ function addScenery(curve,data){
         const bpos=p.clone().addScaledVector(r,bOff);
         let bClose=false;
         for(const bl of placed){if((bpos.x-bl.x)**2+(bpos.z-bl.z)**2<144)bClose=true;}
-        if(!bClose&&!onTrack(bpos.x,bpos.z,10)&&!nearSF(bpos.x,bpos.z)&&!pointInNoAutoZone(data,bpos.x,bpos.z,6)){
+        if(!bClose&&!onTrack(bpos.x,bpos.z,10)&&!inExclusion(bpos.x,bpos.z,6)){
           const bw=4+Math.random()*6, bd=3+Math.random()*5, bh=4+Math.random()*8;
           const bm=[bmk,bmk2,bmk3][Math.floor(Math.random()*3)];
           const bld=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),bm);
@@ -1001,7 +1046,7 @@ function addScenery(curve,data){
       }
 
       // ── Grandstands near track (wedge shape, slope facing track) ──
-      if(i%12===0 && Math.random()<0.3 && !nearSF(p.x,p.z) && !pointInNoAutoZone(data,p.x,p.z,8)){
+      if(i%12===0 && Math.random()<0.3 && !inExclusion(p.x,p.z,8)){
         const gOff=s*(data.rw/2+10);
         const gpos=p.clone().addScaledVector(r,gOff);
         const gang=Math.atan2(t.x,t.z);
@@ -1036,18 +1081,6 @@ function addScenery(curve,data){
         seatStrip.rotation.y=gang;
         seatStrip.rotation.x=trackSide*Math.atan2(gh-0.3,gd)*0.3;
         seatStrip.userData.trk=true; scene.add(seatStrip);
-      }
-    }
-
-    // ── Gravel runoff areas on outside of tight curves ──
-    if(trkCurv[Math.round(i/pts.length*trkPts.length)%trkPts.length]>0.3 && Math.random()<0.4 && !nearSF(p.x,p.z) && !pointInNoAutoZone(data,p.x,p.z,6)){
-      const gOff=data.rw/2+5;
-      for(const s of[-1,1]){
-        const gpos=p.clone().addScaledVector(r,s*gOff);
-        const grv=new THREE.Mesh(new THREE.BoxGeometry(6,0.03,4),gravelMat);
-        grv.position.set(gpos.x,0.01,gpos.z);
-        grv.rotation.y=Math.atan2(t.x,t.z);
-        grv.userData.trk=true; scene.add(grv);
       }
     }
   }
@@ -1806,6 +1839,11 @@ function normalizeEditorTrack(){
   let sfCount=0;
   editorTrack.nodes.forEach((n,i)=>{ if(typeof n.steepness!=='number') n.steepness=40; n.type=(n.type==='start-finish'&&sfCount++===0)?'start-finish':(n.type==='no-auto'?'no-auto':'track-node'); });
   if(!editorTrack.nodes.some(n=>n.type==='start-finish')) editorTrack.nodes[0].type='start-finish';
+  if(editorTrack.nodes.length){
+    const lastIdx=editorTrack.nodes.length-1;
+    if(editorTrack.nodes[lastIdx].type==='start-finish') editorTrack.nodes[lastIdx].type='track-node';
+    editorTrack.nodes[lastIdx].type='no-auto';
+  }
   if(!Array.isArray(editorTrack.assets)) editorTrack.assets=[];
   editorTrack.gridSize=Math.max(40,Math.min(120,+editorTrack.gridSize||70));
 }
@@ -1865,10 +1903,19 @@ function makeCityWpFromRoute(route,grid){
 }
 function buildNoAutoZones(ordered){
   const zones=[];
+  const seen=new Set();
+  const addZone=(x,z,r)=>{
+    const key=`${Math.round(x)}:${Math.round(z)}:${Math.round(r)}`;
+    if(seen.has(key)) return;
+    seen.add(key);
+    zones.push({x,z,r});
+  };
   for(let i=0;i<ordered.length;i++){
     const n=ordered[i]; if(n.type!=='no-auto') continue;
     const prev=ordered[(i-1+ordered.length)%ordered.length], next=ordered[(i+1)%ordered.length];
-    zones.push({x:n.x,z:n.z,r:26},{x:(n.x+prev.x)/2,z:(n.z+prev.z)/2,r:18},{x:(n.x+next.x)/2,z:(n.z+next.z)/2,r:18});
+    addZone(n.x,n.z,26);
+    addZone((n.x+prev.x)/2,(n.z+prev.z)/2,18);
+    addZone((n.x+next.x)/2,(n.z+next.z)/2,18);
   }
   return zones;
 }
