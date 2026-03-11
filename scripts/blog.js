@@ -32,7 +32,7 @@ if (blogPostsContainer) {
 
   const fetchPosts = async () => {
     try {
-      const response = await fetch('blog.json');
+      const response = await fetch('../blog.json');
       if (!response.ok) {
         throw new Error('Blog posts could not be fetched');
       }
