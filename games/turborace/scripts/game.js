@@ -828,10 +828,23 @@ function addKerbAdaptive(pts,rw,side){
   // Batch into single geometry
   const allVerts=[],allIdx=[];let vi=0;
   const allVertsW=[],allIdxW=[];let viW=0;
+  const emitted=[];
+  let terminated=false;
   for(let i=0;i<n-1;i++){
+    if(terminated) break;
     const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
     const c0x=p0.x+r0.x*ko,c0z=p0.z+r0.z*ko;
     const c1x=p1.x+r1.x*ko,c1z=p1.z+r1.z*ko;
+    for(let s=0;s<emitted.length-2;s++){
+      const e=emitted[s];
+      if(segmentsIntersect2D(c0x,c0z,c1x,c1z,e.x0,e.z0,e.x1,e.z1)){
+        terminated=true;
+        break;
+      }
+    }
+    if(terminated) break;
+    emitted.push({x0:c0x,z0:c0z,x1:c1x,z1:c1z});
+
     const hw=kw/2;
     const isRed=Math.floor(i/STRIPE)%2===0;
     const v=isRed?allVerts:allVertsW, ix=isRed?allIdx:allIdxW;
@@ -873,17 +886,30 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
 
   for(const side of[-1,1]){
     const vL=[],vT=[],iL=[],iT=[]; let vi=0,ti=0;
+    const emitted=[];
+    let terminated=false;
     const h=1.15;
     for(let i=0;i<n-1;i++){
+      if(terminated) break;
       const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
       const expand=side<0?(leftExpand[i]||0):(rightExpand[i]||0);
       const off=side*(rw/2+2.0+expand);
       const b0x=p0.x+r0.x*off,b0z=p0.z+r0.z*off;
       const b1x=p1.x+r1.x*off,b1z=p1.z+r1.z*off;
 
+      for(let s=0;s<emitted.length-2;s++){
+        const e=emitted[s];
+        if(segmentsIntersect2D(b0x,b0z,b1x,b1z,e.x0,e.z0,e.x1,e.z1)){
+          terminated=true;
+          break;
+        }
+      }
+      if(terminated) break;
+
       // Prevent barrier quads from being generated inside the track when the
       // inside edge of an extremely sharp corner intersects itself.
       if(intrudesTrackInterior(b0x,b0z,i)||intrudesTrackInterior(b1x,b1z,i)) continue;
+      emitted.push({x0:b0x,z0:b0z,x1:b1x,z1:b1z});
 
       vL.push(b0x,p0.y,b0z, b1x,p1.y,b1z, b1x,p1.y+h,b1z, b0x,p0.y+h,b0z);
       iL.push(vi,vi+1,vi+2,vi,vi+2,vi+3); vi+=4;
@@ -921,6 +947,24 @@ function distPointToSegment2(px,pz,ax,az,bx,bz){
   const cx=ax+abx*t, cz=az+abz*t;
   const dx=px-cx, dz=pz-cz;
   return dx*dx+dz*dz;
+}
+
+function segmentsIntersect2D(a0x,a0z,a1x,a1z,b0x,b0z,b1x,b1z){
+  const orient=(px,pz,qx,qz,rx,rz)=>((qx-px)*(rz-pz)-(qz-pz)*(rx-px));
+  const onSeg=(px,pz,qx,qz,rx,rz)=>
+    Math.min(px,rx)-1e-6<=qx&&qx<=Math.max(px,rx)+1e-6&&
+    Math.min(pz,rz)-1e-6<=qz&&qz<=Math.max(pz,rz)+1e-6;
+  const o1=orient(a0x,a0z,a1x,a1z,b0x,b0z);
+  const o2=orient(a0x,a0z,a1x,a1z,b1x,b1z);
+  const o3=orient(b0x,b0z,b1x,b1z,a0x,a0z);
+  const o4=orient(b0x,b0z,b1x,b1z,a1x,a1z);
+  const s1=Math.sign(o1),s2=Math.sign(o2),s3=Math.sign(o3),s4=Math.sign(o4);
+  if(s1!==s2&&s3!==s4) return true;
+  if(Math.abs(o1)<1e-6&&onSeg(a0x,a0z,b0x,b0z,a1x,a1z)) return true;
+  if(Math.abs(o2)<1e-6&&onSeg(a0x,a0z,b1x,b1z,a1x,a1z)) return true;
+  if(Math.abs(o3)<1e-6&&onSeg(b0x,b0z,a0x,a0z,b1x,b1z)) return true;
+  if(Math.abs(o4)<1e-6&&onSeg(b0x,b0z,a1x,a1z,b1x,b1z)) return true;
+  return false;
 }
 function pointNearTrack(data,px,pz,margin=0){
   if(!data||!Array.isArray(data.wp)||data.wp.length<2) return false;
@@ -967,10 +1011,10 @@ function buildRunoffProfile(pts,data){
     const outX=pNext.x-pCur.x, outZ=pNext.z-pCur.z;
     const inLen=Math.hypot(inX,inZ)||1, outLen=Math.hypot(outX,outZ)||1;
     const dot=(inX*outX+inZ*outZ)/(inLen*outLen);
-    if(dot>=0) continue; // only corners sharper than 90°
+    if(dot>0.45) continue; // include moderate corners so runoff is more consistent
     const turn=Math.sign(inX*outZ-inZ*outX)||1;
     const side=turn>0?-1:1;
-    const sharp=Math.min(1,Math.max(0,-dot));
+    const sharp=Math.min(1,Math.max(0,(0.45-dot)/1.45));
     const exitLen=Math.max(6,Math.min(24,Math.round(8+sharp*16)));
     const start=Math.min(n-3,i+1);
     const end=Math.min(n-2,start+exitLen);
@@ -982,7 +1026,7 @@ function buildRunoffProfile(pts,data){
       else rightExpand[j]=Math.max(rightExpand[j],extra);
       if(j<n-2){
         const blend=Math.sin(((j-start+1)/(end-start+2))*Math.PI);
-        slices.push({index:j,side,outerExtra:4.6+sharp*4.6*blend});
+        slices.push({index:j,side,outerExtra:5.6+sharp*5.2*blend});
       }
     }
   }
@@ -996,9 +1040,13 @@ function addGravelRunoff(profile){
   const verts=[]; const idx=[];
   let vi=0;
   const y=0.011;
+  const used=new Set();
   for(const seg of slices){
     const i=seg.index;
     if(i<1||i>=n-2) continue;
+    const key=`${i}:${seg.side}`;
+    if(used.has(key)) continue;
+    used.add(key);
     const p0=pts[i], p1=pts[i+1];
     const t0=new THREE.Vector3().subVectors(pts[(i+1)%n],pts[(i-1+n)%n]).normalize();
     const t1=new THREE.Vector3().subVectors(pts[(i+2)%n],pts[i]).normalize();
@@ -1011,6 +1059,7 @@ function addGravelRunoff(profile){
     const out0=new THREE.Vector3(p0.x+r0.x*s*outer,y,p0.z+r0.z*s*outer);
     const in1=new THREE.Vector3(p1.x+r1.x*s*inner,y,p1.z+r1.z*s*inner);
     const out1=new THREE.Vector3(p1.x+r1.x*s*outer,y,p1.z+r1.z*s*outer);
+    if(segmentsIntersect2D(in0.x,in0.z,in1.x,in1.z,out0.x,out0.z,out1.x,out1.z)) continue;
     verts.push(in0.x,in0.y,in0.z, out0.x,out0.y,out0.z, out1.x,out1.y,out1.z, in1.x,in1.y,in1.z);
     idx.push(vi,vi+1,vi+2,vi,vi+2,vi+3);
     vi+=4;
