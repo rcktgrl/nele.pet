@@ -711,13 +711,13 @@ function buildTrack(data){
     // NO closing point — leave a gap at S/F for barriers
     return res;
   }
-  const adaptRoad=adaptivePts(500,1,8);    // dense on corners, sparse on straights
-  const adaptKerb=adaptivePts(200,1,5);
-  const adaptBarrier=adaptivePts(240,1,6);
+  const adaptRoad=adaptivePts(900,1,4);    // higher baseline detail everywhere
+  const adaptKerb=adaptRoad;
+  const adaptBarrier=adaptRoad;
 
   if(!roadTex)roadTex=makeRoadTexture();
   if(!isCity){
-    addRibbon(curve,data.rw,500,0,0,0,.005,true,roadTex);
+    addRibbon(curve,data.rw,900,0,0,0,.005,true,roadTex);
     addRibbon(curve,.30,300,0,0xffffff,0,.028,false);
     addKerbAdaptive(adaptKerb,data.rw,1);
     addKerbAdaptive(adaptKerb,data.rw,-1);
