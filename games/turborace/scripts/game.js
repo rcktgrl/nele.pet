@@ -856,6 +856,21 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
   }
   const leftExpand=(runoffProfile&&runoffProfile.leftExpand)||[];
   const rightExpand=(runoffProfile&&runoffProfile.rightExpand)||[];
+
+  function intrudesTrackInterior(px,pz,segIndex){
+    // Ignore nearby centerline segments and only test for self-overlap on very sharp corners.
+    const localWindow=8;
+    let best=Infinity;
+    for(let j=0;j<n-1;j++){
+      if(Math.abs(j-segIndex)<=localWindow) continue;
+      const a=pts[j],b=pts[j+1];
+      const d2=distPointToSegment2(px,pz,a.x,a.z,b.x,b.z);
+      if(d2<best) best=d2;
+    }
+    const minTrackDist=(rw/2)+0.45;
+    return best<(minTrackDist*minTrackDist);
+  }
+
   for(const side of[-1,1]){
     const vL=[],vT=[],iL=[],iT=[]; let vi=0,ti=0;
     const h=1.15;
@@ -865,6 +880,11 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
       const off=side*(rw/2+2.0+expand);
       const b0x=p0.x+r0.x*off,b0z=p0.z+r0.z*off;
       const b1x=p1.x+r1.x*off,b1z=p1.z+r1.z*off;
+
+      // Prevent barrier quads from being generated inside the track when the
+      // inside edge of an extremely sharp corner intersects itself.
+      if(intrudesTrackInterior(b0x,b0z,i)||intrudesTrackInterior(b1x,b1z,i)) continue;
+
       vL.push(b0x,p0.y,b0z, b1x,p1.y,b1z, b1x,p1.y+h,b1z, b0x,p0.y+h,b0z);
       iL.push(vi,vi+1,vi+2,vi,vi+2,vi+3); vi+=4;
       vT.push(b0x,p0.y+h,b0z, b1x,p1.y+h,b1z, b1x,p1.y+h+.16,b1z, b0x,p0.y+h+.16,b0z);
