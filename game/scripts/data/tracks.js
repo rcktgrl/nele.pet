@@ -1,4 +1,4 @@
-const TRACKS=[
+export const TRACKS=[
   // ── Track 1: Monaco Streets ───────────────────────────
   {id:0,name:'Monaco Streets',desc:'Technical street circuit · 3 Laps',laps:3,rw:11,
    sky:0x0d1a2e,gnd:0x111122,

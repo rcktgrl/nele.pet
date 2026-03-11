@@ -1,4 +1,4 @@
-const CARS=[
+export const CARS=[
   // id 0: Lamborghini-style low wedge (red) — 6-speed, 220 kph
   {id:0,name:'Viper GT',desc:'Low wedge supercar, razor sharp',hex:'#ff2222',col:0xff2222,
    maxSpd:61,accel:9.0,brake:21,hdl:0.84,aiSpd:1.00,gndOff:0.32,camH:1.50,stats:{s:88,a:82,h:88},
