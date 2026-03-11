@@ -351,6 +351,7 @@ document.addEventListener('pointermove',e=>{
     raceCamOrbit.lastInput=performance.now();
   }
 });
+gc.addEventListener('contextmenu',e=>e.preventDefault());
 
 
 function isTouchControlsVisibleInState(state){
@@ -1816,6 +1817,15 @@ function getEditorBounds(){
   if(!isFinite(minX)){ minX=-150; maxX=150; minZ=-150; maxZ=150; }
   return {minX,maxX,minZ,maxZ};
 }
+function cornerSeverity(nodes,i){
+  const n=nodes.length;
+  if(n<3) return 0;
+  const prev=nodes[(i-1+n)%n], cur=nodes[i], next=nodes[(i+1)%n];
+  const ax=cur.x-prev.x, az=cur.z-prev.z, bx=next.x-cur.x, bz=next.z-cur.z;
+  const al=Math.hypot(ax,az)||1, bl=Math.hypot(bx,bz)||1;
+  const dot=(ax*bx+az*bz)/(al*bl);
+  return Math.max(0,Math.min(1,1-Math.max(-1,Math.min(1,dot))));
+}
 function makeBezierPath(nodes,samplesPerSeg=18){
   const out=[]; const n=nodes.length;
   for(let i=0;i<n;i++){
@@ -1825,8 +1835,13 @@ function makeBezierPath(nodes,samplesPerSeg=18){
     const h2x=(p3.x-p1.x)*s, h2z=(p3.z-p1.z)*s;
     const c1={x:p1.x+h1x,y:0,z:p1.z+h1z};
     const c2={x:p2.x-h2x,y:0,z:p2.z-h2z};
-    for(let j=0;j<samplesPerSeg;j++){
-      const t=j/samplesPerSeg, mt=1-t;
+    const segLen=Math.hypot(p2.x-p1.x,p2.z-p1.z);
+    const sharp=Math.max(cornerSeverity(nodes,i),cornerSeverity(nodes,(i+1)%n));
+    const detailBoost=1+sharp*2.3;
+    const lenBoost=Math.min(2.1,Math.max(0.9,segLen/95));
+    const segSamples=Math.max(10,Math.min(90,Math.round(samplesPerSeg*detailBoost*lenBoost)));
+    for(let j=0;j<segSamples;j++){
+      const t=j/segSamples, mt=1-t;
       const x=mt*mt*mt*p1.x + 3*mt*mt*t*c1.x + 3*mt*t*t*c2.x + t*t*t*p2.x;
       const z=mt*mt*mt*p1.z + 3*mt*mt*t*c1.z + 3*mt*t*t*c2.z + t*t*t*p2.z;
       out.push([x,0,z]);
