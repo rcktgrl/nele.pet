@@ -70,9 +70,11 @@ let touchControlsEnabled=false;
 const SUPABASE_URL='https://lglcvsptwkqxykapepey.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnbGN2c3B0d2txeHlrYXBlcGV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwNzQ1NDcsImV4cCI6MjA2MjY1MDU0N30.ci7v2g-5wixuPKnG6wUUO87AsbI1bQ8wzRnHHG9QzIQ';
 const LEADERBOARD_TABLE='turborace_leaderboard';
+const CUSTOM_TRACKS_TABLE='turborace_custom_tracks';
 const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const leaderboardByTrack=new Map();
 let leaderboardAvailable=true;
+let customTrackSyncAvailable=true;
 let currentRaceSubmitted=false;
 
 const keys={};
@@ -1581,6 +1583,68 @@ function loadEditorTracks(){
   try{ editorTracks=JSON.parse(localStorage.getItem('turborace_custom_tracks')||'[]'); if(!Array.isArray(editorTracks))editorTracks=[]; }catch(e){ editorTracks=[]; }
 }
 function persistEditorTracks(){ localStorage.setItem('turborace_custom_tracks', JSON.stringify(editorTracks)); }
+
+function normaliseCloudTrack(raw){
+  if(!raw||typeof raw!=='object') return null;
+  const track=deepClone(raw.track_data||raw);
+  if(!track||typeof track!=='object') return null;
+  const cloudId=raw.track_id||track.id;
+  if(!cloudId) return null;
+  track.id=String(cloudId);
+  if(!track.name) track.name='Custom Track';
+  if(!Array.isArray(track.wp)||track.wp.length<3) return null;
+  track.__cloud=true;
+  return track;
+}
+
+function mergeTracksById(...groups){
+  const out=[];
+  const byId=new Map();
+  groups.forEach(group=>{
+    (group||[]).forEach(track=>{
+      if(!track||track.id===undefined||track.id===null) return;
+      const key=String(track.id);
+      if(byId.has(key)){
+        out[byId.get(key)]=track;
+      }else{
+        byId.set(key,out.length);
+        out.push(track);
+      }
+    });
+  });
+  return out;
+}
+
+async function syncEditorTracksFromCloud(){
+  if(!customTrackSyncAvailable) return;
+  const {data,error}=await supabase.from(CUSTOM_TRACKS_TABLE)
+    .select('track_id,track_data,updated_at')
+    .order('updated_at',{ascending:false})
+    .limit(250);
+  if(error){
+    customTrackSyncAvailable=false;
+    console.warn('Custom track sync unavailable:',error.message||error);
+    return;
+  }
+  const cloudTracks=(data||[]).map(normaliseCloudTrack).filter(Boolean);
+  editorTracks=mergeTracksById(editorTracks,cloudTracks);
+  persistEditorTracks();
+}
+
+async function uploadCustomTrack(track){
+  if(!customTrackSyncAvailable||!track||!track.id) return false;
+  const {error}=await supabase.from(CUSTOM_TRACKS_TABLE).upsert({
+    track_id:String(track.id),
+    track_data:track
+  },{onConflict:'track_id'});
+  if(error){
+    console.warn('Failed to sync custom track:',error.message||error);
+    customTrackSyncAvailable=false;
+    return false;
+  }
+  return true;
+}
+
 function ensureEditorBoot(){ loadEditorTracks(); if(!editorTrack) editorTrack=editorTracks[0]?deepClone(editorTracks[0]):makeEditableTrackFromGameTrack(TRACKS[0]); }
 function uniqueTrackId(){ return 'custom-'+Date.now()+'-'+Math.floor(Math.random()*9999); }
 function getEditorStartIndex(){ const idx=(editorTrack.nodes||[]).findIndex(n=>n.type==='start-finish'); return idx>=0?idx:0; }
@@ -1693,7 +1757,7 @@ function insertEditorNodeAfter(){ addEditorNode(); }
 function deleteEditorNode(){ if(editorTrack.nodes.length<=3) return; editorTrack.nodes.splice(editorSelectedNode,1); editorSelectedNode=Math.max(0,Math.min(editorSelectedNode,editorTrack.nodes.length-1)); normalizeEditorTrack(); syncSelectedNodeUI(); requestEditorRebuild(false); }
 function deleteSelectedEditorAsset(){ if(editorSelectedAsset<0) return; editorTrack.assets.splice(editorSelectedAsset,1); editorSelectedAsset=-1; requestEditorRebuild(false); }
 function resetEditorTrack(){ editorTrack=makeEditableTrackFromGameTrack(getTrackById(editorTrack.source||editorTrack.id)||TRACKS[0]); editorSelectedNode=0; editorSelectedAsset=-1; populateEditorUI(); }
-function saveEditorTrack(){ const data=editorTrackToGameTrack(); data.id=TRACKS.some(t=>String(t.id)===String(editorTrack.id))?uniqueTrackId():(editorTrack.id||uniqueTrackId()); data.name=editorTrack.name||'Custom Track'; editorTrack.id=data.id; editorTrack.source=data.id; editorTrack.builtin=false; const idx=editorTracks.findIndex(t=>String(t.id)===String(data.id)); if(idx>=0) editorTracks[idx]=data; else editorTracks.push(data); persistEditorTracks(); selTrk=data.id; renderEditorTrackList(); notify('TRACK SAVED'); }
+async function saveEditorTrack(){ const data=editorTrackToGameTrack(); data.id=TRACKS.some(t=>String(t.id)===String(editorTrack.id))?uniqueTrackId():(editorTrack.id||uniqueTrackId()); data.name=editorTrack.name||'Custom Track'; editorTrack.id=data.id; editorTrack.source=data.id; editorTrack.builtin=false; const idx=editorTracks.findIndex(t=>String(t.id)===String(data.id)); if(idx>=0) editorTracks[idx]=data; else editorTracks.push(data); persistEditorTracks(); const synced=await uploadCustomTrack(data); selTrk=data.id; renderEditorTrackList(); notify(synced?'TRACK SAVED + SYNCED':'TRACK SAVED (LOCAL ONLY)'); }
 function deleteEditorTrack(){
   if(!editorTrack) return;
   if(TRACKS.some(t=>String(t.id)===String(editorTrack.id))){ notify('BUILT-IN TRACKS CANNOT BE DELETED'); return; }
@@ -1710,7 +1774,7 @@ function deleteEditorTrack(){
 function requestEditorRebuild(resetCam){ editorNeedsRebuild=true; if(resetCam) resetEditorCameraToTrack(); }
 function editorRebuildScene(resetCam){ trkData=editorTrackToGameTrack(); buildTrack(trkData); setupLights(); activeCam=camEditor; editorLastRebuild=performance.now(); editorNeedsRebuild=false; if(resetCam) resetEditorCameraToTrack(); }
 function resetEditorCameraToTrack(){ const b=getEditorBounds(); editorCam.target.set((b.minX+b.maxX)/2,0,(b.minZ+b.maxZ)/2); const span=Math.max(180,Math.max(b.maxX-b.minX,b.maxZ-b.minZ)); editorCam.distance=Math.max(180,span*1.15); editorCam.pitch=1.16; }
-function showTrackEditor(){ ensureEditorBoot(); document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none'); document.getElementById('sEditor').style.display='flex'; document.getElementById('hud').style.display='none'; document.getElementById('hint').style.display='none'; bindEditorCanvas(); bindEditorAssetPalette(); populateEditorUI(); document.getElementById('editorPreviewBanner').style.display='block'; gState='editor'; stopAudio(); stopMusic(); activeCam=camEditor; requestEditorRebuild(true); }
+async function showTrackEditor(){ ensureEditorBoot(); await syncEditorTracksFromCloud(); document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none'); document.getElementById('sEditor').style.display='flex'; document.getElementById('hud').style.display='none'; document.getElementById('hint').style.display='none'; bindEditorCanvas(); bindEditorAssetPalette(); populateEditorUI(); document.getElementById('editorPreviewBanner').style.display='block'; gState='editor'; stopAudio(); stopMusic(); activeCam=camEditor; requestEditorRebuild(true); }
 function closeTrackEditor(){ document.getElementById('editorPreviewBanner').style.display='none'; showMain(); }
 function toggleEditorPreview(){}
 function updateEditorPreviewCamera(dt){ const move=(editorCam.distance*0.9+40)*dt; const yaw=editorCam.yaw; const fwdX=Math.sin(yaw), fwdZ=Math.cos(yaw), rightX=Math.sin(yaw+Math.PI/2), rightZ=Math.cos(yaw+Math.PI/2); let mx=0,mz=0; if(keys['KeyW']){mx+=fwdX;mz+=fwdZ;} if(keys['KeyS']){mx-=fwdX;mz-=fwdZ;} if(keys['KeyA']){mx-=rightX;mz-=rightZ;} if(keys['KeyD']){mx+=rightX;mz+=rightZ;} const ml=Math.hypot(mx,mz)||1; if(mx||mz){ editorCam.target.x+=mx/ml*move; editorCam.target.z+=mz/ml*move; } const horiz=Math.cos(editorCam.pitch)*editorCam.distance; const desired=new THREE.Vector3(editorCam.target.x+Math.sin(editorCam.yaw)*horiz, Math.sin(editorCam.pitch)*editorCam.distance, editorCam.target.z+Math.cos(editorCam.yaw)*horiz); camEditor.position.lerp(desired,0.18); camEditor.lookAt(editorCam.target.x,0,editorCam.target.z); activeCam=camEditor; }
@@ -1897,6 +1961,7 @@ function drawTrackPreview(canvas, track, color){
 
 async function showTrkSel(){
   loadEditorTracks();
+  await syncEditorTracksFromCloud();
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrk').style.display='flex';
   document.getElementById('btnNxt').disabled=(selTrk==null);
