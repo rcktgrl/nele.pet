@@ -164,11 +164,20 @@ class Car {
             const lt = globalThis.raceTime - this.lapStart; this.lapStart = globalThis.raceTime;
             if (this.isPlayer) {
               const startingFinal = this.lap === globalThis.trkData.laps - 1;
-              notify('LAP ' + this.lap + '/' + globalThis.trkData.laps + (this.lap > 1 ? ' · ' + fmtT(lt) : ''));
-              if (startingFinal) announce('Final lap! Push it to the limit!');
-              else if (this.lap > 1) announce('Lap ' + (this.lap) + '. ' + fmtT(lt));
+              const fmt = globalThis.fmtT || ((secs)=>secs.toFixed(2)+'s');
+              if (typeof globalThis.notify === 'function') {
+                globalThis.notify('LAP ' + this.lap + '/' + globalThis.trkData.laps + (this.lap > 1 ? ' · ' + fmt(lt) : ''));
+              }
+              if (typeof globalThis.announce === 'function') {
+                if (startingFinal) globalThis.announce('Final lap! Push it to the limit!');
+                else if (this.lap > 1) globalThis.announce('Lap ' + (this.lap) + '. ' + fmt(lt));
+              }
             }
-            if (this.lap >= globalThis.trkData.laps) { this.finished = true; this.finTime = globalThis.raceTime; if (this.isPlayer) endRace(); }
+            if (this.lap >= globalThis.trkData.laps) {
+              this.finished = true;
+              this.finTime = globalThis.raceTime;
+              if (this.isPlayer && typeof globalThis.endRace === 'function') globalThis.endRace();
+            }
           }
         }
       }
