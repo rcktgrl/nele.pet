@@ -4,6 +4,7 @@ import { createRenderPipeline } from './render/pipeline.js';
 import { instantiateRaceCars } from './car.js';
 import { mat, matE } from './render/materials.js';
 import { AI } from './ai-script.js';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/+esm';
 import {
   initAudio,
   onMusicVol,
@@ -64,6 +65,13 @@ globalThis.cityAiPts = cityAiPts;
 let settingsFromPause=false;
 const TOUCH_TOGGLE_KEY='turborace_touch_controls';
 let touchControlsEnabled=false;
+const SUPABASE_URL='https://lglcvsptwkqxykapepey.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnbGN2c3B0d2txeHlrYXBlcGV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwNzQ1NDcsImV4cCI6MjA2MjY1MDU0N30.ci7v2g-5wixuPKnG6wUUO87AsbI1bQ8wzRnHHG9QzIQ';
+const LEADERBOARD_TABLE='turborace_leaderboard';
+const supabase=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const leaderboardByTrack=new Map();
+let leaderboardAvailable=true;
+let currentRaceSubmitted=false;
 
 const keys={};
 const touchState={throttle:false,brake:false,left:false,right:false};
@@ -360,20 +368,19 @@ function addKerbAdaptive(pts,rw,side){
   const allVerts=[],allIdx=[];let vi=0;
   const allVertsW=[],allIdxW=[];let viW=0;
   const emitted=[];
-  let terminated=false;
   for(let i=0;i<n-1;i++){
-    if(terminated) break;
     const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
     const c0x=p0.x+r0.x*ko,c0z=p0.z+r0.z*ko;
     const c1x=p1.x+r1.x*ko,c1z=p1.z+r1.z*ko;
+    let intersects=false;
     for(let s=0;s<emitted.length-2;s++){
       const e=emitted[s];
       if(segmentsIntersect2D(c0x,c0z,c1x,c1z,e.x0,e.z0,e.x1,e.z1)){
-        terminated=true;
+        intersects=true;
         break;
       }
     }
-    if(terminated) break;
+    if(intersects) continue;
     emitted.push({x0:c0x,z0:c0z,x1:c1x,z1:c1z});
 
     const hw=kw/2;
@@ -418,24 +425,23 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
   for(const side of[-1,1]){
     const vL=[],vT=[],iL=[],iT=[]; let vi=0,ti=0;
     const emitted=[];
-    let terminated=false;
     const h=1.15;
     for(let i=0;i<n-1;i++){
-      if(terminated) break;
       const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
       const expand=side<0?(leftExpand[i]||0):(rightExpand[i]||0);
       const off=side*(rw/2+2.0+expand);
       const b0x=p0.x+r0.x*off,b0z=p0.z+r0.z*off;
       const b1x=p1.x+r1.x*off,b1z=p1.z+r1.z*off;
 
+      let intersects=false;
       for(let s=0;s<emitted.length-2;s++){
         const e=emitted[s];
         if(segmentsIntersect2D(b0x,b0z,b1x,b1z,e.x0,e.z0,e.x1,e.z1)){
-          terminated=true;
+          intersects=true;
           break;
         }
       }
-      if(terminated) break;
+      if(intersects) continue;
 
       // Prevent barrier quads from being generated inside the track when the
       // inside edge of an extremely sharp corner intersects itself.
@@ -452,6 +458,93 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
     bm.userData.trk=true; scene.add(bm);
     const tm=new THREE.Mesh(mkGeo(vT,iT),new THREE.MeshLambertMaterial({color:side===-1?0xff2211:0xffffff,side:THREE.DoubleSide}));
     tm.userData.trk=true; scene.add(tm);
+  }
+}
+
+function normaliseTrackId(trackId){ return String(trackId||'unknown'); }
+
+function sanitizeLeaderboardName(raw){
+  const cleaned=String(raw||'').trim().replace(/\s+/g,' ').slice(0,24);
+  return cleaned||'Anonymous';
+}
+
+function renderResultsLeaderboard(entries,highlightName){
+  const board=document.getElementById('resultsLeaderboard');
+  if(!board)return;
+  if(!entries||!entries.length){
+    board.innerHTML='<div class="lb-empty">No leaderboard entries yet for this track.</div>';
+    return;
+  }
+  board.innerHTML='';
+  entries.forEach((entry,idx)=>{
+    const row=document.createElement('div');
+    row.className='lb-row'+(highlightName&&entry.username===highlightName?' lb-row-you':'');
+    row.innerHTML=`<span class="lb-pos">${idx+1}</span><span class="lb-name">${entry.username}</span><span class="lb-time">${fmtT(entry.time_ms)}</span>`;
+    board.appendChild(row);
+  });
+}
+
+function updateTrackCardBestTime(trackId){
+  const data=leaderboardByTrack.get(normaliseTrackId(trackId));
+  const el=document.querySelector(`[data-track-best="${CSS.escape(normaliseTrackId(trackId))}"]`);
+  if(!el)return;
+  if(!leaderboardAvailable) el.textContent='Best: leaderboard unavailable';
+  else if(!data||!data.best) el.textContent='Best: --';
+  else el.textContent=`Best: ${fmtT(data.best.time_ms)} · ${data.best.username}`;
+}
+
+async function loadTrackLeaderboard(trackId,{force=false,limit=10}={}){
+  const key=normaliseTrackId(trackId);
+  if(!leaderboardAvailable) return {best:null,entries:[]};
+  if(!force && leaderboardByTrack.has(key)) return leaderboardByTrack.get(key);
+  const {data,error}=await supabase.from(LEADERBOARD_TABLE)
+    .select('track_id,username,time_ms')
+    .eq('track_id',key)
+    .order('time_ms',{ascending:true})
+    .limit(limit);
+  if(error){
+    console.error('Leaderboard fetch error:',error);
+    leaderboardAvailable=false;
+    return {best:null,entries:[]};
+  }
+  const entries=(data||[]).map((row)=>({
+    track_id:normaliseTrackId(row.track_id),
+    username:sanitizeLeaderboardName(row.username),
+    time_ms:Math.max(0,Number(row.time_ms)||0)
+  }));
+  const payload={best:entries[0]||null,entries};
+  leaderboardByTrack.set(key,payload);
+  return payload;
+}
+
+async function submitTrackTime(trackId,username,timeMs){
+  const key=normaliseTrackId(trackId);
+  if(!leaderboardAvailable) return false;
+  const {error}=await supabase.from(LEADERBOARD_TABLE).insert({
+    track_id:key,
+    username:sanitizeLeaderboardName(username),
+    time_ms:Math.round(Math.max(0,timeMs||0))
+  });
+  if(error){
+    console.error('Leaderboard submit error:',error);
+    leaderboardAvailable=false;
+    return false;
+  }
+  return true;
+}
+
+async function handlePostRaceLeaderboard(){
+  if(currentRaceSubmitted||!trkData||!pCar||!pCar.finTime||!Number.isFinite(pCar.finTime)) return;
+  currentRaceSubmitted=true;
+  const entered=window.prompt('Enter your leaderboard name (max 24 chars):','');
+  if(entered===null) return;
+  const username=sanitizeLeaderboardName(entered);
+  const ok=await submitTrackTime(trkData.id,username,pCar.finTime);
+  if(ok){
+    const latest=await loadTrackLeaderboard(trkData.id,{force:true,limit:10});
+    renderResultsLeaderboard(latest.entries,username);
+    updateTrackCardBestTime(trkData.id);
+    notify('Leaderboard time saved!');
   }
 }
 
@@ -1338,6 +1431,7 @@ function initRace(){
   allCars=raceCars.allCars;
 
   raceTime=0; globalThis.raceTime = raceTime; gState='countdown';
+  currentRaceSubmitted=false;
   document.getElementById('hud').style.display='block';
   document.getElementById('hint').style.display='block';
   updateTouchControlsVisibility();
@@ -1408,6 +1502,10 @@ function endRace(){
 
 function showResults(){
   updateResultsUI();
+  if(trkData&&trkData.id){
+    loadTrackLeaderboard(trkData.id,{force:true,limit:10}).then(data=>renderResultsLeaderboard(data.entries));
+  }
+  handlePostRaceLeaderboard();
   document.getElementById('results').style.display='flex';
   document.getElementById('hud').style.display='none';
   document.getElementById('touchControls').style.display='none';
@@ -1435,6 +1533,8 @@ function updateResultsUI(){
   }
   const pp=all.indexOf(pCar)+1;
   document.getElementById('ptime').textContent=`Your time: ${fmtT(pCar.finTime||raceTime)}  ·  P${pp}`;
+  const cached=leaderboardByTrack.get(normaliseTrackId(trkData&&trkData.id));
+  renderResultsLeaderboard(cached?cached.entries:[]);
 }
 
 
@@ -1779,20 +1879,22 @@ function drawTrackPreview(canvas, track, color){
   ctx.fillText('S/F',sfx+12,sfz+4);
 }
 
-function showTrkSel(){
+async function showTrkSel(){
   loadEditorTracks();
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrk').style.display='flex';
   document.getElementById('btnNxt').disabled=(selTrk==null);
   const COLORS=['#4488ff','#44cc66','#ffaa22','#ff4488','#22ddaa','#dd66ff','#66bbff'];
   const tt=document.getElementById('trkCards'); tt.innerHTML='';
-  getAllTracks().forEach((t,i)=>{
+  const tracks=getAllTracks();
+  tracks.forEach((t,i)=>{
     const card=document.createElement('div'); card.className='tcard'+(String(selTrk)===String(t.id)?' sel':'');
     const canvas=document.createElement('canvas'); canvas.width=280; canvas.height=230;
     canvas.style.borderRadius='6px';
     const h3=document.createElement('h3'); h3.textContent=t.name;
     const p=document.createElement('p'); p.textContent=t.desc+' · '+t.rw+'m wide'+(TRACKS.some(bt=>String(bt.id)===String(t.id))?'':' · Custom');
-    card.appendChild(canvas); card.appendChild(h3); card.appendChild(p);
+    const best=document.createElement('p'); best.className='trackBest'; best.dataset.trackBest=normaliseTrackId(t.id); best.textContent='Best: loading...';
+    card.appendChild(canvas); card.appendChild(h3); card.appendChild(p); card.appendChild(best);
     card.onclick=()=>{
       document.querySelectorAll('#trkCards .tcard').forEach(x=>x.classList.remove('sel'));
       card.classList.add('sel'); selTrk=t.id; document.getElementById('btnNxt').disabled=false;
@@ -1800,6 +1902,10 @@ function showTrkSel(){
     tt.appendChild(card);
     drawTrackPreview(canvas,t,t.previewColor||COLORS[i%COLORS.length]);
   });
+  await Promise.all(tracks.map(async(t)=>{
+    await loadTrackLeaderboard(t.id,{limit:1});
+    updateTrackCardBestTime(t.id);
+  }));
 }
 
 function startRace(){
