@@ -26,6 +26,8 @@ import {
 
 'use strict';
 
+globalThis.announce=announce;
+
 // ═══════════════════════════════════════════════════════
 //  THREE.JS INIT
 // ═══════════════════════════════════════════════════════
@@ -1269,6 +1271,7 @@ function fmtT(s){
   const m=Math.floor(s/60),sc=Math.floor(s%60),ms=Math.floor((s%1)*1000);
   return`${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}.${String(ms).padStart(3,'0')}`;
 }
+globalThis.fmtT=fmtT;
 function updateHUD(){
   if(!pCar||gState!=='racing')return;
   document.getElementById('speedNum').textContent=Math.round((pCar.isReversing?pCar.revSpd:pCar.spd)*3.6);
@@ -1397,6 +1400,7 @@ function notify(txt){
   if(ntTO)clearTimeout(ntTO);
   ntTO=setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.style.display='none',300);},2400);
 }
+globalThis.notify=notify;
 
 // ═══════════════════════════════════════════════════════
 //  RACE LOGIC
@@ -1499,6 +1503,7 @@ function endRace(){
   // Show results after brief delay (AI keeps driving behind it)
   setTimeout(()=>showResults(),1200);
 }
+globalThis.endRace=endRace;
 
 function showResults(){
   updateResultsUI();
@@ -1732,6 +1737,7 @@ function applyPlacedAssets(data){
 function updateFrame(dt){
   if(gState==='racing'){
     raceTime+=dt;
+    globalThis.raceTime = raceTime;
     const autoTouchThrottle=isTouchControlsVisibleInState(gState)
       && ('ontouchstart' in window||navigator.maxTouchPoints>0)
       && !touchState.brake;
