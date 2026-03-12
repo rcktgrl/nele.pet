@@ -1,0 +1,219 @@
+import { createCarVisual, getOpponentCarModels, getPlayerCarModel } from './car-model.js';
+
+class Car {
+  constructor(data, pos, hdg, isPlayer, scene) {
+    this.data = data; this.isPlayer = isPlayer;
+    this.pos = new THREE.Vector3(pos.x, pos.y, pos.z);
+    this.hdg = hdg; this.spd = 0; this.rpm = 800; this.gear = 1;
+    this.lap = 0; this.lastCP = 0; this.cpPassed = 0;
+    this.totalProg = 0; this.finished = false; this.finTime = 0; this.lapStart = 0;
+    this.tl = []; this.wh = [];
+    this.prevGear = 1; this.rpmDrop = 0; // for gear-shift RPM dip
+    this.stuckTimer = 0;               // for boundary recovery
+    this.isReversing = false; this.revSpd = 0; this.reverseTimer = 0;
+    const visual = createCarVisual(this.data);
+    this.mesh = visual.mesh; this.tl = visual.tailLights; this.wh = visual.wheels;
+    this.mesh.position.copy(this.pos); this.mesh.rotation.y = this.hdg;
+    scene.add(this.mesh);
+  }
+
+  // ── Physics update ───────────────────────────────────
+  update(inp, dt) {
+    if (this.finished) return;
+    const { thr, brk, str } = inp;
+
+    // ── Reverse gear: hold brake while stopped (player only) ──
+    if (this.isPlayer && this.spd < 0.3 && brk > 0.5 && thr < 0.1 && !this.isReversing) {
+      this.reverseTimer = (this.reverseTimer || 0) + dt;
+      if (this.reverseTimer > 0.3) this.isReversing = true;
+    } else if (thr > 0.1) {
+      this.isReversing = false; this.reverseTimer = 0;
+    }
+    if (this.isReversing && this.spd < 0.3 && brk < 0.1) this.isReversing = false;
+
+    if (this.isReversing) {
+      // Reverse: brake input drives backward, gear shows R
+      this.gear = 0; // 0 = reverse
+      this.rpm = Math.max(800, Math.min(3000, 800 + this.revSpd * 200));
+      const revAccel = brk * this.data.accel * 0.4;
+      const revDrag = this.revSpd * this.revSpd * 0.01 + this.revSpd * 0.2;
+      this.revSpd = Math.max(0, Math.min(8, this.revSpd + (revAccel - revDrag) * dt));
+      if (thr > 0.1) { this.revSpd = Math.max(0, this.revSpd - this.data.brake * 0.5 * dt); }
+      this.spd = 0;
+      // Steer reversed
+      const sf = Math.max(.5, 1 - this.revSpd / 8 * .4);
+      if (this.revSpd > 0.3) this.hdg -= str * this.data.hdl * 1.8 * sf * dt;
+      const fwd = new THREE.Vector3(Math.sin(this.hdg), 0, Math.cos(this.hdg));
+      this.pos.addScaledVector(fwd, -this.revSpd * dt);
+    } else {
+      this.revSpd = 0;
+      // Auto gearbox — per-car gear count
+      const nGears = this.data.gears || 4;
+      const gThr = this.data.gearThr || [0, 10, 22, 36, this.data.maxSpd + 2];
+      const RATIOS = this.data.gearRat || [620, 281, 172, 112];
+      if (this.gear < 1) this.gear = 1;
+      if (this.gear < nGears && this.spd > gThr[this.gear]) this.gear = Math.min(nGears, this.gear + 1);
+      else if (this.gear > 1 && this.spd < gThr[this.gear - 1] * .72) this.gear = Math.max(1, this.gear - 1);
+      const baseRpm = 800 + RATIOS[this.gear - 1] * this.spd;
+      this.rpm = Math.max(800, Math.min(8000, baseRpm + (thr > .1 ? thr * 300 : 0)));
+      // Forces — drag tuned per car so full throttle reaches exactly maxSpd
+      const thrust = thr * this.data.accel;
+      const rollCoeff = 0.08;
+      const dragCoeff = (this.data.accel - this.data.maxSpd * rollCoeff) / (this.data.maxSpd * this.data.maxSpd);
+      const drag = this.spd * this.spd * dragCoeff;
+      const roll = this.spd * rollCoeff;
+      const bForce = brk * this.data.brake;
+      this.spd = Math.max(0, Math.min(this.data.maxSpd, this.spd + (thrust - drag - roll - bForce) * dt));
+      // Steering
+      const sf = Math.max(.28, 1 - this.spd / this.data.maxSpd * .60);
+      if (this.spd > .5) this.hdg += str * this.data.hdl * 2.2 * sf * dt;
+      // Move forward
+      const fwd = new THREE.Vector3(Math.sin(this.hdg), 0, Math.cos(this.hdg));
+      this.pos.addScaledVector(fwd, this.spd * dt);
+    }
+
+    this.pos.y = this.groundY();
+    this.mesh.position.copy(this.pos); this.mesh.rotation.y = this.hdg;
+    // Wheel spin & steer
+    const wr = (this.isReversing ? -this.revSpd : this.spd) * dt * 2.2;
+    for (const w of this.wh) w.children[0].rotation.x += wr;
+    if (this.wh[0]) this.wh[0].rotation.y = str * .40;
+    if (this.wh[1]) this.wh[1].rotation.y = str * .40;
+    // Brake lights (on during braking or reversing)
+    const bOn = brk > .1 || this.isReversing;
+    const bc = bOn ? 0xee1100 : 0x440500, be = bOn ? 0x881100 : 0x100100;
+    for (const t of this.tl) { t.material.color.set(bc); t.material.emissive.set(be); }
+    this.boundary(dt); this.progress();
+  }
+
+  groundY() {
+    if (!globalThis.trkPts || !globalThis.trkPts.length) return this.data.gndOff;
+    let md = Infinity, ny = 0;
+    for (const p of globalThis.trkPts) { const d = (this.pos.x - p.x) ** 2 + (this.pos.z - p.z) **2; if (d < md) { md = d; ny = p.y; } }
+    return ny + this.data.gndOff;
+  }
+
+  boundary(dt) {
+    if (!globalThis.trkPts || !globalThis.trkPts.length) return;
+
+    // ── City tracks: use grid corridors ──
+    if (globalThis.cityCorridors && globalThis.cityCorridors.length) {
+      const px = this.pos.x, pz = this.pos.z;
+      let inside = false;
+      for (const c of globalThis.cityCorridors) {
+        if (px > c.x - c.hw && px < c.x + c.hw && pz > c.z - c.hd && pz < c.z + c.hd) { inside = true; break; }
+      }
+      if (!inside) {
+        // Find nearest corridor edge and push back
+        let bestDist = Infinity, bestPx = px, bestPz = pz;
+        for (const c of globalThis.cityCorridors) {
+          const cx = Math.max(c.x - c.hw, Math.min(c.x + c.hw, px));
+          const cz = Math.max(c.z - c.hd, Math.min(c.z + c.hd, pz));
+          const d = (px - cx) ** 2 + (pz - cz) ** 2;
+          if (d < bestDist) { bestDist = d; bestPx = cx; bestPz = cz; }
+        }
+        this.pos.x = bestPx; this.pos.z = bestPz;
+        this.spd *= 0.4;
+        if (this.isReversing) this.revSpd *= 0.3;
+        this.stuckTimer += dt;
+      } else {
+        this.stuckTimer = Math.max(0, this.stuckTimer - 0.04);
+      }
+      return;
+    }
+
+    // ── Spline-based boundary for normal tracks ──
+    let md = Infinity, ni = 0;
+    for (let i = 0; i < globalThis.trkPts.length; i++) {
+      const d = (this.pos.x - globalThis.trkPts[i].x) ** 2 + (this.pos.z - globalThis.trkPts[i].z) ** 2;
+      if (d < md) { md = d; ni = i; }
+    }
+    const np = globalThis.trkPts[ni];
+    const dist = Math.sqrt(md), maxD = globalThis.trkData.rw * .5 + 1.0;
+    if (dist > maxD) {
+      const px = np.x - this.pos.x, pz = np.z - this.pos.z, pl = Math.sqrt(px * px + pz * pz) || 1;
+      this.pos.x += px / pl * (dist - maxD + 0.5);
+      this.pos.z += pz / pl * (dist - maxD + 0.5);
+      this.spd *= 0.45;
+      const nxt = globalThis.trkPts[(ni + 1) % globalThis.trkPts.length];
+      const prv = globalThis.trkPts[(ni + globalThis.trkPts.length - 1) % globalThis.trkPts.length];
+      const tx = nxt.x - prv.x, tz = nxt.z - prv.z;
+      const trkHdg = Math.atan2(tx, tz);
+      let he = ((trkHdg - this.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      const heR = he > 0 ? he - Math.PI : he + Math.PI;
+      if (Math.abs(heR) < Math.abs(he)) he = heR;
+      this.hdg += he * 0.75;
+      this.stuckTimer += dt;
+    } else {
+      this.stuckTimer = Math.max(0, this.stuckTimer - 0.032);
+    }
+  }
+
+  progress() {
+    if (!globalThis.trkData) return;
+    const wps = globalThis.trkData.wp, n = wps.length, cr = 22;
+    for (let i = 0; i < n; i++) {
+      const w = wps[i];
+      const d = Math.sqrt((this.pos.x - w[0]) ** 2 + (this.pos.z - w[2]) ** 2);
+      if (d < cr && i !== this.lastCP) {
+        const exp = (this.lastCP + 1 + n) % n;
+        if (i === exp) {
+          this.lastCP = i; this.cpPassed++;
+          if (i === 0 && this.cpPassed >= n) {
+            this.cpPassed = 0; this.lap++;
+            const lt = globalThis.raceTime - this.lapStart; this.lapStart = globalThis.raceTime;
+            if (this.isPlayer) {
+              const startingFinal = this.lap === globalThis.trkData.laps - 1;
+              notify('LAP ' + this.lap + '/' + globalThis.trkData.laps + (this.lap > 1 ? ' · ' + fmtT(lt) : ''));
+              if (startingFinal) announce('Final lap! Push it to the limit!');
+              else if (this.lap > 1) announce('Lap ' + (this.lap) + '. ' + fmtT(lt));
+            }
+            if (this.lap >= globalThis.trkData.laps) { this.finished = true; this.finTime = globalThis.raceTime; if (this.isPlayer) endRace(); }
+          }
+        }
+      }
+    }
+    const ni = (this.lastCP + 1 + n) % n, nw = globalThis.trkData.wp[ni];
+    const dd = Math.sqrt((this.pos.x - nw[0]) ** 2 + (this.pos.z - nw[2]) ** 2);
+    this.totalProg = this.lap * n + this.cpPassed + Math.max(0, 1 - dd / 35);
+  }
+}
+
+function buildRaceGrid(trackPoints){
+  const n=trackPoints.length;
+  if(!n)return Array(5).fill({pos:new THREE.Vector3(0,0,0),hdg:0});
+  const grid=[];
+  const rows=[1,1,2,2,3];
+  const cols=[-1,1,-1,1,0];
+  const rowStep=16;
+  const sideOff=2.6;
+  for(let slot=0;slot<5;slot++){
+    const idx=((n - rows[slot]*rowStep) % n + n) % n;
+    const pt=trackPoints[idx];
+    const ptF=trackPoints[(idx+5)%n];
+    const hdg=Math.atan2(ptF.x-pt.x, ptF.z-pt.z);
+    const right=new THREE.Vector3(Math.cos(hdg),0,-Math.sin(hdg));
+    const pos=pt.clone().addScaledVector(right,cols[slot]*sideOff);
+    grid.push({pos,hdg});
+  }
+  return grid;
+}
+
+export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene, createAIController }){
+  const grid=buildRaceGrid(trackPoints);
+  const playerCar=new Car(getPlayerCarModel(cars, selectedCarIndex),grid[0].pos,grid[0].hdg,true,scene);
+
+  const aiCars=[];
+  const aiControllers=[];
+  const aiModels=getOpponentCarModels(cars, selectedCarIndex,4);
+  for(let i=0;i<4;i++){
+    const aiCar=new Car(aiModels[i],grid[i+1].pos,grid[i+1].hdg,false,scene);
+    aiCar.aiAgg=.86+i*.04;
+    aiCars.push(aiCar);
+    aiControllers.push(createAIController(aiCar,i));
+  }
+
+  return { playerCar, aiCars, aiControllers, allCars:[playerCar,...aiCars] };
+}
+
+export { Car };

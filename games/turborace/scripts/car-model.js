@@ -1,3 +1,5 @@
+import { mat, matE, matT } from './render/materials.js';
+
 export function getPlayerCarModel(cars, selectedCarIndex){
   return cars[selectedCarIndex];
 }
@@ -176,13 +178,8 @@ class CarModelBuilder{
     this.wh=wheels(g,Wm,Rm,.30,.18,.24,.26,[[-0.85,1.15],[0.85,1.15],[-0.85,-1.15],[0.85,-1.15]]);
     return g;
   }
-
-
 }
 
-function mat(c){return new THREE.MeshLambertMaterial({color:c,side:THREE.DoubleSide});}
-function matT(c,o){return new THREE.MeshLambertMaterial({color:c,transparent:true,opacity:o,side:THREE.DoubleSide});}
-function matE(c,e){return new THREE.MeshLambertMaterial({color:c,emissive:e,side:THREE.DoubleSide});}
 function addB(g,w,h,d,x,y,z,m,rx,ry,rz){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
   mesh.position.set(x,y,z);

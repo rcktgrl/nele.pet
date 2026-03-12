@@ -1,8 +1,8 @@
 import { TRACKS } from './data/tracks.js';
 import { CARS } from './data/cars.js';
 import { createRenderPipeline } from './render/pipeline.js';
-import { instantiateRaceCars } from './car-implementation.js';
-import { createCarVisual } from './car-model-code.js';
+import { instantiateRaceCars } from './car.js';
+import { mat, matE } from './render/materials.js';
 import { AI } from './ai-script.js';
 import {
   initAudio,
@@ -50,11 +50,17 @@ let editorNeedsRebuild=false,editorLastRebuild=0;
 let editorCam={target:new THREE.Vector3(),yaw:0,pitch:1.16,distance:260};
 let editorMouse={mode:null,lastX:0,lastY:0};
 let raceCamOrbit={yaw:0,pitch:0,lastInput:0};
-let raceTime=0;
+let raceTime=0; globalThis.raceTime = raceTime;
 let pCar=null,aiCars=[],allCars=[],trkData=null,trkCurve=null,trkPts=[],trkCurv=[];
 let aiControllers=[];
 let cityCorridors=null; // For city tracks: array of {x,z,hw,hd} axis-aligned driveable rectangles
 let cityAiPts=null;    // For city tracks: dense waypoints following grid roads exactly
+// expose initial state to Car and other modules relying on globals
+globalThis.trkData = trkData;
+globalThis.trkCurve = trkCurve;
+globalThis.trkPts = trkPts;
+globalThis.cityCorridors = cityCorridors;
+globalThis.cityAiPts = cityAiPts;
 let settingsFromPause=false;
 const TOUCH_TOGGLE_KEY='turborace_touch_controls';
 let touchControlsEnabled=false;
@@ -170,213 +176,7 @@ function setupTouchControls(){
   window.addEventListener('blur',releaseAllTouchControls);
 }
 
-// ═══════════════════════════════════════════════════════
-//  CAR CLASS
-// ═══════════════════════════════════════════════════════
-class Car{
-  constructor(data,pos,hdg,isPlayer){
-    this.data=data; this.isPlayer=isPlayer;
-    this.pos=new THREE.Vector3(pos.x,pos.y,pos.z);
-    this.hdg=hdg; this.spd=0; this.rpm=800; this.gear=1;
-    this.lap=0; this.lastCP=0; this.cpPassed=0;
-    this.totalProg=0; this.finished=false; this.finTime=0; this.lapStart=0;
-    this.tl=[]; this.wh=[];
-    this.prevGear=1; this.rpmDrop=0; // for gear-shift RPM dip
-    this.stuckTimer=0;               // for boundary recovery
-    this.isReversing=false; this.revSpd=0; this.reverseTimer=0;
-    const visual=createCarVisual(this.data);
-    this.mesh=visual.mesh; this.tl=visual.tailLights; this.wh=visual.wheels;
-    this.mesh.position.copy(this.pos); this.mesh.rotation.y=this.hdg;
-    scene.add(this.mesh);
-  }
-
-  // ── Physics update ───────────────────────────────────
-  update(inp,dt){
-    if(this.finished)return;
-    const{thr,brk,str}=inp;
-
-    // ── Reverse gear: hold brake while stopped (player only) ──
-    if(this.isPlayer && this.spd<0.3 && brk>0.5 && thr<0.1 && !this.isReversing){
-      this.reverseTimer=(this.reverseTimer||0)+dt;
-      if(this.reverseTimer>0.3) this.isReversing=true;
-    } else if(thr>0.1){
-      this.isReversing=false; this.reverseTimer=0;
-    }
-    if(this.isReversing && this.spd<0.3 && brk<0.1) this.isReversing=false;
-
-    if(this.isReversing){
-      // Reverse: brake input drives backward, gear shows R
-      this.gear=0; // 0 = reverse
-      this.rpm=Math.max(800,Math.min(3000,800+this.revSpd*200));
-      const revAccel=brk*this.data.accel*0.4;
-      const revDrag=this.revSpd*this.revSpd*0.01+this.revSpd*0.2;
-      this.revSpd=Math.max(0,Math.min(8,this.revSpd+(revAccel-revDrag)*dt));
-      if(thr>0.1){ this.revSpd=Math.max(0,this.revSpd-this.data.brake*0.5*dt); }
-      this.spd=0;
-      // Steer reversed
-      const sf=Math.max(.5,1-this.revSpd/8*.4);
-      if(this.revSpd>0.3)this.hdg-=str*this.data.hdl*1.8*sf*dt;
-      const fwd=new THREE.Vector3(Math.sin(this.hdg),0,Math.cos(this.hdg));
-      this.pos.addScaledVector(fwd,-this.revSpd*dt);
-    } else {
-      this.revSpd=0;
-      // Auto gearbox — per-car gear count
-      const nGears=this.data.gears||4;
-      const gThr=this.data.gearThr||[0,10,22,36,this.data.maxSpd+2];
-      const RATIOS=this.data.gearRat||[620,281,172,112];
-      if(this.gear<1)this.gear=1;
-      if(this.gear<nGears&&this.spd>gThr[this.gear])this.gear=Math.min(nGears,this.gear+1);
-      else if(this.gear>1&&this.spd<gThr[this.gear-1]*.72)this.gear=Math.max(1,this.gear-1);
-      const baseRpm=800+RATIOS[this.gear-1]*this.spd;
-      this.rpm=Math.max(800,Math.min(8000,baseRpm+(thr>.1?thr*300:0)));
-      // Forces — drag tuned per car so full throttle reaches exactly maxSpd
-      const thrust=thr*this.data.accel;
-      const rollCoeff=0.08;
-      const dragCoeff=(this.data.accel-this.data.maxSpd*rollCoeff)/(this.data.maxSpd*this.data.maxSpd);
-      const drag=this.spd*this.spd*dragCoeff;
-      const roll=this.spd*rollCoeff;
-      const bForce=brk*this.data.brake;
-      this.spd=Math.max(0,Math.min(this.data.maxSpd,this.spd+(thrust-drag-roll-bForce)*dt));
-      // Steering
-      const sf=Math.max(.28,1-this.spd/this.data.maxSpd*.60);
-      if(this.spd>.5)this.hdg+=str*this.data.hdl*2.2*sf*dt;
-      // Move forward
-      const fwd=new THREE.Vector3(Math.sin(this.hdg),0,Math.cos(this.hdg));
-      this.pos.addScaledVector(fwd,this.spd*dt);
-    }
-
-    this.pos.y=this.groundY();
-    this.mesh.position.copy(this.pos); this.mesh.rotation.y=this.hdg;
-    // Wheel spin & steer
-    const wr=(this.isReversing?-this.revSpd:this.spd)*dt*2.2;
-    for(const w of this.wh)w.children[0].rotation.x+=wr;
-    if(this.wh[0])this.wh[0].rotation.y=str*.40;
-    if(this.wh[1])this.wh[1].rotation.y=str*.40;
-    // Brake lights (on during braking or reversing)
-    const bOn=brk>.1||this.isReversing;
-    const bc=bOn?0xee1100:0x440500,be=bOn?0x881100:0x100100;
-    for(const t of this.tl){t.material.color.set(bc);t.material.emissive.set(be);}
-    this.boundary(dt); this.progress();
-  }
-
-  groundY(){
-    if(!trkPts.length)return this.data.gndOff;
-    let md=Infinity,ny=0;
-    for(const p of trkPts){const d=(this.pos.x-p.x)**2+(this.pos.z-p.z)**2;if(d<md){md=d;ny=p.y;}}
-    return ny+this.data.gndOff;
-  }
-
-  boundary(dt){
-    if(!trkPts.length)return;
-
-    // ── City tracks: use grid corridors ──
-    if(cityCorridors&&cityCorridors.length){
-      const px=this.pos.x,pz=this.pos.z;
-      let inside=false;
-      for(const c of cityCorridors){
-        if(px>c.x-c.hw&&px<c.x+c.hw&&pz>c.z-c.hd&&pz<c.z+c.hd){inside=true;break;}
-      }
-      if(!inside){
-        // Find nearest corridor edge and push back
-        let bestDist=Infinity,bestPx=px,bestPz=pz;
-        for(const c of cityCorridors){
-          const cx=Math.max(c.x-c.hw,Math.min(c.x+c.hw,px));
-          const cz=Math.max(c.z-c.hd,Math.min(c.z+c.hd,pz));
-          const d=(px-cx)**2+(pz-cz)**2;
-          if(d<bestDist){bestDist=d;bestPx=cx;bestPz=cz;}
-        }
-        this.pos.x=bestPx; this.pos.z=bestPz;
-        this.spd*=0.4;
-        if(this.isReversing)this.revSpd*=0.3;
-        this.stuckTimer+=dt;
-      } else {
-        this.stuckTimer=Math.max(0,this.stuckTimer-0.04);
-      }
-      return;
-    }
-
-    // ── Spline-based boundary for normal tracks ──
-    let md=Infinity,ni=0;
-    for(let i=0;i<trkPts.length;i++){
-      const d=(this.pos.x-trkPts[i].x)**2+(this.pos.z-trkPts[i].z)**2;
-      if(d<md){md=d;ni=i;}
-    }
-    const np=trkPts[ni];
-    const dist=Math.sqrt(md),maxD=trkData.rw*.5+1.0;
-    if(dist>maxD){
-      const px=np.x-this.pos.x,pz=np.z-this.pos.z,pl=Math.sqrt(px*px+pz*pz)||1;
-      this.pos.x+=px/pl*(dist-maxD+0.5);
-      this.pos.z+=pz/pl*(dist-maxD+0.5);
-      this.spd*=0.45;
-      const nxt=trkPts[(ni+1)%trkPts.length];
-      const prv=trkPts[(ni+trkPts.length-1)%trkPts.length];
-      const tx=nxt.x-prv.x, tz=nxt.z-prv.z;
-      const trkHdg=Math.atan2(tx,tz);
-      let he=((trkHdg-this.hdg+Math.PI*3)%(Math.PI*2))-Math.PI;
-      const heR=he>0?he-Math.PI:he+Math.PI;
-      if(Math.abs(heR)<Math.abs(he))he=heR;
-      this.hdg+=he*0.75;
-      this.stuckTimer+=dt;
-    } else {
-      this.stuckTimer=Math.max(0,this.stuckTimer-0.032);
-    }
-  }
-
-  progress(){
-    if(!trkData)return;
-    const wps=trkData.wp,n=wps.length,cr=22;
-    for(let i=0;i<n;i++){
-      const w=wps[i];
-      const d=Math.sqrt((this.pos.x-w[0])**2+(this.pos.z-w[2])**2);
-      if(d<cr&&i!==this.lastCP){
-        const exp=(this.lastCP+1+n)%n;
-        if(i===exp){
-          this.lastCP=i; this.cpPassed++;
-          if(i===0&&this.cpPassed>=n){
-            this.cpPassed=0; this.lap++;
-            const lt=raceTime-this.lapStart; this.lapStart=raceTime;
-            if(this.isPlayer){
-              const startingFinal=this.lap===trkData.laps-1;
-              notify('LAP '+this.lap+'/'+trkData.laps+(this.lap>1?' · '+fmtT(lt):''));
-              if(startingFinal) announce('Final lap! Push it to the limit!');
-              else if(this.lap>1) announce('Lap '+(this.lap)+'. '+fmtT(lt));
-            }
-            if(this.lap>=trkData.laps){this.finished=true;this.finTime=raceTime;if(this.isPlayer)endRace();}
-          }
-        }
-      }
-    }
-    const ni=(this.lastCP+1+n)%n,nw=trkData.wp[ni];
-    const dd=Math.sqrt((this.pos.x-nw[0])**2+(this.pos.z-nw[2])**2);
-    this.totalProg=this.lap*n+this.cpPassed+Math.max(0,1-dd/35);
-  }
-}
-
-// ─── Mesh helpers ──────────────────────────────────────
-function mat(c){return new THREE.MeshLambertMaterial({color:c,side:THREE.DoubleSide});}
-function matT(c,o){return new THREE.MeshLambertMaterial({color:c,transparent:true,opacity:o,side:THREE.DoubleSide});}
-function matE(c,e){return new THREE.MeshLambertMaterial({color:c,emissive:e,side:THREE.DoubleSide});}
-function addB(g,w,h,d,x,y,z,m,rx,ry,rz){
-  const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
-  mesh.position.set(x,y,z);
-  if(rx)mesh.rotation.x=rx;
-  if(ry)mesh.rotation.y=ry;
-  if(rz)mesh.rotation.z=rz;
-  g.add(mesh); return mesh;
-}
-function wheels(g,Wm,Rm,wr,ir,wt,it,positions,yOff){
-  yOff=yOff||0;
-  const wg=new THREE.CylinderGeometry(wr,wr,wt,12);
-  const ig=new THREE.CylinderGeometry(ir,ir,it,8);
-  const res=[];
-  for(const[wx,wz]of positions){
-    const wgrp=new THREE.Group();
-    const w=new THREE.Mesh(wg,Wm); w.rotation.z=Math.PI/2; wgrp.add(w);
-    const wh=new THREE.Mesh(ig,Rm); wh.rotation.z=Math.PI/2; wgrp.add(wh);
-    wgrp.position.set(wx,yOff,wz); g.add(wgrp); res.push(wgrp);
-  }
-  return res;
-}
+// CAR-related implementation has been extracted to car.js and is imported above.
 
 // ═══════════════════════════════════════════════════════
 //  ROAD TEXTURE
@@ -409,10 +209,14 @@ let roadTex=null;
 // ═══════════════════════════════════════════════════════
 function buildTrack(data){
   cityCorridors=null; cityAiPts=null;
+  globalThis.cityCorridors = cityCorridors;
+  globalThis.cityAiPts = cityAiPts;
   const rm=[]; scene.traverse(o=>{if(o.userData.trk)rm.push(o);}); rm.forEach(o=>scene.remove(o));
   const raw=data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
   const curve=new THREE.CatmullRomCurve3(raw,true,'centripetal',.5);
   trkCurve=curve; trkPts=curve.getSpacedPoints(500);
+  globalThis.trkCurve = trkCurve;
+  globalThis.trkPts = trkPts;
   // Precompute per-point curvature (0=straight, 1=very tight) for AI adaptive lookahead
   trkCurv=[];
   const N=trkPts.length;
@@ -1510,6 +1314,7 @@ function initRace(){
   clearAiSounds();
 
   trkData=getTrackById(selTrk);
+  globalThis.trkData = trkData;
   try{ buildTrack(trkData); }catch(e){ console.error('buildTrack error:',e); }
   setupLights();
 
@@ -1517,7 +1322,7 @@ function initRace(){
     trackPoints: trkPts,
     cars: CARS,
     selectedCarIndex: selCar,
-    CarClass: Car,
+    scene: scene,
     createAIController: (aiCar,i)=>new AI(aiCar,.044+i*.010,()=>({
       trackPoints: trkPts,
       trackCurvature: trkCurv,
@@ -1532,7 +1337,7 @@ function initRace(){
   aiControllers=raceCars.aiControllers;
   allCars=raceCars.allCars;
 
-  raceTime=0; gState='countdown';
+  raceTime=0; globalThis.raceTime = raceTime; gState='countdown';
   document.getElementById('hud').style.display='block';
   document.getElementById('hint').style.display='block';
   updateTouchControlsVisibility();
@@ -1842,6 +1647,7 @@ function updateFrame(dt){
   } else if(gState==='cooldown'){
     // Player finished — car coasts, AI keeps racing behind results screen
     raceTime+=dt;
+    globalThis.raceTime = raceTime;
     pCar.update({thr:0,brk:0.3,str:0},dt);
     for(const ai of aiControllers){if(!ai.car.finished)ai.update(dt);}
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&aiCars[i])aiSounds[i].update(aiCars[i],pCar);}
@@ -1857,6 +1663,7 @@ function updateFrame(dt){
   } else if(gState==='countdown'||gState==='finished'||gState==='paused'){
     if(gState==='finished'){
       raceTime+=dt;
+      globalThis.raceTime = raceTime;
       for(const ai of aiControllers){if(!ai.car.finished)ai.update(dt);}
       updateHUD(); drawMinimap();
     }
