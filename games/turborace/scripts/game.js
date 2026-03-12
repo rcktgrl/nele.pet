@@ -463,7 +463,10 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
   }
 }
 
-function normaliseTrackId(trackId){ return String(trackId||'unknown'); }
+function normaliseTrackId(trackId){
+  if(trackId===null||trackId===undefined||trackId==='') return 'unknown';
+  return String(trackId);
+}
 
 function sanitizeLeaderboardName(raw){
   const cleaned=String(raw||'').trim().replace(/\s+/g,' ').slice(0,24);
