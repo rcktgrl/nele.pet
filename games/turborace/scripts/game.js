@@ -473,6 +473,13 @@ function sanitizeLeaderboardName(raw){
   return cleaned||'Anonymous';
 }
 
+function leaderboardTimeToSeconds(timeMs){
+  const numeric=Math.max(0,Number(timeMs)||0);
+  // Backward compatibility: earlier builds accidentally stored seconds in time_ms.
+  if(numeric<1000) return numeric;
+  return numeric/1000;
+}
+
 function renderResultsLeaderboard(entries,highlightName){
   const board=document.getElementById('resultsLeaderboard');
   if(!board)return;
@@ -484,7 +491,7 @@ function renderResultsLeaderboard(entries,highlightName){
   entries.forEach((entry,idx)=>{
     const row=document.createElement('div');
     row.className='lb-row'+(highlightName&&entry.username===highlightName?' lb-row-you':'');
-    row.innerHTML=`<span class="lb-pos">${idx+1}</span><span class="lb-name">${entry.username}</span><span class="lb-time">${fmtT(entry.time_ms)}</span>`;
+    row.innerHTML=`<span class="lb-pos">${idx+1}</span><span class="lb-name">${entry.username}</span><span class="lb-time">${fmtT(leaderboardTimeToSeconds(entry.time_ms))}</span>`;
     board.appendChild(row);
   });
 }
@@ -495,7 +502,7 @@ function updateTrackCardBestTime(trackId){
   if(!el)return;
   if(!leaderboardAvailable) el.textContent='Best: leaderboard unavailable';
   else if(!data||!data.best) el.textContent='Best: --';
-  else el.textContent=`Best: ${fmtT(data.best.time_ms)} · ${data.best.username}`;
+  else el.textContent=`Best: ${fmtT(leaderboardTimeToSeconds(data.best.time_ms))} · ${data.best.username}`;
 }
 
 async function loadTrackLeaderboard(trackId,{force=false,limit=10}={}){
@@ -528,7 +535,7 @@ async function submitTrackTime(trackId,username,timeMs){
   const {error}=await supabase.from(LEADERBOARD_TABLE).insert({
     track_id:key,
     username:sanitizeLeaderboardName(username),
-    time_ms:Math.round(Math.max(0,timeMs||0))
+    time_ms:Math.round(Math.max(0,timeMs||0)*1000)
   });
   if(error){
     console.error('Leaderboard submit error:',error);
