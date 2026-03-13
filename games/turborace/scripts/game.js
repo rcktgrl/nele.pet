@@ -1536,16 +1536,25 @@ function mergeTracksById(...groups){
 
 async function syncEditorTracksFromCloud(){
   if(!customTrackSyncAvailable) return;
-  const {data,error}=await supabase.from(CUSTOM_TRACKS_TABLE)
+  let result=await supabase.from(CUSTOM_TRACKS_TABLE)
     .select('track_id,track_data,updated_at')
     .order('updated_at',{ascending:false})
     .limit(250);
-  if(error){
+
+  if(result.error){
+    // Older tables may not include updated_at; retry with a minimal projection.
+    result=await supabase.from(CUSTOM_TRACKS_TABLE)
+      .select('track_id,track_data')
+      .limit(250);
+  }
+
+  if(result.error){
     customTrackSyncAvailable=false;
-    console.warn('Custom track sync unavailable:',error.message||error);
+    console.warn('Custom track sync unavailable:',result.error.message||result.error);
     return;
   }
-  const cloudTracks=(data||[]).map(normaliseCloudTrack).filter(Boolean);
+
+  const cloudTracks=(result.data||[]).map(normaliseCloudTrack).filter(Boolean);
   editorTracks=mergeTracksById(editorTracks,cloudTracks);
   persistEditorTracks();
 }
