@@ -1,4 +1,4 @@
-import { galleryArtworks } from './galleryData.js';
+import { galleryArtworks } from './gallery-data.js';
 
 function clampIndex(index) {
   if (!galleryArtworks.length) {

@@ -1,4 +1,4 @@
-import { galleryArtworks } from './galleryData.js';
+import { galleryArtworks } from './gallery-data.js';
 
 const grid = document.getElementById('gallery-grid');
 const lightbox = document.getElementById('lightbox');

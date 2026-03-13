@@ -1,10 +1,9 @@
-// Bootstraps all interactive modules that power the landing page.
-import { initAudioControls } from './audioControls.js';
-import { initCookieConsent } from './cookieConsent.js';
-import { initHeroSlider } from './heroSlider.js';
+import { initAudioControls } from './audio-controls.js';
+import { initCookieConsent } from './cookie-consent.js';
+import { initHeroSlider } from './hero-slider.js';
 import { initPawprints } from './pawprints.js';
-import { initOcsGallerySlider } from './ocsGallerySlider.js';
-import { galleryArtworks } from './galleryData.js';
+import { initOcsGallerySlider } from './ocs-gallery-slider.js';
+import { galleryArtworks } from './gallery-data.js';
 
 // Each init function returns a cleanup callback so we can tidy up on unload.
 const heroCleanup = initHeroSlider({
