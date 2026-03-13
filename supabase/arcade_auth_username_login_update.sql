@@ -1,6 +1,8 @@
 -- Run this migration in Supabase SQL editor.
 -- Supports username-first login and robust username-history sync.
+-- Safe to re-run on branches to reduce merge conflicts.
 
+begin;
 
 -- Enforce case-insensitive uniqueness for usernames.
 create unique index if not exists arcade_profiles_username_lower_uidx
@@ -14,11 +16,9 @@ security definer
 set search_path = public
 stable
 as $$
-
   select p.email
   from public.arcade_profiles p
   where lower(p.username) = lower(trim(coalesce(p_username, '')))
-
   limit 1;
 $$;
 
@@ -56,3 +56,5 @@ $$;
 
 revoke all on function public.arcade_sync_username_everywhere(uuid, text, text) from public;
 grant execute on function public.arcade_sync_username_everywhere(uuid, text, text) to authenticated;
+
+commit;
