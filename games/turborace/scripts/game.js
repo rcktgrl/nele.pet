@@ -48,7 +48,7 @@ let gState='menu';
 let selCar=null,selTrk=null;
 let carCardPreviewScene=null,carCardPreviewCamera=null,carCardPreviews=[];
 let carCardPreviewLastTime=0,carCardPreviewRaf=0;
-let editorTracks=[],editorTrack=null,editorSelectedNode=0,editorSelectedAsset=-1,editorDrag=null,editorPreviewMode=false,editorPreviewOrbit={angle:0,radius:160,center:new THREE.Vector3()};
+let editorTracks=[],editorTrack=null,editorSelectedNode=0,editorSelectedAsset=-1,editorDrag=null;
 const camEditor=new THREE.PerspectiveCamera(55,1,.1,3000);
 const raycaster=new THREE.Raycaster();
 const editorGroundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
@@ -1571,6 +1571,7 @@ function normalizeEditorTrack(){
   if(!editorTrack) return;
   if(!Array.isArray(editorTrack.nodes)||editorTrack.nodes.length<3) editorTrack.nodes=[{x:0,z:0,steepness:40,type:'start-finish'},{x:120,z:0,steepness:40,type:'no-auto'},{x:120,z:-120,steepness:40,type:'no-auto'},{x:0,z:-120,steepness:40,type:'no-auto'}];
   let sfCount=0;
+  // eslint-disable-next-line no-unused-vars
   editorTrack.nodes.forEach((n,i)=>{ if(typeof n.steepness!=='number') n.steepness=40; n.type=(n.type==='start-finish'&&sfCount++===0)?'start-finish':'no-auto'; });
   if(!editorTrack.nodes.some(n=>n.type==='start-finish')) editorTrack.nodes[0].type='start-finish';
   if(editorTrack.nodes.length){
@@ -1691,12 +1692,11 @@ function deleteEditorTrack(){
   notify('TRACK DELETED');
 }
 function requestEditorRebuild(resetCam){ editorNeedsRebuild=true; if(resetCam) resetEditorCameraToTrack(); }
-function editorRebuildScene(resetCam){ trkData=editorTrackToGameTrack(); buildTrack(trkData); setupLights(); activeCam=camEditor; editorLastRebuild=performance.now(); editorNeedsRebuild=false; if(resetCam) resetEditorCameraToTrack(); }
+function editorRebuildScene(resetCam){ trkData=editorTrackToGameTrack(); buildTrack(trkData); setupLights(); state.activeCam=camEditor; editorLastRebuild=performance.now(); editorNeedsRebuild=false; if(resetCam) resetEditorCameraToTrack(); }
 function resetEditorCameraToTrack(){ const b=getEditorBounds(); editorCam.target.set((b.minX+b.maxX)/2,0,(b.minZ+b.maxZ)/2); const span=Math.max(180,Math.max(b.maxX-b.minX,b.maxZ-b.minZ)); editorCam.distance=Math.max(180,span*1.15); editorCam.pitch=1.16; }
-async function showTrackEditor(){ ensureEditorBoot(); await syncEditorTracksFromCloud(); document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none'); document.getElementById('sEditor').style.display='flex'; document.getElementById('hud').style.display='none'; document.getElementById('hint').style.display='none'; bindEditorCanvas(); bindEditorAssetPalette(); populateEditorUI(); document.getElementById('editorPreviewBanner').style.display='block'; gState='editor'; stopAudio(); stopMusic(); activeCam=camEditor; requestEditorRebuild(true); }
+async function showTrackEditor(){ ensureEditorBoot(); await syncEditorTracksFromCloud(); document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none'); document.getElementById('sEditor').style.display='flex'; document.getElementById('hud').style.display='none'; document.getElementById('hint').style.display='none'; bindEditorCanvas(); bindEditorAssetPalette(); populateEditorUI(); document.getElementById('editorPreviewBanner').style.display='block'; gState='editor'; stopAudio(); stopMusic(); state.activeCam=camEditor; requestEditorRebuild(true); }
 function closeTrackEditor(){ document.getElementById('editorPreviewBanner').style.display='none'; showMain(); }
-function toggleEditorPreview(){}
-function updateEditorPreviewCamera(dt){ const move=(editorCam.distance*0.9+40)*dt; const yaw=editorCam.yaw; const fwdX=Math.sin(yaw), fwdZ=Math.cos(yaw), rightX=Math.sin(yaw+Math.PI/2), rightZ=Math.cos(yaw+Math.PI/2); let mx=0,mz=0; if(keys['KeyW']){mx+=fwdX;mz+=fwdZ;} if(keys['KeyS']){mx-=fwdX;mz-=fwdZ;} if(keys['KeyA']){mx-=rightX;mz-=rightZ;} if(keys['KeyD']){mx+=rightX;mz+=rightZ;} const ml=Math.hypot(mx,mz)||1; if(mx||mz){ editorCam.target.x+=mx/ml*move; editorCam.target.z+=mz/ml*move; } const horiz=Math.cos(editorCam.pitch)*editorCam.distance; const desired=new THREE.Vector3(editorCam.target.x+Math.sin(editorCam.yaw)*horiz, Math.sin(editorCam.pitch)*editorCam.distance, editorCam.target.z+Math.cos(editorCam.yaw)*horiz); camEditor.position.lerp(desired,0.18); camEditor.lookAt(editorCam.target.x,0,editorCam.target.z); activeCam=camEditor; }
+function updateEditorPreviewCamera(dt){ const move=(editorCam.distance*0.9+40)*dt; const yaw=editorCam.yaw; const fwdX=Math.sin(yaw), fwdZ=Math.cos(yaw), rightX=Math.sin(yaw+Math.PI/2), rightZ=Math.cos(yaw+Math.PI/2); let mx=0,mz=0; if(keys['KeyW']){mx+=fwdX;mz+=fwdZ;} if(keys['KeyS']){mx-=fwdX;mz-=fwdZ;} if(keys['KeyA']){mx-=rightX;mz-=rightZ;} if(keys['KeyD']){mx+=rightX;mz+=rightZ;} const ml=Math.hypot(mx,mz)||1; if(mx||mz){ editorCam.target.x+=mx/ml*move; editorCam.target.z+=mz/ml*move; } const horiz=Math.cos(editorCam.pitch)*editorCam.distance; const desired=new THREE.Vector3(editorCam.target.x+Math.sin(editorCam.yaw)*horiz, Math.sin(editorCam.pitch)*editorCam.distance, editorCam.target.z+Math.cos(editorCam.yaw)*horiz); camEditor.position.lerp(desired,0.18); camEditor.lookAt(editorCam.target.x,0,editorCam.target.z); state.activeCam=camEditor; }
 function editorWorldToOverlay(vec,canvas){ const p=vec.clone().project(camEditor); if(p.z<-1||p.z>1) return null; const rr=renderer.domElement.getBoundingClientRect(), cr=canvas.getBoundingClientRect(); const sx=(p.x*0.5+0.5)*rr.width-(cr.left-rr.left), sy=(-p.y*0.5+0.5)*rr.height-(cr.top-rr.top); return {x:sx*(canvas.width/cr.width),y:sy*(canvas.height/cr.height)}; }
 function editorClientToGround(clientX,clientY){ const rr=renderer.domElement.getBoundingClientRect(); const ndc=new THREE.Vector2(((clientX-rr.left)/rr.width)*2-1,-((clientY-rr.top)/rr.height)*2+1); raycaster.setFromCamera(ndc,camEditor); const out=new THREE.Vector3(); return raycaster.ray.intersectPlane(editorGroundPlane,out)?out:null; }
 function editorCanPlaceAssetAt(x,z){ return !pointNearTrack(editorTrackToGameTrack(),x,z,3); }
@@ -1794,7 +1794,6 @@ function showMain(){
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
   dc.style.display='none';
-  editorPreviewMode=false;
   const epb=document.getElementById('editorPreviewBanner'); if(epb)epb.style.display='none';
   const epbtn=document.getElementById('editorPreviewBtn'); if(epbtn)epbtn.textContent='3D PREVIEW';
   stopAudio(); stopMusic();
