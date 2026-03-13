@@ -86,9 +86,9 @@ function setMode(mode) {
   usernameInput.required = !isForgot;
   usernameInput.disabled = isForgot;
 
-  emailInput.parentElement.hidden = !isRegister && !isForgot;
+  emailInput.parentElement.hidden = isForgot;
   emailInput.required = isRegister || isForgot;
-  emailInput.disabled = !isRegister && !isForgot;
+  emailInput.disabled = isForgot;
 
   passwordLabel.hidden = isForgot;
   passwordInput.required = !isForgot;
@@ -130,7 +130,7 @@ async function resolveLoginEmail(username) {
 
   if (!error) {
     if (!data) {
-      return { email: '', errorMessage: 'Username not found. Please register first.' };
+      return { email: '', errorMessage: 'Username not found. If this is an existing account, try logging in with your email once to refresh your profile.' };
     }
 
     return { email: normalizeEmail(data), errorMessage: '' };
@@ -154,7 +154,7 @@ async function resolveLoginEmail(username) {
   }
 
   if (!fallbackProfile?.email) {
-    return { email: '', errorMessage: 'Username not found. Please register first.' };
+    return { email: '', errorMessage: 'Username not found. If this is an existing account, try logging in with your email once to refresh your profile.' };
   }
 
   return { email: normalizeEmail(fallbackProfile.email), errorMessage: '' };
@@ -377,6 +377,8 @@ async function loginOrRegister(mode) {
   if (mode === 'login') {
     if (isValidEmail(loginIdentifier)) {
       loginEmail = normalizeEmail(loginIdentifier);
+    } else if (isValidEmail(registrationEmail)) {
+      loginEmail = registrationEmail;
     } else {
       const { email, errorMessage } = await resolveLoginEmail(loginIdentifier);
       if (errorMessage) {
@@ -405,8 +407,11 @@ async function loginOrRegister(mode) {
     return;
   }
 
-  const safeUsername = username || normalizeUsername(activeUser.user_metadata?.username) || 'player';
-  await upsertProfile(activeUser.id, safeUsername, registrationEmail || loginEmail);
+  const metadataUsername = normalizeUsername(activeUser.user_metadata?.username);
+  const safeUsername = mode === 'register'
+    ? username
+    : metadataUsername || username || 'player';
+  await upsertProfile(activeUser.id, safeUsername, normalizeEmail(activeUser.email || registrationEmail || loginEmail));
   feedback.textContent = 'Success!';
   passwordInput.value = '';
   await showArcadeForUser(activeUser);

@@ -14,6 +14,7 @@ body { margin: 0; min-height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Ve
 .auth-overlay[hidden] { display: none !important; }
 .auth-card { width: min(420px, 92vw); background: #11172d; border: 1px solid #3b4a86; border-radius: 14px; padding: 20px; }
 .auth-card label { display: block; margin-top: 12px; }
+.auth-card label[hidden] { display: none !important; }
 .auth-card input { width: 100%; margin-top: 5px; padding: 10px; box-sizing: border-box; border-radius: 8px; border: 1px solid #405089; background: #0a1023; color: #fff; }
 .auth-actions { display: flex; gap: 10px; }
 .auth-actions-stack { flex-direction: column; }
