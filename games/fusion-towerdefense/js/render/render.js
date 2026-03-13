@@ -20,6 +20,7 @@ function getTowerBodyColor(tower) {
 
 function drawTowerRitualOverlay(tower) {
   const ritualState = getCurrentRitualCandidateState(tower);
+  const scale = getTowerVisualScale();
   const isExecutableCenter = ritualState === 'center' && isCurrentRitualExecutable();
 
   if (ritualState === 'center') {
@@ -27,7 +28,7 @@ function drawTowerRitualOverlay(tower) {
       ? 'rgba(89,243,255,0.26)'
       : 'rgba(120,160,255,0.20)';
     ctx.beginPath();
-    ctx.arc(tower.x, tower.y, 28, 0, Math.PI * 2);
+    ctx.arc(tower.x, tower.y, 28 * scale, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.strokeStyle = isExecutableCenter
@@ -35,14 +36,14 @@ function drawTowerRitualOverlay(tower) {
       : 'rgba(120,160,255,0.68)';
     ctx.lineWidth = isExecutableCenter ? 2.5 : 2;
     ctx.beginPath();
-    ctx.arc(tower.x, tower.y, 28, 0, Math.PI * 2);
+    ctx.arc(tower.x, tower.y, 28 * scale, 0, Math.PI * 2);
     ctx.stroke();
 
     if (isExecutableCenter) {
       ctx.strokeStyle = 'rgba(89,243,255,0.35)';
       ctx.lineWidth = 6;
       ctx.beginPath();
-      ctx.arc(tower.x, tower.y, 31, 0, Math.PI * 2);
+      ctx.arc(tower.x, tower.y, 31 * scale, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -52,13 +53,13 @@ function drawTowerRitualOverlay(tower) {
   if (ritualState === 'selected') {
     ctx.fillStyle = 'rgba(125,255,176,0.16)';
     ctx.beginPath();
-    ctx.arc(tower.x, tower.y, 27, 0, Math.PI * 2);
+    ctx.arc(tower.x, tower.y, 27 * scale, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.strokeStyle = 'rgba(125,255,176,0.72)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(tower.x, tower.y, 27, 0, Math.PI * 2);
+    ctx.arc(tower.x, tower.y, 27 * scale, 0, Math.PI * 2);
     ctx.stroke();
 
     return;
@@ -67,13 +68,13 @@ function drawTowerRitualOverlay(tower) {
   if (ritualState === 'candidate') {
     ctx.fillStyle = 'rgba(255,230,107,0.10)';
     ctx.beginPath();
-    ctx.arc(tower.x, tower.y, 26, 0, Math.PI * 2);
+    ctx.arc(tower.x, tower.y, 26 * scale, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.strokeStyle = 'rgba(255,230,107,0.44)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(tower.x, tower.y, 26, 0, Math.PI * 2);
+    ctx.arc(tower.x, tower.y, 26 * scale, 0, Math.PI * 2);
     ctx.stroke();
 
     return;
@@ -82,28 +83,29 @@ function drawTowerRitualOverlay(tower) {
   if (ritualState === 'invalid') {
     ctx.fillStyle = 'rgba(255,102,127,0.08)';
     ctx.beginPath();
-    ctx.arc(tower.x, tower.y, 26, 0, Math.PI * 2);
+    ctx.arc(tower.x, tower.y, 26 * scale, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.strokeStyle = 'rgba(255,102,127,0.28)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(tower.x, tower.y, 26, 0, Math.PI * 2);
+    ctx.arc(tower.x, tower.y, 26 * scale, 0, Math.PI * 2);
     ctx.stroke();
   }
 }
 
 function drawTowerBase(tower) {
   const stunned = (tower.stunTimer || 0) > 0;
+  const scale = getTowerVisualScale();
 
   ctx.fillStyle = stunned ? '#9fa7b8' : getTowerBodyColor(tower);
   ctx.beginPath();
-  ctx.arc(tower.x, tower.y, 20, 0, Math.PI * 2);
+  ctx.arc(tower.x, tower.y, 20 * scale, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = '#08101f';
   ctx.beginPath();
-  ctx.arc(tower.x, tower.y, 10, 0, Math.PI * 2);
+  ctx.arc(tower.x, tower.y, 10 * scale, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -112,6 +114,8 @@ function drawTowerAmmoOverlay(tower) {
     return;
   }
 
+  const scale = getTowerVisualScale();
+
   const ammoRatio = Math.max(
     0,
     Math.min(1, (tower.ammo ?? tower.magSize ?? 0) / (tower.magSize || 1))
@@ -119,7 +123,7 @@ function drawTowerAmmoOverlay(tower) {
 
   ctx.fillStyle = '#28c76f';
   ctx.beginPath();
-  ctx.arc(tower.x, tower.y, 10 * ammoRatio, 0, Math.PI * 2);
+  ctx.arc(tower.x, tower.y, 10 * ammoRatio * scale, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -508,13 +512,16 @@ function drawHoverPreview() {
   ctx.fillStyle = previewColor;
   ctx.lineWidth = 2;
 
+  const scale = getMapScale();
+
   ctx.beginPath();
-  ctx.arc(x, y, 18, 0, Math.PI * 2);
+  ctx.arc(x, y, 18 * scale, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.arc(x, y, range >= 99999 ? 320 : range, 0, Math.PI * 2);
+  const scaledRange = range >= 99999 ? 320 * scale : getRangeInPixels(range);
+  ctx.arc(x, y, scaledRange, 0, Math.PI * 2);
   ctx.strokeStyle = blocked
     ? 'rgba(255,102,127,.22)'
     : 'rgba(89,243,255,.20)';

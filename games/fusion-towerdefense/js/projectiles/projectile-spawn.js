@@ -57,6 +57,8 @@ function buildProjectileRuntimeState(projectileTypeId, runtimeData = {}, options
     runtimeData.effects || {}
   );
 
+  const baseRadius = runtimeData.radius ?? effectivePipeline.stats?.radius ?? 4;
+
   const projectile = {
     instanceId: createProjectileInstanceId(),
     projectileTypeId: resolvedDef.id,
@@ -72,7 +74,8 @@ function buildProjectileRuntimeState(projectileTypeId, runtimeData = {}, options
     damage: runtimeData.damage ?? 0,
     color: runtimeData.color ?? '#ffffff',
 
-    radius: runtimeData.radius ?? effectivePipeline.stats?.radius ?? 4,
+    baseRadius,
+    radius: scaleWorldValue(baseRadius),
     life: runtimeData.life ?? effectivePipeline.stats?.life ?? 2
   };
 
@@ -138,9 +141,10 @@ function spawnProjectile(projectileTypeId, runtimeData = {}, options = {}) {
 }
 
 function getTowerProjectileSpawnPosition(tower, angle, distance = 18) {
+  const scaledDistance = scaleWorldValue(distance);
   return {
-    x: tower.x + Math.cos(angle) * distance,
-    y: tower.y + Math.sin(angle) * distance
+    x: tower.x + Math.cos(angle) * scaledDistance,
+    y: tower.y + Math.sin(angle) * scaledDistance
   };
 }
 
