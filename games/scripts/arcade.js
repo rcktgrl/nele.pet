@@ -75,12 +75,16 @@ function setMode(mode) {
     ? 'Register once, then use your account across all games.'
     : isForgot
       ? 'Enter your account email and we will send a reset link.'
-      : 'Use your account to stay logged in after refresh.';
+      : 'Log in with your username and password.';
   submitButton.textContent = isRegister ? 'Register' : isForgot ? 'Send reset email' : 'Log in';
 
-  usernameLabel.hidden = !isRegister;
-  usernameInput.required = isRegister;
-  usernameInput.disabled = !isRegister;
+  usernameLabel.hidden = isForgot;
+  usernameInput.required = !isForgot;
+  usernameInput.disabled = isForgot;
+
+  emailInput.parentElement.hidden = !isRegister && !isForgot;
+  emailInput.required = isRegister || isForgot;
+  emailInput.disabled = !isRegister && !isForgot;
 
   passwordLabel.hidden = isForgot;
   passwordInput.required = !isForgot;
@@ -90,7 +94,7 @@ function setMode(mode) {
 
   modeCard.hidden = true;
   form.hidden = false;
-  emailInput.focus();
+  (isRegister || isForgot ? emailInput : usernameInput).focus();
 }
 
 function showModeChooser() {
@@ -101,7 +105,34 @@ function showModeChooser() {
   passwordLabel.hidden = false;
   passwordInput.required = true;
   passwordInput.disabled = false;
+  emailInput.parentElement.hidden = false;
+  emailInput.required = true;
+  emailInput.disabled = false;
+  usernameLabel.hidden = true;
+  usernameInput.required = false;
+  usernameInput.disabled = false;
   forgotPasswordButton.hidden = false;
+}
+
+async function resolveLoginEmail(username) {
+  const safeUsername = normalizeUsername(username);
+  if (!safeUsername) {
+    return { email: '', errorMessage: 'Please enter your username.' };
+  }
+
+  const { data, error } = await supabase.rpc('arcade_resolve_login_email', {
+    p_username: safeUsername,
+  });
+
+  if (error) {
+    return { email: '', errorMessage: friendlyAuthError(error) };
+  }
+
+  if (!data) {
+    return { email: '', errorMessage: 'Username not found. Please register first.' };
+  }
+
+  return { email: normalizeEmail(data), errorMessage: '' };
 }
 
 async function upsertProfile(userId, username, email) {
@@ -218,9 +249,16 @@ async function updateUsernameEverywhere(newUsername) {
     return;
   }
 
+  const profile = await getProfile(user);
+  const previousUsername = normalizeUsername(profile.username);
   const safeUsername = normalizeUsername(newUsername);
   if (!safeUsername || safeUsername.length < 3) {
     accountFeedback.textContent = 'Username must be 3-24 characters (letters, numbers, _, -, .).';
+    return;
+  }
+
+  if (safeUsername === previousUsername) {
+    accountFeedback.textContent = 'That is already your username.';
     return;
   }
 
@@ -242,10 +280,11 @@ async function updateUsernameEverywhere(newUsername) {
     return;
   }
 
-  const { error: leaderboardError } = await supabase
-    .from('turborace_leaderboard')
-    .update({ username: safeUsername })
-    .eq('user_id', user.id);
+  const { error: leaderboardError } = await supabase.rpc('arcade_sync_username_everywhere', {
+    p_user_id: user.id,
+    p_old_username: previousUsername,
+    p_new_username: safeUsername,
+  });
 
   if (leaderboardError) {
     accountFeedback.textContent = `${friendlyAuthError(leaderboardError)} (profile updated, but leaderboard sync failed)`;
@@ -259,12 +298,12 @@ async function updateUsernameEverywhere(newUsername) {
 }
 
 async function loginOrRegister(mode) {
-  const email = normalizeEmail(emailInput.value);
+  const registrationEmail = normalizeEmail(emailInput.value);
   const username = normalizeUsername(usernameInput.value);
   const password = passwordInput.value;
   const isForgot = mode === 'forgot';
 
-  if (!isValidEmail(email)) {
+  if (mode === 'register' && !isValidEmail(registrationEmail)) {
     feedback.textContent = 'Please enter a valid email address.';
     return;
   }
@@ -274,21 +313,31 @@ async function loginOrRegister(mode) {
     return;
   }
 
-  if (mode === 'register' && !username) {
-    feedback.textContent = 'Username is required for registration.';
+  if ((mode === 'register' || mode === 'login') && !username) {
+    feedback.textContent = mode === 'register' ? 'Username is required for registration.' : 'Username is required for login.';
     return;
   }
 
   if (isForgot) {
-    await sendPasswordReset(email, feedback);
+    await sendPasswordReset(registrationEmail, feedback);
     return;
+  }
+
+  let loginEmail = registrationEmail;
+  if (mode === 'login') {
+    const { email, errorMessage } = await resolveLoginEmail(username);
+    if (errorMessage) {
+      feedback.textContent = errorMessage;
+      return;
+    }
+    loginEmail = email;
   }
 
   feedback.textContent = mode === 'register' ? 'Creating account...' : 'Logging in...';
 
   const authCall = mode === 'register'
-    ? supabase.auth.signUp({ email, password, options: { data: { username } } })
-    : supabase.auth.signInWithPassword({ email, password });
+    ? supabase.auth.signUp({ email: registrationEmail, password, options: { data: { username } } })
+    : supabase.auth.signInWithPassword({ email: loginEmail, password });
 
   const { data, error } = await authCall;
   if (error) {
@@ -303,7 +352,7 @@ async function loginOrRegister(mode) {
   }
 
   const safeUsername = username || normalizeUsername(activeUser.user_metadata?.username) || 'player';
-  await upsertProfile(activeUser.id, safeUsername, email);
+  await upsertProfile(activeUser.id, safeUsername, registrationEmail || loginEmail);
   feedback.textContent = 'Success!';
   passwordInput.value = '';
   await showArcadeForUser(activeUser);
