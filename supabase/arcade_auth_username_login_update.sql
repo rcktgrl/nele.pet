@@ -1,16 +1,6 @@
 -- Run this migration in Supabase SQL editor.
 -- Supports username-first login and robust username-history sync.
 
--- Ensure required profile columns exist in environments that applied older setup steps partially.
-alter table if exists public.arcade_profiles
-  add column if not exists email text;
-
--- Backfill missing profile emails from auth.users when possible.
-update public.arcade_profiles ap
-set email = u.email
-from auth.users u
-where ap.id = u.id
-  and (ap.email is null or trim(ap.email) = '');
 
 -- Enforce case-insensitive uniqueness for usernames.
 create unique index if not exists arcade_profiles_username_lower_uidx
@@ -24,10 +14,11 @@ security definer
 set search_path = public
 stable
 as $$
-  select coalesce(ap.email, u.email)
-  from public.arcade_profiles ap
-  left join auth.users u on u.id = ap.id
-  where lower(ap.username) = lower(trim(coalesce(p_username, '')))
+
+  select p.email
+  from public.arcade_profiles p
+  where lower(p.username) = lower(trim(coalesce(p_username, '')))
+
   limit 1;
 $$;
 
