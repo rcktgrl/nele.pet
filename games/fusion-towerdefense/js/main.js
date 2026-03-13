@@ -31,6 +31,7 @@ function bindMenuButtons() {
   const playBtn = document.getElementById('playBtn');
   const mapMenuBtn = document.getElementById('mapMenuBtn');
   const researchMenuBtn = document.getElementById('researchMenuBtn');
+  const backToSelectionScreenBtn = document.getElementById('backToSelectionScreenBtn');
   const openDevResearchBtn = document.getElementById('openDevResearchBtn');
   const backToMenuBtn = document.getElementById('backToMenuBtn');
   const backFromResearchBtn = document.getElementById('backFromResearchBtn');
@@ -54,6 +55,12 @@ function bindMenuButtons() {
       updateMetaUI();
       renderResearchTree();
       showScreen('researchMenu');
+    });
+  }
+
+  if (backToSelectionScreenBtn) {
+    backToSelectionScreenBtn.addEventListener('click', () => {
+      window.location.href = '../index.html';
     });
   }
 
