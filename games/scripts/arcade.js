@@ -136,23 +136,22 @@ async function resolveLoginEmail(username) {
     return { email: '', errorMessage: friendlyAuthError(error) };
   }
 
-  // Fallback for branches/projects where the helper RPC has not been deployed yet.
-  const { data: profileData, error: profileError } = await supabase
-    .from('arcade_profiles')
-    .select('email')
-    .ilike('username', safeUsername)
-    .limit(1)
-    .maybeSingle();
+const { data: profileData, error: profileError } = await supabase
+  .from('arcade_profiles')
+  .select('email')
+  .ilike('username', safeUsername)
+  .limit(1)
+  .maybeSingle();
 
-  if (profileError) {
-    return { email: '', errorMessage: friendlyAuthError(profileError) };
-  }
+if (profileError) {
+  return { email: '', errorMessage: friendlyAuthError(profileError) };
+}
 
-  if (!profileData?.email) {
-    return { email: '', errorMessage: 'Username not found. Please register first.' };
-  }
+if (!profileData?.email) {
+  return { email: '', errorMessage: 'Username not found. Please register first.' };
+}
 
-  return { email: normalizeEmail(profileData.email), errorMessage: '' };
+return { email: normalizeEmail(profileData.email), errorMessage: '' };
 }
 
 async function upsertProfile(userId, username, email) {
