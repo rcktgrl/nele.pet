@@ -991,10 +991,11 @@ function getLaserDamageAtDistance(tower, enemy) {
 
   const profileValues = tower?.runtimeLaserDamageProfile?.values || special.damageFalloffValues || [15, 10, 5, 0];
   const profileDistances = tower?.runtimeLaserDamageProfile?.distances || special.damageFalloffDistances || [100, 160, 200, 250];
+  const scaledProfileDistances = profileDistances.map(scaleWorldValue);
 
   return getLinearFalloffDamage(
     distance,
     profileValues,
-    profileDistances
+    scaledProfileDistances
   );
 }

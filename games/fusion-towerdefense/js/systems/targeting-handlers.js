@@ -46,7 +46,8 @@ function isEnemyInTowerRange(tower, enemy) {
   if (!tower || !enemy) return false;
   const dx = enemy.x - tower.x;
   const dy = enemy.y - tower.y;
-  return dx * dx + dy * dy <= tower.range * tower.range;
+  const scaledRange = scaleWorldValue(tower.range);
+  return dx * dx + dy * dy <= scaledRange * scaledRange;
 }
 
 function getEnemiesInTowerRange(tower) {
