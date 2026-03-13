@@ -4,6 +4,15 @@
 
 begin;
 
+
+-- Allow mixed-case usernames while still enforcing case-insensitive uniqueness.
+alter table public.arcade_profiles
+  drop constraint if exists arcade_profiles_username_format;
+
+alter table public.arcade_profiles
+  add constraint arcade_profiles_username_format
+  check (username ~ '^[A-Za-z0-9_.-]{3,24}$');
+
 -- Enforce case-insensitive uniqueness for usernames.
 create unique index if not exists arcade_profiles_username_lower_uidx
 on public.arcade_profiles (lower(username));

@@ -9,7 +9,7 @@ create table if not exists public.arcade_profiles (
   email text not null unique,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint arcade_profiles_username_format check (username ~ '^[a-z0-9_.-]{3,24}$'),
+  constraint arcade_profiles_username_format check (username ~ '^[A-Za-z0-9_.-]{3,24}$'),
   constraint arcade_profiles_email_format check (email ~* '^[^\s@]+@[^\s@]+\.[^\s@]+$')
 );
 

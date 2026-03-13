@@ -37,7 +37,7 @@ let activeMode = null;
 let accountAction = null;
 
 function normalizeUsername(value) {
-  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_\-.]/g, '').slice(0, 24);
+  return String(value || '').trim().replace(/[^A-Za-z0-9_\-.]/g, '').slice(0, 24);
 }
 
 function normalizeUsernameLookup(value) {
