@@ -119,7 +119,6 @@ document.querySelector('[data-mode="register"]')?.addEventListener('click', asyn
 const {
   data: { session },
 } = await supabase.auth.getSession();
-
 if (session?.user) {
   await showArcadeForUser(session.user);
 }
