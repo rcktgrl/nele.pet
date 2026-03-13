@@ -83,6 +83,35 @@ const leaderboardByTrack=new Map();
 let leaderboardAvailable=true;
 let customTrackSyncAvailable=true;
 let currentRaceSubmitted=false;
+let currentArcadeUser={ user_id:null, name:'Anonymous' };
+
+function sanitizeUserId(raw){
+  const value=String(raw||'').trim();
+  return value||null;
+}
+
+async function loadArcadeUser(){
+  try{
+    const cached=JSON.parse(localStorage.getItem('arcade_user')||'null');
+    if(cached&&sanitizeUserId(cached.user_id)){
+      currentArcadeUser={ user_id:sanitizeUserId(cached.user_id), name:sanitizeLeaderboardName(cached.name) };
+      return currentArcadeUser;
+    }
+  }catch(error){
+    console.warn('Could not parse cached arcade user',error);
+  }
+
+  const { data }=await supabase.auth.getSession();
+  const user=data?.session?.user;
+  if(!user){
+    currentArcadeUser={ user_id:null, name:'Anonymous' };
+    return currentArcadeUser;
+  }
+  const guessedName=sanitizeLeaderboardName(user.user_metadata?.username || user.email?.split('@')[0] || 'Player');
+  currentArcadeUser={ user_id:sanitizeUserId(user.id), name:guessedName };
+  localStorage.setItem('arcade_user', JSON.stringify(currentArcadeUser));
+  return currentArcadeUser;
+}
 
 const keys={};
 document.addEventListener('keydown',e=>{
@@ -362,7 +391,7 @@ async function loadTrackLeaderboard(trackId,{force=false,limit=10}={}){
   if(!leaderboardAvailable) return {best:null,entries:[]};
   if(!force && leaderboardByTrack.has(key)) return leaderboardByTrack.get(key);
   const {data,error}=await supabase.from(LEADERBOARD_TABLE)
-    .select('track_id,username,time_ms')
+    .select('track_id,username,user_id,time_ms')
     .eq('track_id',key)
     .order('time_ms',{ascending:true})
     .limit(limit);
@@ -373,6 +402,7 @@ async function loadTrackLeaderboard(trackId,{force=false,limit=10}={}){
   }
   const entries=(data||[]).map((row)=>({
     track_id:normaliseTrackId(row.track_id),
+    user_id:sanitizeUserId(row.user_id),
     username:sanitizeLeaderboardName(row.username),
     time_ms:Math.max(0,Number(row.time_ms)||0)
   }));
@@ -381,12 +411,13 @@ async function loadTrackLeaderboard(trackId,{force=false,limit=10}={}){
   return payload;
 }
 
-async function submitTrackTime(trackId,username,timeMs){
+async function submitTrackTime(trackId,user,timeMs){
   const key=normaliseTrackId(trackId);
   if(!leaderboardAvailable) return false;
   const {error}=await supabase.from(LEADERBOARD_TABLE).insert({
     track_id:key,
-    username:sanitizeLeaderboardName(username),
+    user_id:sanitizeUserId(user.user_id),
+    username:sanitizeLeaderboardName(user.name),
     time_ms:Math.round(Math.max(0,timeMs||0)*1000)
   });
   if(error){
@@ -400,13 +431,11 @@ async function submitTrackTime(trackId,username,timeMs){
 async function handlePostRaceLeaderboard(){
   if(currentRaceSubmitted||!trkData||!pCar||!pCar.finTime||!Number.isFinite(pCar.finTime)) return;
   currentRaceSubmitted=true;
-  const entered=window.prompt('Enter your leaderboard name (max 24 chars):','');
-  if(entered===null) return;
-  const username=sanitizeLeaderboardName(entered);
-  const ok=await submitTrackTime(trkData.id,username,pCar.finTime);
+  const user=await loadArcadeUser();
+  const ok=await submitTrackTime(trkData.id,user,pCar.finTime);
   if(ok){
     const latest=await loadTrackLeaderboard(trkData.id,{force:true,limit:10});
-    renderResultsLeaderboard(latest.entries,username);
+    renderResultsLeaderboard(latest.entries,user.name);
     updateTrackCardBestTime(trkData.id);
     notify('Leaderboard time saved!');
   }
@@ -1905,4 +1934,4 @@ const { renderer, start:startRenderLoop }=createRenderPipeline({
   frameUpdate:updateFrame,
   getActiveCamera:()=>activeCam
 });
-setupLights(); startRenderLoop(); showMain();
+setupLights(); startRenderLoop(); loadArcadeUser(); showMain();
