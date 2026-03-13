@@ -402,7 +402,7 @@ async function loadTrackLeaderboard(trackId,{force=false,limit=10}={}){
   if(!leaderboardAvailable) return {best:null,entries:[]};
   if(!force && leaderboardByTrack.has(key)) return leaderboardByTrack.get(key);
   const {data,error}=await supabase.from(LEADERBOARD_TABLE)
-    .select('track_id,username,user_id,time_ms,car_name,car_hex')
+    .select('*')
     .eq('track_id',key)
     .order('time_ms',{ascending:true})
     .limit(limit);
@@ -1859,12 +1859,17 @@ function showCarSel(){
   document.getElementById('btnGo').disabled=(selCar==null);
   CARS.forEach((c,i)=>{
     const d=document.createElement('div'); d.className='card'+(selCar===i?' sel':'');
+    const topSpeedKph=Math.round(c.maxSpd*3.6);
+    const handlingPct=Math.round(c.hdl*100);
+    const brakeStat=Math.min(100,Math.round(c.brake*4));
     d.innerHTML=`<canvas class="carCardCanvas" aria-hidden="true"></canvas>
       <div class="dot" style="background:${c.hex};box-shadow:0 0 15px ${c.hex}55"></div>
       <h3>${c.name}</h3><p>${c.desc}</p>
       <div class="stat"><span class="sl">SPEED</span><div class="st"><div class="sf" style="width:${c.stats.s}%"></div></div><span class="sv">${c.stats.s}</span></div>
       <div class="stat"><span class="sl">ACCEL</span><div class="st"><div class="sf" style="width:${c.stats.a}%"></div></div><span class="sv">${c.stats.a}</span></div>
-      <div class="stat"><span class="sl">HANDL</span><div class="st"><div class="sf" style="width:${c.stats.h}%"></div></div><span class="sv">${c.stats.h}</span></div>`;
+      <div class="stat"><span class="sl">HANDL</span><div class="st"><div class="sf" style="width:${c.stats.h}%"></div></div><span class="sv">${c.stats.h}</span></div>
+      <div class="stat"><span class="sl">BRAKES</span><div class="st"><div class="sf" style="width:${brakeStat}%"></div></div><span class="sv">${c.brake}</span></div>
+      <p class="carMeta">Top Speed: ${topSpeedKph} km/h · Gears: ${c.gears} · Brake Force: ${c.brake} · Grip: ${handlingPct}%</p>`;
     const canvas=d.querySelector('.carCardCanvas');
     const visual=createCarVisual(c);
     visual.mesh.scale.setScalar(0.72);
