@@ -8,6 +8,7 @@ const CARD_DEFS = {
     rarity: 'common',
 
     unlockScore: 0,
+    buyCost: 500,
 
     description: 'Basic macht 30% mehr Schaden.',
     effect: {
@@ -16,12 +17,43 @@ const CARD_DEFS = {
       multiplier: 1.3
     }
   },
+
+  basic_flat_core: {
+    id: 'basic_flat_core',
+    name: 'Basic: Flat Core',
+    towerTypeId: 'basic',
+    rarity: 'common',
+    unlockScore: 2000,
+    buyCost: 1500,
+    description: 'Basic erhält +3 Grundschaden.',
+    effect: {
+      type: 'tower_stat_flat',
+      stat: 'damage',
+      amount: 3
+    }
+  },
+  basic_percent_core: {
+    id: 'basic_percent_core',
+    name: 'Basic: Overclock 20%',
+    towerTypeId: 'basic',
+    rarity: 'common',
+    unlockScore: 4000,
+    buyCost: 2500,
+    description: 'Basic erhält +20% Schaden.',
+    effect: {
+      type: 'tower_stat_multiplier',
+      stat: 'damage',
+      multiplier: 1.2
+    }
+  },
+
   sniper_chain_trigger: {
     id: 'sniper_chain_trigger',
     name: 'Sniper Chain Trigger',
     towerTypeId: 'sniper',
     rarity: 'rare',
     unlockScore: 5000,
+    buyCost: 4000,
     description: 'Nach einem Kill lädt der nächste Schuss 75% schneller nach.',
     effect: {
       type: 'sniper_kill_haste',
@@ -34,6 +66,7 @@ const CARD_DEFS = {
     towerTypeId: 'rapid',
     rarity: 'rare',
     unlockScore: 10000,
+    buyCost: 7000,
     description: '+200% Ammo und +100% Reload Speed für Rapid.',
     effect: {
       type: 'rapid_ammo_reload_boost',
@@ -41,12 +74,28 @@ const CARD_DEFS = {
       reloadSpeedMultiplier: 2
     }
   },
+
+  extra_start_money: {
+    id: 'extra_start_money',
+    name: 'Extra Start Money',
+    towerTypeId: null,
+    rarity: 'rare',
+    unlockScore: 10000,
+    buyCost: 10000,
+    description: '+100 Startgeld zu Beginn eines Runs.',
+    effect: {
+      type: 'start_money_bonus',
+      amount: 100
+    }
+  },
+
   laser_overtuned_lense: {
     id: 'laser_overtuned_lense',
     name: 'Overtuned Lense',
     towerTypeId: 'laser',
     rarity: 'epic',
     unlockScore: 15000,
+    buyCost: 12000,
     description: 'Laser zielt auf First. Nah wenig Schaden, weit entfernt sehr viel Schaden.',
     effect: {
       type: 'laser_overtuned_lense',

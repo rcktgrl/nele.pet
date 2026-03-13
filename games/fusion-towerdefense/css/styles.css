@@ -3,9 +3,9 @@
 html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Inter,Arial,sans-serif;background:radial-gradient(circle at top,rgba(255,94,220,.1),transparent 32%),radial-gradient(circle at bottom,rgba(89,243,255,.1),transparent 36%),linear-gradient(180deg,#06070f,#0a1020 55%,#06070f);color:var(--text)}
 body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.2;background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);background-size:30px 30px}
 button,input,textarea,select{font:inherit}
-.screen{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px}
+.screen{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:clamp(8px,2vw,24px)}
 .screen.active{display:flex}
-.menu-card{width:min(1040px,100%);background:var(--panel);border:1px solid var(--border);border-radius:28px;backdrop-filter:blur(16px);padding:28px}
+.menu-card{width:min(1200px,100%);max-height:100%;background:var(--panel);border:1px solid var(--border);border-radius:28px;backdrop-filter:blur(16px);padding:clamp(14px,2vw,28px);overflow:auto}
 .title-wrap{display:flex;flex-direction:column;gap:8px;margin-bottom:24px}
 .eyebrow{color:var(--cyan);text-transform:uppercase;letter-spacing:.28em;font-size:12px;font-weight:700}
 h1,h2,h3,p{margin:0}
@@ -32,9 +32,9 @@ h1{font-size:clamp(36px,7vw,68px);line-height:.96;letter-spacing:-.04em}
 .setting-copy span{color:var(--muted);font-size:14px;line-height:1.4}
 .number-control{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:8px}
 .number-control input{width:88px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.07);border-radius:10px;color:var(--text);padding:10px;text-align:center;outline:none}
-.research-full{width:98vw;height:94vh}
+.research-full{width:100%;height:100%}
 .research-card{width:100%;height:100%;background:var(--panel);border:1px solid var(--border);border-radius:28px;backdrop-filter:blur(16px);padding:18px;display:flex;flex-direction:column;min-height:0}
-.research-tree{position:relative;flex:1;min-height:74vh;height:74vh;border:1px solid rgba(255,255,255,.06);border-radius:18px;background:rgba(255,255,255,.02);overflow:hidden;cursor:grab}
+.research-tree{position:relative;flex:1;min-height:360px;height:100%;border:1px solid rgba(255,255,255,.06);border-radius:18px;background:rgba(255,255,255,.02);overflow:hidden;cursor:grab}
 .research-tree.panning{cursor:grabbing}
 .research-lines,.dev-lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .research-content,.dev-content{position:absolute;left:0;top:0;width:6400px;height:3600px;transform-origin:0 0}
@@ -55,7 +55,7 @@ h1{font-size:clamp(36px,7vw,68px);line-height:.96;letter-spacing:-.04em}
 .dev-side input,.dev-side textarea,.dev-side select{width:100%;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.07);border-radius:10px;color:var(--text);padding:10px;outline:none}
 .dev-side textarea{min-height:84px;resize:vertical}
 #gameScreen{padding:16px;align-items:stretch;justify-content:stretch}
-.game-shell{width:100%;height:100%;display:grid;grid-template-columns:390px 1fr;gap:16px}
+.game-shell{width:100%;height:100%;display:grid;grid-template-columns:clamp(280px,26vw,390px) minmax(0,1fr);gap:16px}
 .sidebar{background:var(--panel);border:1px solid var(--border);border-radius:24px;backdrop-filter:blur(16px);padding:16px;display:flex;flex-direction:column;gap:14px;overflow:auto}
 .game-card{background:rgba(9,15,30,.92);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:14px}
 .hud-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -77,11 +77,11 @@ canvas{display:block;width:100%;height:100%}
 .overlay-chip{background:rgba(10,14,30,.85);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;pointer-events:auto}
 .overlay-chip span{color:var(--muted);font-size:13px}
 @media (max-width:1100px){.game-shell,.menu-grid,.settings-layout,.dev-layout{grid-template-columns:1fr}#gameScreen{overflow:auto}.game-area{min-height:60vh}.tower-list{grid-template-columns:1fr}}
-.card-slot-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.card-slot-grid{display:grid;grid-template-columns:repeat(var(--slot-columns,1),minmax(180px,260px));justify-content:center;gap:12px}
 .card-slot{min-height:120px;border:1px dashed rgba(255,255,255,.22);border-radius:14px;background:rgba(255,255,255,.02);padding:12px;display:flex;align-items:center;justify-content:center;text-align:center}
 .card-slot.unlocked{border-style:solid;border-color:rgba(89,243,255,.35)}
 .card-search{min-width:260px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.07);border-radius:10px;color:var(--text);padding:10px;outline:none}
-.card-pool-grid{margin-top:12px;display:grid;grid-template-rows:repeat(3,minmax(120px,1fr));grid-auto-flow:column;grid-auto-columns:minmax(220px,220px);gap:12px;max-height:420px;overflow-x:auto;overflow-y:hidden;padding-bottom:6px}
+.card-pool-grid{margin-top:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;max-height:min(48vh,480px);overflow:auto;padding-bottom:6px}
 .owned-card{border:2px solid rgba(255,255,255,.2);border-radius:14px;background:linear-gradient(180deg,rgba(20,27,56,.95),rgba(12,18,38,.95));padding:10px;display:flex;flex-direction:column;gap:8px;text-align:left;color:var(--text);cursor:pointer;min-height:140px}
 .owned-card-image{font-size:28px;font-weight:900}
 .owned-card-name{font-weight:800}
@@ -91,3 +91,11 @@ canvas{display:block;width:100%;height:100%}
 .menu-card{position:relative}
 .owned-card-meta{font-size:11px;color:var(--muted);margin-top:auto}
 .owned-card.locked{opacity:.55;filter:saturate(.6);cursor:not-allowed}
+
+.card-slot.drag-over{border-color:rgba(125,255,176,.8);background:rgba(125,255,176,.08)}
+.center-placeholder{max-width:420px;width:100%}
+
+.research-card-shop{display:grid;grid-template-columns:1fr;gap:10px;max-height:220px;overflow:auto}
+.research-card-item{border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px;background:rgba(255,255,255,.02);display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+.research-card-item .name{font-weight:800}
+.research-card-item .meta{font-size:12px;color:var(--muted)}

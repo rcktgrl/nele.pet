@@ -1,4 +1,4 @@
-function resizeCanvas(){const r=canvas.parentElement.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.floor(r.width*dpr);canvas.height=Math.floor(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0)}
+function resizeCanvas(){const r=canvas.parentElement.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.floor(r.width*dpr);canvas.height=Math.floor(r.height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);refreshMapLayoutFromCanvas()}
 
 function drawBackground(){const r=canvas.getBoundingClientRect(),g=ctx.createLinearGradient(0,0,0,r.height);ctx.clearRect(0,0,r.width,r.height);g.addColorStop(0,'#060912');g.addColorStop(1,'#0b1430');ctx.fillStyle=g;ctx.fillRect(0,0,r.width,r.height)}
 function roundRect(c,x,y,w,h,r,f,s){r=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();if(f)c.fill();if(s)c.stroke()}
