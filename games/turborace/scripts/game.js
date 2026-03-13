@@ -1843,6 +1843,7 @@ function showCarSel(){
   ensureCarCardPreviewRenderer();
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sCar').style.display='flex';
+  gState='carSel';
   const ct=document.getElementById('carCards'); ct.innerHTML='';
   document.getElementById('btnGo').disabled=(selCar==null);
   CARS.forEach((c,i)=>{
