@@ -19,8 +19,26 @@ function getCardBuyCost(card) {
   return card?.buyCost || 0;
 }
 
+function isCardTowerUnlocked(card) {
+  if (!card || !card.towerTypeId) {
+    return true;
+  }
+
+  const towerDef = getTowerDef(card.towerTypeId);
+  if (!towerDef) {
+    return false;
+  }
+
+  const unlockNodeId = towerDef.unlock?.researchNodeId;
+  if (!unlockNodeId) {
+    return true;
+  }
+
+  return metaProgress.researched[unlockNodeId] !== false;
+}
+
 function canBuyCard(card) {
-  if (!card || isCardOwned(card.id) || !isCardScoreUnlocked(card)) {
+  if (!card || isCardOwned(card.id) || !isCardScoreUnlocked(card) || !isCardTowerUnlocked(card)) {
     return false;
   }
 
@@ -35,6 +53,10 @@ function buyCard(cardId) {
 
   if (!isCardScoreUnlocked(card)) {
     return setStatus(`Karte ${card.name} ist noch nicht verfügbar.`, true, 2.5);
+  }
+
+  if (!isCardTowerUnlocked(card)) {
+    return setStatus(`Du brauchst zuerst ${card.towerTypeId} Research.`, true, 2.5);
   }
 
   if (isCardOwned(card.id)) {
@@ -86,7 +108,8 @@ function setCardToSlot(slotIndex, cardId) {
     return;
   }
 
-  if (!isCardOwned(cardId)) {
+  const card = getCardDef(cardId);
+  if (!isCardOwned(cardId) || !isCardTowerUnlocked(card)) {
     return;
   }
 
@@ -313,7 +336,7 @@ function renderOwnedCardsGrid() {
   }
 
   const query = (ui.cardSearchInput?.value || '').trim().toLowerCase();
-  const cardDefs = getCardDefsArray().filter(card => isCardOwned(card.id));
+  const cardDefs = getCardDefsArray().filter(card => isCardOwned(card.id) && isCardTowerUnlocked(card));
   const filtered = query
     ? cardDefs.filter(card => card.name.toLowerCase().includes(query))
     : cardDefs;
@@ -358,26 +381,98 @@ function renderOwnedCardsGrid() {
   }
 }
 
+
+let cardShopTooltipEl = null;
+
+function getCardShopTooltipDetails(card) {
+  const lines = [];
+  lines.push(`Seltenheit: ${card.rarity}`);
+  if (card.towerTypeId) {
+    const towerDef = getTowerDef(card.towerTypeId);
+    lines.push(`Turm: ${towerDef?.name || card.towerTypeId}`);
+  } else {
+    lines.push('Turm: Run-weit');
+  }
+
+  const effect = card.effect || {};
+  if (effect.type === 'tower_stat_multiplier' && effect.stat === 'damage') {
+    lines.push(`Effekt: x${effect.multiplier} Schaden`);
+  } else if (effect.type === 'tower_stat_flat' && effect.stat === 'damage') {
+    lines.push(`Effekt: +${effect.amount} Schaden`);
+  } else if (effect.type === 'start_money_bonus') {
+    lines.push(`Effekt: +${effect.amount} Startgeld`);
+  } else {
+    lines.push(`Effekt: ${effect.type || 'Spezialeffekt'}`);
+  }
+
+  return lines.join(' · ');
+}
+
+function ensureCardShopTooltip() {
+  if (cardShopTooltipEl) {
+    return cardShopTooltipEl;
+  }
+
+  cardShopTooltipEl = document.createElement('div');
+  cardShopTooltipEl.className = 'card-shop-tooltip';
+  cardShopTooltipEl.style.display = 'none';
+  document.body.appendChild(cardShopTooltipEl);
+  return cardShopTooltipEl;
+}
+
+function hideCardShopTooltip() {
+  if (cardShopTooltipEl) {
+    cardShopTooltipEl.style.display = 'none';
+  }
+}
+
+function showCardShopTooltip(card, anchorRect) {
+  const tip = ensureCardShopTooltip();
+  tip.innerHTML = `
+    <div class="card-shop-tooltip-title" style="color:${getCardRarityColor(card.rarity)}">${card.name}</div>
+    <div class="card-shop-tooltip-body">${getCardShopTooltipDetails(card)}<br><br>${card.description}</div>
+  `;
+  tip.style.display = 'block';
+
+  const gap = 10;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const tipRect = tip.getBoundingClientRect();
+
+  let left = anchorRect.right + gap;
+  if (anchorRect.left > vw / 2) {
+    left = anchorRect.left - tipRect.width - gap;
+  }
+
+  let top = anchorRect.top + (anchorRect.height - tipRect.height) / 2;
+
+  left = Math.max(8, Math.min(left, vw - tipRect.width - 8));
+  top = Math.max(8, Math.min(top, vh - tipRect.height - 8));
+
+  tip.style.left = `${left}px`;
+  tip.style.top = `${top}px`;
+}
+
 function renderCardResearchShop() {
-  if (ui.researchUnlockCardSlotBtn) {
+  if (ui.cardShopUnlockCardSlotBtn) {
     const unlocked = metaProgress.cardSlotsUnlocked || 0;
     if (unlocked >= CARD_SLOT_UNLOCK_COSTS.length) {
-      ui.researchUnlockCardSlotBtn.textContent = 'Alle Slots freigeschaltet';
-      ui.researchUnlockCardSlotBtn.disabled = true;
+      ui.cardShopUnlockCardSlotBtn.textContent = 'Alle Slots freigeschaltet';
+      ui.cardShopUnlockCardSlotBtn.disabled = true;
     } else {
       const cost = CARD_SLOT_UNLOCK_COSTS[unlocked];
-      ui.researchUnlockCardSlotBtn.textContent = `Slot ${unlocked + 1} freischalten ($${cost})`;
-      ui.researchUnlockCardSlotBtn.disabled = !canUnlockNextCardSlot();
+      ui.cardShopUnlockCardSlotBtn.textContent = `Slot ${unlocked + 1} freischalten ($${cost})`;
+      ui.cardShopUnlockCardSlotBtn.disabled = !canUnlockNextCardSlot();
     }
   }
 
-  if (!ui.researchCardShopGrid) {
+  if (!ui.cardShopGrid) {
     return;
   }
 
-  ui.researchCardShopGrid.innerHTML = '';
+  ui.cardShopGrid.innerHTML = '';
 
-  const cards = getCardDefsArray().filter(card => !isCardOwned(card.id));
+  const cards = getCardDefsArray().filter(card => !isCardOwned(card.id) && isCardTowerUnlocked(card));
 
   for (const card of cards) {
     const row = document.createElement('div');
@@ -386,19 +481,23 @@ function renderCardResearchShop() {
     const scoreLocked = !isCardScoreUnlocked(card);
     const cost = getCardBuyCost(card);
 
+    const canBuy = canBuyCard(card);
+
     row.innerHTML = `
-      <div>
-        <div class="name" style="color:${getCardRarityColor(card.rarity)}">${card.name}</div>
-        <div class="meta">${card.description}</div>
-        <div class="meta">${scoreLocked ? `Benötigt ${card.unlockScore} Best Score` : `Kosten: $${cost}`}</div>
-      </div>
-      <button class="btn small ${scoreLocked || !canBuyCard(card) ? 'locked' : ''}" data-buy-card="${card.id}" ${scoreLocked ? 'disabled' : ''}>Kaufen</button>
+      <div class="name" style="color:${getCardRarityColor(card.rarity)}">${card.name}</div>
+      <div class="price">$${cost}</div>
+      <div class="req">${scoreLocked ? `Benötigt ${card.unlockScore}` : 'Verfügbar'}</div>
+      <button class="btn small ${!canBuy ? 'locked' : ''}" data-buy-card="${card.id}" ${!canBuy ? 'disabled' : ''}>Kaufen</button>
     `;
 
-    ui.researchCardShopGrid.appendChild(row);
+    row.addEventListener('mouseenter', () => showCardShopTooltip(card, row.getBoundingClientRect()));
+    row.addEventListener('mousemove', () => showCardShopTooltip(card, row.getBoundingClientRect()));
+    row.addEventListener('mouseleave', hideCardShopTooltip);
+
+    ui.cardShopGrid.appendChild(row);
   }
 
-  ui.researchCardShopGrid.querySelectorAll('[data-buy-card]').forEach(btn => {
+  ui.cardShopGrid.querySelectorAll('[data-buy-card]').forEach(btn => {
     btn.addEventListener('click', () => buyCard(btn.dataset.buyCard));
   });
 }

@@ -42,6 +42,9 @@ function toggleWaveAuto() {
 function updateMetaUI() {
   ui.metaCashValue.textContent = Math.floor(metaProgress.cash);
   ui.mainMetaCash.textContent = Math.floor(metaProgress.cash);
+  if (ui.globalMetaCashValue) {
+    ui.globalMetaCashValue.textContent = Math.floor(metaProgress.cash);
+  }
 
   const unlocked = [];
   for (const k in metaProgress.researched) {
