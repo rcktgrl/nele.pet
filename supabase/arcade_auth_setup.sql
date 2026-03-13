@@ -101,5 +101,12 @@ with check (
   user_id is null or auth.uid() = user_id
 );
 
+create policy "users can update their own leaderboard username"
+on public.turborace_leaderboard
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
 create index if not exists turborace_leaderboard_track_time_idx
 on public.turborace_leaderboard (track_id, time_ms asc, created_at asc);
