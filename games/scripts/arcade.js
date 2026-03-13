@@ -136,11 +136,24 @@ async function resolveLoginEmail(username) {
     return { email: '', errorMessage: friendlyAuthError(error) };
   }
 
-  return {
-    email: '',
-    errorMessage: 'Username login is not available on this branch yet. Please log in with your email, or run the latest Supabase auth migration.',
-  };
+  const { data: fallbackProfile, error: fallbackError } = await supabase
+    .from('arcade_profiles')
+    .select('email')
+    .ilike('username', safeUsername)
+    .maybeSingle();
 
+  if (fallbackError) {
+    return {
+      email: '',
+      errorMessage: 'Username login is not available on this branch yet. Please log in with your email, or run the latest Supabase auth migration.',
+    };
+  }
+
+  if (!fallbackProfile?.email) {
+    return { email: '', errorMessage: 'Username not found. Please register first.' };
+  }
+
+  return { email: normalizeEmail(fallbackProfile.email), errorMessage: '' };
 }
 
 async function upsertProfile(userId, username, email) {
@@ -296,6 +309,24 @@ async function updateUsernameEverywhere(newUsername) {
   });
 
   if (leaderboardError) {
+    if (leaderboardError.code === 'PGRST202') {
+      const { error: fallbackSyncError } = await supabase
+        .from('turborace_leaderboard')
+        .update({ username: safeUsername })
+        .eq('user_id', user.id);
+
+      if (fallbackSyncError) {
+        accountFeedback.textContent = `${friendlyAuthError(fallbackSyncError)} (profile updated, but leaderboard sync failed)`;
+        return;
+      }
+
+      const cached = JSON.parse(localStorage.getItem('arcade_user') || '{}');
+      cacheArcadeUser(user.id, safeUsername, normalizeEmail(cached.email || user.email));
+      userPill.textContent = `Logged in as ${safeUsername} (${normalizeEmail(cached.email || user.email)})`;
+      accountFeedback.textContent = 'Username updated. Run the latest Supabase auth migration to sync historical leaderboard names.';
+      return;
+    }
+
     accountFeedback.textContent = `${friendlyAuthError(leaderboardError)} (profile updated, but leaderboard sync failed)`;
     return;
   }
