@@ -9,17 +9,41 @@ create unique index if not exists arcade_profiles_username_lower_uidx
 on public.arcade_profiles (lower(username));
 
 -- Resolve login email from username without exposing table access patterns in the client.
+-- Also supports legacy users that may exist in auth.users before their public profile row was upserted.
 create or replace function public.arcade_resolve_login_email(p_username text)
 returns text
-language sql
+language plpgsql
 security definer
 set search_path = public
 stable
 as $$
+declare
+  lookup_username text := lower(trim(coalesce(p_username, '')));
+  resolved_email text;
+begin
+  if lookup_username = '' then
+    return null;
+  end if;
+
   select p.email
+  into resolved_email
   from public.arcade_profiles p
-  where lower(p.username) = lower(trim(coalesce(p_username, '')))
+  where lower(p.username) = lookup_username
   limit 1;
+
+  if resolved_email is not null then
+    return lower(trim(resolved_email));
+  end if;
+
+  -- Legacy fallback: query auth.users metadata directly.
+  select u.email
+  into resolved_email
+  from auth.users u
+  where lower(coalesce(u.raw_user_meta_data->>'username', '')) = lookup_username
+  limit 1;
+
+  return lower(trim(coalesce(resolved_email, '')));
+end;
 $$;
 
 revoke all on function public.arcade_resolve_login_email(text) from public;
