@@ -26,16 +26,25 @@
   </main>
 
   <div class="auth-overlay" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-    <form id="auth-form" class="auth-card">
-      <h2 id="auth-title">Log in to Arcade</h2>
-      <p>Use your account to stay logged in after refresh.</p>
+    <section id="auth-mode-card" class="auth-card">
+      <h2 id="auth-title">Welcome to Arcade</h2>
+      <p>Choose an option to continue.</p>
+      <div class="auth-actions auth-actions-stack">
+        <button type="button" data-auth-mode="login">Log in</button>
+        <button type="button" data-auth-mode="register">Register</button>
+      </div>
+    </section>
+
+    <form id="auth-form" class="auth-card" hidden>
+      <h2 id="auth-form-title">Log in to Arcade</h2>
+      <p id="auth-form-subtitle">Use your account to stay logged in after refresh.</p>
       <label>
         Email
         <input id="auth-email" type="email" maxlength="120" autocomplete="email" required>
       </label>
-      <label>
+      <label id="auth-username-label" hidden>
         Username
-        <input id="auth-username" minlength="3" maxlength="24" autocomplete="username" required>
+        <input id="auth-username" minlength="3" maxlength="24" autocomplete="username">
       </label>
       <label>
         Password
@@ -44,8 +53,8 @@
       <p class="auth-note">Disclaimer: your email and username are saved for account login and profile lookup across games. Passwords are never stored in this site code and are handled securely by Supabase Auth.</p>
 
       <div class="auth-actions">
-        <button type="submit" data-mode="login">Log in</button>
-        <button type="button" data-mode="register">Register</button>
+        <button type="submit" id="auth-submit">Log in</button>
+        <button type="button" id="auth-back">Back</button>
       </div>
       <p id="auth-feedback" aria-live="polite"></p>
     </form>

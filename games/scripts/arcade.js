@@ -5,12 +5,20 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const overlay = document.getElementById('auth-overlay');
+const modeCard = document.getElementById('auth-mode-card');
 const form = document.getElementById('auth-form');
+const formTitle = document.getElementById('auth-form-title');
+const formSubtitle = document.getElementById('auth-form-subtitle');
+const submitButton = document.getElementById('auth-submit');
+const backButton = document.getElementById('auth-back');
 const feedback = document.getElementById('auth-feedback');
 const emailInput = document.getElementById('auth-email');
+const usernameLabel = document.getElementById('auth-username-label');
 const usernameInput = document.getElementById('auth-username');
 const passwordInput = document.getElementById('auth-password');
 const userPill = document.getElementById('user-pill');
+
+let activeMode = null;
 
 function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_\-.]/g, '').slice(0, 24);
@@ -26,6 +34,34 @@ function isValidEmail(value) {
 
 function cacheArcadeUser(userId, username, email) {
   localStorage.setItem('arcade_user', JSON.stringify({ user_id: userId, name: username, email }));
+}
+
+function setMode(mode) {
+  activeMode = mode;
+  feedback.textContent = '';
+  form.reset();
+
+  const isRegister = mode === 'register';
+  formTitle.textContent = isRegister ? 'Create your Arcade account' : 'Log in to Arcade';
+  formSubtitle.textContent = isRegister
+    ? 'Register once, then use your account across all games.'
+    : 'Use your account to stay logged in after refresh.';
+  submitButton.textContent = isRegister ? 'Register' : 'Log in';
+
+  usernameLabel.hidden = !isRegister;
+  usernameInput.required = isRegister;
+  usernameInput.disabled = !isRegister;
+
+  modeCard.hidden = true;
+  form.hidden = false;
+  emailInput.focus();
+}
+
+function showModeChooser() {
+  activeMode = null;
+  feedback.textContent = '';
+  form.hidden = true;
+  modeCard.hidden = false;
 }
 
 async function upsertProfile(userId, username, email) {
@@ -107,20 +143,33 @@ async function loginOrRegister(mode) {
   await showArcadeForUser(activeUser);
 }
 
-
 form?.addEventListener('submit', async (event) => {
   event.preventDefault();
-  await loginOrRegister('login');
+  if (!activeMode) {
+    feedback.textContent = 'Please choose Log in or Register first.';
+    showModeChooser();
+    return;
+  }
+  await loginOrRegister(activeMode);
 });
 
-document.querySelector('[data-mode="register"]')?.addEventListener('click', async () => {
-  await loginOrRegister('register');
+document.querySelector('[data-auth-mode="login"]')?.addEventListener('click', () => {
+  setMode('login');
 });
 
+document.querySelector('[data-auth-mode="register"]')?.addEventListener('click', () => {
+  setMode('register');
+});
+
+backButton?.addEventListener('click', () => {
+  showModeChooser();
+});
 
 const {
   data: { session },
 } = await supabase.auth.getSession();
 if (session?.user) {
   await showArcadeForUser(session.user);
+} else {
+  showModeChooser();
 }
