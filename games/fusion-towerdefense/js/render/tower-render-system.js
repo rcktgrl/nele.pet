@@ -179,6 +179,7 @@ function drawModernTowerSingle(tower) {
   drawTowerRitualOverlay(tower);
 
   ctx.translate(tower.x, tower.y);
+  ctx.scale(getMapScale(), getMapScale());
 
   drawTowerModernBase(tower, def);
   drawTowerModernLayers(tower, def);
@@ -196,6 +197,7 @@ function drawLegacyTowerSingle(tower) {
   drawTowerAmmoOverlay(tower);
 
   ctx.translate(tower.x, tower.y);
+  ctx.scale(getMapScale(), getMapScale());
   ctx.rotate(getTowerDrawAngle(tower));
 
   drawTowerWeaponShape(tower);
