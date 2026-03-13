@@ -79,7 +79,7 @@ function update(dt) {
       const target = game.enemies.find(e => e.instanceId === t.TargetId);
       if (!target) continue;
 
-      if (Math.hypot(target.x - t.x, target.y - t.y) <= scaleWorldValue(t.range)) {
+      if (Math.hypot(target.x - t.x, target.y - t.y) <= getRangeInPixels(t.range)) {
         const stackRatio = Math.min(1, (t.Stacks || 0) / 40);
 
         game.effects.push({

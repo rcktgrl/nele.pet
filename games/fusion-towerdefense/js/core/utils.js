@@ -41,10 +41,23 @@ function getScoreMultiplierForPathLength(v){v=clamp(v,20,50);if(v<=40)return ler
 function getMapScale() {
   if (!game?.map) return 1;
   const scale = game.map.renderScale;
-  return Number.isFinite(scale) && scale > 0 ? scale : 1;
+  if (!Number.isFinite(scale) || scale <= 0) return 1;
+  return Math.min(1, scale);
 }
 
 function scaleWorldValue(value) {
   return value * getMapScale();
+}
+
+
+function getTowerVisualScale() {
+  return getMapScale() * 0.5;
+}
+
+function getRangeInPixels(rangeValue) {
+  if (!Number.isFinite(rangeValue)) return 0;
+  if (rangeValue >= 99999) return Infinity;
+  const cellSize = game?.map?.cellSize || BASE_MAP_CELL_SIZE || 72;
+  return (rangeValue / 100) * cellSize;
 }
 

@@ -1,4 +1,4 @@
-import { THREE } from "./three";
+import { THREE } from './three.js';
 
 export const gc=document.getElementById('gc');
 export const scene=new THREE.Scene();

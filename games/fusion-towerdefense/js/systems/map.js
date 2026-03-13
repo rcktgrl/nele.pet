@@ -295,7 +295,10 @@ function refreshMapLayoutFromCanvas() {
   const contentWidth = Math.max(1, parentRect.width - horizontalPadding * 2);
   const contentHeight = Math.max(1, parentRect.height - verticalPadding * 2);
 
-  const baseCellSize = BASE_MAP_CELL_SIZE || 72;
+  if (contentWidth < 160 || contentHeight < 120) {
+    return;
+  }
+
   const cellSize = Math.max(
     28,
     Math.floor(
@@ -305,6 +308,8 @@ function refreshMapLayoutFromCanvas() {
       )
     )
   );
+
+  const baseCellSize = BASE_MAP_CELL_SIZE || 72;
 
   const mapPixelWidth = cellSize * game.map.cols;
   const mapPixelHeight = cellSize * game.map.rows;
