@@ -295,7 +295,6 @@ function refreshMapLayoutFromCanvas() {
   const contentWidth = Math.max(1, parentRect.width - horizontalPadding * 2);
   const contentHeight = Math.max(1, parentRect.height - verticalPadding * 2);
 
-  const baseCellSize = BASE_MAP_CELL_SIZE || 72;
   const cellSize = Math.max(
     28,
     Math.floor(
@@ -306,11 +305,13 @@ function refreshMapLayoutFromCanvas() {
     )
   );
 
+  game.map.baseCellSize = game.map.baseCellSize || cellSize || BASE_MAP_CELL_SIZE || 72;
+
   const mapPixelWidth = cellSize * game.map.cols;
   const mapPixelHeight = cellSize * game.map.rows;
 
   game.map.cellSize = cellSize;
-  game.map.renderScale = cellSize / baseCellSize;
+  game.map.renderScale = cellSize / game.map.baseCellSize;
   game.map.offsetX = Math.floor((parentRect.width - mapPixelWidth) / 2);
   game.map.offsetY = Math.floor((parentRect.height - mapPixelHeight) / 2);
   game.map.pathPoints = game.map.pathCells.map(cell => ({
