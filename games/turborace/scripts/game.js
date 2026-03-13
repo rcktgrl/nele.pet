@@ -7,6 +7,7 @@ import { AI } from './ai-script.js';
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/+esm';
 import { THREE } from './three.js';
 import { createCarVisual } from './car-model.js';
+import { gc, scene, clock, camChase, camCock, dc, dctx, mmctx, state } from './state.js';
 import {
   isTouchControlsVisibleInState,
   updateTouchControlsVisibility,
@@ -39,18 +40,6 @@ import {
 'use strict';
 
 globalThis.announce=announce;
-
-// ═══════════════════════════════════════════════════════
-//  THREE.JS INIT
-// ═══════════════════════════════════════════════════════
-const gc=document.getElementById('gc');
-const scene=new THREE.Scene();
-const clock=new THREE.Clock();
-const camChase=new THREE.PerspectiveCamera(72,1,.1,2000);
-const camCock=new THREE.PerspectiveCamera(88,1,.05,2000);
-let activeCam=camChase, camMode='chase';
-const dc=document.getElementById('dc'),dctx=dc.getContext('2d');
-const mmc=document.getElementById('mmc'),mmctx=mmc.getContext('2d');
 
 // ═══════════════════════════════════════════════════════
 //  STATE
@@ -1138,7 +1127,7 @@ function updateCamera(){
   }
   raceCamOrbit.pitch=Math.max(-0.55,Math.min(0.75,raceCamOrbit.pitch));
   const fwd=new THREE.Vector3(Math.sin(pCar.hdg),0,Math.cos(pCar.hdg));
-  if(camMode==='chase'){
+  if(state.camMode==='chase'){
     const orbitYaw=pCar.hdg+Math.PI+raceCamOrbit.yaw;
     const back=new THREE.Vector3(Math.sin(orbitYaw),0,Math.cos(orbitYaw));
     const camHeight=5.0+raceCamOrbit.pitch*3.5;
@@ -1146,7 +1135,7 @@ function updateCamera(){
     camChase.position.lerp(tgt,.09);
     const look=pCar.pos.clone().addScaledVector(fwd,5).add(new THREE.Vector3(0,.8+raceCamOrbit.pitch*1.2,0));
     camChase.lookAt(look);
-    activeCam=camChase;
+    state.activeCam=camChase;
   } else {
     // Use per-car cockpit height — camera above roof, moved forward past windshield
     const camH=pCar.data.camH||1.8;
@@ -1156,16 +1145,16 @@ function updateCamera(){
     camCock.near=1.2; camCock.updateProjectionMatrix();
     const lookDir=new THREE.Vector3(Math.sin(pCar.hdg+raceCamOrbit.yaw*0.65),Math.max(-0.25,Math.min(0.25,-0.04-raceCamOrbit.pitch*0.18)),Math.cos(pCar.hdg+raceCamOrbit.yaw*0.65)).normalize();
     camCock.lookAt(cp.clone().addScaledVector(lookDir,55));
-    activeCam=camCock;
+    state.activeCam=camCock;
   }
 }
 
 function toggleCam(){
-  camMode=camMode==='chase'?'cockpit':'chase';
-  dc.style.display=camMode==='cockpit'?'block':'none';
-  document.getElementById('speedBox').style.display=camMode==='chase'?'block':'none';
-  document.getElementById('gearBox').style.display=camMode==='chase'?'block':'none';
-  document.getElementById('camLabel').textContent=camMode==='chase'?'[ C ] COCKPIT VIEW':'[ C ] CHASE CAM';
+  state.camMode=state.camMode==='chase'?'cockpit':'chase';
+  dc.style.display=state.camMode==='cockpit'?'block':'none';
+  document.getElementById('speedBox').style.display=state.camMode==='chase'?'block':'none';
+  document.getElementById('gearBox').style.display=state.camMode==='chase'?'block':'none';
+  document.getElementById('camLabel').textContent=state.camMode==='chase'?'[ C ] COCKPIT VIEW':'[ C ] CHASE CAM';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1194,7 +1183,7 @@ function updateHUD(){
 // ═══════════════════════════════════════════════════════
 function resizeDC(){dc.width=window.innerWidth;dc.height=window.innerHeight;}
 function drawDash(){
-  if(camMode!=='cockpit'||!pCar)return;
+  if(state.camMode!=='cockpit'||!pCar)return;
   const W=dc.width,H=dc.height,ctx=dctx,ph=H*.3,py=H-ph;
   ctx.clearRect(0,0,W,H);
   const pg=ctx.createLinearGradient(0,py,0,H);
@@ -1346,7 +1335,7 @@ function initRace(){
   document.getElementById('hint').style.display='block';
   updateTouchControlsVisibility(gState);
   document.getElementById('camLabel').textContent='[ C ] COCKPIT VIEW';
-  camMode='chase'; dc.style.display='none';
+  state.camMode='chase'; dc.style.display='none';
   document.getElementById('speedBox').style.display='block';
   document.getElementById('gearBox').style.display='block';
   doCountdown();
@@ -1547,16 +1536,25 @@ function mergeTracksById(...groups){
 
 async function syncEditorTracksFromCloud(){
   if(!customTrackSyncAvailable) return;
-  const {data,error}=await supabase.from(CUSTOM_TRACKS_TABLE)
+  let result=await supabase.from(CUSTOM_TRACKS_TABLE)
     .select('track_id,track_data,updated_at')
     .order('updated_at',{ascending:false})
     .limit(250);
-  if(error){
+
+  if(result.error){
+    // Older tables may not include updated_at; retry with a minimal projection.
+    result=await supabase.from(CUSTOM_TRACKS_TABLE)
+      .select('track_id,track_data')
+      .limit(250);
+  }
+
+  if(result.error){
     customTrackSyncAvailable=false;
-    console.warn('Custom track sync unavailable:',error.message||error);
+    console.warn('Custom track sync unavailable:',result.error.message||result.error);
     return;
   }
-  const cloudTracks=(data||[]).map(normaliseCloudTrack).filter(Boolean);
+
+  const cloudTracks=(result.data||[]).map(normaliseCloudTrack).filter(Boolean);
   editorTracks=mergeTracksById(editorTracks,cloudTracks);
   persistEditorTracks();
 }
@@ -2100,6 +2098,6 @@ const { renderer, start:startRenderLoop }=createRenderPipeline({
   cameras:[camChase,camCock,camEditor],
   resizeOverlays:resizeDC,
   frameUpdate:updateFrame,
-  getActiveCamera:()=>activeCam
+  getActiveCamera:()=>state.activeCam
 });
 setupLights(); startRenderLoop(); loadArcadeUser(); showMain();
