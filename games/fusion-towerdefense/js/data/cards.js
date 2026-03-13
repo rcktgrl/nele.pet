@@ -6,7 +6,9 @@ const CARD_DEFS = {
     name: 'Basic Overclock I',
     towerTypeId: 'basic',
     rarity: 'common',
+
     unlockScore: 0,
+
     description: 'Basic macht 30% mehr Schaden.',
     effect: {
       type: 'tower_stat_multiplier',

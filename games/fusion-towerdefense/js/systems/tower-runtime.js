@@ -188,6 +188,23 @@ registerTowerRuntimeHook('computeCooldown', ({ tower, cooldown }) => {
 
   tower.nextShotCooldownMultiplier = null;
   return { tower, cooldown: cooldown * multiplier };
+  if ((game.activeCards || []).includes('sniper_chain_trigger') && getTowerTypeId(tower) === 'sniper') {
+    tower.sniperKillHasteCharges = (tower.sniperKillHasteCharges || 0) + 1;
+  }
+}
+
+registerTowerRuntimeHook('computeCooldown', ({ tower, cooldown }) => {
+  if (!tower || !(tower.sniperKillHasteCharges > 0)) {
+    return { tower, cooldown };
+  }
+
+  const hasCard = (game.activeCards || []).includes('sniper_chain_trigger') && getTowerTypeId(tower) === 'sniper';
+  if (!hasCard) {
+    return { tower, cooldown };
+  }
+
+  tower.sniperKillHasteCharges -= 1;
+  return { tower, cooldown: cooldown * 0.25 };
 });
 
 const TOWER_MODIFIER_CARDS = {};

@@ -12,6 +12,9 @@ function getOwnedCardIds() {
     .map(card => card.id);
 
   return [...new Set(unlockedByScore)];
+
+function getOwnedCardIds() {
+  return metaProgress.ownedCards || [];
 }
 
 function isCardOwned(cardId) {
@@ -123,7 +126,6 @@ function applyCardsToTower(tower) {
     if (!card || card.towerTypeId !== towerTypeId) {
       continue;
     }
-
     const handler = CARD_TOWER_EFFECT_HANDLERS[card.effect?.type];
     if (handler) {
       handler(tower, card);
@@ -207,6 +209,12 @@ function renderOwnedCardsGrid() {
       const unlockedSlots = metaProgress.cardSlotsUnlocked || 0;
       const loadout = metaProgress.cardLoadout || [];
       let slotIndex = loadout.findIndex((entry, index) => index < unlockedSlots && !entry);
+    `;
+
+    cardEl.addEventListener('click', () => {
+      const unlocked = metaProgress.cardSlotsUnlocked || 0;
+      const loadout = metaProgress.cardLoadout || [];
+      let slotIndex = loadout.findIndex((entry, index) => index < unlocked && !entry);
       if (slotIndex < 0) {
         slotIndex = 0;
       }
