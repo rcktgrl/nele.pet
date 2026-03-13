@@ -5,12 +5,36 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const overlay = document.getElementById('auth-overlay');
+const modeCard = document.getElementById('auth-mode-card');
 const form = document.getElementById('auth-form');
+const formTitle = document.getElementById('auth-form-title');
+const formSubtitle = document.getElementById('auth-form-subtitle');
+const submitButton = document.getElementById('auth-submit');
+const backButton = document.getElementById('auth-back');
 const feedback = document.getElementById('auth-feedback');
 const emailInput = document.getElementById('auth-email');
+const usernameLabel = document.getElementById('auth-username-label');
 const usernameInput = document.getElementById('auth-username');
+const passwordLabel = document.getElementById('auth-password-label');
 const passwordInput = document.getElementById('auth-password');
 const userPill = document.getElementById('user-pill');
+const userControls = document.getElementById('user-controls');
+const forgotPasswordButton = document.getElementById('auth-forgot-password');
+const accountManageButton = document.getElementById('account-manage-btn');
+const accountOverlay = document.getElementById('account-overlay');
+const accountCloseButton = document.getElementById('account-close-btn');
+const accountFeedback = document.getElementById('account-feedback');
+const accountActionForm = document.getElementById('account-action-form');
+const accountActionLabel = document.getElementById('account-action-label');
+const accountActionInput = document.getElementById('account-action-input');
+const accountActionSubmit = document.getElementById('account-action-submit');
+const changePasswordButton = document.getElementById('change-password-btn');
+const changeUsernameButton = document.getElementById('change-username-btn');
+const accountForgotPasswordButton = document.getElementById('account-forgot-password-btn');
+const logoutButton = document.getElementById('logout-btn');
+
+let activeMode = null;
+let accountAction = null;
 
 function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_\-.]/g, '').slice(0, 24);
@@ -26,6 +50,93 @@ function isValidEmail(value) {
 
 function cacheArcadeUser(userId, username, email) {
   localStorage.setItem('arcade_user', JSON.stringify({ user_id: userId, name: username, email }));
+}
+
+async function getActiveUser() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.user || null;
+}
+
+function setMode(mode) {
+  activeMode = mode;
+  feedback.textContent = '';
+  form.reset();
+
+  const isRegister = mode === 'register';
+  const isForgot = mode === 'forgot';
+  formTitle.textContent = isRegister
+    ? 'Create your Arcade account'
+    : isForgot
+      ? 'Reset your password'
+      : 'Log in to Arcade';
+  formSubtitle.textContent = isRegister
+    ? 'Register once, then use your account across all games.'
+    : isForgot
+      ? 'Enter your account email and we will send a reset link.'
+      : 'Log in with your username and password.';
+  submitButton.textContent = isRegister ? 'Register' : isForgot ? 'Send reset email' : 'Log in';
+
+  usernameLabel.hidden = isForgot;
+  usernameInput.required = !isForgot;
+  usernameInput.disabled = isForgot;
+
+  emailInput.parentElement.hidden = !isRegister && !isForgot;
+  emailInput.required = isRegister || isForgot;
+  emailInput.disabled = !isRegister && !isForgot;
+
+  passwordLabel.hidden = isForgot;
+  passwordInput.required = !isForgot;
+  passwordInput.disabled = isForgot;
+
+  forgotPasswordButton.hidden = isForgot;
+
+  modeCard.hidden = true;
+  form.hidden = false;
+  (isRegister || isForgot ? emailInput : usernameInput).focus();
+}
+
+function showModeChooser() {
+  activeMode = null;
+  feedback.textContent = '';
+  form.hidden = true;
+  modeCard.hidden = false;
+  passwordLabel.hidden = false;
+  passwordInput.required = true;
+  passwordInput.disabled = false;
+  emailInput.parentElement.hidden = false;
+  emailInput.required = true;
+  emailInput.disabled = false;
+  usernameLabel.hidden = true;
+  usernameInput.required = false;
+  usernameInput.disabled = false;
+  forgotPasswordButton.hidden = false;
+}
+
+async function resolveLoginEmail(username) {
+  const safeUsername = normalizeUsername(username);
+  if (!safeUsername) {
+    return { email: '', errorMessage: 'Please enter your username.' };
+  }
+
+
+  const { data, error } = await supabase.rpc('arcade_resolve_login_email', {
+    p_username: safeUsername,
+  });
+
+
+  if (error) {
+    return { email: '', errorMessage: friendlyAuthError(error) };
+  }
+
+
+  if (!data) {
+    return { email: '', errorMessage: 'Username not found. Please register first.' };
+  }
+
+  return { email: normalizeEmail(data), errorMessage: '' };
+
 }
 
 async function upsertProfile(userId, username, email) {
@@ -58,35 +169,181 @@ async function showArcadeForUser(user) {
   const profile = await getProfile(user);
   cacheArcadeUser(user.id, profile.username, profile.email);
   overlay.hidden = true;
-  userPill.hidden = false;
+  userControls.hidden = false;
   userPill.textContent = `Logged in as ${profile.username} (${profile.email})`;
 }
 
+function hideArcadeForAuth() {
+  userControls.hidden = true;
+  overlay.hidden = false;
+  showModeChooser();
+}
+
+async function sendPasswordReset(email, feedbackTarget = feedback) {
+  const safeEmail = normalizeEmail(email);
+  if (!isValidEmail(safeEmail)) {
+    feedbackTarget.textContent = 'Enter a valid email to reset your password.';
+    return;
+  }
+
+  feedbackTarget.textContent = 'Sending reset email...';
+  const { error } = await supabase.auth.resetPasswordForEmail(safeEmail);
+  feedbackTarget.textContent = error
+    ? friendlyAuthError(error)
+    : 'Password reset email sent. Check your inbox.';
+}
+
+function openAccountOverlay() {
+  accountOverlay.hidden = false;
+  accountFeedback.textContent = '';
+  accountActionForm.hidden = true;
+  accountActionInput.value = '';
+  accountAction = null;
+}
+
+function closeAccountOverlay() {
+  accountOverlay.hidden = true;
+  accountFeedback.textContent = '';
+  accountActionForm.hidden = true;
+  accountActionInput.value = '';
+  accountAction = null;
+}
+
+function prepareAccountAction(action) {
+  accountAction = action;
+  accountFeedback.textContent = '';
+  accountActionForm.hidden = false;
+
+  if (action === 'password') {
+    accountActionLabel.textContent = 'New password';
+    accountActionInput.type = 'password';
+    accountActionInput.minLength = 8;
+    accountActionInput.maxLength = 72;
+    accountActionInput.autocomplete = 'new-password';
+    accountActionSubmit.textContent = 'Update password';
+  }
+
+  if (action === 'username') {
+    accountActionLabel.textContent = 'New username';
+    accountActionInput.type = 'text';
+    accountActionInput.minLength = 3;
+    accountActionInput.maxLength = 24;
+    accountActionInput.autocomplete = 'username';
+    accountActionSubmit.textContent = 'Update username';
+  }
+
+  accountActionInput.value = '';
+  accountActionInput.focus();
+}
+
+async function updatePassword(newPassword) {
+  if (newPassword.length < 8) {
+    accountFeedback.textContent = 'Password must be at least 8 characters.';
+    return;
+  }
+  accountFeedback.textContent = 'Updating password...';
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  accountFeedback.textContent = error ? friendlyAuthError(error) : 'Password changed successfully.';
+}
+
+async function updateUsernameEverywhere(newUsername) {
+  const user = await getActiveUser();
+  if (!user) {
+    accountFeedback.textContent = 'You must be logged in to change username.';
+    return;
+  }
+
+  const profile = await getProfile(user);
+  const previousUsername = normalizeUsername(profile.username);
+  const safeUsername = normalizeUsername(newUsername);
+  if (!safeUsername || safeUsername.length < 3) {
+    accountFeedback.textContent = 'Username must be 3-24 characters (letters, numbers, _, -, .).';
+    return;
+  }
+
+  if (safeUsername === previousUsername) {
+    accountFeedback.textContent = 'That is already your username.';
+    return;
+  }
+
+  accountFeedback.textContent = 'Updating username...';
+
+  const { error: profileError } = await supabase
+    .from('arcade_profiles')
+    .update({ username: safeUsername })
+    .eq('id', user.id);
+
+  if (profileError) {
+    accountFeedback.textContent = friendlyAuthError(profileError);
+    return;
+  }
+
+  const { error: metadataError } = await supabase.auth.updateUser({ data: { username: safeUsername } });
+  if (metadataError) {
+    accountFeedback.textContent = friendlyAuthError(metadataError);
+    return;
+  }
+
+
+  const { error: leaderboardError } = await supabase.rpc('arcade_sync_username_everywhere', {
+    p_user_id: user.id,
+    p_old_username: previousUsername,
+    p_new_username: safeUsername,
+  });
+
+
+  if (leaderboardError) {
+    accountFeedback.textContent = `${friendlyAuthError(leaderboardError)} (profile updated, but leaderboard sync failed)`;
+    return;
+  }
+
+  const cached = JSON.parse(localStorage.getItem('arcade_user') || '{}');
+  cacheArcadeUser(user.id, safeUsername, normalizeEmail(cached.email || user.email));
+  userPill.textContent = `Logged in as ${safeUsername} (${normalizeEmail(cached.email || user.email)})`;
+  accountFeedback.textContent = 'Username updated and synced to leaderboard history.';
+}
+
 async function loginOrRegister(mode) {
-  const email = normalizeEmail(emailInput.value);
+  const registrationEmail = normalizeEmail(emailInput.value);
   const username = normalizeUsername(usernameInput.value);
   const password = passwordInput.value;
+  const isForgot = mode === 'forgot';
 
-  if (!isValidEmail(email)) {
+  if (mode === 'register' && !isValidEmail(registrationEmail)) {
     feedback.textContent = 'Please enter a valid email address.';
     return;
   }
 
-  if (password.length < 8) {
+  if (!isForgot && password.length < 8) {
     feedback.textContent = 'Password must be at least 8 characters.';
     return;
   }
 
-  if (mode === 'register' && !username) {
-    feedback.textContent = 'Username is required for registration.';
+  if ((mode === 'register' || mode === 'login') && !username) {
+    feedback.textContent = mode === 'register' ? 'Username is required for registration.' : 'Username is required for login.';
     return;
+  }
+
+  if (isForgot) {
+    await sendPasswordReset(registrationEmail, feedback);
+    return;
+  }
+
+  let loginEmail = registrationEmail;
+  if (mode === 'login') {
+    const { email, errorMessage } = await resolveLoginEmail(username);
+    if (errorMessage) {
+      feedback.textContent = errorMessage;
+      return;
+    }
+    loginEmail = email;
   }
 
   feedback.textContent = mode === 'register' ? 'Creating account...' : 'Logging in...';
 
   const authCall = mode === 'register'
-    ? supabase.auth.signUp({ email, password, options: { data: { username } } })
-    : supabase.auth.signInWithPassword({ email, password });
+    ? supabase.auth.signUp({ email: registrationEmail, password, options: { data: { username } } })
+    : supabase.auth.signInWithPassword({ email: loginEmail, password });
 
   const { data, error } = await authCall;
   if (error) {
@@ -101,7 +358,7 @@ async function loginOrRegister(mode) {
   }
 
   const safeUsername = username || normalizeUsername(activeUser.user_metadata?.username) || 'player';
-  await upsertProfile(activeUser.id, safeUsername, email);
+  await upsertProfile(activeUser.id, safeUsername, registrationEmail || loginEmail);
   feedback.textContent = 'Success!';
   passwordInput.value = '';
   await showArcadeForUser(activeUser);
@@ -109,11 +366,72 @@ async function loginOrRegister(mode) {
 
 form?.addEventListener('submit', async (event) => {
   event.preventDefault();
-  await loginOrRegister('login');
+  if (!activeMode) {
+    feedback.textContent = 'Please choose Log in or Register first.';
+    showModeChooser();
+    return;
+  }
+  await loginOrRegister(activeMode);
 });
 
-document.querySelector('[data-mode="register"]')?.addEventListener('click', async () => {
-  await loginOrRegister('register');
+document.querySelector('[data-auth-mode="login"]')?.addEventListener('click', () => {
+  setMode('login');
+});
+
+document.querySelector('[data-auth-mode="register"]')?.addEventListener('click', () => {
+  setMode('register');
+});
+
+document.querySelector('[data-auth-mode="forgot"]')?.addEventListener('click', () => {
+  setMode('forgot');
+});
+
+backButton?.addEventListener('click', () => {
+  showModeChooser();
+});
+
+forgotPasswordButton?.addEventListener('click', async () => {
+  await sendPasswordReset(emailInput.value);
+});
+
+accountManageButton?.addEventListener('click', () => {
+  openAccountOverlay();
+});
+
+accountCloseButton?.addEventListener('click', () => {
+  closeAccountOverlay();
+});
+
+changePasswordButton?.addEventListener('click', () => {
+  prepareAccountAction('password');
+});
+
+changeUsernameButton?.addEventListener('click', () => {
+  prepareAccountAction('username');
+});
+
+accountForgotPasswordButton?.addEventListener('click', async () => {
+  const user = await getActiveUser();
+  await sendPasswordReset(user?.email || '', accountFeedback);
+});
+
+logoutButton?.addEventListener('click', async () => {
+  accountFeedback.textContent = 'Logging out...';
+  await supabase.auth.signOut();
+  localStorage.removeItem('arcade_user');
+  closeAccountOverlay();
+  hideArcadeForAuth();
+});
+
+accountActionForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (accountAction === 'password') {
+    await updatePassword(accountActionInput.value);
+    return;
+  }
+  if (accountAction === 'username') {
+    await updateUsernameEverywhere(accountActionInput.value);
+  }
 });
 
 const {
@@ -121,4 +439,6 @@ const {
 } = await supabase.auth.getSession();
 if (session?.user) {
   await showArcadeForUser(session.user);
+} else {
+  hideArcadeForAuth();
 }
