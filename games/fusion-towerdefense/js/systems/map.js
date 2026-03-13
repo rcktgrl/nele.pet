@@ -282,36 +282,6 @@ function generateMap(){
 }
 
 
-function getMaxTowerRange() {
-  let maxRange = 0;
-
-  for (const def of getTowerDefsArray()) {
-    const range = def?.stats?.range;
-    if (Number.isFinite(range)) {
-      maxRange = Math.max(maxRange, range);
-    }
-  }
-
-  return maxRange;
-}
-
-function getMaxTowerBodyRadius() {
-  let maxRadius = 24;
-
-  for (const def of Object.values(TOWER_RENDER_DEFS || {})) {
-    const bodyRadius = def?.base?.bodyRadius;
-    if (Number.isFinite(bodyRadius)) {
-      maxRadius = Math.max(maxRadius, bodyRadius);
-    }
-  }
-
-  return maxRadius;
-}
-
-function getMaxEntityRadius() {
-  const enemyTemplateMax = 28;
-  return Math.max(getMaxTowerBodyRadius(), enemyTemplateMax);
-}
 
 function refreshMapLayoutFromCanvas() {
   if (!game.map || !canvas?.parentElement) {
@@ -326,37 +296,13 @@ function refreshMapLayoutFromCanvas() {
   const contentHeight = Math.max(1, parentRect.height - verticalPadding * 2);
 
   const baseCellSize = BASE_MAP_CELL_SIZE || 72;
-  const maxRange = getMaxTowerRange();
-  const maxEntityRadius = getMaxEntityRadius();
-  const paddingRange = Math.ceil(maxRange + maxEntityRadius + 12);
-
-  const limitedCellSize = Math.floor(
-    Math.min(
-      contentWidth / game.map.cols,
-      contentHeight / game.map.rows
-    )
-  );
-
-  const safeWidthCellSize = Math.floor(
-    (contentWidth - paddingRange * 2) / Math.max(1, game.map.cols)
-  );
-  const safeHeightCellSize = Math.floor(
-    (contentHeight - paddingRange * 2) / Math.max(1, game.map.rows)
-  );
-
-  const scaleLimitedCellSize = Math.floor(
-    Math.min(
-      safeWidthCellSize * (baseCellSize / (baseCellSize + 1)),
-      safeHeightCellSize * (baseCellSize / (baseCellSize + 1))
-    )
-  );
-
-  const minCellSize = 16;
   const cellSize = Math.max(
-    minCellSize,
-    Math.min(
-      limitedCellSize,
-      Number.isFinite(scaleLimitedCellSize) ? scaleLimitedCellSize : limitedCellSize
+    28,
+    Math.floor(
+      Math.min(
+        contentWidth / game.map.cols,
+        contentHeight / game.map.rows
+      )
     )
   );
 
