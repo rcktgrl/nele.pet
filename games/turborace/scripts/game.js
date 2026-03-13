@@ -189,8 +189,6 @@ function setupTouchControls(){
   window.addEventListener('blur',releaseAllTouchControls);
 }
 
-// CAR-related implementation has been extracted to car.js and is imported above.
-
 // ═══════════════════════════════════════════════════════
 //  ROAD TEXTURE
 // ═══════════════════════════════════════════════════════
@@ -293,69 +291,6 @@ function addRibbon(curve,width,segs,offset,color,yExtra,yBase,recv,tex){
   mesh.userData.trk=true; scene.add(mesh);
 }
 
-function addKerb(curve,rw,segs,side){
-  const kw=1.6;
-  const pts=curve.getSpacedPoints(segs);
-  const n=pts.length;
-  const matR=new THREE.MeshLambertMaterial({color:0xdd1111,side:THREE.DoubleSide});
-  const matW=new THREE.MeshLambertMaterial({color:0xffffff,side:THREE.DoubleSide});
-  // Averaged per-point normals → no overlaps on inside of curves
-  const norms=[];
-  for(let i=0;i<n;i++){
-    const p=pts[(i-1+n)%n],q=pts[(i+1)%n];
-    const tx=q.x-p.x,tz=q.z-p.z,l=Math.sqrt(tx*tx+tz*tz)||1;
-    norms.push(new THREE.Vector3(-tz/l,0,tx/l));
-  }
-  const ko=side*(rw/2+kw/2+0.05);
-  const STRIPE=4;
-  for(let i=0;i<segs;i++){
-    const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
-    const c0=new THREE.Vector3(p0.x+r0.x*ko,p0.y+.015,p0.z+r0.z*ko);
-    const c1=new THREE.Vector3(p1.x+r1.x*ko,p1.y+.015,p1.z+r1.z*ko);
-    const l0=new THREE.Vector3(c0.x-r0.x*kw/2,c0.y,c0.z-r0.z*kw/2);
-    const rv0=new THREE.Vector3(c0.x+r0.x*kw/2,c0.y,c0.z+r0.z*kw/2);
-    const l1=new THREE.Vector3(c1.x-r1.x*kw/2,c1.y,c1.z-r1.z*kw/2);
-    const rv1=new THREE.Vector3(c1.x+r1.x*kw/2,c1.y,c1.z+r1.z*kw/2);
-    const v=new Float32Array([l0.x,l0.y,l0.z,rv0.x,rv0.y,rv0.z,rv1.x,rv1.y,rv1.z,l1.x,l1.y,l1.z]);
-    const geo=new THREE.BufferGeometry();
-    geo.setAttribute('position',new THREE.BufferAttribute(v,3));
-    geo.setIndex([0,1,2,0,2,3]); geo.computeVertexNormals();
-    const mesh=new THREE.Mesh(geo,Math.floor(i/STRIPE)%2===0?matR:matW);
-    mesh.userData.trk=true; scene.add(mesh);
-  }
-}
-
-function addBarriers(curve,rw,segs){
-  const pts=curve.getSpacedPoints(segs);
-  const n=pts.length;
-  // Averaged per-point normals — eliminates overlap on inner curves and gaps on outer
-  const norms=[];
-  for(let i=0;i<n;i++){
-    const p=pts[(i-1+n)%n],q=pts[(i+1)%n];
-    const tx=q.x-p.x,tz=q.z-p.z,l=Math.sqrt(tx*tx+tz*tz)||1;
-    norms.push(new THREE.Vector3(-tz/l,0,tx/l));
-  }
-  for(const side of[-1,1]){
-    const vL=[],vT=[],iL=[],iT=[]; let vi=0,ti=0;
-    const off=side*(rw/2+2.0),h=1.15;
-    for(let i=0;i<segs;i++){
-      const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
-      const b0x=p0.x+r0.x*off,b0z=p0.z+r0.z*off;
-      const b1x=p1.x+r1.x*off,b1z=p1.z+r1.z*off;
-      vL.push(b0x,p0.y,b0z, b1x,p1.y,b1z, b1x,p1.y+h,b1z, b0x,p0.y+h,b0z);
-      iL.push(vi,vi+1,vi+2,vi,vi+2,vi+3); vi+=4;
-      vT.push(b0x,p0.y+h,b0z, b1x,p1.y+h,b1z, b1x,p1.y+h+.16,b1z, b0x,p0.y+h+.16,b0z);
-      iT.push(ti,ti+1,ti+2,ti,ti+2,ti+3); ti+=4;
-    }
-    const mkGeo=(v,i)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setIndex(i);g.computeVertexNormals();return g;};
-    const bm=new THREE.Mesh(mkGeo(vL,iL),new THREE.MeshLambertMaterial({color:0x888888,side:THREE.DoubleSide}));
-    bm.userData.trk=true; scene.add(bm);
-    const tm=new THREE.Mesh(mkGeo(vT,iT),new THREE.MeshLambertMaterial({color:side===-1?0xff2211:0xffffff,side:THREE.DoubleSide}));
-    tm.userData.trk=true; scene.add(tm);
-  }
-}
-
-// ── Adaptive versions: take pre-sampled point arrays ──────
 function addKerbAdaptive(pts,rw,side){
   const kw=1.6;
   const n=pts.length;
