@@ -10,3 +10,37 @@ function showScreen(name){
   const globalHud=document.getElementById('globalMenuHud');
   if(globalHud) globalHud.style.display=name==='gameScreen'?'none':'block';
 }
+
+document.addEventListener('click', e => {
+  const target = e.target.closest('button');
+  if (!target) return;
+
+  if (target.id === 'progressMenuBtn') {
+    if (typeof updateMetaUI === 'function') updateMetaUI();
+    showScreen('progressMenu');
+    return;
+  }
+
+  if (target.id === 'openResearchFromProgressBtn') {
+    if (typeof updateMetaUI === 'function') updateMetaUI();
+    if (typeof renderResearchTree === 'function') renderResearchTree();
+    showScreen('researchMenu');
+    return;
+  }
+
+  if (target.id === 'openCardShopBtn') {
+    if (typeof updateMetaUI === 'function') updateMetaUI();
+    if (typeof renderCardResearchShop === 'function') renderCardResearchShop();
+    showScreen('cardShopMenu');
+    return;
+  }
+
+  if (target.id === 'backFromProgressBtn') {
+    showScreen('mainMenu');
+    return;
+  }
+
+  if (target.id === 'backFromCardShopBtn' || target.id === 'backFromResearchBtn') {
+    showScreen('progressMenu');
+  }
+}, { capture: true, passive: true });
