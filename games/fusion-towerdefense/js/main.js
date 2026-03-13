@@ -56,6 +56,7 @@ function bindMenuButtons() {
     researchMenuBtn.addEventListener('click', () => {
       updateMetaUI();
       renderResearchTree();
+      renderCardResearchShop();
       showScreen('researchMenu');
     });
   }
@@ -85,6 +86,7 @@ function bindMenuButtons() {
   if (backFromDevResearchBtn) {
     backFromDevResearchBtn.addEventListener('click', () => {
       renderResearchTree();
+      renderCardResearchShop();
       showScreen('researchMenu');
     });
   }
@@ -152,8 +154,8 @@ function bindMenuButtons() {
   }
 
 
-  if (ui.unlockCardSlotBtn) {
-    ui.unlockCardSlotBtn.addEventListener('click', unlockNextCardSlot);
+  if (ui.researchUnlockCardSlotBtn) {
+    ui.researchUnlockCardSlotBtn.addEventListener('click', unlockNextCardSlot);
   }
 
   if (ui.cardSearchInput) {

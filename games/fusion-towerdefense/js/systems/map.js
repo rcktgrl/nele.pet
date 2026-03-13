@@ -277,5 +277,51 @@ function generateMap(){
   }
 
   game.map={cols,rows,cellSize,offsetX,offsetY,pathCells:path,pathPoints:points,pathSet,buildableSet};
+  refreshMapLayoutFromCanvas();
   ui.mapPreviewText.textContent=`Automatisch generierte Neon-Map mit orthogonalem Pfad. Ziellänge: ${targetPathLength} · Tatsächliche Länge: ${path.length} · Profil: ${best.profile.name} · Start: (${best.start.c},${best.start.r}) · Ziel: (${best.end.c},${best.end.r}) · Inseln: ${islandCount} (${nearIslandCount} near / ${farIslandCount} far) · Baufläche: ${mapConfig.terrainPercent}% · Score-Multiplikator: x${mapConfig.scoreMultiplier.toFixed(2)} · Wellenlimit: ${mapConfig.waveLimit}.`;
+}
+
+function refreshMapLayoutFromCanvas() {
+  if (!game.map || !canvas?.parentElement) {
+    return;
+  }
+
+  const parentRect = canvas.parentElement.getBoundingClientRect();
+  const horizontalPadding = Math.max(18, parentRect.width * 0.03);
+  const verticalPadding = Math.max(18, parentRect.height * 0.04);
+
+  const cellSize = Math.max(
+    28,
+    Math.floor(
+      Math.min(
+        (parentRect.width - horizontalPadding * 2) / game.map.cols,
+        (parentRect.height - verticalPadding * 2) / game.map.rows
+      )
+    )
+  );
+
+  const mapPixelWidth = cellSize * game.map.cols;
+  const mapPixelHeight = cellSize * game.map.rows;
+
+  game.map.cellSize = cellSize;
+  game.map.offsetX = Math.floor((parentRect.width - mapPixelWidth) / 2);
+  game.map.offsetY = Math.floor((parentRect.height - mapPixelHeight) / 2);
+  game.map.pathPoints = game.map.pathCells.map(cell => ({
+    x: game.map.offsetX + cell.c * cellSize + cellSize / 2,
+    y: game.map.offsetY + cell.r * cellSize + cellSize / 2
+  }));
+
+  for (const tower of game.towers) {
+    tower.x = game.map.offsetX + tower.c * cellSize + cellSize / 2;
+    tower.y = game.map.offsetY + tower.r * cellSize + cellSize / 2;
+  }
+
+  for (const enemy of game.enemies) {
+    const index = Math.max(0, Math.min(enemy.pathIndex || 0, game.map.pathPoints.length - 1));
+    const point = game.map.pathPoints[index];
+    if (point) {
+      enemy.x = point.x;
+      enemy.y = point.y;
+    }
+  }
 }

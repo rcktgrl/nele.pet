@@ -55,6 +55,7 @@ function updateMetaUI() {
 
   ui.menuTowerCount.textContent = 4 + (metaProgress.researched.tesla ? 1 : 0);
   renderResearchTree();
+  renderCardResearchShop();
 }
 
 function syncSettingsUI() {
