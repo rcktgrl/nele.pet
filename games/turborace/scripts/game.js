@@ -17,6 +17,7 @@ import {
 } from './touch-controls.js';
 import {
   initAudio,
+  initAudioSettings,
   onMusicVol,
   onSfxVol,
   updateAudio,
@@ -1872,11 +1873,15 @@ function startRace(){
   initRace();
 }
 function restartRace(){
+  document.getElementById('pauseMenu').style.display='none';
+  document.getElementById('settingsModal').style.display='none';
+  releaseAllTouchControls();
   document.getElementById('results').style.display='none';
   initRace();
 }
 
 document.getElementById('resumeBtn').addEventListener('click', resumeRace);
+document.getElementById('restartBtn').addEventListener('click', restartRace);
 document.getElementById('showSettingsBtn').addEventListener('click', () => showSettings());
 document.getElementById('quitToMenuBtn').addEventListener('click', showMain);
 document.getElementById('musicVolSlider').addEventListener('input', e => onMusicVol(e.target.value));
@@ -1925,6 +1930,7 @@ document.getElementById('raceAgainBtn').addEventListener('click', restartRace);
 scene.background=new THREE.Color(0x050510);
 setupTouchControls(gState);
 initTouchSettings();
+initAudioSettings();
 const { renderer, start:startRenderLoop }=createRenderPipeline({
   THREE,
   canvas:gc,
