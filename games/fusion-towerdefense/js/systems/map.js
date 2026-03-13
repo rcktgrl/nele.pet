@@ -2,7 +2,7 @@ function seededRandom(seed){let v=seed%2147483647;if(v<=0)v+=2147483646;return f
 function generateMap(){
   mapConfig.seed=Math.floor(Math.random()*1e6);
   const rand=seededRandom(mapConfig.seed);
-  const cols=16,rows=9,cellSize=72,offsetX=70,offsetY=36;
+  const cols=16,rows=9,cellSize=BASE_MAP_CELL_SIZE,offsetX=70,offsetY=36;
   const targetPathLength=clamp(mapConfig.pathLength||40,20,50);
   const islandCount=3+Math.floor(rand()*4);
   const farIslandCount=Math.max(1,Math.round(islandCount*.2));
