@@ -28,7 +28,11 @@
   <div class="auth-overlay" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
     <form id="auth-form" class="auth-card">
       <h2 id="auth-title">Log in to Arcade</h2>
-      <p>Use a username + password. This session stays logged in after refresh.</p>
+      <p>Use your account to stay logged in after refresh.</p>
+      <label>
+        Email
+        <input id="auth-email" type="email" maxlength="120" autocomplete="email" required>
+      </label>
       <label>
         Username
         <input id="auth-username" minlength="3" maxlength="24" autocomplete="username" required>
@@ -37,6 +41,8 @@
         Password
         <input id="auth-password" type="password" minlength="8" maxlength="72" autocomplete="current-password" required>
       </label>
+      <p class="auth-note">Disclaimer: your email and username are saved for account login and profile lookup across games. Passwords are never stored in this site code and are handled securely by Supabase Auth.</p>
+
       <div class="auth-actions">
         <button type="submit" data-mode="login">Log in</button>
         <button type="button" data-mode="register">Register</button>

@@ -1,12 +1,33 @@
 -- Run this in Supabase SQL editor.
--- 1) Profile table: stores public game identity (username) bound to auth.users
+-- Password storage note: Supabase Auth stores passwords as secure hashes in auth,
+-- not in this table and not in frontend localStorage.
+
+-- 1) Profile table: stores game identity and login email metadata bound to auth.users.
 create table if not exists public.arcade_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   username text not null unique,
+  email text not null unique,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint arcade_profiles_username_format check (username ~ '^[a-z0-9_.-]{3,24}$')
+  constraint arcade_profiles_username_format check (username ~ '^[a-z0-9_.-]{3,24}$'),
+  constraint arcade_profiles_email_format check (email ~* '^[^\s@]+@[^\s@]+\.[^\s@]+$')
 );
+
+alter table public.arcade_profiles
+  add column if not exists email text;
+
+-- Backfill from auth.users if needed.
+update public.arcade_profiles p
+set email = u.email
+from auth.users u
+where p.id = u.id
+  and (p.email is null or trim(p.email) = '');
+
+alter table public.arcade_profiles
+  alter column email set not null;
+
+create unique index if not exists arcade_profiles_email_lower_uidx
+on public.arcade_profiles (lower(email));
 
 alter table public.arcade_profiles enable row level security;
 
