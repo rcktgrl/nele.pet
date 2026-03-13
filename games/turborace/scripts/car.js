@@ -1,3 +1,4 @@
+import { THREE } from './three.js';
 import { createCarVisual, getOpponentCarModels, getPlayerCarModel } from './car-model.js';
 
 class Car {

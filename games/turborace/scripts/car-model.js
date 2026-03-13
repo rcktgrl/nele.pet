@@ -1,3 +1,4 @@
+import { THREE } from './three.js';
 import { mat, matE, matT } from './render/materials.js';
 
 export function getPlayerCarModel(cars, selectedCarIndex){

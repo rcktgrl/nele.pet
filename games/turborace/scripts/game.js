@@ -5,6 +5,7 @@ import { instantiateRaceCars } from './car.js';
 import { mat, matE } from './render/materials.js';
 import { AI } from './ai-script.js';
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/+esm';
+import { THREE } from './three.js';
 import {
   initAudio,
   onMusicVol,
