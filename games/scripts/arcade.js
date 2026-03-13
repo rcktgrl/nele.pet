@@ -107,6 +107,19 @@ async function loginOrRegister(mode) {
   await showArcadeForUser(activeUser);
 }
 
+async function loginWithProvider(provider) {
+  feedback.textContent = `Redirecting to ${provider[0].toUpperCase()}${provider.slice(1)}...`;
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo },
+  });
+
+  if (error) {
+    feedback.textContent = friendlyAuthError(error);
+  }
+}
+
 form?.addEventListener('submit', async (event) => {
   event.preventDefault();
   await loginOrRegister('login');
@@ -114,6 +127,10 @@ form?.addEventListener('submit', async (event) => {
 
 document.querySelector('[data-mode="register"]')?.addEventListener('click', async () => {
   await loginOrRegister('register');
+});
+
+document.querySelector('[data-provider="apple"]')?.addEventListener('click', async () => {
+  await loginWithProvider('apple');
 });
 
 const {
