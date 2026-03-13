@@ -1454,7 +1454,21 @@ function makeTimeOfDayPreset(mode){
 }
 function makeEditableTrackFromGameTrack(src){
   const tod = src.timeOfDay || (src.type==='city'?'night':'day');
-  const pts=(src.wp||[]).map((p,i)=>({x:p[0],z:p[2],steepness:40,type:i===0?'start-finish':'no-auto'}));
+  const sourceNodes=Array.isArray(src.editorNodes)&&src.editorNodes.length>=3
+    ? src.editorNodes
+    : (Array.isArray(src.nodes)&&src.nodes.length>=3 ? src.nodes : (src.wp||[]).map(p=>({x:p[0],z:p[2]})));
+  const rawPts=sourceNodes.map((n,i)=>({
+    x:+n.x||0,
+    z:+n.z||0,
+    steepness:typeof n.steepness==='number'?n.steepness:40,
+    type:n.type||(i===0?'start-finish':'no-auto')
+  }));
+  const pts=[];
+  for(const node of rawPts){
+    const last=pts[pts.length-1];
+    if(last&&last.x===node.x&&last.z===node.z) continue;
+    pts.push(node);
+  }
   if(pts.length && !pts.some(n=>n.type==='start-finish')) pts[0].type='start-finish';
   return {
     id:src.id,name:src.name,desc:src.desc||'',laps:src.laps||3,rw:src.rw||12,previewColor:src.previewColor||'#44aaff',
@@ -1625,7 +1639,7 @@ function editorTrackToGameTrack(){
   let wp, type='circuit', cityRoute=null;
   if(editorTrack.streetGrid){ cityRoute=makeCityRouteFromNodes(ordered, editorTrack.gridSize||70); wp=makeCityWpFromRoute(cityRoute, editorTrack.gridSize||70); type='city'; }
   else wp=editorTrack.useBezier?makeBezierPath(ordered,18):ordered.map(n=>[n.x,0,n.z]);
-  return {id:editorTrack.id||uniqueTrackId(),name:editorTrack.name||'Custom Track',desc:editorTrack.desc||'Custom track',laps:+editorTrack.laps||3,rw:+editorTrack.rw||12,wp,previewColor:editorTrack.previewColor||'#44aaff',type,gridSize:editorTrack.gridSize||70,enableRunoff:editorTrack.enableRunoff!==false,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(editorTrack.groundColor)||tod.gnd,timeOfDay:editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(editorTrack.assets||[]),useBezier:!!editorTrack.useBezier};
+  return {id:editorTrack.id||uniqueTrackId(),name:editorTrack.name||'Custom Track',desc:editorTrack.desc||'Custom track',laps:+editorTrack.laps||3,rw:+editorTrack.rw||12,wp,editorNodes:deepClone(ordered),previewColor:editorTrack.previewColor||'#44aaff',type,gridSize:editorTrack.gridSize||70,enableRunoff:editorTrack.enableRunoff!==false,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(editorTrack.groundColor)||tod.gnd,timeOfDay:editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(editorTrack.assets||[]),useBezier:!!editorTrack.useBezier};
 }
 function populateEditorUI(){ normalizeEditorTrack(); document.getElementById('editorTrackName').value=editorTrack.name||''; document.getElementById('editorTrackDesc').value=editorTrack.desc||''; document.getElementById('editorTrackLaps').value=editorTrack.laps||3; document.getElementById('editorTrackWidth').value=editorTrack.rw||12; document.getElementById('editorTrackColor').value=editorTrack.previewColor||'#44aaff'; document.getElementById('editorUseBezier').checked=editorTrack.useBezier!==false; document.getElementById('editorGroundColor').value=editorTrack.groundColor||'#1a3018'; document.getElementById('editorSkyColor').value=editorTrack.skyColor||'#0d1a2e'; document.getElementById('editorTimeOfDay').value=editorTrack.timeOfDay||'day'; document.getElementById('editorStreetGrid').checked=!!editorTrack.streetGrid; document.getElementById('editorEnableRunoff').checked=editorTrack.enableRunoff!==false; document.getElementById('editorGridSize').value=editorTrack.gridSize||70; renderEditorTrackList(); syncSelectedNodeUI(); requestEditorRebuild(true); }
 function renderEditorTrackList(){ const wrap=document.getElementById('editorTrackList'); if(!wrap) return; wrap.innerHTML=''; getAllTracks().forEach(src=>{ const d=document.createElement('div'); d.className='editorListItem'+(String(editorTrack.id)===String(src.id)?' sel':''); d.textContent=src.name+(TRACKS.some(t=>String(t.id)===String(src.id))?' · built-in':''); d.onclick=()=>{ editorTrack=makeEditableTrackFromGameTrack(src); editorSelectedNode=0; editorSelectedAsset=-1; populateEditorUI(); }; wrap.appendChild(d); }); }
