@@ -9,10 +9,13 @@ body { margin: 0; min-height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Ve
 .game-thumb { height: 130px; border-radius: 12px; font-size: 52px; display: grid; place-items: center; background: linear-gradient(130deg, #2f6dd9, #9c4dff); }
 .play-btn, .auth-actions button { display: inline-block; margin-top: 10px; padding: 10px 14px; border-radius: 10px; border: 0; background: #5f7dff; color: #fff; text-decoration: none; cursor: pointer; }
 .auth-overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(2, 3, 8, 0.8); backdrop-filter: blur(3px); }
+.auth-overlay[hidden] { display: none !important; }
 .auth-card { width: min(420px, 92vw); background: #11172d; border: 1px solid #3b4a86; border-radius: 14px; padding: 20px; }
 .auth-card label { display: block; margin-top: 12px; }
 .auth-card input { width: 100%; margin-top: 5px; padding: 10px; box-sizing: border-box; border-radius: 8px; border: 1px solid #405089; background: #0a1023; color: #fff; }
 .auth-actions { display: flex; gap: 10px; }
+.auth-actions-stack { flex-direction: column; }
+.auth-actions-stack button { margin-top: 0; }
 #auth-feedback { min-height: 22px; color: #ffd17b; }
 
 .auth-note { margin: 12px 0 4px; font-size: 0.88rem; line-height: 1.4; color: #b9c4ff; }
