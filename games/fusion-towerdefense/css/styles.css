@@ -77,3 +77,18 @@ canvas{display:block;width:100%;height:100%}
 .overlay-chip{background:rgba(10,14,30,.85);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;pointer-events:auto}
 .overlay-chip span{color:var(--muted);font-size:13px}
 @media (max-width:1100px){.game-shell,.menu-grid,.settings-layout,.dev-layout{grid-template-columns:1fr}#gameScreen{overflow:auto}.game-area{min-height:60vh}.tower-list{grid-template-columns:1fr}}
+.card-slot-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.card-slot{min-height:120px;border:1px dashed rgba(255,255,255,.22);border-radius:14px;background:rgba(255,255,255,.02);padding:12px;display:flex;align-items:center;justify-content:center;text-align:center}
+.card-slot.unlocked{border-style:solid;border-color:rgba(89,243,255,.35)}
+.card-search{min-width:260px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.07);border-radius:10px;color:var(--text);padding:10px;outline:none}
+.card-pool-grid{margin-top:12px;display:grid;grid-template-rows:repeat(3,minmax(120px,1fr));grid-auto-flow:column;grid-auto-columns:minmax(220px,220px);gap:12px;max-height:420px;overflow-x:auto;overflow-y:hidden;padding-bottom:6px}
+.owned-card{border:2px solid rgba(255,255,255,.2);border-radius:14px;background:linear-gradient(180deg,rgba(20,27,56,.95),rgba(12,18,38,.95));padding:10px;display:flex;flex-direction:column;gap:8px;text-align:left;color:var(--text);cursor:pointer;min-height:140px}
+.owned-card-image{font-size:28px;font-weight:900}
+.owned-card-name{font-weight:800}
+.owned-card-desc{font-size:12px;color:var(--muted);line-height:1.35}
+.mini{font-size:12px;color:var(--muted)}
+
+.menu-version{position:absolute;right:22px;bottom:18px;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+.menu-card{position:relative}
+.owned-card-meta{font-size:11px;color:var(--muted);margin-top:auto}
+.owned-card.locked{opacity:.55;filter:saturate(.6);cursor:not-allowed}

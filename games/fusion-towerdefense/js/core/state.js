@@ -1,6 +1,9 @@
 const metaProgress={
     cash:0,
     bestRunScore:0,
+    cardSlotsUnlocked:0,
+    cardLoadout:[null,null,null],
+    ownedCards:[],
     researched:{
         tesla:false,
         laser:false,
