@@ -67,6 +67,7 @@ function bindMenuButtons() {
     openResearchFromProgressBtn.addEventListener('click', () => {
       updateMetaUI();
       renderResearchTree();
+      renderCardResearchShop();
       showScreen('researchMenu');
     });
   }
@@ -112,6 +113,7 @@ function bindMenuButtons() {
   if (backFromDevResearchBtn) {
     backFromDevResearchBtn.addEventListener('click', () => {
       renderResearchTree();
+      renderCardResearchShop();
       showScreen('researchMenu');
     });
   }

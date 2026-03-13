@@ -19,7 +19,6 @@ function getCardBuyCost(card) {
   return card?.buyCost || 0;
 }
 
-
 function isCardTowerUnlocked(card) {
   if (!card || !card.towerTypeId) {
     return true;
