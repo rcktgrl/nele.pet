@@ -87,3 +87,7 @@ canvas{display:block;width:100%;height:100%}
 .owned-card-name{font-weight:800}
 .owned-card-desc{font-size:12px;color:var(--muted);line-height:1.35}
 .mini{font-size:12px;color:var(--muted)}
+.menu-version{position:absolute;right:22px;bottom:18px;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+.menu-card{position:relative}
+.owned-card-meta{font-size:11px;color:var(--muted);margin-top:auto}
+.owned-card.locked{opacity:.55;filter:saturate(.6);cursor:not-allowed}

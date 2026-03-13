@@ -2,6 +2,17 @@ function getCardSlotsUnlockedCount() {
   return CARD_SLOT_UNLOCK_COSTS.filter((_, index) => metaProgress.cardSlotsUnlocked > index).length;
 }
 
+function isCardScoreUnlocked(card) {
+  return (metaProgress.bestRunScore || 0) >= (card?.unlockScore || 0);
+}
+
+function getOwnedCardIds() {
+  const unlockedByScore = getCardDefsArray()
+    .filter(isCardScoreUnlocked)
+    .map(card => card.id);
+
+  return [...new Set(unlockedByScore)];
+
 function getOwnedCardIds() {
   return metaProgress.ownedCards || [];
 }
@@ -74,6 +85,38 @@ function getActiveLoadoutCardIds() {
     .filter(Boolean);
 }
 
+const CARD_TOWER_EFFECT_HANDLERS = {
+  tower_stat_multiplier(tower, card) {
+    if (card.effect?.stat === 'damage') {
+      tower.damage = Math.round(tower.damage * (card.effect.multiplier || 1));
+    }
+  },
+  sniper_kill_haste(tower, card) {
+    tower.onKillCooldownMultiplier = card.effect?.cooldownMultiplierAfterKill || 0.25;
+  },
+  rapid_ammo_reload_boost(tower, card) {
+    const ammoMultiplier = card.effect?.ammoMultiplier || 1;
+    const reloadSpeedMultiplier = card.effect?.reloadSpeedMultiplier || 1;
+
+    if (tower.magSize != null) {
+      tower.magSize = Math.max(1, Math.round(tower.magSize * ammoMultiplier));
+      tower.ammo = tower.magSize;
+      tower.requiresAmmo = true;
+    }
+
+    if (tower.reloadTime != null) {
+      tower.reloadTime = tower.reloadTime / Math.max(1, reloadSpeedMultiplier);
+    }
+  },
+  laser_overtuned_lense(tower, card) {
+    tower.runtimeTargetingMode = card.effect?.targetingMode || 'first';
+    tower.runtimeLaserDamageProfile = {
+      values: [...(card.effect?.damageFalloffValues || [])],
+      distances: [...(card.effect?.damageFalloffDistances || [])]
+    };
+  }
+};
+
 function applyCardsToTower(tower) {
   const activeCards = game.activeCards || [];
   const towerTypeId = getTowerTypeId(tower);
@@ -83,13 +126,9 @@ function applyCardsToTower(tower) {
     if (!card || card.towerTypeId !== towerTypeId) {
       continue;
     }
-
-    if (card.effect?.type === 'tower_stat_multiplier' && card.effect.stat === 'damage') {
-      tower.damage = Math.round(tower.damage * (card.effect.multiplier || 1));
-    }
-
-    if (card.effect?.type === 'sniper_kill_haste') {
-      tower.sniperKillHasteCharges = 0;
+    const handler = CARD_TOWER_EFFECT_HANDLERS[card.effect?.type];
+    if (handler) {
+      handler(tower, card);
     }
   }
 }
@@ -136,7 +175,7 @@ function renderOwnedCardsGrid() {
   }
 
   const query = (ui.cardSearchInput?.value || '').trim().toLowerCase();
-  const cardDefs = getCardDefsArray().filter(card => isCardOwned(card.id));
+  const cardDefs = getCardDefsArray();
   const filtered = query
     ? cardDefs.filter(card => card.name.toLowerCase().includes(query))
     : cardDefs;
@@ -151,10 +190,25 @@ function renderOwnedCardsGrid() {
     const towerDef = getTowerDef(card.towerTypeId);
     const iconColor = towerDef?.visuals?.color || '#ffffff';
 
+    const unlocked = isCardOwned(card.id);
+    const reqScore = card.unlockScore || 0;
+
     cardEl.innerHTML = `
       <div class="owned-card-image" style="color:${iconColor}">⬢</div>
       <div class="owned-card-name">${card.name}</div>
       <div class="owned-card-desc">${card.description}</div>
+      <div class="owned-card-meta">${unlocked ? 'Freigeschaltet' : `Benötigt ${reqScore} Best Score`}</div>
+    `;
+
+    cardEl.classList.toggle('locked', !unlocked);
+
+    cardEl.addEventListener('click', () => {
+      if (!unlocked) {
+        return;
+      }
+      const unlockedSlots = metaProgress.cardSlotsUnlocked || 0;
+      const loadout = metaProgress.cardLoadout || [];
+      let slotIndex = loadout.findIndex((entry, index) => index < unlockedSlots && !entry);
     `;
 
     cardEl.addEventListener('click', () => {

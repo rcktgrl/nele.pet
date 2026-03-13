@@ -6,6 +6,9 @@ const CARD_DEFS = {
     name: 'Basic Overclock I',
     towerTypeId: 'basic',
     rarity: 'common',
+
+    unlockScore: 0,
+
     description: 'Basic macht 30% mehr Schaden.',
     effect: {
       type: 'tower_stat_multiplier',
@@ -18,10 +21,38 @@ const CARD_DEFS = {
     name: 'Sniper Chain Trigger',
     towerTypeId: 'sniper',
     rarity: 'rare',
-    description: 'Nach jedem Kill schießt der nächste Sniper-Schuss mit 75% weniger Cooldown.',
+    unlockScore: 5000,
+    description: 'Nach einem Kill lädt der nächste Schuss 75% schneller nach.',
     effect: {
       type: 'sniper_kill_haste',
       cooldownMultiplierAfterKill: 0.25
+    }
+  },
+  rapid_mag_booster: {
+    id: 'rapid_mag_booster',
+    name: 'Rapid: Ammo Matrix',
+    towerTypeId: 'rapid',
+    rarity: 'rare',
+    unlockScore: 10000,
+    description: '+200% Ammo und +100% Reload Speed für Rapid.',
+    effect: {
+      type: 'rapid_ammo_reload_boost',
+      ammoMultiplier: 3,
+      reloadSpeedMultiplier: 2
+    }
+  },
+  laser_overtuned_lense: {
+    id: 'laser_overtuned_lense',
+    name: 'Overtuned Lense',
+    towerTypeId: 'laser',
+    rarity: 'epic',
+    unlockScore: 15000,
+    description: 'Laser zielt auf First. Nah wenig Schaden, weit entfernt sehr viel Schaden.',
+    effect: {
+      type: 'laser_overtuned_lense',
+      targetingMode: 'first',
+      damageFalloffValues: [4, 12, 30, 75],
+      damageFalloffDistances: [60, 130, 200, 250]
     }
   }
 };

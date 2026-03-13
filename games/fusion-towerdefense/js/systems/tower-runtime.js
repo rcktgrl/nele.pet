@@ -164,6 +164,30 @@ function registerTowerKillCredit(towerInstanceId) {
     return;
   }
 
+  const hasSniperKillCard = (game.activeCards || []).includes('sniper_chain_trigger') && getTowerTypeId(tower) === 'sniper';
+  if (!hasSniperKillCard) {
+    return;
+  }
+
+  const hasteMultiplier = tower.onKillCooldownMultiplier || 0.25;
+
+  if ((tower.cooldown || 0) > 0.01) {
+    const targetCooldown = Math.max(0.01, tower.fireRate * hasteMultiplier);
+    tower.cooldown = Math.min(tower.cooldown, targetCooldown);
+    return;
+  }
+
+  tower.nextShotCooldownMultiplier = hasteMultiplier;
+}
+
+registerTowerRuntimeHook('computeCooldown', ({ tower, cooldown }) => {
+  const multiplier = tower?.nextShotCooldownMultiplier;
+  if (multiplier == null) {
+    return { tower, cooldown };
+  }
+
+  tower.nextShotCooldownMultiplier = null;
+  return { tower, cooldown: cooldown * multiplier };
   if ((game.activeCards || []).includes('sniper_chain_trigger') && getTowerTypeId(tower) === 'sniper') {
     tower.sniperKillHasteCharges = (tower.sniperKillHasteCharges || 0) + 1;
   }

@@ -3,7 +3,9 @@ const metaProgress={
     bestRunScore:0,
     cardSlotsUnlocked:0,
     cardLoadout:[null,null,null],
-    ownedCards:['basic_overclock_i','sniper_chain_trigger'],
+
+    ownedCards:[],
+
     researched:{
         tesla:false,
         laser:false,

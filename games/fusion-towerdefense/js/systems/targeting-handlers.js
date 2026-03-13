@@ -15,7 +15,7 @@ function getTowerTargetingConfig(tower) {
 
   return {
     fireCondition: raw.fireCondition || DEFAULT_TARGETING_CONFIG.fireCondition,
-    targetingMode: raw.targetingMode || DEFAULT_TARGETING_CONFIG.targetingMode,
+    targetingMode: tower?.runtimeTargetingMode || raw.targetingMode || DEFAULT_TARGETING_CONFIG.targetingMode,
     retentionMode: raw.retentionMode || DEFAULT_TARGETING_CONFIG.retentionMode,
     rangePolicy: {
       requireInRangeToAcquire:
