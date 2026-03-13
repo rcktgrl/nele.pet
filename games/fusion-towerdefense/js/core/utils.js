@@ -37,3 +37,14 @@ function snapToGrid(v){return Math.round(v/RESEARCH_GRID_SIZE)*RESEARCH_GRID_SIZ
 function lerp(a,b,t){return a+(b-a)*t}
 function getScoreMultiplierForTerrain(p){p=clamp(p,10,100);if(p>=50)return lerp(1,1.2,(100-p)/50);if(p>=25)return lerp(1.2,1.5,(50-p)/25);return lerp(1.5,3,(25-p)/15)}
 function getScoreMultiplierForPathLength(v){v=clamp(v,20,50);if(v<=40)return lerp(1.3,1,(v-20)/20);return lerp(1,.8,(v-40)/10)}
+
+function getMapScale() {
+  if (!game?.map) return 1;
+  const scale = game.map.renderScale;
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
+function scaleWorldValue(value) {
+  return value * getMapScale();
+}
+
