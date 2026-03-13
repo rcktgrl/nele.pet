@@ -120,21 +120,23 @@ async function resolveLoginEmail(username) {
     return { email: '', errorMessage: 'Please enter your username.' };
   }
 
-  const { data, error } = await supabase
-    .from('arcade_profiles')
-    .select('email')
-    .eq('username', safeUsername)
-    .maybeSingle();
+
+  const { data, error } = await supabase.rpc('arcade_resolve_login_email', {
+    p_username: safeUsername,
+  });
+
 
   if (error) {
     return { email: '', errorMessage: friendlyAuthError(error) };
   }
 
-  if (!data?.email) {
+
+  if (!data) {
     return { email: '', errorMessage: 'Username not found. Please register first.' };
   }
 
-  return { email: normalizeEmail(data.email), errorMessage: '' };
+  return { email: normalizeEmail(data), errorMessage: '' };
+
 }
 
 async function upsertProfile(userId, username, email) {
@@ -282,10 +284,13 @@ async function updateUsernameEverywhere(newUsername) {
     return;
   }
 
-  const { error: leaderboardError } = await supabase
-    .from('turborace_leaderboard')
-    .update({ username: safeUsername })
-    .or(`user_id.eq.${user.id},username.eq.${previousUsername}`);
+
+  const { error: leaderboardError } = await supabase.rpc('arcade_sync_username_everywhere', {
+    p_user_id: user.id,
+    p_old_username: previousUsername,
+    p_new_username: safeUsername,
+  });
+
 
   if (leaderboardError) {
     accountFeedback.textContent = `${friendlyAuthError(leaderboardError)} (profile updated, but leaderboard sync failed)`;
