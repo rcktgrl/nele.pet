@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Tower Defense</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<section id="mainMenu" class="screen active"><div class="menu-card"><div class="title-wrap"><div class="eyebrow">Neon Defense Grid</div><h1>Neon Tower Defense</h1><p class="subtitle">Research, Fusionen und Neon-Tower mit ersten Redesigns.</p></div><div class="menu-grid"><div class="panel"><h3>Start</h3><div class="button-list"><button id="playBtn" class="btn primary">▶ Spiel starten</button><button id="mapMenuBtn" class="btn">▣ Setup öffnen</button><button id="researchMenuBtn" class="btn">✦ Research</button></div><div class="info-grid"><div class="info-box"><div class="label">Türme</div><div class="value" id="menuTowerCount">4</div></div><div class="info-box"><div class="label">Wellenlimit</div><div class="value" id="menuWaveLimit">20</div></div><div class="info-box"><div class="label">Meta-Cash</div><div class="value" id="mainMetaCash">0</div></div><div class="info-box"><div class="label">Karte</div><div class="value">Orthogonal</div></div></div></div><div class="panel"><h3>Überblick</h3><p>Basesniper, Snipegun, Tesla und Longsniper sind Basis-Research. Stormfork braucht Tesla, Quicksniper braucht Basesniper.</p><br><p class="footer-note">Tesla und Stormfork wurden gebufft. Longsniper ist neu.</p></div></div></div></section>
+<section id="mapMenu" class="screen"><div class="menu-card"><div class="title-wrap"><div class="eyebrow">Map Setup</div><h2 style="font-size:clamp(28px,5vw,46px)">Map-Menü</h2><p class="subtitle">Hier stellst du Baufläche und Wellenlimit vor dem Run ein.</p></div><div class="settings-layout"><div class="panel"><h3>Setup ▸ Karte</h3><div class="setting-row"><div class="setting-copy"><strong>Maximale Wellen</strong><span>Legt fest, bis zu welcher Wave die Runde läuft.</span></div><div class="number-control"><button id="waveLimitMinus" class="btn small center">-</button><input id="waveLimitInput" type="number" min="1" max="999" step="1" value="20"><button id="waveLimitPlus" class="btn small center">+</button></div></div><div class="setting-row"><div class="setting-copy"><strong>Bebaubares Terrain</strong><span>Weniger Terrain erhöht den Score-Multiplikator linear.</span></div><div class="number-control"><button id="terrainMinus" class="btn small center">-</button><input id="terrainInput" type="number" min="10" max="100" step="5" value="100"><button id="terrainPlus" class="btn small center">+</button></div></div><div class="setting-row"><div class="setting-copy"><strong>Pfadlänge</strong><span>Kürzere Pfade geben mehr Score, längere etwas weniger.</span></div><div class="number-control"><button id="pathLengthMinus" class="btn small center">-</button><input id="pathLengthInput" type="number" min="20" max="50" step="1" value="40"><button id="pathLengthPlus" class="btn small center">+</button></div></div><div class="setting-row"><div class="setting-copy"><strong>Enemy Count</strong><span>Mehr Gegner erhöhen den Score multiplikativ und senken den Geld-Drop pro Gegner entsprechend.</span></div><div class="number-control"><button id="enemyCountMinus" class="btn small center">-</button><input id="enemyCountInput" type="number" min="1" step="0.1" value="1"><button id="enemyCountPlus" class="btn small center">+</button></div></div></div><div class="panel"><h3>Setup ▸ Vorschau</h3><p id="mapPreviewText">Automatisch generierte Neon-Map mit orthogonalem Pfad.</p><div class="info-grid"><div class="info-box"><div class="label">Wellenlimit</div><div class="value" id="settingsWaveLimit">20</div></div><div class="info-box"><div class="label">Score-Multi</div><div class="value" id="scoreMultValue">x1.0</div></div><div class="info-box"><div class="label">Pfadlänge</div><div class="value" id="settingsPathLength">40</div></div><div class="info-box"><div class="label" style="color:var(--yellow)">Enemy Count</div><div class="value" id="settingsEnemyCount">x1.0</div></div></div><div style="display:flex;gap:12px;margin-top:22px;flex-wrap:wrap"><button id="settingsPlayBtn" class="btn primary">Mit diesen Werten starten</button><button id="backToMenuBtn" class="btn">Zurück zum Hauptmenü</button></div></div></div></section>
+<section id="researchMenu" class="screen"><div class="research-full"><div class="research-card"><div class="title-wrap"><div class="eyebrow">Meta Progression</div><h2 style="font-size:clamp(28px,5vw,46px)">Research</h2><p class="subtitle">Der Tree wird aus Node- und Verbindungsdaten aufgebaut. Grün ist freigeschaltet, grau noch gesperrt.</p></div><div style="display:flex;gap:18px;flex:1;min-height:0"><div style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:0" class="panel"><h3>Forschungsbaum</h3><div id="researchTreeView" class="research-tree"></div></div><div style="width:260px;display:flex;flex-direction:column;gap:18px" class="panel"><h3>Meta-Währung</h3><div class="info-grid"><div class="info-box"><div class="label">Gesamt-Cash</div><div class="value" id="metaCashValue">0</div></div><div class="info-box"><div class="label">Freigeschaltet</div><div class="value" id="researchCountValue">0</div></div></div><p id="researchStatusText" class="footer-note">Noch keine zusätzliche Research freigeschaltet.</p><div id="researchHoverInfo" class="research-hover-box">Hovere über einen Research-Knoten, um Fusion, Stats und Beschreibung zu sehen.</div><div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:auto"><button id="openDevResearchBtn" class="btn">⚙ Developer Mode</button><button id="backFromResearchBtn" class="btn">Zurück zum Hauptmenü</button></div></div></div></div></div></section>
+<section id="devResearchMenu" class="screen">
+  <div class="research-full">
+    <div class="research-card">
+      <div class="title-wrap">
+        <div class="eyebrow">Developer Mode</div>
+        <h2 style="font-size:clamp(28px,5vw,46px)">Edit Research Tree</h2>
+        <p class="subtitle">
+          Nodes verschieben, verbinden und Konstanten ändern. Dieser Modus ist nur temporär.
+        </p>
+      </div>
+
+      <div class="dev-layout">
+        <div class="panel">
+          <div id="devTreeCanvas" class="dev-canvas"></div>
+        </div>
+
+        <div class="panel dev-side">
+          <h3>Node bearbeiten</h3>
+
+          <select id="devNodeSelect"></select>
+          <input id="devNodeTitle" placeholder="Titel">
+          <input id="devNodeCost" type="number" placeholder="Kosten">
+          <textarea id="devNodeDesc" placeholder="Beschreibung"></textarea>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <input id="devNodeX" type="number" placeholder="X">
+            <input id="devNodeY" type="number" placeholder="Y">
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="devSaveNodeBtn" class="btn small">Node speichern</button>
+            <button id="devConnectBtn" class="btn small">Verbinden</button>
+            <button id="devDisconnectBtn" class="btn small">Verbindung löschen</button>
+            <button id="devResetTreeBtn" class="btn small">Tree reset</button>
+            <button id="devExportTreeBtn" class="btn small">Export Tree JS</button>
+            <button id="devCopyExportBtn" class="btn small">Export kopieren</button>
+          </div>
+
+          <textarea
+            id="devExportOutput"
+            readonly
+            placeholder="Hier erscheint der exportierbare research.js-Inhalt."
+            style="width:100%;min-height:220px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.07);border-radius:10px;color:var(--text);padding:10px;outline:none;resize:vertical;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;"
+          ></textarea>
+
+          <p class="footer-note">
+            Exportiert den aktuellen Dev-Tree als kompletten Inhalt für
+            <code>js/data/research.js</code>.
+          </p>
+
+          <p class="footer-note">
+            Verbinden nutzt die zwei zuletzt ausgewählten Nodes. Eine Kante bedeutet Voraussetzung.
+          </p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+          <input id="devMetaCashInput" type="number" placeholder="Meta-Cash" value="10000" style="flex:1;min-width:120px">
+          <button id="devAddMetaCashBtn" class="btn small">Meta-Cash hinzufügen</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:22px;flex-wrap:wrap">
+        <button id="backFromDevResearchBtn" class="btn">Zurück zu Research</button>
+      </div>
+    </div>
+  </div>
+</section>
+<section id="gameScreen" class="screen">
+  <div class="game-shell">
+
+    <aside class="sidebar">
+
+      <div class="game-card">
+        <div class="section-title">Run-Status</div>
+
+        <div class="hud-grid">
+          <div class="hud-stat">
+            <div class="label">Geld</div>
+            <div class="value" id="moneyValue">0</div>
+          </div>
+
+          <div class="hud-stat">
+            <div class="label">Score</div>
+            <div class="value" id="scoreValue">0</div>
+          </div>
+
+          <div class="hud-stat">
+            <div class="label">Leben</div>
+            <div class="value" id="livesValue">20</div>
+          </div>
+
+          <div class="hud-stat">
+            <div class="label">Wave</div>
+            <div class="value" id="waveValue">0 / 20</div>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="game-card">
+        <div class="section-title">Türme</div>
+        <div class="tower-list" id="towerList"></div>
+      </div>
+
+
+      <div class="game-card">
+        <div class="section-title">Aktion</div>
+
+        <div class="status-line" id="statusLine">
+          Wähle einen Turm aus und klicke auf eine freie Bauzelle.
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+          <button id="startWaveBtn" class="btn small">▶ Start Wave</button>
+          <button id="cancelTowerBtn" class="btn small">✕ Auswahl aufheben</button>
+          <button id="sellModeBtn" class="btn small">$ Verkaufen</button>
+          <button id="ritualModeBtn" class="btn small" title="Ritualmodus">⛧</button>
+          <button id="leaveRunBtn" class="btn small">⌂ Zum Menü</button>
+        </div>
+      </div>
+
+
+      <div class="game-card">
+        <div class="section-title">Ausgewählter Turm</div>
+
+        <div id="selectedTowerStats" class="footer-note">
+          Wähle links einen Turm aus, um seine Werte oder Fusionen zu sehen.
+        </div>
+      </div>
+
+
+      <div class="game-card">
+        <div class="section-title">Nächste Waves</div>
+
+        <div id="wavePreviewList" class="footer-note">
+          Wave-Vorschau wird vorbereitet.
+        </div>
+      </div>
+
+    </aside>
+
+
+    <main class="game-area">
+      <canvas id="gameCanvas" width="1280" height="720"></canvas>
+
+      <div class="top-overlay">
+
+        <div class="overlay-chip">
+          <strong id="topInfo">Wave 0 / 20</strong>
+          <br>
+          <span id="topSubInfo">Bereit für den Start der ersten Wave.</span>
+        </div>
+
+        <div class="overlay-chip">
+          <strong>Steuerung</strong>
+          <br>
+          <span>Klick = bauen/fusionieren, Verkaufen über Modus</span>
+        </div>
+
+      </div>
+    </main>
+
+  </div>
+</section>
+<script src="js/data/research.js"></script>
+<script src="js/data/towers.js"></script>
+<script src="js/core/tower-registry.js"></script>
+<script src="js/core/constants.js"></script>
+<script src="js/core/state.js"></script>
+<script src="js/core/save.js"></script>
+<script src="js/core/utils.js"></script>
+<script src="js/core/research-helpers.js"></script>
+<script src="js/core/dom.js"></script>
+<script src="js/ui/screens.js"></script>
+<script src="js/ui/hud.js"></script>
+<script src="js/ui/research-ui.js"></script>
+<script src="js/render/render.js"></script>
+<script src="js/render/tower-render-defs.js"></script>
+<script src="js/render/tower-render-system.js"></script>
+<script src="js/projectiles/projectile-defaults.js"></script>
+<script src="js/projectiles/projectile-defs.js"></script>
+<script src="js/projectiles/projectile-registry.js"></script>
+<script src="js/projectiles/projectile-spawn.js"></script>
+<script src="js/projectiles/projectile-render.js"></script>
+<script src="js/projectiles/projectile-runtime-config.js"></script>
+<script src="js/projectiles/projectile-hooks.js"></script>
+<script src="js/projectiles/projectile-injections.js"></script>
+<script src="js/projectiles/projectile-pipelines.js"></script>
+<script src="js/systems/map.js"></script>
+<script src="js/systems/enemies.js"></script>
+<script src="js/systems/waves.js"></script>
+<script src="js/systems/combat.js"></script>
+<script src="js/data/rituals.js"></script>
+<script src="js/systems/targeting-handlers.js"></script>
+<script src="js/systems/attack-handlers.js"></script>
+<script src="js/systems/towers.js"></script>
+<script src="js/systems/game-loop.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
