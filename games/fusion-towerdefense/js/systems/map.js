@@ -281,6 +281,38 @@ function generateMap(){
   ui.mapPreviewText.textContent=`Automatisch generierte Neon-Map mit orthogonalem Pfad. Ziellänge: ${targetPathLength} · Tatsächliche Länge: ${path.length} · Profil: ${best.profile.name} · Start: (${best.start.c},${best.start.r}) · Ziel: (${best.end.c},${best.end.r}) · Inseln: ${islandCount} (${nearIslandCount} near / ${farIslandCount} far) · Baufläche: ${mapConfig.terrainPercent}% · Score-Multiplikator: x${mapConfig.scoreMultiplier.toFixed(2)} · Wellenlimit: ${mapConfig.waveLimit}.`;
 }
 
+
+function getMaxTowerRange() {
+  let maxRange = 0;
+
+  for (const def of getTowerDefsArray()) {
+    const range = def?.stats?.range;
+    if (Number.isFinite(range)) {
+      maxRange = Math.max(maxRange, range);
+    }
+  }
+
+  return maxRange;
+}
+
+function getMaxTowerBodyRadius() {
+  let maxRadius = 24;
+
+  for (const def of Object.values(TOWER_RENDER_DEFS || {})) {
+    const bodyRadius = def?.base?.bodyRadius;
+    if (Number.isFinite(bodyRadius)) {
+      maxRadius = Math.max(maxRadius, bodyRadius);
+    }
+  }
+
+  return maxRadius;
+}
+
+function getMaxEntityRadius() {
+  const enemyTemplateMax = 28;
+  return Math.max(getMaxTowerBodyRadius(), enemyTemplateMax);
+}
+
 function refreshMapLayoutFromCanvas() {
   if (!game.map || !canvas?.parentElement) {
     return;
@@ -290,13 +322,41 @@ function refreshMapLayoutFromCanvas() {
   const horizontalPadding = Math.max(18, parentRect.width * 0.03);
   const verticalPadding = Math.max(18, parentRect.height * 0.04);
 
+  const contentWidth = Math.max(1, parentRect.width - horizontalPadding * 2);
+  const contentHeight = Math.max(1, parentRect.height - verticalPadding * 2);
+
+  const baseCellSize = BASE_MAP_CELL_SIZE || 72;
+  const maxRange = getMaxTowerRange();
+  const maxEntityRadius = getMaxEntityRadius();
+  const paddingRange = Math.ceil(maxRange + maxEntityRadius + 12);
+
+  const limitedCellSize = Math.floor(
+    Math.min(
+      contentWidth / game.map.cols,
+      contentHeight / game.map.rows
+    )
+  );
+
+  const safeWidthCellSize = Math.floor(
+    (contentWidth - paddingRange * 2) / Math.max(1, game.map.cols)
+  );
+  const safeHeightCellSize = Math.floor(
+    (contentHeight - paddingRange * 2) / Math.max(1, game.map.rows)
+  );
+
+  const scaleLimitedCellSize = Math.floor(
+    Math.min(
+      safeWidthCellSize * (baseCellSize / (baseCellSize + 1)),
+      safeHeightCellSize * (baseCellSize / (baseCellSize + 1))
+    )
+  );
+
+  const minCellSize = 16;
   const cellSize = Math.max(
-    28,
-    Math.floor(
-      Math.min(
-        (parentRect.width - horizontalPadding * 2) / game.map.cols,
-        (parentRect.height - verticalPadding * 2) / game.map.rows
-      )
+    minCellSize,
+    Math.min(
+      limitedCellSize,
+      Number.isFinite(scaleLimitedCellSize) ? scaleLimitedCellSize : limitedCellSize
     )
   );
 
@@ -304,6 +364,7 @@ function refreshMapLayoutFromCanvas() {
   const mapPixelHeight = cellSize * game.map.rows;
 
   game.map.cellSize = cellSize;
+  game.map.renderScale = cellSize / baseCellSize;
   game.map.offsetX = Math.floor((parentRect.width - mapPixelWidth) / 2);
   game.map.offsetY = Math.floor((parentRect.height - mapPixelHeight) / 2);
   game.map.pathPoints = game.map.pathCells.map(cell => ({
@@ -316,12 +377,23 @@ function refreshMapLayoutFromCanvas() {
     tower.y = game.map.offsetY + tower.r * cellSize + cellSize / 2;
   }
 
+
+  for (const projectile of game.projectiles) {
+    if (projectile.baseRadius != null) {
+      projectile.radius = scaleWorldValue(projectile.baseRadius);
+    }
+  }
+
   for (const enemy of game.enemies) {
     const index = Math.max(0, Math.min(enemy.pathIndex || 0, game.map.pathPoints.length - 1));
     const point = game.map.pathPoints[index];
     if (point) {
       enemy.x = point.x;
       enemy.y = point.y;
+    }
+
+    if (enemy.baseRadius != null) {
+      enemy.radius = scaleWorldValue(enemy.baseRadius);
     }
   }
 }
