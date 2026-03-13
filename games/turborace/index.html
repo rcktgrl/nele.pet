@@ -93,7 +93,7 @@
     <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
     <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.21</div>
+  <div class="menuVersion" aria-label="Game version">v0.23</div>
 </div>
 
 <!-- CAR SELECT -->
@@ -274,6 +274,16 @@
   <div class="menuActions menuActions-inline">
     <button id="menuBtn" class="btn btn-p">MENU</button>
     <button id="raceAgainBtn" class="btn btn-s">RACE AGAIN</button>
+  </div>
+</div>
+
+<div id="leaderboardModal" aria-hidden="true">
+  <div class="leaderboardPanel" role="dialog" aria-modal="true" aria-labelledby="leaderboardModalTitle">
+    <h3 id="leaderboardModalTitle">Track Leaderboard</h3>
+    <div id="leaderboardModalList"></div>
+    <div class="menuActions menuActions-inline">
+      <button id="closeLeaderboardModalBtn" class="btn btn-p">CLOSE</button>
+    </div>
   </div>
 </div>
 </body>
