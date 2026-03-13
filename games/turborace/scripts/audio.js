@@ -13,6 +13,35 @@ export let aiSounds = [];
 
 // Volume state (0-1)
 let musicVolume = 0.6, sfxVolume = 0.8;
+const MUSIC_VOLUME_KEY='turborace_music_volume';
+const SFX_VOLUME_KEY='turborace_sfx_volume';
+
+function clampVolumePercent(v,fallback){
+  const parsed=Number(v);
+  if(!Number.isFinite(parsed)) return fallback;
+  return Math.max(0,Math.min(100,Math.round(parsed)));
+}
+
+function syncVolumeUI(){
+  const musicValue=Math.round(musicVolume*100);
+  const sfxValue=Math.round(sfxVolume*100);
+  const musicSlider=document.getElementById('musicVolSlider');
+  const sfxSlider=document.getElementById('sfxVolSlider');
+  const musicLabel=document.getElementById('musicVolVal');
+  const sfxLabel=document.getElementById('sfxVolVal');
+  if(musicSlider) musicSlider.value=String(musicValue);
+  if(sfxSlider) sfxSlider.value=String(sfxValue);
+  if(musicLabel) musicLabel.textContent=String(musicValue);
+  if(sfxLabel) sfxLabel.textContent=String(sfxValue);
+}
+
+export function initAudioSettings(){
+  const savedMusic=clampVolumePercent(localStorage.getItem(MUSIC_VOLUME_KEY),60);
+  const savedSfx=clampVolumePercent(localStorage.getItem(SFX_VOLUME_KEY),80);
+  musicVolume=savedMusic/100;
+  sfxVolume=savedSfx/100;
+  syncVolumeUI();
+}
 
 export function initAudio(){
   if(audioReady) return;
@@ -57,14 +86,22 @@ function applyVolumes(){
 }
 
 export function onMusicVol(v){
-  musicVolume = v/100;
-  document.getElementById('musicVolVal').textContent = v;
+  const value=clampVolumePercent(v,60);
+  musicVolume = value/100;
+  localStorage.setItem(MUSIC_VOLUME_KEY, String(value));
+  document.getElementById('musicVolVal').textContent = value;
+  const slider=document.getElementById('musicVolSlider');
+  if(slider&&slider.value!==String(value)) slider.value=String(value);
   if(audioReady) musicMaster.gain.setTargetAtTime(musicVolume, audioCtx.currentTime, .05);
 }
 
 export function onSfxVol(v){
-  sfxVolume = v/100;
-  document.getElementById('sfxVolVal').textContent = v;
+  const value=clampVolumePercent(v,80);
+  sfxVolume = value/100;
+  localStorage.setItem(SFX_VOLUME_KEY, String(value));
+  document.getElementById('sfxVolVal').textContent = value;
+  const slider=document.getElementById('sfxVolSlider');
+  if(slider&&slider.value!==String(value)) slider.value=String(value);
   if(audioReady) sfxMaster.gain.setTargetAtTime(sfxVolume, audioCtx.currentTime, .05);
 }
 
