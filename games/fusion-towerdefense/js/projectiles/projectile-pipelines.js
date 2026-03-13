@@ -177,6 +177,7 @@ function runStandardProjectilePipeline(projectile, projectileDef, dt) {
         hitMode: 'direct'
       });
 
+      registerTowerKillCredit(projectile.sourceTowerId);
       rewardEnemyKill(enemy);
       game.enemies.splice(j, 1);
     }
@@ -305,6 +306,7 @@ function runBeamProjectilePipeline(projectile, projectileDef, dt) {
             hitMode: 'beam'
           });
 
+          registerTowerKillCredit(projectile.sourceTowerId);
           rewardEnemyKill(target);
           const idx = game.enemies.indexOf(target);
           if (idx !== -1) {
@@ -391,6 +393,7 @@ function runTeslaChainProjectilePipeline(projectile, projectileDef, dt) {
         hitMode: 'chain'
       });
 
+      registerTowerKillCredit(projectile.sourceTowerId);
       rewardEnemyKill(target);
       const idx = game.enemies.indexOf(target);
       if (idx !== -1) {

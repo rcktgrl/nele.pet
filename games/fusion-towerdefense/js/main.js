@@ -42,8 +42,10 @@ function bindMenuButtons() {
   const sellModeBtn = document.getElementById('sellModeBtn');
   const leaveRunBtn = document.getElementById('leaveRunBtn');
   const ritualModeBtn = document.getElementById('ritualModeBtn');
+  const backFromCardsBtn = document.getElementById('backFromCardsBtn');
+  const startRunFromCardsBtn = document.getElementById('startRunFromCardsBtn');
   if (playBtn) {
-    playBtn.addEventListener('click', startGame);
+    playBtn.addEventListener('click', openCardLoadoutScreen);
   }
 
   if (mapMenuBtn) {
@@ -88,7 +90,7 @@ function bindMenuButtons() {
   }
 
   if (settingsPlayBtn) {
-    settingsPlayBtn.addEventListener('click', startGame);
+    settingsPlayBtn.addEventListener('click', openCardLoadoutScreen);
   }
 
   if (startWaveBtn) {
@@ -147,6 +149,23 @@ function bindMenuButtons() {
       updateTowerSelectionUI();
       updateSelectedTowerStats();
     });
+  }
+
+
+  if (ui.unlockCardSlotBtn) {
+    ui.unlockCardSlotBtn.addEventListener('click', unlockNextCardSlot);
+  }
+
+  if (ui.cardSearchInput) {
+    ui.cardSearchInput.addEventListener('input', renderOwnedCardsGrid);
+  }
+
+  if (backFromCardsBtn) {
+    backFromCardsBtn.addEventListener('click', () => showScreen('mainMenu'));
+  }
+
+  if (startRunFromCardsBtn) {
+    startRunFromCardsBtn.addEventListener('click', startGame);
   }
 
   if (leaveRunBtn) {

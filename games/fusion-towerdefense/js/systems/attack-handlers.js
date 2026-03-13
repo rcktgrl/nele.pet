@@ -13,7 +13,18 @@ const ATTACK_HANDLERS = {
   flamethrower_pierce: handleFlamethrowerAttack,
   laser_beam: handleLaserBeamAttack,
   pulse_laser_beam: handlePulseLaserBeamAttack,
+  inferno_beam: handleInfernoBeamAttack,
   _beam: handleBeamAttack
+};
+
+const ATTACK_TO_PROJECTILE_TYPE = {
+  railgun: 'rail_slug',
+  explosive_projectile: 'explosive_orb',
+  mortar_target_point: 'mortar_shell',
+  flamethrower_pierce: 'flame_piercer',
+  laser_beam: 'laser_beam_projectile',
+  pulse_laser_beam: 'pulse_beam_projectile',
+  tesla_chain: 'tesla_arc'
 };
 
 function getTowerProjectileOverrideConfig(tower) {
@@ -41,22 +52,11 @@ function mergeTowerProjectileOverrides(tower, overrides = {}) {
 
 function getTowerProjectileTypeId(tower, fallbackProjectileTypeId = 'basic_bullet') {
   const def = getTowerDefFromInstance(tower);
+  const attackType = getTowerResolvedAttackType(tower);
+  const mappedFallback = ATTACK_TO_PROJECTILE_TYPE[attackType] || fallbackProjectileTypeId;
   const explicit = def?.special?.projectileTypeId;
-  if (explicit) {
-    return explicit;
-  }
 
-  const attackType = def?.special?.attackType;
-
-  if (attackType === 'railgun') return 'rail_slug';
-  if (attackType === 'explosive_projectile') return 'explosive_orb';
-  if (attackType === 'mortar_target_point') return 'mortar_shell';
-  if (attackType === 'flamethrower_pierce') return 'flame_piercer';
-  if (attackType === 'laser_beam') return 'laser_beam_projectile';
-  if (attackType === 'pulse_laser_beam') return 'pulse_beam_projectile';
-  if (attackType === 'tesla_chain') return 'tesla_arc';
-
-  return fallbackProjectileTypeId;
+  return getTowerResolvedProjectileTypeId(tower, explicit || mappedFallback);
 }
 
 function fireSingleProjectile(tower, projectileTypeId, overrides = {}) {
@@ -138,6 +138,7 @@ function handleBeamAttack(t, best) {
   const damage = Math.round(getDamageFromStacks(t.Stacks || 0));
 
   best.hp -= damage;
+  best.lastHitTowerId = t.instanceId;
 
   if (best.isBoss && t.instanceId) {
     best.lastDamageWindow = 1;
@@ -352,6 +353,7 @@ function handleStormforkMultiAttack(tower, _primaryTarget) {
 
   for (const target of targets) {
     target.hp -= tower.damage;
+    target.lastHitTowerId = tower.instanceId;
 
     game.effects.push({
       type: 'lightning',
@@ -375,30 +377,16 @@ function handleProjectileAttack(t) {
     ? t.angle + ((Math.random() * 2 - 1) * t.spreadRandom)
     : t.angle;
 
-  const sniperDouble =
-    metaProgress.researched.sniper_upgrade &&
-    isTowerType(t, 'sniper') &&
-    (t.idleShotTimer || 0) >= 5;
-
   fireSingleProjectile(t, getTowerProjectileTypeId(t), {
     angle: shotAngle,
-    damage: sniperDouble ? t.damage * 2 : t.damage,
+    damage: t.damage,
     radius: isTowerType(t, 'sniper') ? 5 : 4,
     life: isTowerType(t, 'sniper') ? 2.4 : 2,
-    longsniperBoost:
-      metaProgress.researched.longsniper_upgrade &&
-      isTowerType(t, 'longsniper')
   });
 
   t.idleShotTimer = 0;
-
-  if (isTowerType(t, 'rapid') && !t.noReload) {
-    t.ammo -= 1;
-    if (t.ammo <= 0) {
-      t.reloadTimer = t.reloadTime;
-    }
-  }
 }
+
 
 function handleInfernoBeamAttack(t, best) {
   const stacks = t.infernoStacks || 0;
@@ -406,6 +394,7 @@ function handleInfernoBeamAttack(t, best) {
   const infernoDamage = Math.round(getInfernoDamageFromTower(t));
 
   best.hp -= infernoDamage;
+  best.lastHitTowerId = t.instanceId;
 
   if (best.isBoss && t.instanceId) {
     best.lastDamageWindow = 1;
