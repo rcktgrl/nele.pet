@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arcade</title>
+  <link rel="stylesheet" href="./styles/arcade.css">
+  <script type="module" src="./scripts/arcade.js" defer></script>
+</head>
+<body>
+  <main class="arcade-shell">
+    <header class="arcade-header">
+      <h1>🎮 Arcade</h1>
+      <p>Pick a game and keep one account across all games.</p>
+      <div id="user-pill" class="user-pill" hidden></div>
+    </header>
+
+    <section class="game-grid" aria-label="Arcade game list">
+      <article class="game-card">
+        <div class="game-thumb" aria-hidden="true">🏎️</div>
+        <h2>TurboRace</h2>
+        <p>Arcade 3D racing with leaderboard support.</p>
+        <a class="play-btn" href="./turborace/index.html">Play</a>
+      </article>
+    </section>
+  </main>
+
+  <div class="auth-overlay" id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <form id="auth-form" class="auth-card">
+      <h2 id="auth-title">Log in to Arcade</h2>
+      <p>Use your account to stay logged in after refresh.</p>
+      <label>
+        Email
+        <input id="auth-email" type="email" maxlength="120" autocomplete="email" required>
+      </label>
+      <label>
+        Username
+        <input id="auth-username" minlength="3" maxlength="24" autocomplete="username" required>
+      </label>
+      <label>
+        Password
+        <input id="auth-password" type="password" minlength="8" maxlength="72" autocomplete="current-password" required>
+      </label>
+      <p class="auth-note">Disclaimer: your email and username are saved for account login and profile lookup across games. Passwords are never stored in this site code and are handled securely by Supabase Auth.</p>
+      <div class="auth-actions">
+        <button type="submit" data-mode="login">Log in</button>
+        <button type="button" data-mode="register">Register</button>
+      </div>
+      <p id="auth-feedback" aria-live="polite"></p>
+    </form>
+  </div>
+</body>
+</html>
