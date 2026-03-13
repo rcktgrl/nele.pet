@@ -343,7 +343,7 @@ function runTeslaChainProjectilePipeline(projectile, projectileDef, dt) {
 
   const lingerTime = pipeline.lingerTime ?? 0.12;
   const chainDelay = pipeline.chainDelay ?? 0.12;
-  const chainRange = pipeline.chainRange ?? 120;
+  const chainRange = scaleWorldValue(pipeline.chainRange ?? 120);
   const allowRepeatTargets = !!pipeline.allowRepeatTargets;
   const retargetMode = pipeline.retargetMode ?? 'closest_unvisited';
 
