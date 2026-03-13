@@ -20,7 +20,7 @@ function getTowerBodyColor(tower) {
 
 function drawTowerRitualOverlay(tower) {
   const ritualState = getCurrentRitualCandidateState(tower);
-  const scale = getMapScale();
+  const scale = getTowerVisualScale();
   const isExecutableCenter = ritualState === 'center' && isCurrentRitualExecutable();
 
   if (ritualState === 'center') {
@@ -96,7 +96,7 @@ function drawTowerRitualOverlay(tower) {
 
 function drawTowerBase(tower) {
   const stunned = (tower.stunTimer || 0) > 0;
-  const scale = getMapScale();
+  const scale = getTowerVisualScale();
 
   ctx.fillStyle = stunned ? '#9fa7b8' : getTowerBodyColor(tower);
   ctx.beginPath();
@@ -114,7 +114,7 @@ function drawTowerAmmoOverlay(tower) {
     return;
   }
 
-  const scale = getMapScale();
+  const scale = getTowerVisualScale();
 
   const ammoRatio = Math.max(
     0,
@@ -520,7 +520,7 @@ function drawHoverPreview() {
   ctx.stroke();
 
   ctx.beginPath();
-  const scaledRange = range >= 99999 ? 320 * scale : scaleWorldValue(range);
+  const scaledRange = range >= 99999 ? 320 * scale : getRangeInPixels(range);
   ctx.arc(x, y, scaledRange, 0, Math.PI * 2);
   ctx.strokeStyle = blocked
     ? 'rgba(255,102,127,.22)'
