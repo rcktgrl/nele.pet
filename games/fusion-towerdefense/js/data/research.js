@@ -200,63 +200,28 @@ const DEFAULT_RESEARCH_NODES = [
     "y": 460
   },
   {
-  "id": "flamethrower",
-  "title": "Flamethrower",
-  "cost": 25000,
-  "desc": "Base-Tower mit großen Piercing-Schüssen und leichter Ungenauigkeit.",
-  "recipe": "Flamethrower Tower",
-  "x": 1020,
-  "y": 220,
-  "unlockScore": 7500
+    "id": "flamethrower",
+    "title": "Flamethrower",
+    "cost": 25000,
+    "desc": "Base-Tower mit großen Piercing-Schüssen und leichter Ungenauigkeit.",
+    "recipe": "Flamethrower Tower",
+    "x": 1020,
+    "y": 220,
+    "unlockScore": 7500
   },
   {
-  "id": "card_slot_1",
-  "title": "Card Slot I",
-  "cost": 1000,
-  "desc": "Schaltet den ersten Karten-Slot frei.",
-  "recipe": "Modifierkarten-Slot",
-  "x": 1260,
-  "y": 20
-  },
-  {
-  "id": "card_slot_2",
-  "title": "Card Slot II",
-  "cost": 10000,
-  "desc": "Schaltet den zweiten Karten-Slot frei.",
-  "recipe": "Modifierkarten-Slot",
-  "x": 1260,
-  "y": 120
-  },
-  {
-  "id": "card_slot_3",
-  "title": "Card Slot III",
-  "cost": 25000,
-  "desc": "Schaltet den dritten Karten-Slot frei.",
-  "recipe": "Modifierkarten-Slot",
-  "x": 1260,
-  "y": 220
-  },
-  {
-  "id": "rituals",
-  "title": "Rituals",
-  "cost": 1000,
-  "desc": "Erlaubt Rituale wie Penta.",
-  "recipe": "Ritualsystem",
-  "x": 1080,
-  "y": 20,
-  "unlockScore": 500
+    "id": "rituals",
+    "title": "Rituals",
+    "cost": 1000,
+    "desc": "Erlaubt Rituale wie Penta.",
+    "recipe": "Ritualsystem",
+    "x": 1080,
+    "y": 20,
+    "unlockScore": 500
   }
 ];
 
 const DEFAULT_RESEARCH_EDGES = [
-  {
-    "from": "card_slot_1",
-    "to": "card_slot_2"
-  },
-  {
-    "from": "card_slot_2",
-    "to": "card_slot_3"
-  },
   {
     "from": "basic_upgrade",
     "to": "duo_upgrade"

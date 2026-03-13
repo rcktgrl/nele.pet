@@ -1,14 +1,6 @@
 function buyResearch(id){
   const node=getNodeById(id);
   if(!node||metaProgress.researched[id]||metaProgress.cash<node.cost||!canResearch(id)||!isResearchScoreUnlocked(node))return;
-
-  if(id==='card_slot_1' || id==='card_slot_2' || id==='card_slot_3'){
-    const slotIndex=Number(id.slice(-1));
-    if((metaProgress.cardSlotsUnlocked||0) < slotIndex){
-      metaProgress.cardSlotsUnlocked=slotIndex;
-    }
-  }
-
   metaProgress.cash-=node.cost;
   metaProgress.researched[id]=true;
   saveMeta();
