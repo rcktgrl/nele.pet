@@ -40,6 +40,10 @@ function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_\-.]/g, '').slice(0, 24);
 }
 
+function normalizeUsernameLookup(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -115,7 +119,7 @@ function showModeChooser() {
 }
 
 async function resolveLoginEmail(username) {
-  const safeUsername = normalizeUsername(username);
+  const safeUsername = normalizeUsernameLookup(username);
   if (!safeUsername) {
     return { email: '', errorMessage: 'Please enter your username.' };
   }
@@ -374,7 +378,7 @@ async function loginOrRegister(mode) {
     if (isValidEmail(loginIdentifier)) {
       loginEmail = normalizeEmail(loginIdentifier);
     } else {
-      const { email, errorMessage } = await resolveLoginEmail(username);
+      const { email, errorMessage } = await resolveLoginEmail(loginIdentifier);
       if (errorMessage) {
         feedback.textContent = errorMessage;
         return;
