@@ -120,19 +120,23 @@ async function resolveLoginEmail(username) {
     return { email: '', errorMessage: 'Please enter your username.' };
   }
 
+
   const { data, error } = await supabase.rpc('arcade_resolve_login_email', {
     p_username: safeUsername,
   });
 
+
   if (error) {
     return { email: '', errorMessage: friendlyAuthError(error) };
   }
+
 
   if (!data) {
     return { email: '', errorMessage: 'Username not found. Please register first.' };
   }
 
   return { email: normalizeEmail(data), errorMessage: '' };
+
 }
 
 async function upsertProfile(userId, username, email) {
@@ -280,11 +284,13 @@ async function updateUsernameEverywhere(newUsername) {
     return;
   }
 
+
   const { error: leaderboardError } = await supabase.rpc('arcade_sync_username_everywhere', {
     p_user_id: user.id,
     p_old_username: previousUsername,
     p_new_username: safeUsername,
   });
+
 
   if (leaderboardError) {
     accountFeedback.textContent = `${friendlyAuthError(leaderboardError)} (profile updated, but leaderboard sync failed)`;
