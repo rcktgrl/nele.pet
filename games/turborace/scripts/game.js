@@ -1487,20 +1487,42 @@ function makeEditableTrackFromGameTrack(src){
     streetGrid:src.type==='city',gridSize:src.gridSize||70,enableRunoff:src.enableRunoff!==false,nodes:pts,assets:deepClone(src.assets||[]),source:src.id,builtin:TRACKS.some(t=>String(t.id)===String(src.id))
   };
 }
+function normaliseStoredTrack(raw){
+  if(!raw) return null;
+  let track=raw;
+  if(typeof track==='string'){
+    try{ track=JSON.parse(track); }catch{ return null; }
+  }
+  if(track&&typeof track==='object'&&track.track_data) track=track.track_data;
+  if(!track||typeof track!=='object') return null;
+  const out=deepClone(track);
+  out.id=String(out.id||raw.track_id||'');
+  if(!out.id) return null;
+  if(!out.name) out.name='Custom Track';
+  if(!Array.isArray(out.wp)||out.wp.length<3){
+    const nodes=Array.isArray(out.editorNodes)&&out.editorNodes.length>=3
+      ? out.editorNodes
+      : (Array.isArray(out.nodes)&&out.nodes.length>=3 ? out.nodes : null);
+    if(!nodes) return null;
+    out.wp=nodes.map(n=>[+n.x||0,0,+n.z||0]);
+  }
+  return out;
+}
+
 function loadEditorTracks(){
-  try{ editorTracks=JSON.parse(localStorage.getItem('turborace_custom_tracks')||'[]'); if(!Array.isArray(editorTracks))editorTracks=[]; }catch(e){ editorTracks=[]; }
+  try{
+    const parsed=JSON.parse(localStorage.getItem('turborace_custom_tracks')||'[]');
+    editorTracks=(Array.isArray(parsed)?parsed:[]).map(normaliseStoredTrack).filter(Boolean);
+  }catch{
+    editorTracks=[];
+  }
 }
 function persistEditorTracks(){ localStorage.setItem('turborace_custom_tracks', JSON.stringify(editorTracks)); }
 
 function normaliseCloudTrack(raw){
   if(!raw||typeof raw!=='object') return null;
-  const track=deepClone(raw.track_data||raw);
-  if(!track||typeof track!=='object') return null;
-  const cloudId=raw.track_id||track.id;
-  if(!cloudId) return null;
-  track.id=String(cloudId);
-  if(!track.name) track.name='Custom Track';
-  if(!Array.isArray(track.wp)||track.wp.length<3) return null;
+  const track=normaliseStoredTrack(raw);
+  if(!track) return null;
   track.__cloud=true;
   return track;
 }
