@@ -7,6 +7,15 @@ import { AI } from './ai-script.js';
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/+esm';
 import { THREE } from './three.js';
 import {
+  isTouchControlsVisibleInState,
+  updateTouchControlsVisibility,
+  onTouchControlsToggle,
+  initTouchSettings,
+  releaseAllTouchControls,
+  setupTouchControls,
+  touchState,
+} from './touch-controls.js';
+import {
   initAudio,
   onMusicVol,
   onSfxVol,
@@ -66,8 +75,6 @@ globalThis.trkPts = trkPts;
 globalThis.cityCorridors = cityCorridors;
 globalThis.cityAiPts = cityAiPts;
 let settingsFromPause=false;
-const TOUCH_TOGGLE_KEY='turborace_touch_controls';
-let touchControlsEnabled=false;
 const SUPABASE_URL='https://lglcvsptwkqxykapepey.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnbGN2c3B0d2txeHlrYXBlcGV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwNzQ1NDcsImV4cCI6MjA2MjY1MDU0N30.ci7v2g-5wixuPKnG6wUUO87AsbI1bQ8wzRnHHG9QzIQ';
 const LEADERBOARD_TABLE='turborace_leaderboard';
@@ -79,8 +86,6 @@ let customTrackSyncAvailable=true;
 let currentRaceSubmitted=false;
 
 const keys={};
-const touchState={throttle:false,brake:false,left:false,right:false};
-const touchPointers={throttle:new Set(),brake:new Set(),left:new Set(),right:new Set()};
 document.addEventListener('keydown',e=>{
   keys[e.code]=true;
   if(e.code==='KeyC'&&(gState==='racing'||gState==='cooldown'))toggleCam();
@@ -98,96 +103,6 @@ document.addEventListener('pointermove',e=>{
   }
 });
 gc.addEventListener('contextmenu',e=>e.preventDefault());
-
-
-function isTouchControlsVisibleInState(state){
-  return touchControlsEnabled&&(state==='racing'||state==='cooldown');
-}
-
-function updateTouchControlsVisibility(){
-  const root=document.getElementById('touchControls');
-  if(!root)return;
-  root.style.display=isTouchControlsVisibleInState(gState)?'flex':'none';
-}
-
-function onTouchControlsToggle(enabled){
-  touchControlsEnabled=!!enabled;
-  const input=document.getElementById('touchToggleInput');
-  if(input&&input.checked!==touchControlsEnabled)input.checked=touchControlsEnabled;
-  localStorage.setItem(TOUCH_TOGGLE_KEY,touchControlsEnabled?'1':'0');
-  if(!touchControlsEnabled)releaseAllTouchControls();
-  updateTouchControlsVisibility();
-}
-
-function initTouchSettings(){
-  const saved=localStorage.getItem(TOUCH_TOGGLE_KEY);
-  touchControlsEnabled=(saved==='1');
-  const input=document.getElementById('touchToggleInput');
-  if(input)input.checked=touchControlsEnabled;
-}
-
-function setTouchControl(name,active){
-  touchState[name]=active;
-  const btn=document.querySelector(`#touchControls [data-control="${name}"]`);
-  if(btn)btn.classList.toggle('active',!!active);
-}
-
-function syncTouchControlFromPointers(name){
-  setTouchControl(name,touchPointers[name].size>0);
-}
-
-function releaseAllTouchControls(){
-  Object.values(touchPointers).forEach(set=>set.clear());
-  setTouchControl('throttle',false);
-  setTouchControl('brake',false);
-  setTouchControl('left',false);
-  setTouchControl('right',false);
-}
-
-function setupTouchControls(){
-  const root=document.getElementById('touchControls');
-  if(!root)return;
-  root.querySelectorAll('[data-control]').forEach(btn=>{
-    const name=btn.dataset.control;
-    const onPress=(e)=>{
-      e.preventDefault();
-      btn.setPointerCapture(e.pointerId);
-      touchPointers[name].add(e.pointerId);
-      syncTouchControlFromPointers(name);
-    };
-    const onRelease=(e)=>{
-      e.preventDefault();
-      touchPointers[name].delete(e.pointerId);
-      syncTouchControlFromPointers(name);
-    };
-    btn.addEventListener('pointerdown',onPress);
-    btn.addEventListener('pointerup',onRelease);
-    btn.addEventListener('pointercancel',onRelease);
-    btn.addEventListener('pointerleave',e=>{ if(e.buttons===0) onRelease(e); });
-    btn.addEventListener('contextmenu',e=>e.preventDefault());
-  });
-  root.querySelectorAll('[data-tap]').forEach(btn=>{
-    const onTap=(e)=>{
-      e.preventDefault();
-      if(btn.dataset.tap==='camera' && (gState==='racing'||gState==='cooldown')) toggleCam();
-      if(btn.dataset.tap==='pause'){
-        if(gState==='racing'||gState==='cooldown') pauseRace();
-        else if(gState==='paused') resumeRace();
-      }
-    };
-    btn.addEventListener('pointerup',onTap);
-    btn.addEventListener('contextmenu',e=>e.preventDefault());
-  });
-  window.addEventListener('pointerup',e=>{
-    Object.keys(touchPointers).forEach(name=>{
-      if(touchPointers[name].has(e.pointerId)){
-        touchPointers[name].delete(e.pointerId);
-        syncTouchControlFromPointers(name);
-      }
-    });
-  });
-  window.addEventListener('blur',releaseAllTouchControls);
-}
 
 // ═══════════════════════════════════════════════════════
 //  ROAD TEXTURE
@@ -1386,7 +1301,7 @@ function initRace(){
   currentRaceSubmitted=false;
   document.getElementById('hud').style.display='block';
   document.getElementById('hint').style.display='block';
-  updateTouchControlsVisibility();
+  updateTouchControlsVisibility(gState);
   document.getElementById('camLabel').textContent='[ C ] COCKPIT VIEW';
   camMode='chase'; dc.style.display='none';
   document.getElementById('speedBox').style.display='block';
@@ -1413,7 +1328,7 @@ function doCountdown(){
     } else {
       el.textContent='GO!'; playBeep(880,.45,.4,'square'); announce('Go go go!');
       clearInterval(iv);
-      setTimeout(()=>{el.style.display='none'; gState='racing'; updateTouchControlsVisibility(); startMusic();},700);
+      setTimeout(()=>{el.style.display='none'; gState='racing'; updateTouchControlsVisibility(gState); startMusic();},700);
     }
   },1000);
 }
@@ -1423,14 +1338,14 @@ function pauseRace(){
   _prePauseState=gState;
   gState='paused'; stopAudio(); stopMusic();
   document.getElementById('pauseMenu').style.display='flex';
-  updateTouchControlsVisibility();
+  updateTouchControlsVisibility(gState);
   releaseAllTouchControls();
 }
 function resumeRace(){
   gState=_prePauseState==='cooldown'?'cooldown':'racing';
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
-  updateTouchControlsVisibility();
+  updateTouchControlsVisibility(gState);
   initAudio(); startMusic();
 }
 
@@ -1807,7 +1722,7 @@ function showMain(){
   document.getElementById('hud').style.display='none';
   document.getElementById('hint').style.display='none';
   gState='menu';
-  updateTouchControlsVisibility();
+  updateTouchControlsVisibility(gState);
   releaseAllTouchControls();
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
@@ -1980,7 +1895,7 @@ document.getElementById('raceAgainBtn').addEventListener('click', restartRace);
 //  BOOT
 // ═══════════════════════════════════════════════════════
 scene.background=new THREE.Color(0x050510);
-setupTouchControls();
+setupTouchControls(gState);
 initTouchSettings();
 const { renderer, start:startRenderLoop }=createRenderPipeline({
   THREE,
