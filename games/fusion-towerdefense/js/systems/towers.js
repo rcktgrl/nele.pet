@@ -51,33 +51,25 @@ function getTowerSpecialText(t){
 
     if(typeId === 'rapid'){
         parts.push(
-        metaProgress.researched.rapid_upgrade
-            ? `Magazin ${special.magSize ?? 20}, Nachladen ${(special.reloadTime ?? 4.0) * 0.7}s durch Upgrade verkürzt.`
-            : `Magazin ${special.magSize ?? 20}, Nachladen ${special.reloadTime ?? 4.0}s.`
+        `Magazin ${special.magSize ?? 20}, Nachladen ${special.reloadTime ?? 4.0}s.`
         );
     }
 
     if(typeId === 'shotgun'){
         parts.push(
-        metaProgress.researched.shotgun_upgrade
-            ? `Pellets: ${special.pelletCount ?? 10}. +1 Schaden durch Upgrade.`
-            : `Pellets: ${special.pelletCount ?? 10}.`
+        `Pellets: ${special.pelletCount ?? 10}.`
         );
     }
 
     if(typeId === 'basic'){
         parts.push(
-        metaProgress.researched.basic_upgrade
-            ? 'Basic macht 20% mehr Schaden.'
-            : 'Basic kann weiter verbessert werden.'
+        'Basic kann mit Karten weiter verbessert werden.'
         );
     }
 
     if(typeId === 'sniper'){
         parts.push(
-        metaProgress.researched.sniper_upgrade
-            ? 'Nach 5s ohne Schuss macht der nächste Schuss doppelten Schaden.'
-            : 'Prädiktives Zielen auf große Distanz.'
+        'Prädiktives Zielen auf große Distanz.'
         );
     }
 
@@ -184,9 +176,7 @@ function updateSelectedTowerStats() {
         damage: 50,
         fireRate: 1.8,
         range: '∞',
-        note: metaProgress.researched.longsniper_upgrade
-          ? '50 Schaden, 1.8s Feuerrate, unendliche Reichweite. +3 Schaden pro 75 Flugdistanz.'
-          : '50 Schaden, 1.8s Feuerrate, unendliche Reichweite, zielt auf meisten HP, 100% schnellere Projektile.',
+        note: '50 Schaden, 1.8s Feuerrate, unendliche Reichweite, zielt auf meisten HP, 100% schnellere Projektile.',
         color: '#ff8af0',
         cost: (hovered.sellValue || hovered.cost) + towerTypes.sniper.cost
       });
@@ -224,12 +214,7 @@ function updateSelectedTowerStats() {
   const t = towerTypes[game.selectedTowerType];
   const def = getTowerDef(game.selectedTowerType);
 
-  const displayDamage =
-  isTowerType(t, 'basic') && metaProgress.researched.basic_upgrade
-    ? Math.round(t.damage * 1.2)
-    : isTowerType(t, 'shotgun') && metaProgress.researched.shotgun_upgrade
-      ? t.damage + 1
-      : t.damage;
+  const displayDamage = t.damage;
 
   const classesText = def?.classes?.length
     ? `<br>Klassen: ${def.classes.join(', ')}`
@@ -318,14 +303,10 @@ function updateTowerSelectionUI() {
   }
 }
 function createTowerData(t,c,r,x,y){
-  const basicDamage=(t.id==='basic'&&metaProgress.researched.basic_upgrade)?Math.round(t.damage*1.2):t.damage;
-  const shotgunDamage=(t.id==='shotgun'&&metaProgress.researched.shotgun_upgrade)?t.damage+1:t.damage;
-  const rapidReload=(t.id==='rapid'&&metaProgress.researched.rapid_upgrade)?t.reloadTime*.7:t.reloadTime;
-
   const baseTower = {
     ...t,
-    damage:t.id==='shotgun'?shotgunDamage:basicDamage,
-    reloadTime:rapidReload,
+    damage:t.damage,
+    reloadTime:t.reloadTime,
     instanceId:`tower_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,
     towerTypeId:t.id,
     c,r,x,y,
@@ -333,26 +314,16 @@ function createTowerData(t,c,r,x,y){
     stunTimer:0,
     reloadTimer:0,
     idleShotTimer:0,
-    ammo:t.magSize??null,
     fusionLevel:0,
-    projectileLifeMultiplier:1,
-    spreadMultiplier:1,
-    spreadRandom:0,
     sellValue:t.cost,
-    multiHitCount:1,
-    noChain:false,
-    noReload:false,
-    quickRamp:false,
-    quickSpin:0,
     currentTargetId:null,
-    attackType:null,
-    projectileRadius:4,
-    projectileLife:2,
-    pierceOncePerEnemy:false,
+    runtimeModifiers:[],
     angle:-Math.PI/2
   };
 
-  return applyTowerDefinitionToInstance(baseTower, t.id);
+  const tower = applyTowerDefinitionToInstance(baseTower, t.id);
+  applyCardsToTower(tower);
+  return tower;
 }
 function applyTowerDefinitionToInstance(tower, towerTypeId) {
   const def = getTowerDef(towerTypeId);
@@ -373,24 +344,23 @@ function applyTowerDefinitionToInstance(tower, towerTypeId) {
 
   if (visuals.color) tower.color = visuals.color;
 
-  tower.projectileLifeMultiplier = special.projectileLifeMultiplier ?? 1;
-  tower.spreadMultiplier = special.spreadMultiplier ?? 1;
-  tower.spreadRandom = special.spreadRandom ?? 0;
-  tower.multiHitCount = special.multiHitCount ?? 1;
-  tower.noChain = !!special.noChain;
-  tower.noReload = !!special.noReload;
-  tower.quickRamp = !!special.quickRamp;
-
   tower.attackType = attackType;
+
+  if (special.projectileLifeMultiplier != null) tower.projectileLifeMultiplier = special.projectileLifeMultiplier; else delete tower.projectileLifeMultiplier;
+  if (special.spreadMultiplier != null) tower.spreadMultiplier = special.spreadMultiplier; else delete tower.spreadMultiplier;
+  if (special.spreadRandom != null) tower.spreadRandom = special.spreadRandom; else delete tower.spreadRandom;
+  if (special.multiHitCount != null) tower.multiHitCount = special.multiHitCount; else delete tower.multiHitCount;
+  if (special.noChain) tower.noChain = true; else delete tower.noChain;
+  if (special.noReload) tower.noReload = true; else delete tower.noReload;
+  if (special.quickRamp) { tower.quickRamp = true; tower.quickSpin = 0; } else { delete tower.quickRamp; delete tower.quickSpin; }
 
   tower.magSize = special.magSize ?? null;
   tower.reloadTime = special.reloadTime ?? 0;
+  tower.requiresAmmo = tower.magSize != null;
 
-  tower.projectileRadius = special.projectileRadius ?? 4;
-  tower.projectileLife = special.projectileLife ?? 2;
-  tower.pierceOncePerEnemy = !!special.pierceOncePerEnemy;
-
-  tower.quickSpin = 0;
+  if (special.projectileRadius != null) tower.projectileRadius = special.projectileRadius; else delete tower.projectileRadius;
+  if (special.projectileLife != null) tower.projectileLife = special.projectileLife; else delete tower.projectileLife;
+  if (special.pierceOncePerEnemy) tower.pierceOncePerEnemy = true; else delete tower.pierceOncePerEnemy;
 
   tower.currentTargetId = null;
 
@@ -414,6 +384,7 @@ function applyTowerDefinitionToInstance(tower, towerTypeId) {
     tower.magSize = 999999;
     tower.ammo = 999999;
     tower.reloadTime = 0;
+    tower.requiresAmmo = false;
   } else if (tower.magSize != null) {
     tower.ammo = tower.magSize;
   } else {
@@ -567,78 +538,76 @@ function placeTower(cell) {
   setStatus(`${t.name} gebaut.`, false, 2.5);
 }
 function updateTowers(dt) {
-  for (const t of game.towers) {
-    const attackType = getTowerAttackType(t);
+  for (const tower of game.towers) {
+    const attackType = getTowerAttackType(tower);
 
-    t.cooldown -= dt;
-    t.stunTimer = Math.max(0, (t.stunTimer || 0) - dt);
+    tower.cooldown -= dt;
+    tower.stunTimer = Math.max(0, (tower.stunTimer || 0) - dt);
 
-    const prevReloadTimer = t.reloadTimer || 0;
-    t.reloadTimer = Math.max(0, prevReloadTimer - dt);
+    const prevReloadTimer = tower.reloadTimer || 0;
+    tower.reloadTimer = Math.max(0, prevReloadTimer - dt);
 
-    if (isTowerType(t, 'rapid') && !t.noReload && prevReloadTimer > 0 && t.reloadTimer <= 0) {
-      t.ammo = t.magSize;
-    }
+    tower.idleShotTimer = (tower.idleShotTimer || 0) + dt;
 
-    t.idleShotTimer = (t.idleShotTimer || 0) + dt;
+    applyTowerTickRuntimeHandlers(tower, dt, prevReloadTimer);
+    runTowerRuntimeHooks('beforeTick', { tower, dt });
 
-    if (t.quickRamp) {
-      const hasTargetableEnemies = game.enemies.length > 0;
-      if (hasTargetableEnemies) {
-        t.quickSpin = Math.min(1, (t.quickSpin || 0) + dt / 10);
-      } else {
-        t.quickSpin = Math.max(0, (t.quickSpin || 0) - dt / (10 / 6));
-      }
-    }
-
-    if (t.stunTimer > 0 || t.reloadTimer > 0) {
+    if (tower.stunTimer > 0 || tower.reloadTimer > 0) {
+      runTowerRuntimeHooks('afterTick', { tower, dt, skipped: true });
       continue;
     }
 
-    const best = resolveTowerTarget(t);
+    runTowerRuntimeHooks('beforeAcquireTarget', { tower, dt });
+    const target = resolveTowerTarget(tower);
+    runTowerRuntimeHooks('afterAcquireTarget', { tower, dt, target });
 
-    if (best) {
-      const aim = getTowerAimPoint(t, best);
+    if (target) {
+      const aim = getTowerAimPoint(tower, target);
       if (aim) {
-        t.angle = Math.atan2(aim.y - t.y, aim.x - t.x);
+        tower.angle = Math.atan2(aim.y - tower.y, aim.x - tower.x);
       }
     }
 
-
-    if (t.cooldown > 0 || !best) {
+    if (tower.cooldown > 0 || !target) {
+      runTowerRuntimeHooks('afterTick', { tower, dt, skipped: true, target });
       continue;
     }
 
-    if (!canTowerFireAtTarget(t, best)) {
+    if (!canTowerFireAtTarget(tower, target)) {
+      runTowerRuntimeHooks('afterTick', { tower, dt, skipped: true, target });
       continue;
     }
 
-    if (isTowerType(t, 'rapid') && !t.noReload) {
-      t.ammo = t.ammo ?? t.magSize;
-      if (t.ammo <= 0) {
-        t.reloadTimer = t.reloadTime;
-        continue;
-      }
+    if (!canTowerSpendShot(tower)) {
+      runTowerRuntimeHooks('afterTick', { tower, dt, skipped: true, target });
+      continue;
     }
 
-    if (t.quickRamp) {
-      const spin = t.quickSpin || 0;
-      const startShotsPerSecond = 1 / t.fireRate;
-      const endShotsPerSecond = 9.0;
-      const currentShotsPerSecond =
-        startShotsPerSecond + (endShotsPerSecond - startShotsPerSecond) * spin;
+    const firePayload = runTowerRuntimeHooks('beforeFire', {
+      tower,
+      dt,
+      target,
+      blocked: false
+    });
 
-      t.cooldown = 1 / currentShotsPerSecond;
-    } else {
-      t.cooldown = t.fireRate;
+    if (firePayload?.blocked) {
+      runTowerRuntimeHooks('afterTick', { tower, dt, skipped: true, target });
+      continue;
     }
+
+    tower.cooldown = getTowerFireCooldown(tower);
 
     const handler = getAttackHandler(attackType);
     if (!handler) {
+      runTowerRuntimeHooks('afterTick', { tower, dt, skipped: true, target });
       continue;
     }
 
-    handler(t, best);
+    handler(tower, target);
+    applyTowerAfterFireRuntimeHandlers(tower);
+
+    runTowerRuntimeHooks('afterFire', { tower, dt, target });
+    runTowerRuntimeHooks('afterTick', { tower, dt, target, skipped: false });
   }
 }
 function updateProjectiles(dt) {
@@ -660,6 +629,7 @@ function updateProjectiles(dt) {
 
   for (let i = game.enemies.length - 1; i >= 0; i--) {
     if (game.enemies[i].hp <= 0) {
+      registerTowerKillCredit(game.enemies[i].lastHitTowerId || null);
       rewardEnemyKill(game.enemies[i]);
       game.enemies.splice(i, 1);
     }
@@ -686,7 +656,7 @@ function getTowerDefFromInstance(t){
 }
 
 function getTowerAttackType(t){
-  return t?.attackType || getTowerDefFromInstance(t)?.special?.attackType || 'projectile';
+  return getTowerResolvedAttackType(t);
 }
 
 function isTowerType(t, typeId){

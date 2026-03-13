@@ -76,6 +76,8 @@
     </div>
   </div>
 </section>
+
+<section id="cardLoadoutMenu" class="screen"><div class="menu-card"><div class="title-wrap"><div class="eyebrow">Loadout</div><h2 style="font-size:clamp(28px,5vw,46px)">Modifierkarten</h2><p class="subtitle">Wähle Karten für deine freigeschalteten Slots aus, bevor der Run startet.</p></div><div class="panel" style="display:flex;flex-direction:column;gap:14px"><div id="cardLoadoutSlots" class="card-slot-grid"></div><div style="display:flex;gap:10px;flex-wrap:wrap"><button id="unlockCardSlotBtn" class="btn">Slot freischalten</button><button id="startRunFromCardsBtn" class="btn primary">▶ Run starten</button><button id="backFromCardsBtn" class="btn">Zurück</button></div></div><div class="panel" style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h3>Kartensammlung</h3><input id="cardSearchInput" type="search" placeholder="Kartenname suchen..." class="card-search"></div><div id="cardPoolGrid" class="card-pool-grid"></div></div></div></section>
 <section id="gameScreen" class="screen">
   <div class="game-shell">
 
@@ -174,6 +176,7 @@
   </div>
 </section>
 <script src="js/data/research.js"></script>
+<script src="js/data/cards.js"></script>
 <script src="js/data/towers.js"></script>
 <script src="js/core/tower-registry.js"></script>
 <script src="js/core/constants.js"></script>
@@ -184,6 +187,7 @@
 <script src="js/core/dom.js"></script>
 <script src="js/ui/screens.js"></script>
 <script src="js/ui/hud.js"></script>
+<script src="js/ui/cards-ui.js"></script>
 <script src="js/ui/research-ui.js"></script>
 <script src="js/render/render.js"></script>
 <script src="js/render/tower-render-defs.js"></script>
@@ -203,6 +207,7 @@
 <script src="js/systems/combat.js"></script>
 <script src="js/data/rituals.js"></script>
 <script src="js/systems/targeting-handlers.js"></script>
+<script src="js/systems/tower-runtime.js"></script>
 <script src="js/systems/attack-handlers.js"></script>
 <script src="js/systems/towers.js"></script>
 <script src="js/systems/game-loop.js"></script>
