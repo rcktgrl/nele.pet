@@ -75,7 +75,7 @@ function setMode(mode) {
     ? 'Register once, then use your account across all games.'
     : isForgot
       ? 'Enter your account email and we will send a reset link.'
-      : 'Log in with your username and password.';
+      : 'Log in with your username or email and password.';
   submitButton.textContent = isRegister ? 'Register' : isForgot ? 'Send reset email' : 'Log in';
 
   usernameLabel.hidden = isForgot;
@@ -136,22 +136,11 @@ async function resolveLoginEmail(username) {
     return { email: '', errorMessage: friendlyAuthError(error) };
   }
 
-const { data: profileData, error: profileError } = await supabase
-  .from('arcade_profiles')
-  .select('email')
-  .ilike('username', safeUsername)
-  .limit(1)
-  .maybeSingle();
+  return {
+    email: '',
+    errorMessage: 'Username login is not available on this branch yet. Please log in with your email, or run the latest Supabase auth migration.',
+  };
 
-if (profileError) {
-  return { email: '', errorMessage: friendlyAuthError(profileError) };
-}
-
-if (!profileData?.email) {
-  return { email: '', errorMessage: 'Username not found. Please register first.' };
-}
-
-return { email: normalizeEmail(profileData.email), errorMessage: '' };
 }
 
 async function upsertProfile(userId, username, email) {
@@ -319,7 +308,8 @@ async function updateUsernameEverywhere(newUsername) {
 
 async function loginOrRegister(mode) {
   const registrationEmail = normalizeEmail(emailInput.value);
-  const username = normalizeUsername(usernameInput.value);
+  const loginIdentifier = String(usernameInput.value || '').trim();
+  const username = normalizeUsername(loginIdentifier);
   const password = passwordInput.value;
   const isForgot = mode === 'forgot';
 
@@ -333,8 +323,13 @@ async function loginOrRegister(mode) {
     return;
   }
 
-  if ((mode === 'register' || mode === 'login') && !username) {
-    feedback.textContent = mode === 'register' ? 'Username is required for registration.' : 'Username is required for login.';
+  if (mode === 'register' && !username) {
+    feedback.textContent = 'Username is required for registration.';
+    return;
+  }
+
+  if (mode === 'login' && !loginIdentifier) {
+    feedback.textContent = 'Username or email is required for login.';
     return;
   }
 
@@ -345,12 +340,16 @@ async function loginOrRegister(mode) {
 
   let loginEmail = registrationEmail;
   if (mode === 'login') {
-    const { email, errorMessage } = await resolveLoginEmail(username);
-    if (errorMessage) {
-      feedback.textContent = errorMessage;
-      return;
+    if (isValidEmail(loginIdentifier)) {
+      loginEmail = normalizeEmail(loginIdentifier);
+    } else {
+      const { email, errorMessage } = await resolveLoginEmail(username);
+      if (errorMessage) {
+        feedback.textContent = errorMessage;
+        return;
+      }
+      loginEmail = email;
     }
-    loginEmail = email;
   }
 
   feedback.textContent = mode === 'register' ? 'Creating account...' : 'Logging in...';
