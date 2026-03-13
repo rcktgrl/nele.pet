@@ -74,7 +74,6 @@ globalThis.trkCurve = trkCurve;
 globalThis.trkPts = trkPts;
 globalThis.cityCorridors = cityCorridors;
 globalThis.cityAiPts = cityAiPts;
-let settingsFromPause=false;
 const SUPABASE_URL='https://lglcvsptwkqxykapepey.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnbGN2c3B0d2txeHlrYXBlcGV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwNzQ1NDcsImV4cCI6MjA2MjY1MDU0N30.ci7v2g-5wixuPKnG6wUUO87AsbI1bQ8wzRnHHG9QzIQ';
 const LEADERBOARD_TABLE='turborace_leaderboard';
@@ -1705,8 +1704,7 @@ function updateFrame(dt){
 // ═══════════════════════════════════════════════════════
 //  SETTINGS
 // ═══════════════════════════════════════════════════════
-function showSettings(fromPause){
-  settingsFromPause=!!fromPause;
+function showSettings(){
   document.getElementById('settingsModal').style.display='block';
 }
 function closeSettings(){
@@ -1850,7 +1848,7 @@ function restartRace(){
 }
 
 document.getElementById('resumeBtn').addEventListener('click', resumeRace);
-document.getElementById('showSettingsBtn').addEventListener('click', () => showSettings(true));
+document.getElementById('showSettingsBtn').addEventListener('click', () => showSettings());
 document.getElementById('quitToMenuBtn').addEventListener('click', showMain);
 document.getElementById('musicVolSlider').addEventListener('input', e => onMusicVol(e.target.value));
 document.getElementById('sfxVolSlider').addEventListener('input', e => onSfxVol(e.target.value));
@@ -1858,7 +1856,7 @@ document.getElementById('touchToggleInput').addEventListener('input', e => onTou
 document.getElementById('settingsCloseBtn').addEventListener('click', closeSettings);
 document.getElementById('gameStartBtn').addEventListener('click', function() {tryStartMenuMusic();showTrkSel();});
 document.getElementById('trackEditorBtn').addEventListener('click', function() {tryStartMenuMusic();showTrackEditor();});
-document.getElementById('mainSettingsBtn').addEventListener('click', function() {tryStartMenuMusic();showSettings(false);});
+document.getElementById('mainSettingsBtn').addEventListener('click', function() {tryStartMenuMusic();showSettings();});
 document.getElementById('showTrkSelBtn').addEventListener('click', showTrkSel);
 document.getElementById('btnGo').addEventListener('click', startRace);
 document.getElementById('trkSelBackBtn').addEventListener('click', showMain);
