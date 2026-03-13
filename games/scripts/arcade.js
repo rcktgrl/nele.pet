@@ -130,13 +130,13 @@ async function resolveLoginEmail(username) {
     return { email: '', errorMessage: friendlyAuthError(error) };
   }
 
-
+main
   if (!data) {
     return { email: '', errorMessage: 'Username not found. Please register first.' };
   }
 
   return { email: normalizeEmail(data), errorMessage: '' };
-
+main
 }
 
 async function upsertProfile(userId, username, email) {
@@ -290,7 +290,7 @@ async function updateUsernameEverywhere(newUsername) {
     p_old_username: previousUsername,
     p_new_username: safeUsername,
   });
-
+main
 
   if (leaderboardError) {
     accountFeedback.textContent = `${friendlyAuthError(leaderboardError)} (profile updated, but leaderboard sync failed)`;
