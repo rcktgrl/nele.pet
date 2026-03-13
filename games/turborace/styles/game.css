@@ -45,6 +45,7 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .stat{display:flex;align-items:center;gap:6px;margin:3px 0;font-size:11px;}
 .sl{width:52px;text-align:right;color:#445;letter-spacing:1px;}
 .st{flex:1;height:4px;background:rgba(255,255,255,.07);border-radius:2px;}
+.sv{min-width:28px;text-align:right;color:#9da9ca;font-family:'Orbitron',monospace;font-size:10px;}
 .sf{height:100%;border-radius:2px;background:linear-gradient(90deg,#ff5500,#ffcc00);}
 .dot{width:32px;height:32px;border-radius:6px;margin:0 auto 10px;}
 #results{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.94);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:200;padding:24px 20px;overflow:auto;}
@@ -62,7 +63,9 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .lb-row{display:grid;grid-template-columns:40px 1fr auto;gap:8px;align-items:center;padding:7px 9px;border-radius:7px;background:rgba(0,0,0,.2);font-size:13px;}
 .lb-row-you{outline:1px solid #ffd70066;background:rgba(255,215,0,.08);}
 .lb-pos{color:#9fb0de;font-family:'Orbitron',monospace;}
-.lb-name{color:#e9eeff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lb-name{color:#e9eeff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;flex-direction:column;gap:3px;}
+.lb-car{display:flex;align-items:center;gap:6px;color:#95a6d0;font-size:11px;font-family:'Rajdhani',sans-serif;}
+.lb-car-dot{width:10px;height:10px;border-radius:3px;display:inline-block;box-shadow:0 0 8px currentColor;}
 .lb-time{color:#ffd28f;font-family:'Orbitron',monospace;font-size:12px;}
 .lb-empty{font-size:12px;color:#667aab;text-align:center;padding:6px 0;}
 .trackBest{font-size:11px;color:#8f9fc8;letter-spacing:1px;}
@@ -85,6 +88,12 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .tcard:hover,.tcard.sel{border-color:#ff5500;background:rgba(255,85,0,.07);transform:translateY(-4px);box-shadow:0 8px 30px rgba(255,85,0,.25);}
 .tcard h3{font-family:'Orbitron',monospace;font-size:13px;color:#ffcc00;letter-spacing:2px;text-transform:uppercase;}
 .tcard p{font-size:11px;color:#445;letter-spacing:1px;}
+.trackLbBtn{margin-top:4px;padding:8px 12px;font-size:10px;letter-spacing:2px;}
+#leaderboardModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.78);z-index:450;padding:16px;}
+.leaderboardPanel{width:min(560px,100%);max-height:min(80vh,640px);display:flex;flex-direction:column;gap:12px;padding:18px;border-radius:12px;border:1px solid #2a3550;background:#0b101d;}
+.leaderboardPanel h3{font-family:'Orbitron',monospace;font-size:16px;letter-spacing:3px;color:#d4ddff;text-transform:uppercase;text-align:center;}
+#leaderboardModalList{display:flex;flex-direction:column;gap:6px;overflow:auto;padding-right:4px;}
+
 /* Track Editor */
 .editorScreen{background:rgba(5,7,12,.92);backdrop-filter:blur(4px);justify-content:flex-start;padding:28px;overflow:auto;}
 .editorWrap{width:min(1500px,100%);height:calc(100vh - 56px);display:grid;grid-template-columns:360px 1fr;gap:18px;align-items:stretch;}

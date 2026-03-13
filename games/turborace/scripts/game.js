@@ -122,6 +122,8 @@ document.addEventListener('keydown',e=>{
   keys[e.code]=true;
   if(e.code==='KeyC'&&(gState==='racing'||gState==='cooldown'))toggleCam();
   if(e.code==='Escape'){
+    const leaderboardModal=document.getElementById('leaderboardModal');
+    if(leaderboardModal&&leaderboardModal.style.display==='flex'){ closeTrackLeaderboardModal(); return; }
     if(gState==='racing'||gState==='cooldown')pauseRace();
     else if(gState==='paused')resumeRace();
   }
@@ -365,20 +367,25 @@ function leaderboardTimeToSeconds(timeMs){
   return numeric/1000;
 }
 
-function renderResultsLeaderboard(entries,highlightName){
-  const board=document.getElementById('resultsLeaderboard');
-  if(!board)return;
+function renderLeaderboardRows(container,entries,highlightName){
+  if(!container)return;
   if(!entries||!entries.length){
-    board.innerHTML='<div class="lb-empty">No leaderboard entries yet for this track.</div>';
+    container.innerHTML='<div class="lb-empty">No leaderboard entries yet for this track.</div>';
     return;
   }
-  board.innerHTML='';
+  container.innerHTML='';
   entries.forEach((entry,idx)=>{
     const row=document.createElement('div');
     row.className='lb-row'+(highlightName&&entry.username===highlightName?' lb-row-you':'');
-    row.innerHTML=`<span class="lb-pos">${idx+1}</span><span class="lb-name">${entry.username}</span><span class="lb-time">${fmtT(leaderboardTimeToSeconds(entry.time_ms))}</span>`;
-    board.appendChild(row);
+    const carLabel=entry.car_name?`<div class="lb-car"><span class="lb-car-dot" style="background:${entry.car_hex||'#fff'}"></span>${entry.car_name}</div>`:'';
+    row.innerHTML=`<span class="lb-pos">${idx+1}</span><span class="lb-name">${entry.username}${carLabel}</span><span class="lb-time">${fmtT(leaderboardTimeToSeconds(entry.time_ms))}</span>`;
+    container.appendChild(row);
   });
+}
+
+function renderResultsLeaderboard(entries,highlightName){
+  const board=document.getElementById('resultsLeaderboard');
+  renderLeaderboardRows(board,entries,highlightName);
 }
 
 function updateTrackCardBestTime(trackId){
@@ -395,7 +402,7 @@ async function loadTrackLeaderboard(trackId,{force=false,limit=10}={}){
   if(!leaderboardAvailable) return {best:null,entries:[]};
   if(!force && leaderboardByTrack.has(key)) return leaderboardByTrack.get(key);
   const {data,error}=await supabase.from(LEADERBOARD_TABLE)
-    .select('track_id,username,user_id,time_ms')
+    .select('track_id,username,user_id,time_ms,car_name,car_hex')
     .eq('track_id',key)
     .order('time_ms',{ascending:true})
     .limit(limit);
@@ -408,6 +415,8 @@ async function loadTrackLeaderboard(trackId,{force=false,limit=10}={}){
     track_id:normaliseTrackId(row.track_id),
     user_id:sanitizeUserId(row.user_id),
     username:sanitizeLeaderboardName(row.username),
+    car_name:String(row.car_name||'').trim().slice(0,30),
+    car_hex:/^#[0-9a-f]{6}$/i.test(String(row.car_hex||''))?String(row.car_hex):null,
     time_ms:Math.max(0,Number(row.time_ms)||0)
   }));
   const payload={best:entries[0]||null,entries};
@@ -415,13 +424,15 @@ async function loadTrackLeaderboard(trackId,{force=false,limit=10}={}){
   return payload;
 }
 
-async function submitTrackTime(trackId,user,timeMs){
+async function submitTrackTime(trackId,user,timeMs,car){
   const key=normaliseTrackId(trackId);
   if(!leaderboardAvailable) return false;
   const {error}=await supabase.from(LEADERBOARD_TABLE).insert({
     track_id:key,
     user_id:sanitizeUserId(user.user_id),
     username:sanitizeLeaderboardName(user.name),
+    car_name:String(car?.name||'').trim().slice(0,30)||null,
+    car_hex:/^#[0-9a-f]{6}$/i.test(String(car?.hex||''))?String(car.hex):null,
     time_ms:Math.round(Math.max(0,timeMs||0)*1000)
   });
   if(error){
@@ -436,7 +447,7 @@ async function handlePostRaceLeaderboard(){
   if(currentRaceSubmitted||!trkData||!pCar||!pCar.finTime||!Number.isFinite(pCar.finTime)) return;
   currentRaceSubmitted=true;
   const user=await loadArcadeUser();
-  const ok=await submitTrackTime(trkData.id,user,pCar.finTime);
+  const ok=await submitTrackTime(trkData.id,user,pCar.finTime,CARS[pCar.ci]);
   if(ok){
     const latest=await loadTrackLeaderboard(trkData.id,{force:true,limit:10});
     renderResultsLeaderboard(latest.entries,user.name);
@@ -1851,9 +1862,9 @@ function showCarSel(){
     d.innerHTML=`<canvas class="carCardCanvas" aria-hidden="true"></canvas>
       <div class="dot" style="background:${c.hex};box-shadow:0 0 15px ${c.hex}55"></div>
       <h3>${c.name}</h3><p>${c.desc}</p>
-      <div class="stat"><span class="sl">SPEED</span><div class="st"><div class="sf" style="width:${c.stats.s}%"></div></div></div>
-      <div class="stat"><span class="sl">ACCEL</span><div class="st"><div class="sf" style="width:${c.stats.a}%"></div></div></div>
-      <div class="stat"><span class="sl">HANDL</span><div class="st"><div class="sf" style="width:${c.stats.h}%"></div></div></div>`;
+      <div class="stat"><span class="sl">SPEED</span><div class="st"><div class="sf" style="width:${c.stats.s}%"></div></div><span class="sv">${c.stats.s}</span></div>
+      <div class="stat"><span class="sl">ACCEL</span><div class="st"><div class="sf" style="width:${c.stats.a}%"></div></div><span class="sv">${c.stats.a}</span></div>
+      <div class="stat"><span class="sl">HANDL</span><div class="st"><div class="sf" style="width:${c.stats.h}%"></div></div><span class="sv">${c.stats.h}</span></div>`;
     const canvas=d.querySelector('.carCardCanvas');
     const visual=createCarVisual(c);
     visual.mesh.scale.setScalar(0.72);
@@ -1946,7 +1957,15 @@ async function showTrkSel(){
     const h3=document.createElement('h3'); h3.textContent=t.name;
     const p=document.createElement('p'); p.textContent=t.desc+' · '+t.rw+'m wide'+(TRACKS.some(bt=>String(bt.id)===String(t.id))?'':' · Custom');
     const best=document.createElement('p'); best.className='trackBest'; best.dataset.trackBest=normaliseTrackId(t.id); best.textContent='Best: loading...';
-    card.appendChild(canvas); card.appendChild(h3); card.appendChild(p); card.appendChild(best);
+    const leaderboardBtn=document.createElement('button');
+    leaderboardBtn.className='btn btn-s trackLbBtn';
+    leaderboardBtn.type='button';
+    leaderboardBtn.textContent='LEADERBOARD';
+    leaderboardBtn.addEventListener('click',async(e)=>{
+      e.stopPropagation();
+      await openTrackLeaderboardModal(t.id,t.name);
+    });
+    card.appendChild(canvas); card.appendChild(h3); card.appendChild(p); card.appendChild(best); card.appendChild(leaderboardBtn);
     card.onclick=()=>{
       document.querySelectorAll('#trkCards .tcard').forEach(x=>x.classList.remove('sel'));
       card.classList.add('sel'); selTrk=t.id; document.getElementById('btnNxt').disabled=false;
@@ -1958,6 +1977,27 @@ async function showTrkSel(){
     await loadTrackLeaderboard(t.id,{limit:1});
     updateTrackCardBestTime(t.id);
   }));
+}
+
+
+async function openTrackLeaderboardModal(trackId,trackName){
+  const modal=document.getElementById('leaderboardModal');
+  const title=document.getElementById('leaderboardModalTitle');
+  const list=document.getElementById('leaderboardModalList');
+  if(!modal||!title||!list) return;
+  title.textContent=`${trackName} Leaderboard`;
+  list.innerHTML='<div class="lb-empty">Loading leaderboard…</div>';
+  modal.style.display='flex';
+  modal.setAttribute('aria-hidden','false');
+  const data=await loadTrackLeaderboard(trackId,{force:true,limit:50});
+  renderLeaderboardRows(list,data.entries);
+}
+
+function closeTrackLeaderboardModal(){
+  const modal=document.getElementById('leaderboardModal');
+  if(!modal) return;
+  modal.style.display='none';
+  modal.setAttribute('aria-hidden','true');
 }
 
 function startRace(){
@@ -2013,6 +2053,8 @@ document.getElementById('delAssetBtn').addEventListener('click', deleteSelectedE
 document.getElementById('resetEditorCamBtn').addEventListener('click', resetEditorCameraToTrack);
 document.getElementById('saveEditorTrackBtn').addEventListener('click', saveEditorTrack);
 document.getElementById('resetEditorTrackBtn').addEventListener('click', resetEditorTrack);
+document.getElementById('closeLeaderboardModalBtn').addEventListener('click', closeTrackLeaderboardModal);
+document.getElementById('leaderboardModal').addEventListener('click', e=>{ if(e.target.id==='leaderboardModal') closeTrackLeaderboardModal(); });
 document.getElementById('menuBtn').addEventListener('click', showMain);
 document.getElementById('raceAgainBtn').addEventListener('click', restartRace);
 
