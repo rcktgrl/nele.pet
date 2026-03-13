@@ -30,7 +30,11 @@ function bindCanvasEvents() {
 function bindMenuButtons() {
   const playBtn = document.getElementById('playBtn');
   const mapMenuBtn = document.getElementById('mapMenuBtn');
-  const researchMenuBtn = document.getElementById('researchMenuBtn');
+  const progressMenuBtn = document.getElementById('progressMenuBtn');
+  const openCardShopBtn = document.getElementById('openCardShopBtn');
+  const openResearchFromProgressBtn = document.getElementById('openResearchFromProgressBtn');
+  const backFromProgressBtn = document.getElementById('backFromProgressBtn');
+  const backFromCardShopBtn = document.getElementById('backFromCardShopBtn');
   const backToSelectionScreenBtn = document.getElementById('backToSelectionScreenBtn');
   const openDevResearchBtn = document.getElementById('openDevResearchBtn');
   const backToMenuBtn = document.getElementById('backToMenuBtn');
@@ -52,11 +56,26 @@ function bindMenuButtons() {
     mapMenuBtn.addEventListener('click', () => showScreen('mapMenu'));
   }
 
-  if (researchMenuBtn) {
-    researchMenuBtn.addEventListener('click', () => {
+  if (progressMenuBtn) {
+    progressMenuBtn.addEventListener('click', () => {
+      updateMetaUI();
+      showScreen('progressMenu');
+    });
+  }
+
+  if (openResearchFromProgressBtn) {
+    openResearchFromProgressBtn.addEventListener('click', () => {
       updateMetaUI();
       renderResearchTree();
       showScreen('researchMenu');
+    });
+  }
+
+  if (openCardShopBtn) {
+    openCardShopBtn.addEventListener('click', () => {
+      updateMetaUI();
+      renderCardResearchShop();
+      showScreen('cardShopMenu');
     });
   }
 
@@ -79,7 +98,15 @@ function bindMenuButtons() {
   }
 
   if (backFromResearchBtn) {
-    backFromResearchBtn.addEventListener('click', () => showScreen('mainMenu'));
+    backFromResearchBtn.addEventListener('click', () => showScreen('progressMenu'));
+  }
+
+  if (backFromProgressBtn) {
+    backFromProgressBtn.addEventListener('click', () => showScreen('mainMenu'));
+  }
+
+  if (backFromCardShopBtn) {
+    backFromCardShopBtn.addEventListener('click', () => showScreen('progressMenu'));
   }
 
   if (backFromDevResearchBtn) {
@@ -152,8 +179,8 @@ function bindMenuButtons() {
   }
 
 
-  if (ui.unlockCardSlotBtn) {
-    ui.unlockCardSlotBtn.addEventListener('click', unlockNextCardSlot);
+  if (ui.cardShopUnlockCardSlotBtn) {
+    ui.cardShopUnlockCardSlotBtn.addEventListener('click', unlockNextCardSlot);
   }
 
   if (ui.cardSearchInput) {
