@@ -120,23 +120,39 @@ async function resolveLoginEmail(username) {
     return { email: '', errorMessage: 'Please enter your username.' };
   }
 
-
   const { data, error } = await supabase.rpc('arcade_resolve_login_email', {
     p_username: safeUsername,
   });
 
+  if (!error) {
+    if (!data) {
+      return { email: '', errorMessage: 'Username not found. Please register first.' };
+    }
 
-  if (error) {
+    return { email: normalizeEmail(data), errorMessage: '' };
+  }
+
+  if (error.code !== 'PGRST202') {
     return { email: '', errorMessage: friendlyAuthError(error) };
   }
 
-main
-  if (!data) {
+  // Fallback for branches/projects where the helper RPC has not been deployed yet.
+  const { data: profileData, error: profileError } = await supabase
+    .from('arcade_profiles')
+    .select('email')
+    .ilike('username', safeUsername)
+    .limit(1)
+    .maybeSingle();
+
+  if (profileError) {
+    return { email: '', errorMessage: friendlyAuthError(profileError) };
+  }
+
+  if (!profileData?.email) {
     return { email: '', errorMessage: 'Username not found. Please register first.' };
   }
 
-  return { email: normalizeEmail(data), errorMessage: '' };
-main
+  return { email: normalizeEmail(profileData.email), errorMessage: '' };
 }
 
 async function upsertProfile(userId, username, email) {
@@ -290,7 +306,6 @@ async function updateUsernameEverywhere(newUsername) {
     p_old_username: previousUsername,
     p_new_username: safeUsername,
   });
-main
 
   if (leaderboardError) {
     accountFeedback.textContent = `${friendlyAuthError(leaderboardError)} (profile updated, but leaderboard sync failed)`;
