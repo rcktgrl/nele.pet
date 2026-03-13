@@ -140,6 +140,7 @@ async function resolveLoginEmail(username) {
     email: '',
     errorMessage: 'Username login is not available on this branch yet. Please log in with your email, or run the latest Supabase auth migration.',
   };
+
 }
 
 async function upsertProfile(userId, username, email) {
