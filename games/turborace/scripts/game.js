@@ -1886,6 +1886,7 @@ document.getElementById('settingsCloseBtn').addEventListener('click', closeSetti
 document.getElementById('gameStartBtn').addEventListener('click', function() {tryStartMenuMusic();showTrkSel();});
 document.getElementById('trackEditorBtn').addEventListener('click', function() {tryStartMenuMusic();showTrackEditor();});
 document.getElementById('mainSettingsBtn').addEventListener('click', function() {tryStartMenuMusic();showSettings();});
+document.getElementById('backToSelectionBtn').addEventListener('click', () => { window.location.href = '../index.html'; });
 document.getElementById('showTrkSelBtn').addEventListener('click', showTrkSel);
 document.getElementById('btnGo').addEventListener('click', startRace);
 document.getElementById('trkSelBackBtn').addEventListener('click', showMain);
