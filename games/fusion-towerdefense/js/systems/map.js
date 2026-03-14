@@ -343,7 +343,9 @@ function refreshMapLayoutFromCanvas() {
       enemy.y = point.y;
     }
 
-    if (enemy.baseRadius != null) {
+    if (enemy.tileDiameterRatio != null) {
+      enemy.radius = getEnemyRadiusFromTileRatio(enemy.tileDiameterRatio);
+    } else if (enemy.baseRadius != null) {
       enemy.radius = scaleWorldValue(enemy.baseRadius);
     }
   }
