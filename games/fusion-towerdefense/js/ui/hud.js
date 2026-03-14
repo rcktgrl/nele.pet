@@ -128,7 +128,7 @@ function updateWavePreviewUI() {
   ui.wavePreviewList.innerHTML = items
     .map(
       (def) =>
-        `<strong>Wave ${def.wave}</strong><br>${def.preview}<br><span style="color:var(--muted)">Budget ${def.budget.toFixed(0)} · Gegner-Multi x${def.enemyMultiplier.toFixed(2)}</span>`
+        `<strong>Wave ${def.wave}</strong><br>${def.preview}<br><span style="color:var(--muted)">Budget ${def.budget.toFixed(0)} · Money-Multi x${def.moneyMultiplier.toFixed(2)} · Round-Multi x${def.roundScoreMultiplier.toFixed(2)}</span>`
     )
     .join('<br><br>');
 }
@@ -150,13 +150,13 @@ function updateHUD() {
   } else if (game.intermission) {
     ui.topInfo.textContent = `Wave ${game.wave} / ${game.maxWaves}`;
     ui.topSubInfo.textContent = game.autoWaveStart
-      ? `Nächste Wave in ${Math.ceil(game.intermissionTimer)}s · Score x${eff.toFixed(2)}`
-      : `Warte auf ▶ Start Wave · Score x${eff.toFixed(2)}`;
+      ? `Nächste Wave in ${Math.ceil(game.intermissionTimer)}s · Score x${eff.toFixed(2)} · Money x${game.currentMoneyMultiplier.toFixed(2)}`
+      : `Warte auf ▶ Start Wave · Score x${eff.toFixed(2)} · Money x${game.currentMoneyMultiplier.toFixed(2)}`;
   } else if (game.waveInProgress) {
     ui.topInfo.textContent = `Wave ${game.wave} / ${game.maxWaves}`;
     ui.topSubInfo.textContent =
       `${game.enemies.length + game.spawnQueue.length} Gegner verbleibend · ` +
       `Budget ${game.currentWaveInfo ? Math.floor(game.currentWaveInfo.budget) : 0} · ` +
-      `Score x${eff.toFixed(2)}`;
+      `Score x${eff.toFixed(2)} · Money x${game.currentMoneyMultiplier.toFixed(2)}`;
   }
 }

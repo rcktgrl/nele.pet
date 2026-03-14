@@ -1,3 +1,93 @@
-function generateWavePlan(wave){const countMult=Math.max(1,mapConfig.enemyCountMultiplier||1);if(wave%10===0){const enemyMultiplier=1.1+Math.pow(Math.max(1,wave),.72)*.08;const bossHp=Math.floor((520+wave*95+Math.pow(wave,1.52)*22)+(enemyMultiplier-1)*260);return{wave,budget:190+Math.pow(wave,1.22)*28,enemyMultiplier,bossWave:true,spawnGap:.15,preview:`Boss mit ${bossHp} HP`,entries:[{key:'boss',count:Math.max(1,Math.round(1*countMult)),hp:bossHp,speed:Math.min(58+wave*1.55,118),reward:52+Math.floor(Math.pow(wave,1.08)*4.2),radius:28}]}}if(wave===1)return{wave,budget:8,enemyMultiplier:1,spawnGap:.74,preview:'5 Yellow',entries:[{key:'yellow',count:Math.max(1,Math.round(5*countMult))}]};if(wave===2)return{wave,budget:11,enemyMultiplier:1.02,spawnGap:.70,preview:'7 Yellow, 1 Fast I',entries:[{key:'yellow',count:Math.max(1,Math.round(7*countMult))},{key:'fast_1',count:Math.max(1,Math.round(1*countMult))}]};if(wave===3)return{wave,budget:15,enemyMultiplier:1.06,spawnGap:.66,preview:'9 Yellow, 1 Red Core, 2 Fast I',entries:[{key:'yellow',count:Math.max(1,Math.round(9*countMult))},{key:'yellow_red',count:Math.max(1,Math.round(1*countMult))},{key:'fast_1',count:Math.max(1,Math.round(2*countMult))}]};const t=Math.max(0,wave-3);const baseBudget=16*Math.pow(1.125,t)*(1+.016*t);const budget=baseBudget*(0.92+Math.random()*0.34);const minCost=budget/150;const catalog=getEnemyCatalog(wave).filter(e=>e.cost>=minCost&&!e.isInfinity);const affordable=catalog.filter(e=>e.cost<=budget);const entries=[];let spent=0;if(affordable.length){const maxTypes=budget<30?1:budget<90?2:3;const sorted=[...affordable].sort((a,b)=>a.cost-b.cost);const targetTypeCount=Math.min(maxTypes, sorted.length, Math.random()<0.76?1:(Math.random()<0.9?2:3));const chosen=[];const preferredMin=budget*0.015;const preferredMax=budget*0.22;const preferred=sorted.filter(e=>e.cost>=preferredMin&&e.cost<=preferredMax);while(chosen.length<targetTypeCount){const pool=(chosen.length===0&&preferred.length)?preferred:sorted;let totalW=0;const weighted=pool.filter(e=>!chosen.some(c=>c.key===e.key)).map(e=>{const ratio=e.cost/budget;const budgetFit=Math.max(.18,1-Math.abs(ratio-0.08)*3.2);const tierBias=ratio<=0.03?1.45:ratio<=0.08?1.32:ratio<=0.16?1.12:.62;const weight=budgetFit*tierBias*(1+Math.random()*0.12);totalW+=weight;return{enemy:e,weight}});if(!weighted.length)break;let roll=Math.random()*totalW;let pick=weighted[0].enemy;for(const item of weighted){roll-=item.weight;if(roll<=0){pick=item.enemy;break}}chosen.push(pick)}for(const enemy of chosen){const investCap=Math.min(budget-spent, enemy.cost*100);if(investCap<enemy.cost)continue;const desiredShare=chosen.length===1?1:(enemy.cost===Math.max(...chosen.map(c=>c.cost))?0.48:0.52/(chosen.length-1));const targetSpend=Math.min(investCap,Math.max(enemy.cost,(budget*desiredShare)*(0.9+Math.random()*0.22)));let count=Math.max(1,Math.min(100,Math.floor(targetSpend/enemy.cost)));if(enemy.cost>=budget*0.18)count=Math.min(count,Math.max(1,Math.floor(6+wave*.18)));count=Math.max(1,Math.round(count*countMult));entries.push({key:enemy.key,count});spent+=count*enemy.cost/countMult}}if(!entries.length){entries.push({key:'infinity',count:20});spent=1}const enemyMultiplier=Math.max(1,spent/baseBudget);const totalCount=entries.reduce((a,e)=>a+e.count,0);const preview=entries.map(e=>`${e.count}× ${e.key.replace('_',' ')}`).join(', ');const spawnGap=Math.max(.045,Math.min(.30,1.85/(Math.sqrt(totalCount)+spent*.055)));return{wave,budget:spent,enemyMultiplier,bossWave:false,spawnGap,preview,entries}}
-function queueWave(){if(game.wave>=game.maxWaves){if(!game.victory&&!game.enemies.length&&!game.spawnQueue.length){game.victory=true;finalizeRun(true)}return}game.wave+=1;const def=game.pendingWaveDefs.shift()||generateWavePlan(game.wave);while(game.pendingWaveDefs.length<3&&game.wave+game.pendingWaveDefs.length<game.maxWaves)game.pendingWaveDefs.push(generateWavePlan(game.wave+game.pendingWaveDefs.length+1));game.currentWaveInfo=def;game.currentEnemyMultiplier=Math.max(1,def.enemyMultiplier||1);game.spawnQueue=[];for(const entry of def.entries){const count=entry.count||1;const spacingMultiplier=count>20?1:lerp(3.2,1.1,(count-1)/19);for(let i=0;i<count;i++){const enemy=createEnemyFromTemplate(entry,game.wave,game.currentEnemyMultiplier);enemy.spawnGapMultiplier=spacingMultiplier;game.spawnQueue.push(enemy)}}game.timeUntilNextSpawn=0;game.waveInProgress=true;game.intermission=false;setStatus(def.bossWave?`Boss-Wave ${game.wave} gestartet.`:`Wave ${game.wave} gestartet.`);updateWavePreviewUI();updateHUD()}
+function getWaveRoundScoreMultiplier(wave){
+  return 1+Math.max(0,wave-1)*0.12;
+}
+
+function getWaveMoneyMultiplier(wave){
+  return 1+Math.max(0,wave-1)*0.08;
+}
+
+function getCatalogEntryByKey(catalog,key){
+  return catalog.find(e=>e.key===key)||catalog[0];
+}
+
+function buildEntriesFromBudget(budget,catalog,wave){
+  const entries=[];
+  let remaining=Math.max(1,Math.floor(budget));
+  const sorted=[...catalog].filter(e=>!e.isInfinity).sort((a,b)=>b.cost-a.cost);
+
+  if(!sorted.length){
+    return [{key:'infinity',count:Math.max(1,remaining)}];
+  }
+
+  while(remaining>0){
+    const progress=remaining/Math.max(1,budget);
+    const pool=sorted.filter(e=>e.cost<=remaining&&(!e.isFast||Math.random()>0.22+progress*0.35));
+    const pick=(pool.length?pool:sorted.filter(e=>e.cost<=remaining))[0];
+    if(!pick)break;
+    const existing=entries.find(en=>en.key===pick.key);
+    if(existing)existing.count+=1;
+    else entries.push({key:pick.key,count:1});
+    remaining-=pick.cost;
+  }
+
+  if(remaining>0){
+    const filler=sorted.filter(e=>e.cost===1)[0]||sorted[sorted.length-1];
+    const existing=entries.find(en=>en.key===filler.key);
+    if(existing)existing.count+=remaining;
+    else entries.push({key:filler.key,count:remaining});
+    remaining=0;
+  }
+
+  const countMult=Math.max(1,mapConfig.enemyCountMultiplier||1);
+  for(const entry of entries){
+    entry.count=Math.max(1,Math.round(entry.count*countMult));
+  }
+
+  return entries;
+}
+
+function getSpentBudget(entries,catalog){
+  let spent=0;
+  for(const entry of entries){
+    const info=getCatalogEntryByKey(catalog,entry.key);
+    spent+=info.cost*(entry.count||1)/Math.max(1,mapConfig.enemyCountMultiplier||1);
+  }
+  return spent;
+}
+
+function generateWavePlan(wave){
+  const catalog=getEnemyCatalog(wave);
+
+  if(wave%10===0){
+    const moneyMultiplier=getWaveMoneyMultiplier(wave);
+    const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
+    const bossHp=Math.floor(650+wave*120+Math.pow(wave,1.6)*26);
+    const bossBudget=Math.max(120,Math.floor(170+Math.pow(wave,1.25)*34));
+
+    return {
+      wave,
+      budget:bossBudget,
+      moneyMultiplier,
+      roundScoreMultiplier,
+      bossWave:true,
+      spawnGap:.24,
+      preview:`Boss mit ${bossHp} HP`,
+      entries:[{key:'boss',count:Math.max(1,Math.round(1*Math.max(1,mapConfig.enemyCountMultiplier||1))),hp:bossHp,speed:Math.min(54+wave*1.45,110),reward:bossBudget,radius:28,cost:bossBudget}]
+    };
+  }
+
+  const baseBudget=Math.floor(10+Math.pow(wave,1.22)*6);
+  const budget=Math.max(8,baseBudget+Math.floor(Math.random()*6));
+  const entries=buildEntriesFromBudget(budget,catalog,wave);
+  const spent=getSpentBudget(entries,catalog);
+  const moneyMultiplier=getWaveMoneyMultiplier(wave);
+  const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
+  const totalCount=entries.reduce((a,e)=>a+e.count,0);
+  const preview=entries.map(e=>`${e.count}× ${e.key.replace('_',' ')}`).join(', ');
+  const spawnGap=Math.max(.11,Math.min(.46,2.35/(Math.sqrt(totalCount)+spent*.036)));
+
+  return {wave,budget:spent,moneyMultiplier,roundScoreMultiplier,bossWave:false,spawnGap,preview,entries};
+}
+
+function queueWave(){if(game.wave>=game.maxWaves){if(!game.victory&&!game.enemies.length&&!game.spawnQueue.length){game.victory=true;finalizeRun(true)}return}game.wave+=1;const def=game.pendingWaveDefs.shift()||generateWavePlan(game.wave);while(game.pendingWaveDefs.length<3&&game.wave+game.pendingWaveDefs.length<game.maxWaves)game.pendingWaveDefs.push(generateWavePlan(game.wave+game.pendingWaveDefs.length+1));game.currentWaveInfo=def;game.currentMoneyMultiplier=Math.max(1,def.moneyMultiplier||1);game.roundScoreMultiplier=Math.max(1,def.roundScoreMultiplier||1);game.spawnQueue=[];for(const entry of def.entries){const count=entry.count||1;const spacingMultiplier=count>20?1:lerp(3.2,1.1,(count-1)/19);for(let i=0;i<count;i++){const enemy=createEnemyFromTemplate(entry,game.wave,game.currentMoneyMultiplier);enemy.spawnGapMultiplier=spacingMultiplier;game.spawnQueue.push(enemy)}}game.timeUntilNextSpawn=0;game.waveInProgress=true;game.intermission=false;setStatus(def.bossWave?`Boss-Wave ${game.wave} gestartet.`:`Wave ${game.wave} gestartet.`);updateWavePreviewUI();updateHUD()}
 function spawnEnemyFromQueue(){if(!game.spawnQueue.length||!game.map)return;const e=game.spawnQueue.shift(),s=game.map.pathPoints[0];e.instanceId=`enemy_${Date.now()}_${Math.random().toString(36).slice(2,9)}`;e.x=s.x;e.y=s.y;game.enemies.push(e);const baseGap=game.currentWaveInfo?game.currentWaveInfo.spawnGap:.4;game.timeUntilNextSpawn=baseGap*(e.spawnGapMultiplier||1)}

@@ -1,83 +1,116 @@
+const ENEMY_LAYER_COLORS = ['#ffe66b', '#ff667f', '#9d8cff', '#65ff8f'];
+const ENEMY_LAYER_HP_MULTIPLIER = 5;
+
 function getEnemyRadiusFromTileRatio(tileDiameterRatio) {
   const cellSize = game?.map?.cellSize || BASE_MAP_CELL_SIZE || 72;
   const safeRatio = Number.isFinite(tileDiameterRatio) ? tileDiameterRatio : 1 / 3;
   return (cellSize * safeRatio) / 2;
 }
 
-function getEnemyCatalog(wave){
-  const hpScale=Math.pow(1.115,Math.max(0,wave-4));
-  const speedScale=1+Math.min(.55,Math.max(0,wave-4)*.018);
-  const rewardScale=Math.pow(1.07,Math.max(0,wave-4));
-  const baseHp=Math.floor((30+wave*4.5+Math.pow(wave,1.08)*1.8)*hpScale);
-  const baseSpeed=Math.min((74+wave*1.35)*speedScale,210);
-  const baseReward=Math.max(5,Math.floor((7+wave*.28)*rewardScale));
-  const fastBase=Math.max(8,Math.floor(baseHp*.5));
-  const infinityHp=Math.max(4,Math.floor(6*Math.pow(1.2,Math.max(0,wave-1))));
-  const waveSizeBonus=Math.min(.07,Math.max(0,wave-1)*.0025);
+function getEnemyCatalog(wave) {
+  const speedScale = 1 + Math.min(0.55, Math.max(0, wave - 3) * 0.016);
+  const baseLayerHp = Math.floor(36 + wave * 5.25 + Math.pow(wave, 1.05) * 2.5);
+  const fastLayerHp = Math.max(10, Math.floor(baseLayerHp * 0.52));
+  const baseSpeed = Math.min((72 + wave * 1.3) * speedScale, 210);
+  const waveSizeBonus = Math.min(0.07, Math.max(0, wave - 1) * 0.0025);
 
-  return[
-    {key:'yellow',hp:baseHp,speed:baseSpeed,reward:baseReward,cost:1,tileDiameterRatio:(1/3)+waveSizeBonus,color:'#ffe66b'},
-    {key:'yellow_red',hp:baseHp*3,speed:baseSpeed*.92,reward:baseReward,cost:3,tileDiameterRatio:.4+waveSizeBonus,color:'#ffe66b',core:'#ff667f'},
-    {key:'yellow_fort',hp:baseHp*9,speed:baseSpeed*.82,reward:baseReward,cost:9,tileDiameterRatio:.46+waveSizeBonus,color:'#ffe66b',core:'#9d8cff'},
-    {key:'fast_1',hp:fastBase,speed:baseSpeed*1.95,reward:Math.max(4,Math.floor(baseReward*.78)),cost:1.1,tileDiameterRatio:.28+waveSizeBonus*.5,color:'#59f3ff',isFast:true},
-    {key:'fast_2',hp:fastBase*3,speed:baseSpeed*1.78,reward:Math.max(4,Math.floor(baseReward*.78)),cost:3.3,tileDiameterRatio:.34+waveSizeBonus*.5,color:'#59f3ff',core:'#ff667f',isFast:true},
-    {key:'fast_3',hp:fastBase*9,speed:baseSpeed*1.62,reward:Math.max(4,Math.floor(baseReward*.78)),cost:9.9,tileDiameterRatio:.4+waveSizeBonus*.5,color:'#59f3ff',core:'#9d8cff',isFast:true},
-    {key:'infinity',hp:infinityHp,speed:baseSpeed*1.35,reward:1,cost:.05,tileDiameterRatio:.24,color:'#ffffff',core:'#08101f',isInfinity:true}
-  ]
+  return [
+    { key: 'yellow', layerHp: baseLayerHp, speed: baseSpeed, cost: 1, tier: 0, tileDiameterRatio: (1 / 3) + waveSizeBonus, color: '#ffe66b' },
+    { key: 'yellow_red', layerHp: baseLayerHp, speed: baseSpeed * 0.92, cost: 6, tier: 1, tileDiameterRatio: 0.4 + waveSizeBonus, color: '#ffe66b' },
+    { key: 'yellow_fort', layerHp: baseLayerHp, speed: baseSpeed * 0.82, cost: 31, tier: 2, tileDiameterRatio: 0.46 + waveSizeBonus, color: '#ffe66b' },
+    { key: 'fast_1', layerHp: fastLayerHp, speed: baseSpeed * 1.95, cost: 1, tier: 0, tileDiameterRatio: 0.28 + waveSizeBonus * 0.5, color: '#59f3ff', isFast: true },
+    { key: 'fast_2', layerHp: fastLayerHp, speed: baseSpeed * 1.78, cost: 6, tier: 1, tileDiameterRatio: 0.34 + waveSizeBonus * 0.5, color: '#59f3ff', isFast: true },
+    { key: 'fast_3', layerHp: fastLayerHp, speed: baseSpeed * 1.62, cost: 156, tier: 3, tileDiameterRatio: 0.4 + waveSizeBonus * 0.5, color: '#59f3ff', isFast: true },
+    { key: 'infinity', layerHp: Math.max(4, Math.floor(6 * Math.pow(1.2, Math.max(0, wave - 1)))), speed: baseSpeed * 1.35, cost: 1, tier: 0, tileDiameterRatio: 0.24, color: '#ffffff', isInfinity: true }
+  ];
 }
 
-function createEnemyFromTemplate(template,wave,enemyMultiplier){
-  const countMult=Math.max(1,mapConfig.enemyCountMultiplier||1);
+function buildEnemyLayers(layerHpBase, tier) {
+  const layers = [];
 
-  if(template.key==='boss'){
+  for (let i = 0; i <= tier; i++) {
+    layers.push({
+      maxHp: Math.max(1, Math.floor(layerHpBase * Math.pow(ENEMY_LAYER_HP_MULTIPLIER, i))),
+      hp: Math.max(1, Math.floor(layerHpBase * Math.pow(ENEMY_LAYER_HP_MULTIPLIER, i))),
+      color: ENEMY_LAYER_COLORS[i] || ENEMY_LAYER_COLORS[ENEMY_LAYER_COLORS.length - 1],
+      rewardWeight: Math.pow(ENEMY_LAYER_HP_MULTIPLIER, i)
+    });
+  }
+
+  return layers;
+}
+
+function createEnemyFromTemplate(template, wave, moneyMultiplier) {
+  const countMult = Math.max(1, mapConfig.enemyCountMultiplier || 1);
+
+  if (template.key === 'boss') {
     const tileDiameterRatio = Number.isFinite(template.tileDiameterRatio) ? template.tileDiameterRatio : null;
     const bossRadius = tileDiameterRatio != null
       ? getEnemyRadiusFromTileRatio(tileDiameterRatio)
       : scaleWorldValue(template.radius);
 
     return {
-      instanceId:null,
-      maxHp:template.hp,
-      hp:template.hp,
-      speed:template.speed,
-      reward:Math.max(.35,(template.reward/Math.max(1,enemyMultiplier))/countMult),
-      pathIndex:0,
-      baseRadius:template.radius,
+      instanceId: null,
+      maxHp: template.hp,
+      hp: template.hp,
+      speed: template.speed,
+      reward: Math.max(0.35, (template.reward / Math.max(1, moneyMultiplier)) / countMult),
+      rewardGranted: false,
+      pathIndex: 0,
+      baseRadius: template.radius,
       tileDiameterRatio,
-      radius:bossRadius,
-      isBoss:true,
-      isFast:false,
-      damageByTower:{},
-      lastDamageWindow:0,
-      stunCooldown:1,
-      stunPulseTimer:1,
-      color:'#ff667f',
-      core:'#ff5edc'
-    }
+      radius: bossRadius,
+      isBoss: true,
+      isFast: false,
+      damageByTower: {},
+      lastDamageWindow: 0,
+      stunCooldown: 1,
+      stunPulseTimer: 1,
+      color: '#ff667f',
+      core: '#ff5edc',
+      key: 'boss'
+    };
   }
 
-  const data=getEnemyCatalog(wave).find(e=>e.key===template.key)||getEnemyCatalog(wave)[0];
+  const catalog = getEnemyCatalog(wave);
+  const data = catalog.find(e => e.key === template.key) || catalog[0];
+  const tier = Number.isFinite(data.tier) ? data.tier : 0;
+  const layers = buildEnemyLayers(data.layerHp, tier);
+  const rewardWeightTotal = layers.reduce((sum, layer) => sum + layer.rewardWeight, 0) || 1;
+  const enemyBudgetValue = data.cost;
+  const rewardLayers = layers.map(layer =>
+    Math.max(0.2, ((enemyBudgetValue * (layer.rewardWeight / rewardWeightTotal)) / Math.max(1, moneyMultiplier)) / countMult)
+  );
+
   return {
-    instanceId:null,
-    maxHp:data.hp,
-    hp:data.hp,
-    speed:data.speed,
-    reward:Math.max(.35,(data.reward/Math.max(1,enemyMultiplier))/countMult),
-    pathIndex:0,
-    baseRadius:data.radius,
-    tileDiameterRatio:data.tileDiameterRatio,
-    radius:getEnemyRadiusFromTileRatio(data.tileDiameterRatio),
-    isBoss:false,
-    isFast:!!data.isFast,
-    isInfinity:!!data.isInfinity,
-    damageByTower:{},
-    lastDamageWindow:0,
-    stunCooldown:1,
-    stunPulseTimer:1,
-    color:data.color,
-    core:data.core||null,
-    key:data.key
-  }
+    instanceId: null,
+    maxHp: layers.reduce((sum, layer) => sum + layer.maxHp, 0),
+    hp: layers.reduce((sum, layer) => sum + layer.hp, 0),
+    speed: data.speed,
+    reward: rewardLayers.reduce((sum, r) => sum + r, 0),
+    rewardLayers,
+    rewardGranted: false,
+    pathIndex: 0,
+    baseRadius: data.radius,
+    tileDiameterRatio: data.tileDiameterRatio,
+    radius: getEnemyRadiusFromTileRatio(data.tileDiameterRatio),
+    isBoss: false,
+    isFast: !!data.isFast,
+    isInfinity: !!data.isInfinity,
+    damageByTower: {},
+    lastDamageWindow: 0,
+    stunCooldown: 1,
+    stunPulseTimer: 1,
+    color: data.color,
+    core: null,
+    key: data.key,
+    layers,
+    activeLayerIndex: layers.length - 1,
+    layerHp: layers[layers.length - 1].hp,
+    layerMaxHp: layers[layers.length - 1].maxHp,
+    layerColor: layers[layers.length - 1].color,
+    enemyBudgetValue
+  };
 }
 
 function getEnemyVelocity(e){if(!game.map)return{vx:0,vy:0};const ni=Math.min(e.pathIndex+1,game.map.pathPoints.length-1),np=game.map.pathPoints[ni],dx=np.x-e.x,dy=np.y-e.y,dist=Math.hypot(dx,dy)||1;return{vx:dx/dist*e.speed,vy:dy/dist*e.speed}}
