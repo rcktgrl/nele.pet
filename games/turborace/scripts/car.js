@@ -2,6 +2,7 @@ import { THREE } from './three.js';
 import { createCarVisual, getOpponentCarModels, getPlayerCarModel } from './car-model.js';
 import { state } from './state.js';
 import { fmtT } from './util.js';
+import { announce } from './audio.js';
 
 class Car {
   constructor(data, pos, hdg, isPlayer, scene) {
@@ -175,10 +176,8 @@ class Car {
               if (typeof globalThis.notify === 'function') {
                 globalThis.notify('LAP ' + this.lap + '/' + state.trkData.laps + (this.lap > 1 ? ' · ' + fmt(lt) : ''));
               }
-              if (typeof globalThis.announce === 'function') {
-                if (startingFinal) globalThis.announce('Final lap! Push it to the limit!');
-                else if (this.lap > 1) globalThis.announce('Lap ' + (this.lap) + '. ' + fmt(lt));
-              }
+              if (startingFinal) announce('Final lap! Push it to the limit!');
+              else if (this.lap > 1) announce('Lap ' + (this.lap) + '. ' + fmt(lt));
             }
             if (this.lap >= state.trkData.laps) {
               this.finished = true;
