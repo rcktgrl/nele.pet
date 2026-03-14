@@ -42,7 +42,7 @@ function getMapScale() {
   if (!game?.map) return 1;
   const scale = game.map.renderScale;
   if (!Number.isFinite(scale) || scale <= 0) return 1;
-  return Math.min(1, scale);
+  return scale;
 }
 
 function scaleWorldValue(value) {
@@ -51,7 +51,10 @@ function scaleWorldValue(value) {
 
 
 function getTowerVisualScale() {
-  return getMapScale() * 0.5;
+  const towerBaseDiameter = 40;
+  const towerTileDiameterRatio = 2 / 3;
+  const cellSize = game?.map?.cellSize || BASE_MAP_CELL_SIZE || 72;
+  return (cellSize * towerTileDiameterRatio) / towerBaseDiameter;
 }
 
 function getRangeInPixels(rangeValue) {
