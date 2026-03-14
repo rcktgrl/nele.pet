@@ -28,25 +28,6 @@ function resolveBuyableTowerSelections(){
     .filter(Boolean);
 }
 
-function validateBuyableTowerSelections(selections, contextLabel='unknown'){
-  const list = Array.isArray(selections) ? selections.filter(Boolean) : [];
-  const ids = new Set(list.map(t => t.id));
-
-  if (!ids.has('rapid')) {
-    const rapidDef = getTowerDef('rapid');
-    console.warn(
-      `[tower-buyables] Expected "rapid" to be buyable in ${contextLabel}, but it is missing.`,
-      {
-        ids: [...ids],
-        rapidDefExists: !!rapidDef,
-        rapidDefBuyable: !!rapidDef?.acquire?.buyable
-      }
-    );
-  }
-
-  return list;
-}
-
 function getFusionPreview(typeId, cell = null) {
   if (!cell) return null;
 
@@ -267,12 +248,7 @@ function updateSelectedTowerStats() {
 function buildTowerButtons(){
   ui.towerList.innerHTML='';
 
-  const resolvedBuyables = resolveBuyableTowerSelections();
-  const buyableSelections = validateBuyableTowerSelections(
-    resolvedBuyables,
-    'buildTowerButtons'
-  );
-  game.buyableTowerSelections = buyableSelections;
+  const buyableSelections = resolveBuyableTowerSelections();
 
   buyableSelections.forEach(t => {
       const def = getTowerDef(t.id);

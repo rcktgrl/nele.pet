@@ -31,3 +31,12 @@ function loadTreeConfig(){
   researchEdges=DEFAULT_RESEARCH_EDGES.map(e=>({...e})).filter(e=>!LEGACY_UPGRADE_RESEARCH_IDS.has(e.from)&&!LEGACY_UPGRADE_RESEARCH_IDS.has(e.to));
 }
 function saveTreeConfig(){localStorage.setItem(TREE_SAVE_KEY,JSON.stringify({nodes:researchNodes,edges:researchEdges}))}
+
+
+function clearAllSavedProgress(){
+  try{
+    localStorage.removeItem(SAVE_KEY);
+    localStorage.removeItem(TREE_SAVE_KEY);
+    localStorage.removeItem('neon_td_meta_v5');
+  }catch(e){}
+}
