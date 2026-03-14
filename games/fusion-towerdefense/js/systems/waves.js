@@ -141,11 +141,16 @@ function buildTimelinePlan(wave,budget,catalog,restrictedKeys=null){
   const events=[];
 
   let carryBudget=0;
+  let timelineCursor=0;
 
   for(let chunk=0;chunk<chunkCount;chunk++){
     let localBudget=chunkBudgets[chunk]+carryBudget;
-    let cursor=chunk*chunkDuration;
+    const chunkStart=chunk*chunkDuration;
     const chunkEnd=(chunk+1)*chunkDuration;
+    let cursor=Math.max(
+      timelineCursor,
+      chunkStart + Math.random() * Math.max(0.05, chunkDuration * 0.38)
+    );
 
     while(localBudget>=1){
       const sourceCatalog=Array.isArray(restrictedKeys)
@@ -165,8 +170,8 @@ function buildTimelinePlan(wave,budget,catalog,restrictedKeys=null){
       countsByKey[enemy.key]=(countsByKey[enemy.key]||0)+packCount;
       localBudget-=enemy.cost*packCount;
 
-      if(cursor<chunkEnd&&Math.random()<0.88){
-        cursor+=Math.random()*0.3;
+      if(cursor<chunkEnd&&Math.random()<0.9){
+        cursor+=Math.random()*Math.min(0.55,chunkDuration*0.22);
       }
 
       if(localBudget>0&&localBudget<enemy.cost&&Math.random()<0.8){
@@ -175,6 +180,7 @@ function buildTimelinePlan(wave,budget,catalog,restrictedKeys=null){
     }
 
     carryBudget=Math.max(0,localBudget);
+    timelineCursor=Math.max(timelineCursor,cursor);
   }
 
   if(carryBudget>=1){
@@ -183,7 +189,7 @@ function buildTimelinePlan(wave,budget,catalog,restrictedKeys=null){
       const maxByBudget=Math.max(1,Math.floor(carryBudget/fallback.cost));
       const packCount=maxByBudget>=2?Math.max(2,Math.min(6,maxByBudget)):1;
       const spacing=getPackSpacingSec(packCount);
-      let cursor=Math.max(0,duration-packCount*spacing);
+      let cursor=Math.max(timelineCursor,duration-packCount*spacing*0.9);
       for(let i=0;i<packCount;i++){
         events.push({time:cursor,key:fallback.key});
         cursor+=spacing;
