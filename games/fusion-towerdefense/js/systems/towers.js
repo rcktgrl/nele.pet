@@ -22,11 +22,28 @@ function getBuyableTowerSelection(typeId){
 }
 
 function resolveBuyableTowerSelections(){
-  return getTowerDefsArray()
-    .filter(def => def.acquire?.buyable)
-    .map(def => getBuyableTowerSelection(def.id))
-    .filter(Boolean);
+  const out=[];
+
+  for(const towerKey of Object.keys(RAW_TOWER_DEFS||{})){
+    const def = getTowerDef(towerKey);
+    if(!def?.acquire?.buyable) continue;
+
+    if(def.id!==towerKey){
+      console.warn('[tower-buyables] Tower id mismatch detected while resolving buyables.', {
+        towerKey,
+        resolvedDefId:def.id
+      });
+    }
+
+    const canonicalSelection = getBuyableTowerSelection(towerKey);
+    if(canonicalSelection){
+      out.push({...canonicalSelection,id:towerKey});
+    }
+  }
+
+  return out;
 }
+
 
 
 function warnIfExpectedBuyableMissing(expectedId, stage, resolvedSelections, renderedSelections = null){
@@ -44,6 +61,17 @@ function warnIfExpectedBuyableMissing(expectedId, stage, resolvedSelections, ren
   const unlockId = def?.unlock?.researchNodeId ?? null;
   const researchedValue = unlockId ? metaProgress?.researched?.[unlockId] : null;
 
+  const rawBuyableKeys = Object.keys(RAW_TOWER_DEFS || {})
+    .filter(key => !!getTowerDef(key)?.acquire?.buyable);
+
+  const unlockFilteredIds = resolved
+    .filter(t => {
+      const td = getTowerDef(t.id);
+      const u = td?.unlock?.researchNodeId;
+      return !!u && metaProgress?.researched?.[u] === false;
+    })
+    .map(t => t.id);
+
   console.warn(`[tower-buyables] Expected "${expectedId}" missing at ${stage}.`, {
     missingFromResolved,
     missingFromRendered,
@@ -51,8 +79,11 @@ function warnIfExpectedBuyableMissing(expectedId, stage, resolvedSelections, ren
     renderedIds,
     defExists: !!def,
     defBuyable: !!def?.acquire?.buyable,
+    defId: def?.id ?? null,
+    rawBuyableKeys,
     unlockId,
-    researchedValue
+    researchedValue,
+    unlockFilteredIds
   });
 }
 
