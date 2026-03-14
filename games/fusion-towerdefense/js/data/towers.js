@@ -96,7 +96,6 @@ const RAW_TOWER_DEFS = {
   },
 
   rapid: {
-    id: 'rapid',
     name: 'Rapid',
     classes: ['physical'],
     tags: ['base', 'buyable'],
