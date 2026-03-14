@@ -58,7 +58,29 @@ function getSpentBudget(entries,catalog){
 function generateWavePlan(wave){
   const catalog=getEnemyCatalog(wave);
 
-  if(wave%10===0){
+
+  if(wave===1){
+    const moneyLossPercent=getWaveMoneyLossPercent(wave);
+    const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
+    const entries=[{key:'yellow',count:12},{key:'fast_1',count:2}];
+    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.36,preview:'12× yellow, 2× fast 1',entries};
+  }
+
+  if(wave===2){
+    const moneyLossPercent=getWaveMoneyLossPercent(wave);
+    const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
+    const entries=[{key:'yellow',count:16},{key:'fast_1',count:4}];
+    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.32,preview:'16× yellow, 4× fast 1',entries};
+  }
+
+  if(wave===3){
+    const moneyLossPercent=getWaveMoneyLossPercent(wave);
+    const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
+    const entries=[{key:'yellow',count:18},{key:'fast_1',count:5},{key:'yellow_red',count:1}];
+    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.3,preview:'18× yellow, 5× fast 1, 1× yellow red',entries};
+  }
+
+    if(wave%10===0){
     const moneyLossPercent=getWaveMoneyLossPercent(wave);
     const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
     const bossHp=Math.floor(720+wave*145+Math.pow(wave,1.68)*34);
