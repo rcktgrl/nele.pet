@@ -14,8 +14,9 @@ export const editorGroundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
 
 export const editorMouse = {mode:null,lastX:0,lastY:0};
 export const editorCam = {target:new THREE.Vector3(),yaw:0,pitch:1.16,distance:260};
-
 export const raceCamOrbit={yaw:0,pitch:0,lastInput:0};
+
+export const keys = {};
 
 export const state = {
     activeCam: camChase,
@@ -45,5 +46,6 @@ export const state = {
     trkCurv: [],
     aiControllers: [],
     cityCorridors: null, // For city tracks: array of {x,z,hw,hd} axis-aligned driveable rectangles
-    cityAiPts: null    // For city tracks: dense waypoints following grid roads exactly
+    cityAiPts: null,    // For city tracks: dense waypoints following grid roads exactly
+    renderer: null
 };
