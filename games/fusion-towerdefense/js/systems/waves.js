@@ -62,22 +62,22 @@ function generateWavePlan(wave){
   if(wave===1){
     const moneyLossPercent=getWaveMoneyLossPercent(wave);
     const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
-    const entries=[{key:'yellow',count:12},{key:'fast_1',count:2}];
-    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.36,preview:'12× yellow, 2× fast 1',entries};
+    const entries=[{key:'yellow',count:30},{key:'fast_1',count:10}];
+    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.28,preview:'30× yellow, 10× fast 1',entries};
   }
 
   if(wave===2){
     const moneyLossPercent=getWaveMoneyLossPercent(wave);
     const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
-    const entries=[{key:'yellow',count:16},{key:'fast_1',count:4}];
-    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.32,preview:'16× yellow, 4× fast 1',entries};
+    const entries=[{key:'yellow',count:32},{key:'fast_1',count:12}];
+    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.26,preview:'32× yellow, 12× fast 1',entries};
   }
 
   if(wave===3){
     const moneyLossPercent=getWaveMoneyLossPercent(wave);
     const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
-    const entries=[{key:'yellow',count:18},{key:'fast_1',count:5},{key:'yellow_red',count:1}];
-    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.3,preview:'18× yellow, 5× fast 1, 1× yellow red',entries};
+    const entries=[{key:'yellow',count:34},{key:'fast_1',count:12},{key:'yellow_red',count:1}];
+    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.24,preview:'34× yellow, 12× fast 1, 1× yellow red',entries};
   }
 
     if(wave%10===0){
@@ -98,7 +98,7 @@ function generateWavePlan(wave){
     };
   }
 
-  const baseBudget=Math.floor(14+Math.pow(wave,1.35)*9.5+wave*2.2);
+  const baseBudget=Math.floor(40+Math.pow(wave,1.42)*14+wave*4.5);
   const budget=Math.max(10,baseBudget+Math.floor(Math.random()*8));
   const entries=buildEntriesFromBudget(budget,catalog);
   const spent=getSpentBudget(entries,catalog);

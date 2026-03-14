@@ -8,10 +8,10 @@ function getEnemyRadiusFromTileRatio(tileDiameterRatio) {
 }
 
 function getEnemyCatalog(wave) {
-  const speedScale = 1 + Math.min(0.55, Math.max(0, wave - 3) * 0.016);
-  const baseLayerHp = Math.floor(36 + wave * 5.25 + Math.pow(wave, 1.05) * 2.5);
-  const fastLayerHp = Math.max(10, Math.floor(baseLayerHp * 0.52));
-  const baseSpeed = Math.min((72 + wave * 1.3) * speedScale, 210);
+  const speedScale = 1 + Math.min(0.45, Math.max(0, wave - 1) * 0.012);
+  const baseLayerHp = 50;
+  const fastLayerHp = 26;
+  const baseSpeed = Math.min((74 + wave * 1.0) * speedScale, 210);
   const waveSizeBonus = Math.min(0.07, Math.max(0, wave - 1) * 0.0025);
 
   return [
