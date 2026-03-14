@@ -99,6 +99,39 @@ function getPackSpacingSec(packCount){
   return clamp(base,0.13,0.5);
 }
 
+
+function softenDenseSpawnStacks(events,duration){
+  if(!events.length) return events;
+
+  const sorted=[...events].sort((a,b)=>a.time-b.time);
+  let i=0;
+
+  while(i<sorted.length){
+    let j=i+1;
+    const time=sorted[i].time;
+
+    while(j<sorted.length && Math.abs(sorted[j].time-time)<1e-9){
+      j+=1;
+    }
+
+    const count=j-i;
+    if(count>=4){
+      for(let k=i;k<j;k++){
+        const spreadIndex=k-i;
+        sorted[k].time=time+spreadIndex*0.012+Math.random()*0.004;
+        if(Number.isFinite(duration)){
+          sorted[k].time=Math.min(sorted[k].time,Math.max(0,duration));
+        }
+      }
+    }
+
+    i=j;
+  }
+
+  return sorted;
+}
+
+
 function buildTimelinePlan(wave,budget,catalog,restrictedKeys=null){
   const duration=getWaveSpawnDurationSec(wave);
   const chunkCount=getChunkCountForDuration(duration);
@@ -162,6 +195,7 @@ function buildTimelinePlan(wave,budget,catalog,restrictedKeys=null){
     events.push({time:0,key:'yellow'});
   }
 
+  softenDenseSpawnStacks(events,duration);
   events.sort((a,b)=>a.time-b.time);
 
   const entriesMap=new Map();

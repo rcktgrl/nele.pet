@@ -67,6 +67,7 @@ const game={
   autoWaveStart:false,
   ritualMode:false,
   ritualCenterTowerId:null,
-  ritualSelectedTowerIds:[]
+  ritualSelectedTowerIds:[],
+  buyableTowerSelections:[]
 };
 const mapConfig={waveLimit:10,terrainPercent:100,pathLength:40,enemyCountMultiplier:1,scoreMultiplier:1,seed:Math.floor(Math.random()*1e6)};
