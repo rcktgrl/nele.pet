@@ -1,6 +1,6 @@
-import { mat, matE } from "./render/materials";
-import { state, scene } from "./state";
-import { THREE } from "./three";
+import { mat, matE } from "./render/materials.js";
+import { state, scene } from "./state.js";
+import { THREE } from "./three.js";
 
 let roadTex=null;
 
