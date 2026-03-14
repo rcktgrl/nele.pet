@@ -7,7 +7,19 @@ import { AI } from './ai-script.js';
 import { THREE } from './three.js';
 import { createCarVisual } from './car-model.js';
 import { supabase } from './supabase.js';
-import { sanitizeUserId, sanitizeLeaderboardName, loadArcadeUser } from './user.js';
+import { loadArcadeUser } from './user.js';
+import { fmtT } from './util.js';
+import {
+  leaderboardByTrack,
+  normaliseTrackId,
+  renderResultsLeaderboard,
+  updateTrackCardBestTime,
+  loadTrackLeaderboard,
+  handlePostRaceLeaderboard,
+  openTrackLeaderboardModal,
+  closeTrackLeaderboardModal,
+  resetCurrentRaceSubmitted
+} from './leaderboard.js';
 import {
   gc,
   scene,
@@ -62,12 +74,8 @@ globalThis.announce=announce;
 // ═══════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════
-const LEADERBOARD_TABLE='turborace_leaderboard';
 const CUSTOM_TRACKS_TABLE='turborace_custom_tracks';
-const leaderboardByTrack=new Map();
-let leaderboardAvailable=true;
 let customTrackSyncAvailable=true;
-let currentRaceSubmitted=false;
 
 const keys={};
 document.addEventListener('keydown',e=>{
@@ -295,118 +303,6 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
     bm.userData.trk=true; scene.add(bm);
     const tm=new THREE.Mesh(mkGeo(vT,iT),new THREE.MeshLambertMaterial({color:side===-1?0xff2211:0xffffff,side:THREE.DoubleSide}));
     tm.userData.trk=true; scene.add(tm);
-  }
-}
-
-function normaliseTrackId(trackId){
-  if(trackId===null||trackId===undefined||trackId==='') return 'unknown';
-  return String(trackId);
-}
-
-function leaderboardTimeToSeconds(timeMs){
-  const numeric=Math.max(0,Number(timeMs)||0);
-  // Backward compatibility: earlier builds accidentally stored seconds in time_ms.
-  if(numeric<1000) return numeric;
-  return numeric/1000;
-}
-
-function renderLeaderboardRows(container,entries,highlightName){
-  if(!container)return;
-  if(!entries||!entries.length){
-    container.innerHTML='<div class="lb-empty">No leaderboard entries yet for this track.</div>';
-    return;
-  }
-  container.innerHTML='';
-  entries.forEach((entry,idx)=>{
-    const row=document.createElement('div');
-    row.className='lb-row'+(highlightName&&entry.username===highlightName?' lb-row-you':'');
-    const carLabel=entry.car_name?`<div class="lb-car"><span class="lb-car-dot" style="background:${entry.car_hex||'#fff'}"></span>${entry.car_name}</div>`:'';
-    row.innerHTML=`<span class="lb-pos">${idx+1}</span><span class="lb-name">${entry.username}${carLabel}</span><span class="lb-time">${fmtT(leaderboardTimeToSeconds(entry.time_ms))}</span>`;
-    container.appendChild(row);
-  });
-}
-
-function renderResultsLeaderboard(entries,highlightName){
-  const board=document.getElementById('resultsLeaderboard');
-  renderLeaderboardRows(board,entries,highlightName);
-}
-
-function updateTrackCardBestTime(trackId){
-  const data=leaderboardByTrack.get(normaliseTrackId(trackId));
-  const el=document.querySelector(`[data-track-best="${CSS.escape(normaliseTrackId(trackId))}"]`);
-  if(!el)return;
-  if(!leaderboardAvailable) el.textContent='Best: leaderboard unavailable';
-  else if(!data||!data.best) el.textContent='Best: --';
-  else el.textContent=`Best: ${fmtT(leaderboardTimeToSeconds(data.best.time_ms))} · ${data.best.username}`;
-}
-
-async function loadTrackLeaderboard(trackId,{force=false,limit=10}={}){
-  const key=normaliseTrackId(trackId);
-  if(!leaderboardAvailable) return {best:null,entries:[]};
-  if(!force && leaderboardByTrack.has(key)) return leaderboardByTrack.get(key);
-  const {data,error}=await supabase.from(LEADERBOARD_TABLE)
-    .select('*')
-    .eq('track_id',key)
-    .order('time_ms',{ascending:true})
-    .limit(limit);
-  if(error){
-    console.error('Leaderboard fetch error:',error);
-    leaderboardAvailable=false;
-    return {best:null,entries:[]};
-  }
-  const entries=(data||[]).map((row)=>({
-    track_id:normaliseTrackId(row.track_id),
-    user_id:sanitizeUserId(row.user_id),
-    username:sanitizeLeaderboardName(row.username),
-    car_name:String(row.car_name||'').trim().slice(0,30),
-    car_hex:/^#[0-9a-f]{6}$/i.test(String(row.car_hex||''))?String(row.car_hex):null,
-    time_ms:Math.max(0,Number(row.time_ms)||0)
-  }));
-  const payload={best:entries[0]||null,entries};
-  leaderboardByTrack.set(key,payload);
-  return payload;
-}
-
-async function submitTrackTime(trackId,user,timeMs,car){
-  const key=normaliseTrackId(trackId);
-  if(!leaderboardAvailable) return false;
-
-  const { data:{session} }=await supabase.auth.getSession();
-  if(!session||!session.user){
-    console.info('Leaderboard submit skipped: sign in required.');
-    return false;
-  }
-
-  const {error}=await supabase.from(LEADERBOARD_TABLE).insert({
-    track_id:key,
-    user_id:sanitizeUserId(user.user_id),
-    username:sanitizeLeaderboardName(user.name),
-    car_name:String(car?.name||'').trim().slice(0,30)||null,
-    car_hex:/^#[0-9a-f]{6}$/i.test(String(car?.hex||''))?String(car.hex).toLowerCase():null,
-    time_ms:Math.round(Math.max(0,timeMs||0)*1000)
-  });
-  if(error){
-    console.error('Leaderboard submit error:',error);
-    const msg=String(error.message||'').toLowerCase();
-    const authBlocked=msg.includes('row-level security')||msg.includes('permission denied');
-    if(!authBlocked) leaderboardAvailable=false;
-    return false;
-  }
-  return true;
-}
-
-async function handlePostRaceLeaderboard(){
-  if(currentRaceSubmitted||!state.trkData||!state.pCar||!state.pCar.finTime||!Number.isFinite(state.pCar.finTime)) return;
-  currentRaceSubmitted=true;
-  const user=await loadArcadeUser();
-  const ok=await submitTrackTime(state.trkData.id,user,state.pCar.finTime,state.pCar.data);
-  if(ok){
-    const latest=await loadTrackLeaderboard(state.trkData.id,{force:true,limit:10});
-    renderResultsLeaderboard(latest.entries,user.name);
-    updateTrackCardBestTime(state.trkData.id);
-    notify('Leaderboard time saved!');
-  }else{
-    notify('Leaderboard submit skipped (sign in required).');
   }
 }
 
@@ -1127,11 +1023,6 @@ function toggleCam(){
 // ═══════════════════════════════════════════════════════
 const ords=['TH','ST','ND','RD'];
 function getOrd(n){return n>=1&&n<=3?ords[n]:ords[0];}
-function fmtT(s){
-  const m=Math.floor(s/60),sc=Math.floor(s%60),ms=Math.floor((s%1)*1000);
-  return`${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}.${String(ms).padStart(3,'0')}`;
-}
-globalThis.fmtT=fmtT;
 function updateHUD(){
   if(!state.pCar||state.gState!=='racing')return;
   document.getElementById('speedNum').textContent=Math.round((state.pCar.isReversing?state.pCar.revSpd:state.pCar.spd)*3.6);
@@ -1298,7 +1189,7 @@ function initRace(){
   state.allCars=raceCars.allCars;
 
   state.raceTime=0; state.gState='countdown';
-  currentRaceSubmitted=false;
+  resetCurrentRaceSubmitted();
   document.getElementById('hud').style.display='block';
   document.getElementById('hint').style.display='block';
   updateTouchControlsVisibility(state.gState);
@@ -1373,7 +1264,7 @@ function showResults(){
   if(state.trkData&&state.trkData.id){
     loadTrackLeaderboard(state.trkData.id,{force:true,limit:10}).then(data=>renderResultsLeaderboard(data.entries));
   }
-  handlePostRaceLeaderboard();
+  handlePostRaceLeaderboard(notify);
   document.getElementById('results').style.display='flex';
   document.getElementById('hud').style.display='none';
   document.getElementById('touchControls').style.display='none';
@@ -2428,26 +2319,6 @@ async function showTrkSel(){
   }));
 }
 
-
-async function openTrackLeaderboardModal(trackId,trackName){
-  const modal=document.getElementById('leaderboardModal');
-  const title=document.getElementById('leaderboardModalTitle');
-  const list=document.getElementById('leaderboardModalList');
-  if(!modal||!title||!list) return;
-  title.textContent=`${trackName} Leaderboard`;
-  list.innerHTML='<div class="lb-empty">Loading leaderboard…</div>';
-  modal.style.display='flex';
-  modal.setAttribute('aria-hidden','false');
-  const data=await loadTrackLeaderboard(trackId,{force:true,limit:50});
-  renderLeaderboardRows(list,data.entries);
-}
-
-function closeTrackLeaderboardModal(){
-  const modal=document.getElementById('leaderboardModal');
-  if(!modal) return;
-  modal.style.display='none';
-  modal.setAttribute('aria-hidden','true');
-}
 
 function startRace(){
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');

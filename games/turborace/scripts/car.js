@@ -1,6 +1,7 @@
 import { THREE } from './three.js';
 import { createCarVisual, getOpponentCarModels, getPlayerCarModel } from './car-model.js';
 import { state } from './state.js';
+import { fmtT } from './util.js';
 
 class Car {
   constructor(data, pos, hdg, isPlayer, scene) {
@@ -170,7 +171,7 @@ class Car {
             const lt = state.raceTime - this.lapStart; this.lapStart = state.raceTime;
             if (this.isPlayer) {
               const startingFinal = this.lap === state.trkData.laps - 1;
-              const fmt = globalThis.fmtT || ((secs)=>secs.toFixed(2)+'s');
+              const fmt = fmtT || ((secs)=>secs.toFixed(2)+'s');
               if (typeof globalThis.notify === 'function') {
                 globalThis.notify('LAP ' + this.lap + '/' + state.trkData.laps + (this.lap > 1 ? ' · ' + fmt(lt) : ''));
               }
