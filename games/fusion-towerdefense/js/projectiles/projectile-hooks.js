@@ -43,9 +43,9 @@ function runStandardProjectileOnHit(projectile, projectileDef, context) {
   if (!enemy) return context;
 
   const damage = context.damage ?? 0;
-  enemy.hp -= damage;
-  context.didHit = true;
-  context.didKill = enemy.hp <= 0;
+  const damageResult = applyEnemyDamage(enemy, damage, projectile.sourceTowerId || null);
+  context.didHit = damageResult.didHit;
+  context.didKill = damageResult.didKill;
 
   return context;
 }

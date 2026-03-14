@@ -12,6 +12,7 @@ let devPanLast={x:0,y:0};
 const screens={
   mainMenu:document.getElementById('mainMenu'),
   mapMenu:document.getElementById('mapMenu'),
+  settingsMenu:document.getElementById('settingsMenu'),
   researchMenu:document.getElementById('researchMenu'),
   progressMenu:document.getElementById('progressMenu'),
   cardShopMenu:document.getElementById('cardShopMenu'),
