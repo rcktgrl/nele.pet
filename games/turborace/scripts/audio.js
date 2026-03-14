@@ -5,6 +5,7 @@ export let audioCtx = null;
 export let audioReady = false;
 export let musicMaster = null, sfxMaster = null;
 let engOsc = null, engOsc2 = null, engGain = null, engFilter = null, engFilter2 = null;
+let engHighGainNode = null, engSubGainNode = null;
 let scrOsc = null, scrGain = null;
 export let musicPlaying = false, musicStep = 0, nextStepTime = 0, musicTimerId = null;
 
@@ -57,8 +58,8 @@ export function initAudio(){
     engOsc2 = audioCtx.createOscillator();  engOsc2.type = 'square';   engOsc2.frequency.value = 40;
     engFilter = audioCtx.createBiquadFilter();  engFilter.type = 'lowpass';  engFilter.frequency.value = 500; engFilter.Q.value = 1.8;
     engFilter2 = audioCtx.createBiquadFilter(); engFilter2.type = 'bandpass'; engFilter2.frequency.value = 320; engFilter2.Q.value = 3;
-    const hg = audioCtx.createGain(); hg.gain.value = 0.22;
-    const sg = audioCtx.createGain(); sg.gain.value = 0.5;
+    const hg = audioCtx.createGain(); hg.gain.value = 0.22; engHighGainNode = hg;
+    const sg = audioCtx.createGain(); sg.gain.value = 0.5; engSubGainNode = sg;
     engGain = audioCtx.createGain(); engGain.gain.value = 0;
     engOsc.connect(engFilter); engFilter.connect(engGain);
     engOsc2.connect(sg); sg.connect(engFilter2); engFilter2.connect(hg); hg.connect(engGain);
@@ -105,6 +106,24 @@ export function onSfxVol(v){
   if(audioReady) sfxMaster.gain.setTargetAtTime(sfxVolume, audioCtx.currentTime, .05);
 }
 
+
+function getEngineProfile(car){
+  const redline = Math.max(4500, car?.redlineRpm || 8000);
+  const norm = Math.max(0, Math.min(1, (redline - 6000) / 3000));
+  return {
+    redline,
+    baseFreq: 46 + norm * 16,
+    pitchRange: 118 + norm * 82,
+    lowpassBase: 260 + norm * 80,
+    lowpassRange: 2000 + norm * 1400,
+    bandBase: 300 + norm * 210,
+    bandRange: 430 + norm * 380,
+    highMix: 0.14 + norm * 0.20,
+    subMix: 0.62 - norm * 0.24,
+    q: 1.5 + norm * 1.0,
+  };
+}
+
 export function updateAudio(thr, brk, dt, pCar, keys){
   if(!audioReady || !pCar) return;
   // Silence engine when player is finished
@@ -114,11 +133,17 @@ export function updateAudio(thr, brk, dt, pCar, keys){
     return;
   }
   const now = audioCtx.currentTime, rpm = pCar.rpm, sf = pCar.spd / pCar.data.maxSpd;
-  const freq = 55 + rpm/8000*155;
+  const profile = getEngineProfile(pCar);
+  const rpmFrac = Math.max(0, Math.min(1, rpm / profile.redline));
+  const freq = profile.baseFreq + rpmFrac * profile.pitchRange;
   engOsc.frequency.setTargetAtTime(freq, now, .06);
   engOsc2.frequency.setTargetAtTime(freq*.5, now, .06);
-  const cut = 280 + rpm/8000*2800*(0.4 + thr*.6);
+  const cut = profile.lowpassBase + rpmFrac * profile.lowpassRange * (0.4 + thr*.6);
   engFilter.frequency.setTargetAtTime(cut, now, .05);
+  engFilter.Q.setTargetAtTime(profile.q, now, .08);
+  engFilter2.frequency.setTargetAtTime(profile.bandBase + rpmFrac * profile.bandRange, now, .05);
+  if(engHighGainNode) engHighGainNode.gain.setTargetAtTime(profile.highMix, now, .08);
+  if(engSubGainNode) engSubGainNode.gain.setTargetAtTime(profile.subMix, now, .08);
   const vol = Math.min(.42, 0.06 + thr*.20 + sf*.16 + (brk?.04:0));
   engGain.gain.setTargetAtTime(vol, now, .04);
   const ts = Math.abs((keys['ArrowLeft']||keys['KeyA'])?1:(keys['ArrowRight']||keys['KeyD'])?-1:0);
@@ -211,10 +236,12 @@ export class AISound{
     const cosH=Math.cos(-playerCar.hdg), sinH=Math.sin(-playerCar.hdg);
     const px = cosH*dx - sinH*dz;
     const pan = Math.max(-1, Math.min(1, px/35));
-    const freq = 48 + aiCar.rpm/8000*90;
+    const aiProfile = getEngineProfile(aiCar);
+    const aiRpmFrac = Math.max(0, Math.min(1, aiCar.rpm/aiProfile.redline));
+    const freq = (44 + (aiProfile.baseFreq-40)*0.7) + aiRpmFrac*(92 + (aiProfile.pitchRange-120)*0.25);
     this.osc.frequency.setTargetAtTime(freq, now, .1);
     this.osc2.frequency.setTargetAtTime(freq*.5, now, .1);
-    this.filt.frequency.setTargetAtTime(300+aiCar.rpm/8000*600, now, .1);
+    this.filt.frequency.setTargetAtTime(260 + aiRpmFrac*(520 + (aiProfile.lowpassRange-2000)*0.18), now, .1);
     this.gain.gain.setTargetAtTime(vol, now, .08);
     this.panner.pan.setTargetAtTime(pan, now, .1);
   }
