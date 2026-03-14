@@ -67,6 +67,8 @@ create table if not exists public.turborace_leaderboard (
   track_id text not null,
   user_id uuid references auth.users(id) on delete set null,
   username text not null,
+  car_name text,
+  car_hex text,
   time_ms integer not null check (time_ms >= 0),
   created_at timestamptz not null default now()
 );
@@ -74,6 +76,8 @@ create table if not exists public.turborace_leaderboard (
 alter table public.turborace_leaderboard
   add column if not exists user_id uuid references auth.users(id) on delete set null,
   add column if not exists username text,
+  add column if not exists car_name text,
+  add column if not exists car_hex text,
   add column if not exists time_ms integer,
   add column if not exists created_at timestamptz default now();
 
