@@ -1,6 +1,8 @@
 import { THREE } from './three.js';
 import { createCarVisual, getOpponentCarModels, getPlayerCarModel } from './car-model.js';
 import { state } from './state.js';
+import { fmtT } from './util.js';
+import { announce } from './audio.js';
 
 class Car {
   constructor(data, pos, hdg, isPlayer, scene) {
@@ -141,10 +143,14 @@ class Car {
       const prv = state.trkPts[(ni + state.trkPts.length - 1) % state.trkPts.length];
       const tx = nxt.x - prv.x, tz = nxt.z - prv.z;
       const trkHdg = Math.atan2(tx, tz);
-      let he = ((trkHdg - this.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-      const heR = he > 0 ? he - Math.PI : he + Math.PI;
-      if (Math.abs(heR) < Math.abs(he)) he = heR;
-      this.hdg += he * 0.75;
+      const trkFwd = new THREE.Vector2(Math.sin(trkHdg), Math.cos(trkHdg));
+      const carFwd = new THREE.Vector2(Math.sin(this.hdg), Math.cos(this.hdg));
+      // Keep correction in driving direction: never flip the car toward the reverse tangent.
+      const alignedTrackHdg = carFwd.dot(trkFwd) >= 0 ? trkHdg : trkHdg + Math.PI;
+      const hdgErr = ((alignedTrackHdg - this.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      const maxCorrection = Math.PI / 18; // 10°
+      const correction = Math.max(-maxCorrection, Math.min(maxCorrection, hdgErr * 0.75));
+      this.hdg += correction;
       this.stuckTimer += dt;
     } else {
       this.stuckTimer = Math.max(0, this.stuckTimer - 0.032);
@@ -166,14 +172,12 @@ class Car {
             const lt = state.raceTime - this.lapStart; this.lapStart = state.raceTime;
             if (this.isPlayer) {
               const startingFinal = this.lap === state.trkData.laps - 1;
-              const fmt = globalThis.fmtT || ((secs)=>secs.toFixed(2)+'s');
+              const fmt = fmtT || ((secs)=>secs.toFixed(2)+'s');
               if (typeof globalThis.notify === 'function') {
                 globalThis.notify('LAP ' + this.lap + '/' + state.trkData.laps + (this.lap > 1 ? ' · ' + fmt(lt) : ''));
               }
-              if (typeof globalThis.announce === 'function') {
-                if (startingFinal) globalThis.announce('Final lap! Push it to the limit!');
-                else if (this.lap > 1) globalThis.announce('Lap ' + (this.lap) + '. ' + fmt(lt));
-              }
+              if (startingFinal) announce('Final lap! Push it to the limit!');
+              else if (this.lap > 1) announce('Lap ' + (this.lap) + '. ' + fmt(lt));
             }
             if (this.lap >= state.trkData.laps) {
               this.finished = true;
