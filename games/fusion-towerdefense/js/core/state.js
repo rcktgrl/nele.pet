@@ -60,7 +60,7 @@ const game={
   runEarnedScore:0,
   pendingWaveDefs:[],
   currentWaveInfo:null,
-  currentMoneyMultiplier:1,
+  currentMoneyLossPercent:0,
   baseScoreMultiplier:1,
   roundScoreMultiplier:1,
   currentPathLengthMultiplier:1,

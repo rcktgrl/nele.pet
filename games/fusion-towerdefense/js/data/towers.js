@@ -16,7 +16,7 @@ const RAW_TOWER_DEFS = {
     },
     stats: {
       cost: 60,
-      range: 120,
+      range: 150,
       damage: 14,
       fireRate: 0.8,
       projectileSpeed: 520
@@ -60,7 +60,7 @@ const RAW_TOWER_DEFS = {
     },
     stats: {
       cost: 120,
-      range: 240,
+      range: 350,
       damage: 38,
       fireRate: 1.7,
       projectileSpeed: 980
@@ -96,7 +96,6 @@ const RAW_TOWER_DEFS = {
   },
 
   rapid: {
-    id: 'rapid',
     name: 'Rapid',
     classes: ['physical'],
     tags: ['base', 'buyable'],
@@ -112,7 +111,7 @@ const RAW_TOWER_DEFS = {
     },
     stats: {
       cost: 80,
-      range: 95,
+      range: 135,
       damage: 8,
       fireRate: 0.07,
       projectileSpeed: 400
@@ -158,7 +157,7 @@ const RAW_TOWER_DEFS = {
     },
     stats: {
       cost: 95,
-      range: 88,
+      range: 125,
       damage: 4,
       fireRate: 0.95,
       projectileSpeed: 420
@@ -373,7 +372,7 @@ const RAW_TOWER_DEFS = {
     },
     stats: {
       cost: null,
-      range: 142,
+      range: 175,
       damage: 14,
       fireRate: 0.8,
       projectileSpeed: 520
@@ -585,7 +584,7 @@ const RAW_TOWER_DEFS = {
     },
     stats: {
       cost: null,
-      range: 110,
+      range: 140,
       damage: 7,
       fireRate: 0.09,
       projectileSpeed: 400
@@ -630,7 +629,7 @@ const RAW_TOWER_DEFS = {
     },
     stats: {
       cost: null,
-      range: 95,
+      range: 200,
       damage: 8,
       fireRate: 1.5,
       projectileSpeed: 520
