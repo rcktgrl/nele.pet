@@ -10,6 +10,13 @@
 <body>
 <canvas id="gc"></canvas>
 <canvas id="dc"></canvas>
+<div class="screen introScreen" id="sIntro">
+  <h1>TurboRace</h1>
+  <div class="sub">Start engines · feel the synthwave</div>
+  <div class="menuActions">
+    <button id="introStartBtn" class="btn btn-p">START EXPERIENCE</button>
+  </div>
+</div>
 <div id="hud" role="status" aria-live="polite">
   <div id="raceTop">
     <div id="lapNum">LAP</div>
@@ -26,13 +33,15 @@
 <div id="cd"></div>
 <div id="hint" class="hudBottomDock">W/↑ THROTTLE · S/↓ BRAKE (HOLD WHILE STOPPED = REVERSE) · A/D STEER · C CAMERA · ESC PAUSE</div>
 <div id="touchControls" aria-label="On-screen controls">
+  <div class="touchCluster touchCluster-utility">
+    <button class="touchBtn touchBtn-small" data-tap="camera" aria-label="Toggle camera">CAM</button>
+    <button class="touchBtn touchBtn-small" data-tap="pause" aria-label="Pause">⏸</button>
+  </div>
   <div class="touchCluster touchCluster-left">
     <button class="touchBtn touchBtn-small" data-control="left" aria-label="Steer left">◀</button>
     <button class="touchBtn touchBtn-small" data-control="right" aria-label="Steer right">▶</button>
   </div>
   <div class="touchCluster touchCluster-right">
-    <button class="touchBtn touchBtn-small" data-tap="camera" aria-label="Toggle camera">CAM</button>
-    <button class="touchBtn touchBtn-small" data-tap="pause" aria-label="Pause">⏸</button>
     <button class="touchBtn touchBtn-primary" data-control="brake" aria-label="Brake or reverse">BRAKE</button>
   </div>
 </div>
@@ -94,7 +103,7 @@
     <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
     <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.31</div>
+  <div class="menuVersion" aria-label="Game version">v0.32</div>
 
 </div>
 
@@ -269,6 +278,7 @@
   <h1 id="rTitle" style="color:#ffd700">RACE OVER</h1>
   <div id="podium"></div>
   <div id="ptime"></div>
+  <div id="runCar"></div>
   <div id="resultsLbWrap">
     <h3>Track Leaderboard</h3>
     <div id="resultsLeaderboard"></div>
