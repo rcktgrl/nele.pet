@@ -227,14 +227,15 @@ function buildRaceGrid(trackPoints){
   return grid;
 }
 
-export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene, createAIController }){
+export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene, createAIController, aiCount=4 }){
   const grid=buildRaceGrid(trackPoints);
   const playerCar=new Car(getPlayerCarModel(cars, selectedCarIndex),grid[0].pos,grid[0].hdg,true,scene);
 
   const aiCars=[];
   const aiControllers=[];
-  const aiModels=getOpponentCarModels(cars, selectedCarIndex,4);
-  for(let i=0;i<4;i++){
+  const count=Math.max(0,Math.min(4,Math.floor(aiCount)||0));
+  const aiModels=getOpponentCarModels(cars, selectedCarIndex,count);
+  for(let i=0;i<count;i++){
     const aiCar=new Car(aiModels[i],grid[i+1].pos,grid[i+1].hdg,false,scene);
     aiCar.aiAgg=.86+i*.04;
     aiCars.push(aiCar);

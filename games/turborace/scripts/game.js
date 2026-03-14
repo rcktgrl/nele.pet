@@ -83,7 +83,157 @@ import {
 //  STATE
 // ═══════════════════════════════════════════════════════
 const CUSTOM_TRACKS_TABLE='turborace_custom_tracks';
+const LOCAL_GHOST_TOGGLE_KEY='turborace_local_ghost_enabled';
+const LOCAL_GHOST_BEST_KEY='turborace_local_ghost_best_v1';
+const GHOST_SAMPLE_MS=100;
 let customTrackSyncAvailable=true;
+let localGhostEnabled=false;
+let ghostReplay=null;
+let ghostRecord=null;
+let ghostMesh=null;
+let ghostNameTagUser='Ghost';
+const ghostNameTagEl=document.getElementById('ghostNameTag');
+
+function normalizeGhostName(raw){
+  const out=String(raw||'').trim().replace(/\s+/g,' ').slice(0,24);
+  return out||'Ghost';
+}
+
+function readGhostToggle(){
+  return localStorage.getItem(LOCAL_GHOST_TOGGLE_KEY)==='1';
+}
+
+function setGhostToggle(enabled){
+  localGhostEnabled=!!enabled;
+  const input=document.getElementById('ghostToggleInput');
+  if(input&&input.checked!==localGhostEnabled)input.checked=localGhostEnabled;
+  localStorage.setItem(LOCAL_GHOST_TOGGLE_KEY,localGhostEnabled?'1':'0');
+}
+
+function readStoredGhostBestByTrack(){
+  try{
+    const parsed=JSON.parse(localStorage.getItem(LOCAL_GHOST_BEST_KEY)||'{}');
+    return parsed&&typeof parsed==='object'?parsed:{};
+  }catch(error){
+    console.warn('Failed to read local ghost store',error);
+    return {};
+  }
+}
+
+function getStoredGhostForTrack(trackId){
+  const key=normaliseTrackId(trackId);
+  const all=readStoredGhostBestByTrack();
+  const run=all[key];
+  if(!run||!Array.isArray(run.frames)||run.frames.length<2||!Number.isFinite(run.timeMs))return null;
+  return run;
+}
+
+function saveStoredGhostForTrack(trackId,run){
+  const key=normaliseTrackId(trackId);
+  const all=readStoredGhostBestByTrack();
+  const prev=all[key];
+  if(prev&&Number.isFinite(prev.timeMs)&&prev.timeMs<=run.timeMs)return;
+  all[key]=run;
+  localStorage.setItem(LOCAL_GHOST_BEST_KEY,JSON.stringify(all));
+}
+
+function clearGhostVisual(){
+  if(ghostMesh){ scene.remove(ghostMesh); ghostMesh=null; }
+  if(ghostNameTagEl)ghostNameTagEl.style.display='none';
+}
+
+function setupGhostReplayFromTrack(trackId){
+  ghostReplay=getStoredGhostForTrack(trackId);
+  clearGhostVisual();
+  if(!localGhostEnabled||!ghostReplay||!ghostReplay.carData)return;
+  const visual=createCarVisual(ghostReplay.carData);
+  ghostMesh=visual.mesh;
+  ghostMesh.traverse(obj=>{
+    if(obj.isMesh){
+      obj.castShadow=false;
+      obj.receiveShadow=false;
+      if(obj.material){
+        obj.material=obj.material.clone();
+        obj.material.transparent=true;
+        obj.material.opacity=0.42;
+        obj.material.depthWrite=false;
+      }
+    }
+  });
+  scene.add(ghostMesh);
+  ghostNameTagUser=normalizeGhostName(ghostReplay.username);
+  if(ghostNameTagEl){ ghostNameTagEl.textContent=ghostNameTagUser; }
+}
+
+function startGhostRecording(){
+  if(!localGhostEnabled||!state.trkData||!state.pCar)return;
+  ghostRecord={
+    trackId:normaliseTrackId(state.trkData.id),
+    username:'Anonymous',
+    carData:{...state.pCar.data},
+    frames:[],
+    nextSampleMs:0,
+    timeMs:0
+  };
+}
+
+function sampleGhostFrame(){
+  if(!ghostRecord||!state.pCar||state.gState!=='racing')return;
+  const nowMs=Math.round(state.raceTime*1000);
+  if(nowMs<ghostRecord.nextSampleMs)return;
+  ghostRecord.nextSampleMs=nowMs+GHOST_SAMPLE_MS;
+  ghostRecord.frames.push({
+    t:nowMs,
+    x:state.pCar.pos.x,
+    y:state.pCar.pos.y,
+    z:state.pCar.pos.z,
+    h:state.pCar.hdg
+  });
+}
+
+async function finalizeGhostRecording(){
+  if(!ghostRecord||!state.trkData||!state.pCar||!state.pCar.finTime)return;
+  const user=await loadArcadeUser();
+  ghostRecord.username=normalizeGhostName(user&&user.name);
+  ghostRecord.timeMs=Math.round(Math.max(0,state.pCar.finTime)*1000);
+  if(ghostRecord.frames.length<2)return;
+  saveStoredGhostForTrack(state.trkData.id,ghostRecord);
+}
+
+function updateGhostReplay(){
+  if(!ghostMesh||!ghostReplay||!Array.isArray(ghostReplay.frames)||ghostReplay.frames.length<2)return;
+  const t=Math.round(Math.max(0,state.raceTime)*1000);
+  const frames=ghostReplay.frames;
+  if(t<=frames[0].t){
+    ghostMesh.position.set(frames[0].x,frames[0].y,frames[0].z);
+    ghostMesh.rotation.y=frames[0].h;
+  }else if(t>=frames[frames.length-1].t){
+    ghostMesh.position.set(frames[frames.length-1].x,frames[frames.length-1].y,frames[frames.length-1].z);
+    ghostMesh.rotation.y=frames[frames.length-1].h;
+  }else{
+    let i=0;
+    while(i<frames.length-1&&frames[i+1].t<t)i++;
+    const a=frames[i],b=frames[Math.min(i+1,frames.length-1)];
+    const span=Math.max(1,b.t-a.t);
+    const f=Math.max(0,Math.min(1,(t-a.t)/span));
+    ghostMesh.position.set(
+      a.x+(b.x-a.x)*f,
+      a.y+(b.y-a.y)*f,
+      a.z+(b.z-a.z)*f
+    );
+    const da=Math.atan2(Math.sin(b.h-a.h),Math.cos(b.h-a.h));
+    ghostMesh.rotation.y=a.h+da*f;
+  }
+  if(ghostNameTagEl&&state.activeCam){
+    const p=ghostMesh.position.clone().add(new THREE.Vector3(0,2.9,0)).project(state.activeCam);
+    if(p.z>-1&&p.z<1){
+      ghostNameTagEl.style.display='block';
+      ghostNameTagEl.style.left=`${(p.x*0.5+0.5)*window.innerWidth}px`;
+      ghostNameTagEl.style.top=`${(-p.y*0.5+0.5)*window.innerHeight}px`;
+      ghostNameTagEl.textContent=ghostNameTagUser;
+    }else ghostNameTagEl.style.display='none';
+  }
+}
 
 document.addEventListener('keydown',e=>{
   keys[e.code]=true;
@@ -276,6 +426,9 @@ function initRace(){
   for(const c of state.allCars)scene.remove(c.mesh);
   state.allCars=[]; state.aiCars=[]; state.aiControllers=[]; state.pCar=null;
   clearAiSounds();
+  clearGhostVisual();
+  ghostRecord=null;
+  ghostReplay=null;
 
   state.trkData=getTrackById(state.selTrk);
   try{ buildTrack(state.trkData); }catch(e){ console.error('buildTrack error:',e); }
@@ -287,6 +440,7 @@ function initRace(){
     trackPoints: state.trkPts,
     cars: CARS,
     selectedCarIndex: state.selCar,
+    aiCount: localGhostEnabled?0:4,
     scene: scene,
     createAIController: (aiCar,i)=>new AI(aiCar,.044+i*.010,()=>({
       trackPoints: state.trkPts,
@@ -301,6 +455,7 @@ function initRace(){
   state.aiCars=raceCars.aiCars;
   state.aiControllers=raceCars.aiControllers;
   state.allCars=raceCars.allCars;
+  setupGhostReplayFromTrack(state.trkData&&state.trkData.id);
 
   state.raceTime=0; state.gState='countdown';
   resetCurrentRaceSubmitted();
@@ -311,6 +466,8 @@ function initRace(){
   state.camMode='chase'; dc.style.display='none';
   document.getElementById('speedBox').style.display='block';
   document.getElementById('gearBox').style.display='block';
+  startGhostRecording();
+  if(localGhostEnabled&&!ghostReplay)notify('Ghost enabled: no saved local run yet for this track.');
   doCountdown();
 }
 
@@ -368,6 +525,7 @@ function endRace(){
     playLossSound();
     announce('Race finished! P'+pos+'!');
   }
+  finalizeGhostRecording();
   // Show results after brief delay (AI keeps driving behind it)
   setTimeout(()=>showResults(),1200);
 }
@@ -382,6 +540,7 @@ function showResults(){
   document.getElementById('results').style.display='flex';
   document.getElementById('hud').style.display='none';
   document.getElementById('touchControls').style.display='none';
+  if(ghostNameTagEl)ghostNameTagEl.style.display='none';
   releaseAllTouchControls();
   dc.style.display='none';
 }
@@ -1068,9 +1227,11 @@ function updateFrame(dt){
     const gyroSteer=getGyroSteering();
     const str=Math.abs(gyroSteer)>0.01?gyroSteer:keySteer;
     state.pCar.update({thr,brk,str},dt);
+    sampleGhostFrame();
     for(const ai of state.aiControllers)ai.update(dt);
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&state.aiCars[i])aiSounds[i].update(state.aiCars[i],state.pCar);}
     updateAudio(thr,brk,dt,state.pCar,keys); updateCamera(); updateHUD(); drawDash(); drawMinimap();
+    updateGhostReplay();
   } else if(state.gState==='cooldown'){
     // Player finished — car coasts, AI keeps racing behind results screen
     state.raceTime+=dt;
@@ -1078,6 +1239,7 @@ function updateFrame(dt){
     for(const ai of state.aiControllers){if(!ai.car.finished)ai.update(dt);}
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&state.aiCars[i])aiSounds[i].update(state.aiCars[i],state.pCar);}
     updateAudio(0,0,dt,state.pCar,keys); updateCamera();
+    updateGhostReplay();
     // Live-update results as AI cars finish
     if(document.getElementById('results').style.display==='flex') updateResultsUI();
   } else if(state.gState==='editorPreview'){
@@ -1093,6 +1255,8 @@ function updateFrame(dt){
       updateHUD(); drawMinimap();
     }
     updateCamera();
+    if(state.gState==='countdown'||state.gState==='finished')updateGhostReplay();
+    else if(ghostNameTagEl)ghostNameTagEl.style.display='none';
   }
 }
 
@@ -1120,6 +1284,7 @@ function showIntro(){
   releaseAllTouchControls();
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
+  clearGhostVisual();
   dc.style.display='none';
 }
 
@@ -1138,6 +1303,7 @@ function showMain(){
   const epbtn=document.getElementById('editorPreviewBtn'); if(epbtn)epbtn.textContent='3D PREVIEW';
   stopAudio(); stopMusic();
   disposeCarCardPreviews();
+  clearGhostVisual();
   // Restart menu music (audio already initialised)
   if(audioReady)startMusic();
   for(const c of state.allCars)scene.remove(c.mesh);
@@ -1360,6 +1526,7 @@ document.getElementById('quitToMenuBtn').addEventListener('click', showMain);
 document.getElementById('musicVolSlider').addEventListener('input', e => onMusicVol(e.target.value));
 document.getElementById('sfxVolSlider').addEventListener('input', e => onSfxVol(e.target.value));
 document.getElementById('touchToggleInput').addEventListener('input', e => onTouchControlsToggle(e.target.checked));
+document.getElementById('ghostToggleInput').addEventListener('input', e => setGhostToggle(e.target.checked));
 document.getElementById('settingsCloseBtn').addEventListener('click', closeSettings);
 document.getElementById('introStartBtn').addEventListener('click', function() {tryStartMenuMusic();showMain();});
 document.getElementById('gameStartBtn').addEventListener('click', function() {tryStartMenuMusic();showTrkSel();});
@@ -1407,6 +1574,7 @@ scene.background=new THREE.Color(0x050510);
 setupTouchControls(state.gState);
 initTouchSettings();
 initAudioSettings();
+setGhostToggle(readGhostToggle());
 document.querySelectorAll('.menuVersion').forEach(el=>{
   el.textContent=TURBORACE_VERSION;
 });
