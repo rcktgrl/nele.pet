@@ -4,6 +4,89 @@ function getTowerTypeId(t){
   if(t.towerTypeId) return t.towerTypeId;
   return t.id;
 }
+
+function getBuyableTowerSelection(typeId){
+  const def = getTowerDef(typeId);
+  if(!def || !def.acquire?.buyable) return null;
+
+  return {
+    id: def.id,
+    name: def.name,
+    cost: def.stats.cost,
+    range: def.stats.range,
+    damage: def.stats.damage,
+    fireRate: def.stats.fireRate,
+    projectileSpeed: def.stats.projectileSpeed,
+    color: def.visuals?.color || '#ffffff'
+  };
+}
+
+function resolveBuyableTowerSelections(){
+  const out=[];
+
+  for(const towerKey of Object.keys(RAW_TOWER_DEFS||{})){
+    const def = getTowerDef(towerKey);
+    if(!def?.acquire?.buyable) continue;
+
+    if(def.id!==towerKey){
+      console.warn('[tower-buyables] Tower id mismatch detected while resolving buyables.', {
+        towerKey,
+        resolvedDefId:def.id
+      });
+    }
+
+    const canonicalSelection = getBuyableTowerSelection(towerKey);
+    if(canonicalSelection){
+      out.push({...canonicalSelection,id:towerKey});
+    }
+  }
+
+  return out;
+}
+
+
+
+function warnIfExpectedBuyableMissing(expectedId, stage, resolvedSelections, renderedSelections = null){
+  const resolved = Array.isArray(resolvedSelections) ? resolvedSelections.filter(Boolean) : [];
+  const rendered = Array.isArray(renderedSelections) ? renderedSelections.filter(Boolean) : null;
+  const resolvedIds = resolved.map(t => t.id);
+  const renderedIds = rendered ? rendered.map(t => t.id) : null;
+
+  const missingFromResolved = !resolvedIds.includes(expectedId);
+  const missingFromRendered = renderedIds ? !renderedIds.includes(expectedId) : false;
+
+  if(!missingFromResolved && !missingFromRendered) return;
+
+  const def = getTowerDef(expectedId);
+  const unlockId = def?.unlock?.researchNodeId ?? null;
+  const researchedValue = unlockId ? metaProgress?.researched?.[unlockId] : null;
+
+  const rawBuyableKeys = Object.keys(RAW_TOWER_DEFS || {})
+    .filter(key => !!getTowerDef(key)?.acquire?.buyable);
+
+  const unlockFilteredIds = resolved
+    .filter(t => {
+      const td = getTowerDef(t.id);
+      const u = td?.unlock?.researchNodeId;
+      return !!u && metaProgress?.researched?.[u] === false;
+    })
+    .map(t => t.id);
+
+  console.warn(`[tower-buyables] Expected "${expectedId}" missing at ${stage}.`, {
+    missingFromResolved,
+    missingFromRendered,
+    resolvedIds,
+    renderedIds,
+    defExists: !!def,
+    defBuyable: !!def?.acquire?.buyable,
+    defId: def?.id ?? null,
+    rawBuyableKeys,
+    unlockId,
+    researchedValue,
+    unlockFilteredIds
+  });
+}
+
 function getFusionPreview(typeId, cell = null) {
   if (!cell) return null;
 
@@ -20,7 +103,7 @@ function getFusionPreview(typeId, cell = null) {
     damage: f.damage,
     fireRate: f.fireRate,
     range: f.range,
-    cost: (ex.sellValue || ex.cost || 0) + (towerTypes[typeId]?.cost || 0),
+    cost: (ex.sellValue || ex.cost || 0) + (getBuyableTowerSelection(typeId)?.cost || 0),
     note: f.note,
     color: f.targetColor
   };
@@ -49,44 +132,20 @@ function getTowerSpecialText(t){
         parts.push('Erhältlich durch Ritual.');
     }
 
-    if(typeId === 'rapid'){
-        parts.push(
-        `Magazin ${special.magSize ?? 20}, Nachladen ${special.reloadTime ?? 4.0}s.`
-        );
+    if(Number.isFinite(special.magSize)){
+      parts.push(`Magazin: ${special.magSize}.`);
     }
-
-    if(typeId === 'shotgun'){
-        parts.push(
-        `Pellets: ${special.pelletCount ?? 10}.`
-        );
+    if(Number.isFinite(special.reloadTime) && special.reloadTime > 0){
+      parts.push(`Nachladezeit: ${special.reloadTime}s.`);
     }
-
-    if(typeId === 'basic'){
-        parts.push(
-        'Basic kann mit Karten weiter verbessert werden.'
-        );
+    if(Number.isFinite(special.pelletCount)){
+      parts.push(`Pellets: ${special.pelletCount}.`);
     }
-
-    if(typeId === 'sniper'){
-        parts.push(
-        'Prädiktives Zielen auf große Distanz.'
-        );
+    if(Number.isFinite(special.chainCount)){
+      parts.push(`Kettenziele: ${special.chainCount}.`);
     }
-
-    if(typeId === '' && Array.isArray(special.rampStages)){
-        parts.push(`Ramp: ${special.rampStages.join(' → ')}.`);
-    }
-
-    if(typeId === 'flamethrower'){
-        parts.push('Große Piercing-Schüsse mit leichter Ungenauigkeit (10°). Jeder Gegner wird pro Schuss nur einmal getroffen.');
-    }
-
-    if(typeId === 'laser'){
-        parts.push('Zielt auf den nächsten Gegner. Beam tickt alle 0.1s und verliert über Distanz Schaden.');
-    }
-
-    if(typeId === 'penta'){
-        parts.push('Ritualtower: 3 Schüsse nach vorne wie Trio und 2 gleichzeitig nach hinten wie Duo.');
+    if(Array.isArray(special.rampStages) && special.rampStages.length){
+      parts.push(`Ramp: ${special.rampStages.join(' → ')}.`);
     }
 
     if(def.description?.text){
@@ -95,6 +154,7 @@ function getTowerSpecialText(t){
 
     return parts.join(' ');
 }
+
 
 function updateSelectedTowerStats() {
   const hovered = game.hoveredCell
@@ -211,8 +271,23 @@ function updateSelectedTowerStats() {
     return;
   }
 
-  const t = towerTypes[game.selectedTowerType];
   const def = getTowerDef(game.selectedTowerType);
+  if (!def) {
+    ui.selectedTowerStats.innerHTML =
+      'Der ausgewählte Turm ist ungültig. Wähle ihn erneut aus.';
+    return;
+  }
+
+  const t = getBuyableTowerSelection(game.selectedTowerType) || {
+    id: def.id,
+    name: def.name,
+    cost: def.stats.cost,
+    range: def.stats.range,
+    damage: def.stats.damage,
+    fireRate: def.stats.fireRate,
+    projectileSpeed: def.stats.projectileSpeed,
+    color: def.visuals?.color || '#ffffff'
+  };
 
   const displayDamage = t.damage;
 
@@ -232,17 +307,19 @@ function updateSelectedTowerStats() {
 function buildTowerButtons(){
   ui.towerList.innerHTML='';
 
-  getTowerDefsArray()
-    .filter(def => def.acquire?.buyable)
-    .forEach(def => {
+  const buyableSelections = resolveBuyableTowerSelections();
+  warnIfExpectedBuyableMissing('rapid', 'buildTowerButtons:resolved', buyableSelections, null);
+
+  const renderedSelections=[];
+  buyableSelections.forEach(t => {
+      const def = getTowerDef(t.id);
+      if (!def) return;
+
       const unlockId = def.unlock?.researchNodeId;
 
       if (unlockId && metaProgress.researched[unlockId] === false) {
         return;
       }
-
-      const t = towerTypes[def.id];
-      if(!t) return;
 
       const b = document.createElement('button');
       b.className = 'tower-btn';
@@ -253,17 +330,20 @@ function buildTowerButtons(){
         <div class="cost-tag">$${t.cost}</div>
       `;
       b.addEventListener('click',()=>{
-        game.selectedTowerType = t.id;
+        game.selectedTowerType = def.id;
         game.sellMode = false;
         game.ritualMode = false;
         game.ritualCenterTowerId = null;
         game.ritualSelectedTowerIds = [];
         updateTowerSelectionUI();
         updateSelectedTowerStats();
-        setStatus(`${t.name} ausgewählt.`);
+        setStatus(`${def.name} ausgewählt.`);
       });
       ui.towerList.appendChild(b);
+      renderedSelections.push(t);
     });
+
+  warnIfExpectedBuyableMissing('rapid', 'buildTowerButtons:rendered', buyableSelections, renderedSelections);
 
   updateTowerSelectionUI();
   updateSelectedTowerStats();
@@ -479,7 +559,7 @@ function placeTower(cell) {
     return setStatus('Du musst zuerst einen Turm auswählen.', true, 2.5);
   }
 
-  const t = towerTypes[game.selectedTowerType];
+  const t = getBuyableTowerSelection(game.selectedTowerType);
   const key = `${cell.c},${cell.r}`;
 
   if (game.map.pathSet.has(key)) {
@@ -497,7 +577,11 @@ function placeTower(cell) {
     if (canApplyFusion) {
 
 
-      const cost = towerTypes[game.selectedTowerType].cost;
+      if (!t) {
+        return setStatus('Der ausgewählte Turm ist ungültig. Wähle ihn erneut aus.', true, 2.5);
+      }
+
+      const cost = t.cost;
 
       if (game.money < cost) {
         return setStatus(`Nicht genug Geld für ${f.name}.`, true, 2.5);
@@ -516,6 +600,10 @@ function placeTower(cell) {
     }
 
     return setStatus('Diese Zelle ist bereits belegt.', true, 2.5);
+  }
+
+  if (!t) {
+    return setStatus('Der ausgewählte Turm ist ungültig. Wähle ihn erneut aus.', true, 2.5);
   }
 
   if (game.money < t.cost) {

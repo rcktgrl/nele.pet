@@ -31,6 +31,7 @@ function bindMenuButtons() {
   const playBtn = document.getElementById('playBtn');
   const mapMenuBtn = document.getElementById('mapMenuBtn');
   const progressMenuBtn = document.getElementById('progressMenuBtn');
+  const openSettingsMenuBtn = document.getElementById('openSettingsMenuBtn');
   const openCardShopBtn = document.getElementById('openCardShopBtn');
   const openResearchFromProgressBtn = document.getElementById('openResearchFromProgressBtn');
   const backFromProgressBtn = document.getElementById('backFromProgressBtn');
@@ -48,6 +49,9 @@ function bindMenuButtons() {
   const ritualModeBtn = document.getElementById('ritualModeBtn');
   const backFromCardsBtn = document.getElementById('backFromCardsBtn');
   const startRunFromCardsBtn = document.getElementById('startRunFromCardsBtn');
+  const backFromSettingsBtn = document.getElementById('backFromSettingsBtn');
+  const deleteAllProgressHoldBtn = document.getElementById('deleteAllProgressHoldBtn');
+  const deleteAllProgressHoldStatus = document.getElementById('deleteAllProgressHoldStatus');
   if (playBtn) {
     playBtn.addEventListener('click', openCardLoadoutScreen);
   }
@@ -61,6 +65,62 @@ function bindMenuButtons() {
       updateMetaUI();
       showScreen('progressMenu');
     });
+  }
+
+  if (openSettingsMenuBtn) {
+    openSettingsMenuBtn.addEventListener('click', () => showScreen('settingsMenu'));
+  }
+
+  if (backFromSettingsBtn) {
+    backFromSettingsBtn.addEventListener('click', () => showScreen('mainMenu'));
+  }
+
+  if (deleteAllProgressHoldBtn && deleteAllProgressHoldStatus) {
+    let holdTimer = null;
+    let holdInterval = null;
+    let holdStart = 0;
+
+    const resetHoldVisual = (msg = 'Bereit.') => {
+      deleteAllProgressHoldStatus.textContent = msg;
+      deleteAllProgressHoldBtn.style.opacity = '1';
+    };
+
+    const cancelHold = () => {
+      if (holdTimer) clearTimeout(holdTimer);
+      if (holdInterval) clearInterval(holdInterval);
+      holdTimer = null;
+      holdInterval = null;
+      holdStart = 0;
+      resetHoldVisual('Abgebrochen. Halte erneut 5 Sekunden.');
+    };
+
+    const finishHold = () => {
+      if (holdTimer) clearTimeout(holdTimer);
+      if (holdInterval) clearInterval(holdInterval);
+      holdTimer = null;
+      holdInterval = null;
+      deleteAllProgressHoldStatus.textContent = 'Progress gelöscht. Neustart…';
+      deleteAllProgressHoldBtn.style.opacity = '0.6';
+      clearAllSavedProgress();
+      setTimeout(() => window.location.reload(), 250);
+    };
+
+    const beginHold = () => {
+      if (holdTimer) return;
+      holdStart = performance.now();
+      holdTimer = setTimeout(finishHold, 5000);
+      holdInterval = setInterval(() => {
+        const elapsedSec = (performance.now() - holdStart) / 1000;
+        const left = Math.max(0, 5 - elapsedSec);
+        deleteAllProgressHoldStatus.textContent = `Halte gedrückt: ${left.toFixed(1)}s`; 
+      }, 100);
+    };
+
+    deleteAllProgressHoldBtn.addEventListener('pointerdown', beginHold);
+    deleteAllProgressHoldBtn.addEventListener('pointerup', cancelHold);
+    deleteAllProgressHoldBtn.addEventListener('pointerleave', cancelHold);
+    deleteAllProgressHoldBtn.addEventListener('pointercancel', cancelHold);
+    deleteAllProgressHoldBtn.addEventListener('lostpointercapture', cancelHold);
   }
 
   if (openResearchFromProgressBtn) {
