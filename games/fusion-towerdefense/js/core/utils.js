@@ -51,7 +51,7 @@ function scaleWorldValue(value) {
 
 
 function getTowerVisualScale() {
-  return getMapScale();
+  return getMapScale() * (2 / 3);
 }
 
 function getRangeInPixels(rangeValue) {
