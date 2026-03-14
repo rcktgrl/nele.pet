@@ -45,9 +45,24 @@ export function markCurrentRaceSubmitted(){
   currentRaceSubmitted=true;
 }
 
-export function normaliseTrackId(trackId) {
-  if (trackId === null || trackId === undefined || trackId === '') return 'unknown';
-  return String(trackId);
+export function normaliseTrackId(trackId, trackName = '') {
+  const rawId = trackId === null || trackId === undefined || trackId === '' ? 'unknown' : String(trackId);
+  const rawName = trackName;
+  const slug = String(rawName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  if (!slug) return rawId;
+  return `${rawId}:${slug}`;
+}
+
+function getTrackIdCandidates(trackId, trackName = '') {
+  const preferred = normaliseTrackId(trackId, trackName);
+  const legacy = normaliseTrackId(trackId);
+  if (preferred === legacy) return [preferred];
+  return [preferred, legacy];
 }
 
 export function leaderboardTimeToSeconds(timeMs) {
@@ -78,22 +93,23 @@ export function renderResultsLeaderboard(entries, highlightName) {
   renderLeaderboardRows(board, entries, highlightName);
 }
 
-export function updateTrackCardBestTime(trackId) {
-  const data = leaderboardByTrack.get(normaliseTrackId(trackId));
-  const el = document.querySelector(`[data-track-best="${CSS.escape(normaliseTrackId(trackId))}"]`);
+export function updateTrackCardBestTime(trackId, trackName = '') {
+  const key = normaliseTrackId(trackId, trackName);
+  const data = leaderboardByTrack.get(key);
+  const el = document.querySelector(`[data-track-best="${CSS.escape(key)}"]`);
   if (!el) return;
   if (!leaderboardAvailable) el.textContent = 'Best: leaderboard unavailable';
   else if (!data || !data.best) el.textContent = 'Best: --';
   else el.textContent = `Best: ${fmtT(leaderboardTimeToSeconds(data.best.time_ms))} · ${data.best.username}`;
 }
 
-export async function loadTrackLeaderboard(trackId, { force = false, limit = 10 } = {}) {
-  const key = normaliseTrackId(trackId);
+export async function loadTrackLeaderboard(trackId, { force = false, limit = 10, trackName = '' } = {}) {
+  const [key, ...legacyKeys] = getTrackIdCandidates(trackId, trackName);
   if (!leaderboardAvailable) return { best: null, entries: [] };
   if (!force && leaderboardByTrack.has(key)) return leaderboardByTrack.get(key);
   const { data, error } = await supabase.from(LEADERBOARD_TABLE)
     .select('*')
-    .eq('track_id', key)
+    .in('track_id', [key, ...legacyKeys])
     .order('time_ms', { ascending: true })
     .limit(limit);
   if (error) {
@@ -102,7 +118,7 @@ export async function loadTrackLeaderboard(trackId, { force = false, limit = 10 
     return { best: null, entries: [] };
   }
   const entries = (data || []).map((row) => ({
-    track_id: normaliseTrackId(row.track_id),
+    track_id: String(row.track_id || ''),
     user_id: sanitizeUserId(row.user_id),
     username: sanitizeLeaderboardName(row.username),
     car_name: String(row.car_name || '').trim().slice(0, 30),
@@ -115,8 +131,8 @@ export async function loadTrackLeaderboard(trackId, { force = false, limit = 10 
   return payload;
 }
 
-export async function submitTrackTime(trackId, user, timeMs, car, ghostData = null) {
-  const key = normaliseTrackId(trackId);
+export async function submitTrackTime(trackId, user, timeMs, car, ghostData = null, trackName = '') {
+  const [key, ...legacyKeys] = getTrackIdCandidates(trackId, trackName);
   if (!leaderboardAvailable) return false;
 
   const { data: { session } } = await supabase.auth.getSession();
@@ -125,15 +141,51 @@ export async function submitTrackTime(trackId, user, timeMs, car, ghostData = nu
     return false;
   }
 
-  const { error } = await supabase.from(LEADERBOARD_TABLE).insert({
+  const userId = sanitizeUserId(user.user_id);
+  const username = sanitizeLeaderboardName(user.name);
+  const nextTimeMs = Math.round(Math.max(0, timeMs || 0) * 1000);
+  const payload = {
     track_id: key,
-    user_id: sanitizeUserId(user.user_id),
-    username: sanitizeLeaderboardName(user.name),
+    user_id: userId,
+    username,
     car_name: String(car?.name || '').trim().slice(0, 30) || null,
     car_hex: /^#[0-9a-f]{6}$/i.test(String(car?.hex || '')) ? String(car.hex).toLowerCase() : null,
-    time_ms: Math.round(Math.max(0, timeMs || 0) * 1000),
+    time_ms: nextTimeMs,
     ghost_data: sanitizeGhostData(ghostData)
-  });
+  };
+
+  const { data: existingRows, error: existingError } = await supabase.from(LEADERBOARD_TABLE)
+    .select('id,time_ms,track_id')
+    .in('track_id', [key, ...legacyKeys])
+    .eq('user_id', userId)
+    .order('time_ms', { ascending: true });
+  if (existingError) {
+    console.error('Leaderboard existing row lookup error:', existingError);
+    return false;
+  }
+
+  const fastestExisting = Array.isArray(existingRows) && existingRows.length ? existingRows[0] : null;
+  const shouldInsertNew = !fastestExisting || nextTimeMs < Math.max(0, Number(fastestExisting.time_ms) || 0);
+
+  if (Array.isArray(existingRows) && existingRows.length) {
+    const idsToDelete = shouldInsertNew
+      ? existingRows.map((row) => row.id)
+      : existingRows.slice(1).map((row) => row.id);
+    if (idsToDelete.length) {
+      const { error: deleteError } = await supabase.from(LEADERBOARD_TABLE)
+        .delete()
+        .in('id', idsToDelete);
+      if (deleteError) {
+        console.error('Leaderboard cleanup delete error:', deleteError);
+        return false;
+      }
+    }
+  }
+
+  let error = null;
+  if (shouldInsertNew) {
+    ({ error } = await supabase.from(LEADERBOARD_TABLE).insert(payload));
+  }
   if (error) {
     console.error('Leaderboard submit error:', error);
     const msg = String(error.message || '').toLowerCase();
@@ -148,11 +200,11 @@ export async function handlePostRaceLeaderboard(notify, ghostData = null) {
   if (currentRaceSubmitted || !state.trkData || !state.pCar || !state.pCar.finTime || !Number.isFinite(state.pCar.finTime)) return;
   currentRaceSubmitted = true;
   const user = await loadArcadeUser();
-  const ok = await submitTrackTime(state.trkData.id, user, state.pCar.finTime, state.pCar.data, ghostData);
+  const ok = await submitTrackTime(state.trkData.id, user, state.pCar.finTime, state.pCar.data, ghostData, state.trkData.name);
   if (ok) {
-    const latest = await loadTrackLeaderboard(state.trkData.id, { force: true, limit: 10 });
+    const latest = await loadTrackLeaderboard(state.trkData.id, { force: true, limit: 10, trackName: state.trkData.name });
     renderResultsLeaderboard(latest.entries, user.name);
-    updateTrackCardBestTime(state.trkData.id);
+    updateTrackCardBestTime(state.trkData.id, state.trkData.name);
     notify('Leaderboard time saved!');
   } else {
     notify('Leaderboard submit skipped (sign in required).');
@@ -168,7 +220,7 @@ export async function openTrackLeaderboardModal(trackId, trackName) {
   list.innerHTML = '<div class="lb-empty">Loading leaderboard…</div>';
   modal.style.display = 'flex';
   modal.setAttribute('aria-hidden', 'false');
-  const data = await loadTrackLeaderboard(trackId, { force: true, limit: 50 });
+  const data = await loadTrackLeaderboard(trackId, { force: true, limit: 50, trackName });
   renderLeaderboardRows(list, data.entries);
 }
 

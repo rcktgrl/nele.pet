@@ -103,7 +103,7 @@ function readOnlineGhostToggle(){
 }
 
 function parseOnlineGhostCount(raw){
-  return Math.max(1,Math.min(3,Math.round(Number(raw)||1)));
+  return Math.max(1,Math.min(10,Math.round(Number(raw)||1)));
 }
 
 function readOnlineGhostCount(){
@@ -168,7 +168,7 @@ async function setupGhostReplayFromTrack(trackId){
   ghostReplays=[];
   clearGhostVisual();
   if(onlineGhostEnabled&&trackId){
-    const data=await loadTrackLeaderboard(trackId,{force:true,limit:Math.max(10,onlineGhostCount*4)});
+    const data=await loadTrackLeaderboard(trackId,{force:true,limit:Math.max(10,onlineGhostCount*4),trackName:state.trkData&&state.trkData.name});
     for(const entry of data.entries){
       if(ghostReplays.length>=onlineGhostCount)break;
       if(entry.ghost_data&&Array.isArray(entry.ghost_data.frames)&&entry.ghost_data.frames.length>1){
@@ -176,13 +176,13 @@ async function setupGhostReplayFromTrack(trackId){
       }
     }
   }
-  ghostReplays.slice(0,3).forEach((replay,idx)=>addGhostVisual(replay,idx));
+  ghostReplays.slice(0,10).forEach((replay,idx)=>addGhostVisual(replay,idx));
 }
 
 function startGhostRecording(){
   if(!state.trkData||!state.pCar)return;
   ghostRecord={
-    trackId:normaliseTrackId(state.trkData.id),
+    trackId:normaliseTrackId(state.trkData.id,state.trkData.name),
     username:'Anonymous',
     carData:{...state.pCar.data},
     frames:[],
@@ -556,7 +556,7 @@ globalThis.endRace=endRace;
 function showResults(ghostPayload){
   updateResultsUI();
   if(state.trkData&&state.trkData.id){
-    loadTrackLeaderboard(state.trkData.id,{force:true,limit:10}).then(data=>renderResultsLeaderboard(data.entries));
+    loadTrackLeaderboard(state.trkData.id,{force:true,limit:10,trackName:state.trkData.name}).then(data=>renderResultsLeaderboard(data.entries));
   }
   handlePostRaceLeaderboard(notify,ghostPayload);
   document.getElementById('results').style.display='flex';
@@ -591,7 +591,7 @@ function updateResultsUI(){
   document.getElementById('ptime').textContent=`Your time: ${fmtT(state.pCar.finTime||state.raceTime)}  ·  P${pp}`;
   const carName=(state.pCar&&state.pCar.data&&state.pCar.data.name)?state.pCar.data.name:'Unknown';
   document.getElementById('runCar').textContent=`Run car: ${carName}`;
-  const cached=leaderboardByTrack.get(normaliseTrackId(state.trkData&&state.trkData.id));
+  const cached=leaderboardByTrack.get(normaliseTrackId(state.trkData&&state.trkData.id,state.trkData&&state.trkData.name));
   renderResultsLeaderboard(cached?cached.entries:[]);
 }
 
@@ -1507,7 +1507,7 @@ async function showTrkSel(){
     canvas.style.borderRadius='6px';
     const h3=document.createElement('h3'); h3.textContent=t.name;
     const p=document.createElement('p'); p.textContent=t.desc+' · '+t.rw+'m wide'+(TRACKS.some(bt=>String(bt.id)===String(t.id))?'':' · Custom');
-    const best=document.createElement('p'); best.className='trackBest'; best.dataset.trackBest=normaliseTrackId(t.id); best.textContent='Best: loading...';
+    const best=document.createElement('p'); best.className='trackBest'; best.dataset.trackBest=normaliseTrackId(t.id,t.name); best.textContent='Best: loading...';
     const leaderboardBtn=document.createElement('button');
     leaderboardBtn.className='btn btn-s trackLbBtn';
     leaderboardBtn.type='button';
@@ -1525,8 +1525,8 @@ async function showTrkSel(){
     drawTrackPreview(canvas,t,t.previewColor||COLORS[i%COLORS.length]);
   });
   await Promise.all(tracks.map(async(t)=>{
-    await loadTrackLeaderboard(t.id,{limit:1});
-    updateTrackCardBestTime(t.id);
+    await loadTrackLeaderboard(t.id,{limit:1,trackName:t.name});
+    updateTrackCardBestTime(t.id,t.name);
   }));
 }
 
