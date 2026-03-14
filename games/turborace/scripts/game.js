@@ -60,12 +60,6 @@ globalThis.announce=announce;
 // ═══════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════
-globalThis.raceTime = state.raceTime;
-globalThis.trkData = state.trkData;
-globalThis.trkCurve = state.trkCurve;
-globalThis.trkPts = state.trkPts;
-globalThis.cityCorridors = state.cityCorridors;
-globalThis.cityAiPts = state.cityAiPts;
 const LEADERBOARD_TABLE='turborace_leaderboard';
 const CUSTOM_TRACKS_TABLE='turborace_custom_tracks';
 const leaderboardByTrack=new Map();
@@ -154,14 +148,10 @@ let roadTex=null;
 // ═══════════════════════════════════════════════════════
 function buildTrack(data){
   state.cityCorridors=null; state.cityAiPts=null;
-  globalThis.cityCorridors = state.cityCorridors;
-  globalThis.cityAiPts = state.cityAiPts;
   const rm=[]; scene.traverse(o=>{if(o.userData.trk)rm.push(o);}); rm.forEach(o=>scene.remove(o));
   const raw=data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
   const curve=new THREE.CatmullRomCurve3(raw,true,'centripetal',.5);
   state.trkCurve=curve; state.trkPts=curve.getSpacedPoints(500);
-  globalThis.trkCurve = state.trkCurve;
-  globalThis.trkPts = state.trkPts;
   // Precompute per-point curvature (0=straight, 1=very tight) for AI adaptive lookahead
   state.trkCurv=[];
   const N=state.trkPts.length;
@@ -1302,7 +1292,6 @@ function initRace(){
   clearAiSounds();
 
   state.trkData=getTrackById(state.selTrk);
-  globalThis.trkData = state.trkData;
   try{ buildTrack(state.trkData); }catch(e){ console.error('buildTrack error:',e); }
   setupLights();
 
@@ -1327,7 +1316,7 @@ function initRace(){
   state.aiControllers=raceCars.aiControllers;
   state.allCars=raceCars.allCars;
 
-  state.raceTime=0; globalThis.raceTime = state.raceTime; state.gState='countdown';
+  state.raceTime=0; state.gState='countdown';
   currentRaceSubmitted=false;
   document.getElementById('hud').style.display='block';
   document.getElementById('hint').style.display='block';
@@ -2133,7 +2122,6 @@ function applyPlacedAssets(data){
 function updateFrame(dt){
   if(state.gState==='racing'){
     state.raceTime+=dt;
-    globalThis.raceTime = state.raceTime;
     const autoTouchThrottle=isTouchControlsVisibleInState(state.gState)
       && ('ontouchstart' in window||navigator.maxTouchPoints>0)
       && !touchState.brake;
@@ -2149,7 +2137,6 @@ function updateFrame(dt){
   } else if(state.gState==='cooldown'){
     // Player finished — car coasts, AI keeps racing behind results screen
     state.raceTime+=dt;
-    globalThis.raceTime = state.raceTime;
     state.pCar.update({thr:0,brk:0.3,str:0},dt);
     for(const ai of state.aiControllers){if(!ai.car.finished)ai.update(dt);}
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&state.aiCars[i])aiSounds[i].update(state.aiCars[i],state.pCar);}
@@ -2165,7 +2152,6 @@ function updateFrame(dt){
   } else if(state.gState==='countdown'||state.gState==='finished'||state.gState==='paused'){
     if(state.gState==='finished'){
       state.raceTime+=dt;
-      globalThis.raceTime = state.raceTime;
       for(const ai of state.aiControllers){if(!ai.car.finished)ai.update(dt);}
       updateHUD(); drawMinimap();
     }
