@@ -137,8 +137,7 @@ function handleBeamAttack(t, best) {
   const stackRatio = Math.min(1, (t.Stacks || 0) / 40);
   const damage = Math.round(getDamageFromStacks(t.Stacks || 0));
 
-  best.hp -= damage;
-  best.lastHitTowerId = t.instanceId;
+  const hitResult = applyEnemyDamage(best, damage, t.instanceId);
 
   if (best.isBoss && t.instanceId) {
     best.lastDamageWindow = 1;
@@ -166,7 +165,7 @@ function handleBeamAttack(t, best) {
     stackRatio
   });
 
-  if (best.hp <= 0) {
+  if (hitResult.didKill) {
     t.TargetId = null;
     t.BeamTargetId = null;
     t.Stacks = 0;
@@ -352,8 +351,7 @@ function handleStormforkMultiAttack(tower, _primaryTarget) {
   }
 
   for (const target of targets) {
-    target.hp -= tower.damage;
-    target.lastHitTowerId = tower.instanceId;
+    applyEnemyDamage(target, tower.damage, tower.instanceId);
 
     game.effects.push({
       type: 'lightning',
@@ -393,8 +391,7 @@ function handleInfernoBeamAttack(t, best) {
   const stackRatio = Math.min(1, stacks / 40);
   const infernoDamage = Math.round(getInfernoDamageFromTower(t));
 
-  best.hp -= infernoDamage;
-  best.lastHitTowerId = t.instanceId;
+  const hitResult = applyEnemyDamage(best, infernoDamage, t.instanceId);
 
   if (best.isBoss && t.instanceId) {
     best.lastDamageWindow = 1;
@@ -423,7 +420,7 @@ function handleInfernoBeamAttack(t, best) {
     stackRatio
   });
 
-  if (best.hp <= 0) {
+  if (hitResult.didKill) {
     t.infernoTargetId = null;
     t.infernoBeamTargetId = null;
     t.infernoStacks = 0;
