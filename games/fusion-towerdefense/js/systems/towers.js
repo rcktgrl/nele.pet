@@ -211,8 +211,23 @@ function updateSelectedTowerStats() {
     return;
   }
 
-  const t = towerTypes[game.selectedTowerType];
   const def = getTowerDef(game.selectedTowerType);
+  if (!def) {
+    ui.selectedTowerStats.innerHTML =
+      'Der ausgewählte Turm ist ungültig. Wähle ihn erneut aus.';
+    return;
+  }
+
+  const t = towerTypes[game.selectedTowerType] || {
+    id: def.id,
+    name: def.name,
+    cost: def.stats.cost,
+    range: def.stats.range,
+    damage: def.stats.damage,
+    fireRate: def.stats.fireRate,
+    projectileSpeed: def.stats.projectileSpeed,
+    color: def.visuals?.color || '#ffffff'
+  };
 
   const displayDamage = t.damage;
 
@@ -253,14 +268,14 @@ function buildTowerButtons(){
         <div class="cost-tag">$${t.cost}</div>
       `;
       b.addEventListener('click',()=>{
-        game.selectedTowerType = t.id;
+        game.selectedTowerType = def.id;
         game.sellMode = false;
         game.ritualMode = false;
         game.ritualCenterTowerId = null;
         game.ritualSelectedTowerIds = [];
         updateTowerSelectionUI();
         updateSelectedTowerStats();
-        setStatus(`${t.name} ausgewählt.`);
+        setStatus(`${def.name} ausgewählt.`);
       });
       ui.towerList.appendChild(b);
     });
@@ -479,7 +494,22 @@ function placeTower(cell) {
     return setStatus('Du musst zuerst einen Turm auswählen.', true, 2.5);
   }
 
-  const t = towerTypes[game.selectedTowerType];
+  let t = towerTypes[game.selectedTowerType];
+  if(!t){
+    const selectedDef=getTowerDef(game.selectedTowerType);
+    if(selectedDef?.stats){
+      t={
+        id:selectedDef.id,
+        name:selectedDef.name,
+        cost:selectedDef.stats.cost,
+        range:selectedDef.stats.range,
+        damage:selectedDef.stats.damage,
+        fireRate:selectedDef.stats.fireRate,
+        projectileSpeed:selectedDef.stats.projectileSpeed,
+        color:selectedDef.visuals?.color||'#ffffff'
+      };
+    }
+  }
   const key = `${cell.c},${cell.r}`;
 
   if (game.map.pathSet.has(key)) {
@@ -497,7 +527,12 @@ function placeTower(cell) {
     if (canApplyFusion) {
 
 
-      const cost = towerTypes[game.selectedTowerType].cost;
+      const selectedTowerDef = getTowerDef(game.selectedTowerType);
+      if (!selectedTowerDef) {
+        return setStatus('Der ausgewählte Turm ist ungültig. Wähle ihn erneut aus.', true, 2.5);
+      }
+
+      const cost = selectedTowerDef.stats.cost;
 
       if (game.money < cost) {
         return setStatus(`Nicht genug Geld für ${f.name}.`, true, 2.5);
@@ -516,6 +551,10 @@ function placeTower(cell) {
     }
 
     return setStatus('Diese Zelle ist bereits belegt.', true, 2.5);
+  }
+
+  if (!t) {
+    return setStatus('Der ausgewählte Turm ist ungültig. Wähle ihn erneut aus.', true, 2.5);
   }
 
   if (game.money < t.cost) {
