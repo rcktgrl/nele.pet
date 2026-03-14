@@ -8,6 +8,31 @@ export const leaderboardByTrack = new Map();
 export let leaderboardAvailable = true;
 let currentRaceSubmitted = false;
 
+function sanitizeGhostFrame(frame) {
+  if (!frame || typeof frame !== 'object') return null;
+  const t = Math.round(Number(frame.t));
+  const x = Number(frame.x);
+  const y = Number(frame.y);
+  const z = Number(frame.z);
+  const h = Number(frame.h);
+  if (!Number.isFinite(t) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(h)) return null;
+  return { t, x, y, z, h };
+}
+
+function sanitizeGhostData(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const carData = raw.carData && typeof raw.carData === 'object' ? { ...raw.carData } : null;
+  const username = sanitizeLeaderboardName(raw.username);
+  const frames = Array.isArray(raw.frames) ? raw.frames.map(sanitizeGhostFrame).filter(Boolean) : [];
+  if (!carData || frames.length < 2) return null;
+  return {
+    username,
+    carData,
+    frames,
+    timeMs: Math.max(0, Number(raw.timeMs) || 0)
+  };
+}
+
 export function isCurrentRaceSubmitted(){
   return currentRaceSubmitted;
 }
@@ -41,8 +66,9 @@ export function renderLeaderboardRows(container, entries, highlightName) {
   entries.forEach((entry, idx) => {
     const row = document.createElement('div');
     row.className = 'lb-row' + (highlightName && entry.username === highlightName ? ' lb-row-you' : '');
+    const ghostMarker = entry.ghost_data ? '<span class="lb-ghost-marker" title="Ghost data available" aria-label="Ghost data available">👻</span>' : '';
     const carLabel = entry.car_name ? `<div class="lb-car"><span class="lb-car-dot" style="background:${entry.car_hex || '#fff'}"></span>${entry.car_name}</div>` : '';
-    row.innerHTML = `<span class="lb-pos">${idx + 1}</span><span class="lb-name">${entry.username}${carLabel}</span><span class="lb-time">${fmtT(leaderboardTimeToSeconds(entry.time_ms))}</span>`;
+    row.innerHTML = `<span class="lb-pos">${idx + 1}</span><span class="lb-name">${entry.username}${ghostMarker}${carLabel}</span><span class="lb-time">${fmtT(leaderboardTimeToSeconds(entry.time_ms))}</span>`;
     container.appendChild(row);
   });
 }
@@ -81,14 +107,15 @@ export async function loadTrackLeaderboard(trackId, { force = false, limit = 10 
     username: sanitizeLeaderboardName(row.username),
     car_name: String(row.car_name || '').trim().slice(0, 30),
     car_hex: /^#[0-9a-f]{6}$/i.test(String(row.car_hex || '')) ? String(row.car_hex) : null,
-    time_ms: Math.max(0, Number(row.time_ms) || 0)
+    time_ms: Math.max(0, Number(row.time_ms) || 0),
+    ghost_data: sanitizeGhostData(row.ghost_data)
   }));
   const payload = { best: entries[0] || null, entries };
   leaderboardByTrack.set(key, payload);
   return payload;
 }
 
-export async function submitTrackTime(trackId, user, timeMs, car) {
+export async function submitTrackTime(trackId, user, timeMs, car, ghostData = null) {
   const key = normaliseTrackId(trackId);
   if (!leaderboardAvailable) return false;
 
@@ -104,7 +131,8 @@ export async function submitTrackTime(trackId, user, timeMs, car) {
     username: sanitizeLeaderboardName(user.name),
     car_name: String(car?.name || '').trim().slice(0, 30) || null,
     car_hex: /^#[0-9a-f]{6}$/i.test(String(car?.hex || '')) ? String(car.hex).toLowerCase() : null,
-    time_ms: Math.round(Math.max(0, timeMs || 0) * 1000)
+    time_ms: Math.round(Math.max(0, timeMs || 0) * 1000),
+    ghost_data: sanitizeGhostData(ghostData)
   });
   if (error) {
     console.error('Leaderboard submit error:', error);
@@ -116,11 +144,11 @@ export async function submitTrackTime(trackId, user, timeMs, car) {
   return true;
 }
 
-export async function handlePostRaceLeaderboard(notify) {
+export async function handlePostRaceLeaderboard(notify, ghostData = null) {
   if (currentRaceSubmitted || !state.trkData || !state.pCar || !state.pCar.finTime || !Number.isFinite(state.pCar.finTime)) return;
   currentRaceSubmitted = true;
   const user = await loadArcadeUser();
-  const ok = await submitTrackTime(state.trkData.id, user, state.pCar.finTime, state.pCar.data);
+  const ok = await submitTrackTime(state.trkData.id, user, state.pCar.finTime, state.pCar.data, ghostData);
   if (ok) {
     const latest = await loadTrackLeaderboard(state.trkData.id, { force: true, limit: 10 });
     renderResultsLeaderboard(latest.entries, user.name);
