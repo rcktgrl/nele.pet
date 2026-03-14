@@ -1452,6 +1452,8 @@ function normaliseStoredTrack(raw){
     if(!nodes) return null;
     out.wp=nodes.map(n=>[+n.x||0,0,+n.z||0]);
   }
+  const updatedAt=Date.parse(out.updatedAt||out.updated_at||raw.updated_at||'');
+  out.updatedAt=Number.isFinite(updatedAt)?new Date(updatedAt).toISOString():new Date(0).toISOString();
   return out;
 }
 
@@ -1470,7 +1472,13 @@ function normaliseCloudTrack(raw){
   const track=normaliseStoredTrack(raw);
   if(!track) return null;
   track.__cloud=true;
+  if(raw.updated_at) track.updatedAt=raw.updated_at;
   return track;
+}
+
+function trackUpdatedAtMs(track){
+  const ts=Date.parse(track&&track.updatedAt?track.updatedAt:'');
+  return Number.isFinite(ts)?ts:0;
 }
 
 function mergeTracksById(...groups){
@@ -1481,7 +1489,8 @@ function mergeTracksById(...groups){
       if(!track||track.id===undefined||track.id===null) return;
       const key=String(track.id);
       if(byId.has(key)){
-        out[byId.get(key)]=track;
+        const idx=byId.get(key);
+        if(trackUpdatedAtMs(track)>=trackUpdatedAtMs(out[idx])) out[idx]=track;
       }else{
         byId.set(key,out.length);
         out.push(track);
@@ -1772,6 +1781,7 @@ async function saveEditorTrack(){
   const data=editorTrackToGameTrack();
   data.id=TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))?uniqueTrackId():(state.editorTrack.id||uniqueTrackId());
   data.name=state.editorTrack.name||'Custom Track';
+  data.updatedAt=new Date().toISOString();
   state.editorTrack.id=data.id;
   state.editorTrack.source=data.id;
   state.editorTrack.builtin=false;
