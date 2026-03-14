@@ -62,22 +62,22 @@ function generateWavePlan(wave){
   if(wave===1){
     const moneyLossPercent=getWaveMoneyLossPercent(wave);
     const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
-    const entries=[{key:'yellow',count:30},{key:'fast_1',count:10}];
-    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.28,preview:'30× yellow, 10× fast 1',entries};
+    const entries=[{key:'yellow',count:8},{key:'fast_1',count:2}];
+    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.38,preview:'8× yellow, 2× fast 1',entries};
   }
 
   if(wave===2){
     const moneyLossPercent=getWaveMoneyLossPercent(wave);
     const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
-    const entries=[{key:'yellow',count:32},{key:'fast_1',count:12}];
-    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.26,preview:'32× yellow, 12× fast 1',entries};
+    const entries=[{key:'yellow',count:9},{key:'fast_1',count:3}];
+    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.35,preview:'9× yellow, 3× fast 1',entries};
   }
 
   if(wave===3){
     const moneyLossPercent=getWaveMoneyLossPercent(wave);
     const roundScoreMultiplier=getWaveRoundScoreMultiplier(wave);
-    const entries=[{key:'yellow',count:34},{key:'fast_1',count:12},{key:'yellow_red',count:1}];
-    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.24,preview:'34× yellow, 12× fast 1, 1× yellow red',entries};
+    const entries=[{key:'yellow',count:10},{key:'fast_1',count:2},{key:'yellow_red',count:1}];
+    return {wave,budget:getSpentBudget(entries,catalog),moneyLossPercent,roundScoreMultiplier,bossWave:false,spawnGap:.33,preview:'10× yellow, 2× fast 1, 1× yellow red',entries};
   }
 
     if(wave%10===0){

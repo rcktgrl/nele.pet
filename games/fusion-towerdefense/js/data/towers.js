@@ -477,7 +477,7 @@ const RAW_TOWER_DEFS = {
     },
     stats: {
       cost: null,
-      range: 240,
+      range: 350,
       damage: 28,
       fireRate: 0.8,
       projectileSpeed: 980

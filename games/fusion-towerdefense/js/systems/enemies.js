@@ -15,13 +15,13 @@ function getEnemyCatalog(wave) {
   const waveSizeBonus = Math.min(0.07, Math.max(0, wave - 1) * 0.0025);
 
   return [
-    { key: 'yellow', layerHp: baseLayerHp, speed: baseSpeed, cost: 1, tier: 0, tileDiameterRatio: (1 / 3) + waveSizeBonus, color: '#ffe66b' },
-    { key: 'yellow_red', layerHp: baseLayerHp, speed: baseSpeed * 0.92, cost: 6, tier: 1, tileDiameterRatio: 0.4 + waveSizeBonus, color: '#ffe66b' },
-    { key: 'yellow_fort', layerHp: baseLayerHp, speed: baseSpeed * 0.82, cost: 36, tier: 2, tileDiameterRatio: 0.46 + waveSizeBonus, color: '#ffe66b' },
-    { key: 'fast_1', layerHp: fastLayerHp, speed: baseSpeed * 1.95, cost: 1, tier: 0, tileDiameterRatio: 0.28 + waveSizeBonus * 0.5, color: '#59f3ff', isFast: true },
-    { key: 'fast_2', layerHp: fastLayerHp, speed: baseSpeed * 1.78, cost: 6, tier: 1, tileDiameterRatio: 0.34 + waveSizeBonus * 0.5, color: '#59f3ff', isFast: true },
-    { key: 'fast_3', layerHp: fastLayerHp, speed: baseSpeed * 1.62, cost: 216, tier: 3, tileDiameterRatio: 0.4 + waveSizeBonus * 0.5, color: '#59f3ff', isFast: true },
-    { key: 'infinity', layerHp: Math.max(4, Math.floor(6 * Math.pow(1.2, Math.max(0, wave - 1)))), speed: baseSpeed * 1.35, cost: 1, tier: 0, tileDiameterRatio: 0.24, color: '#ffffff', isInfinity: true }
+    { key: 'yellow', layerHp: baseLayerHp, speed: baseSpeed, cost: 4, tier: 0, tileDiameterRatio: (1 / 3) + waveSizeBonus, color: '#ffe66b' },
+    { key: 'yellow_red', layerHp: baseLayerHp, speed: baseSpeed * 0.92, cost: 24, tier: 1, tileDiameterRatio: 0.4 + waveSizeBonus, color: '#ffe66b' },
+    { key: 'yellow_fort', layerHp: baseLayerHp, speed: baseSpeed * 0.82, cost: 144, tier: 2, tileDiameterRatio: 0.46 + waveSizeBonus, color: '#ffe66b' },
+    { key: 'fast_1', layerHp: fastLayerHp, speed: baseSpeed * 1.95, cost: 4, tier: 0, tileDiameterRatio: 0.28 + waveSizeBonus * 0.5, color: '#59f3ff', isFast: true },
+    { key: 'fast_2', layerHp: fastLayerHp, speed: baseSpeed * 1.78, cost: 24, tier: 1, tileDiameterRatio: 0.34 + waveSizeBonus * 0.5, color: '#59f3ff', isFast: true },
+    { key: 'fast_3', layerHp: fastLayerHp, speed: baseSpeed * 1.62, cost: 864, tier: 3, tileDiameterRatio: 0.4 + waveSizeBonus * 0.5, color: '#59f3ff', isFast: true },
+    { key: 'infinity', layerHp: Math.max(4, Math.floor(6 * Math.pow(1.2, Math.max(0, wave - 1)))), speed: baseSpeed * 1.35, cost: 4, tier: 0, tileDiameterRatio: 0.24, color: '#ffffff', isInfinity: true }
   ];
 }
 
