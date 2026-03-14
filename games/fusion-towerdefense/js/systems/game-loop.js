@@ -1,4 +1,4 @@
-function startGame(){syncSettingsUI();const activeCards=getActiveLoadoutCardIds();Object.assign(game,{running:true,money:getRunStartMoney(),score:0,runEarnedScore:0,runScorePenaltyMult:0,lives:20,wave:0,maxWaves:mapConfig.waveLimit,selectedTowerType:null,sellMode:false,enemies:[],towers:[],projectiles:[],effects:[],spawnQueue:[],timeUntilNextSpawn:0,intermission:true,intermissionTimer:0,waveInProgress:false,gameOver:false,victory:false,hoveredCell:null,statusTimer:0,fastSpawnAccumulator:0,pendingWaveDefs:[],currentWaveInfo:null,currentEnemyMultiplier:1,autoWaveStart:false,activeCards});generateMap();for(let i=1;i<=Math.min(3,game.maxWaves);i++)game.pendingWaveDefs.push(generateWavePlan(i));buildTowerButtons();updateHUD();updateWavePreviewUI();updateSelectedTowerStats();updateStartWaveButton();setStatus('Run gestartet. Drücke Start Wave, um die erste Welle zu beginnen.');showScreen('gameScreen')}
+function startGame(){syncSettingsUI();const activeCards=getActiveLoadoutCardIds();Object.assign(game,{running:true,money:getRunStartMoney(),score:0,runEarnedScore:0,runScorePenaltyMult:0,lives:20,wave:0,maxWaves:mapConfig.waveLimit,selectedTowerType:null,sellMode:false,enemies:[],towers:[],projectiles:[],effects:[],spawnQueue:[],timeUntilNextSpawn:0,intermission:true,intermissionTimer:0,waveInProgress:false,gameOver:false,victory:false,hoveredCell:null,statusTimer:0,fastSpawnAccumulator:0,pendingWaveDefs:[],currentWaveInfo:null,currentMoneyMultiplier:1,baseScoreMultiplier:Math.max(1,mapConfig.scoreMultiplier),roundScoreMultiplier:1,autoWaveStart:false,activeCards});generateMap();for(let i=1;i<=Math.min(3,game.maxWaves);i++)game.pendingWaveDefs.push(generateWavePlan(i));buildTowerButtons();updateHUD();updateWavePreviewUI();updateSelectedTowerStats();updateStartWaveButton();setStatus('Run gestartet. Drücke Start Wave, um die erste Welle zu beginnen.');showScreen('gameScreen')}
 function finalizeRun(v){const payout=Math.floor(game.score*(v?1:.5));metaProgress.cash+=payout;metaProgress.bestRunScore=Math.max(metaProgress.bestRunScore||0,game.score||0);saveMeta();updateMetaUI();setStatus(v?`Sieg! +${payout} Meta-Cash.`:`Niederlage. +${payout} Meta-Cash.`,!v)}
 function leaveToMenu(){
     game.running=false;
@@ -8,7 +8,7 @@ function leaveToMenu(){
     updateMetaUI()
 }
 function getTotalScoreMultiplier(){
-    return Math.max(1,mapConfig.scoreMultiplier+game.currentEnemyMultiplier+game.runScorePenaltyMult)
+    return Math.max(1,game.baseScoreMultiplier+game.roundScoreMultiplier+game.runScorePenaltyMult)
 }
 function updateWaves(dt) {
     if (game.gameOver || game.victory) return;
@@ -32,7 +32,7 @@ function updateWaves(dt) {
                 finalizeRun(true);
             } else {
                 game.intermission = true;
-                game.intermissionTimer = 5;
+                game.intermissionTimer = 7;
 
                 const bonus = 25 + Math.floor(game.wave * 3);
                 game.money += bonus;
@@ -48,7 +48,7 @@ function updateWaves(dt) {
 
                 setStatus(
                     game.autoWaveStart
-                        ? `Wave ${game.wave} besiegt. Nächste Wave in 5 Sekunden. Bonus +$${bonus}.`
+                        ? `Wave ${game.wave} besiegt. Nächste Wave in 7 Sekunden. Bonus +$${bonus}.`
                         : `Wave ${game.wave} besiegt. Bonus +$${bonus}. Drücke Start Wave für die nächste Welle.`
                 );
             }
