@@ -178,7 +178,9 @@ function drawDash(){
   ctx.restore();
   // Gauges
   const gr=Math.min(W*.12,ph*.42);
-  drawGauge(ctx,W*.2,py+ph*.5,gr,state.pCar.rpm,0,8000,6000,'#ff3300','RPM',v=>(v/1000).toFixed(0)+'k');
+  const redline=state.pCar.redlineRpm||8000;
+  const warnRpm=state.pCar.shiftWarnRpm||Math.round(redline*0.78);
+  drawGauge(ctx,W*.2,py+ph*.5,gr,state.pCar.rpm,0,redline,warnRpm,'#ff3300','RPM',v=>(v/1000).toFixed(1)+'k');
   const mxK=Math.round(state.pCar.data.maxSpd*3.6*1.08);
   drawGauge(ctx,W*.8,py+ph*.5,gr,state.pCar.spd*3.6,0,mxK,mxK*.82,'#ffaa00','KM/H',v=>Math.round(v));
   // Gear
@@ -190,7 +192,7 @@ function drawDash(){
   // Rev bar
   const bw=W*.32,bh=ph*.055,bx=(W-bw)/2,by=py+ph*.12;
   ctx.fillStyle='#0a0a14'; ctx.fillRect(bx,by,bw,bh);
-  const rf=state.pCar.rpm/8000,rl=6000/8000;
+  const rf=state.pCar.rpm/redline,rl=warnRpm/redline;
   for(let i=0;i<20;i++){
     const f=(i+1)/20;
     if(f<=rf){

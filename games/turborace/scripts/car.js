@@ -3,12 +3,17 @@ import { createCarVisual, getOpponentCarModels, getPlayerCarModel } from './car-
 import { state } from './state.js';
 import { fmtT } from './util.js';
 import { announce } from './audio.js';
+import { buildGearboxForCar, rpmFromSpeed } from './data/gearboxes.js';
 
 class Car {
   constructor(data, pos, hdg, isPlayer, scene) {
     this.data = data; this.isPlayer = isPlayer;
     this.pos = new THREE.Vector3(pos.x, pos.y, pos.z);
-    this.hdg = hdg; this.spd = 0; this.rpm = 800; this.gear = 1;
+    this.hdg = hdg; this.spd = 0; this.gear = 1;
+    this.gearbox = buildGearboxForCar(this.data);
+    this.redlineRpm = this.gearbox.redlineRpm;
+    this.shiftWarnRpm = Math.round(this.redlineRpm * 0.78);
+    this.rpm = this.gearbox.idleRpm;
     this.lap = 0; this.lastCP = 0; this.cpPassed = 0;
     this.totalProg = 0; this.finished = false; this.finTime = 0; this.lapStart = 0;
     this.tl = []; this.wh = [];
@@ -38,7 +43,8 @@ class Car {
     if (this.isReversing) {
       // Reverse: brake input drives backward, gear shows R
       this.gear = 0; // 0 = reverse
-      this.rpm = Math.max(800, Math.min(3000, 800 + this.revSpd * 200));
+      const revCeil = Math.max(2800, Math.round(this.redlineRpm * 0.45));
+      this.rpm = Math.max(this.gearbox.idleRpm, Math.min(revCeil, this.gearbox.idleRpm + this.revSpd * 260));
       const revAccel = brk * this.data.accel * 0.4;
       const revDrag = this.revSpd * this.revSpd * 0.01 + this.revSpd * 0.2;
       this.revSpd = Math.max(0, Math.min(8, this.revSpd + (revAccel - revDrag) * dt));
@@ -51,15 +57,23 @@ class Car {
       this.pos.addScaledVector(fwd, -this.revSpd * dt);
     } else {
       this.revSpd = 0;
-      // Auto gearbox — per-car gear count
-      const nGears = this.data.gears || 4;
-      const gThr = this.data.gearThr || [0, 10, 22, 36, this.data.maxSpd + 2];
-      const RATIOS = this.data.gearRat || [620, 281, 172, 112];
+      // Auto gearbox — ratio-linked RPM + adaptive redline
+      const gb = this.gearbox;
+      const nGears = gb.gearRatios.length;
       if (this.gear < 1) this.gear = 1;
-      if (this.gear < nGears && this.spd > gThr[this.gear]) this.gear = Math.min(nGears, this.gear + 1);
-      else if (this.gear > 1 && this.spd < gThr[this.gear - 1] * .72) this.gear = Math.max(1, this.gear - 1);
-      const baseRpm = 800 + RATIOS[this.gear - 1] * this.spd;
-      this.rpm = Math.max(800, Math.min(8000, baseRpm + (thr > .1 ? thr * 300 : 0)));
+      let gearRpm = rpmFromSpeed(this.spd, gb, this.gear);
+      const canUpshift = this.gear < nGears && thr > 0.20;
+      if (canUpshift && gearRpm >= gb.upshiftRpm) {
+        this.gear = Math.min(nGears, this.gear + 1);
+        gearRpm = rpmFromSpeed(this.spd, gb, this.gear);
+      } else if (this.gear > 1 && gearRpm <= gb.downshiftRpm) {
+        const downRpm = rpmFromSpeed(this.spd, gb, this.gear - 1);
+        if (downRpm < gb.redlineRpm * 0.985) {
+          this.gear = Math.max(1, this.gear - 1);
+          gearRpm = downRpm;
+        }
+      }
+      this.rpm = Math.max(gb.idleRpm, Math.min(gb.redlineRpm, gearRpm + (thr > .1 ? thr * 180 : 0)));
       // Forces — drag tuned per car so full throttle reaches exactly maxSpd
       const thrust = thr * this.data.accel;
       const rollCoeff = 0.08;
