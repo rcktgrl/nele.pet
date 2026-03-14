@@ -1407,8 +1407,9 @@ scene.background=new THREE.Color(0x050510);
 setupTouchControls(state.gState);
 initTouchSettings();
 initAudioSettings();
-const menuVersionEl=document.querySelector('.menuVersion');
-if(menuVersionEl)menuVersionEl.textContent=TURBORACE_VERSION;
+document.querySelectorAll('.menuVersion').forEach(el=>{
+  el.textContent=TURBORACE_VERSION;
+});
 
 const { renderer, start:startRenderLoop }=createRenderPipeline({
   THREE,

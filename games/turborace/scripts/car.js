@@ -157,11 +157,10 @@ class Car {
       const prv = state.trkPts[(ni + state.trkPts.length - 1) % state.trkPts.length];
       const tx = nxt.x - prv.x, tz = nxt.z - prv.z;
       const trkHdg = Math.atan2(tx, tz);
-      const trkFwd = new THREE.Vector2(Math.sin(trkHdg), Math.cos(trkHdg));
-      const carFwd = new THREE.Vector2(Math.sin(this.hdg), Math.cos(this.hdg));
-      // Keep correction in driving direction: never flip the car toward the reverse tangent.
-      const alignedTrackHdg = carFwd.dot(trkFwd) >= 0 ? trkHdg : trkHdg + Math.PI;
-      const hdgErr = ((alignedTrackHdg - this.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      const wrapPi = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      // Keep boundary recovery aligned to the track's forward tangent.
+      const targetHdg = this.isReversing ? trkHdg + Math.PI : trkHdg;
+      const hdgErr = wrapPi(targetHdg - this.hdg);
       const maxCorrection = Math.PI / 18; // 10°
       const correction = Math.max(-maxCorrection, Math.min(maxCorrection, hdgErr * 0.75));
       this.hdg += correction;
