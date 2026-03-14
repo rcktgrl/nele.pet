@@ -52,7 +52,7 @@ function scaleWorldValue(value) {
 
 function getTowerVisualScale() {
   const towerBaseDiameter = 40;
-  const towerTileDiameterRatio = 2 / 3;
+  const towerTileDiameterRatio = 1 / 2;
   const cellSize = game?.map?.cellSize || BASE_MAP_CELL_SIZE || 72;
   return (cellSize * towerTileDiameterRatio) / towerBaseDiameter;
 }

@@ -253,14 +253,14 @@ function buildTowerButtons(){
         <div class="cost-tag">$${t.cost}</div>
       `;
       b.addEventListener('click',()=>{
-        game.selectedTowerType = t.id;
+        game.selectedTowerType = def.id;
         game.sellMode = false;
         game.ritualMode = false;
         game.ritualCenterTowerId = null;
         game.ritualSelectedTowerIds = [];
         updateTowerSelectionUI();
         updateSelectedTowerStats();
-        setStatus(`${t.name} ausgewählt.`);
+        setStatus(`${def.name} ausgewählt.`);
       });
       ui.towerList.appendChild(b);
     });
@@ -479,7 +479,22 @@ function placeTower(cell) {
     return setStatus('Du musst zuerst einen Turm auswählen.', true, 2.5);
   }
 
-  const t = towerTypes[game.selectedTowerType];
+  let t = towerTypes[game.selectedTowerType];
+  if(!t){
+    const selectedDef=getTowerDef(game.selectedTowerType);
+    if(selectedDef?.stats){
+      t={
+        id:selectedDef.id,
+        name:selectedDef.name,
+        cost:selectedDef.stats.cost,
+        range:selectedDef.stats.range,
+        damage:selectedDef.stats.damage,
+        fireRate:selectedDef.stats.fireRate,
+        projectileSpeed:selectedDef.stats.projectileSpeed,
+        color:selectedDef.visuals?.color||'#ffffff'
+      };
+    }
+  }
   const key = `${cell.c},${cell.r}`;
 
   if (game.map.pathSet.has(key)) {
@@ -516,6 +531,10 @@ function placeTower(cell) {
     }
 
     return setStatus('Diese Zelle ist bereits belegt.', true, 2.5);
+  }
+
+  if (!t) {
+    return setStatus('Der ausgewählte Turm ist ungültig. Wähle ihn erneut aus.', true, 2.5);
   }
 
   if (game.money < t.cost) {
