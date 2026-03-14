@@ -1390,6 +1390,8 @@ function updateResultsUI(){
   }
   const pp=all.indexOf(state.pCar)+1;
   document.getElementById('ptime').textContent=`Your time: ${fmtT(state.pCar.finTime||state.raceTime)}  ·  P${pp}`;
+  const carName=(state.pCar&&state.pCar.data&&state.pCar.data.name)?state.pCar.data.name:'Unknown';
+  document.getElementById('runCar').textContent=`Run car: ${carName}`;
   const cached=leaderboardByTrack.get(normaliseTrackId(state.trkData&&state.trkData.id));
   renderResultsLeaderboard(cached?cached.entries:[]);
 }
@@ -2184,6 +2186,20 @@ function closeSettings(){
 // ═══════════════════════════════════════════════════════
 //  MENU FUNCTIONS
 // ═══════════════════════════════════════════════════════
+function showIntro(){
+  document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
+  const intro=document.getElementById('sIntro');
+  if(intro) intro.style.display='flex';
+  document.getElementById('hud').style.display='none';
+  document.getElementById('hint').style.display='none';
+  state.gState='menu';
+  updateTouchControlsVisibility(state.gState);
+  releaseAllTouchControls();
+  document.getElementById('pauseMenu').style.display='none';
+  document.getElementById('settingsModal').style.display='none';
+  dc.style.display='none';
+}
+
 function showMain(){
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
   document.getElementById('sMain').style.display='flex';
@@ -2442,6 +2458,7 @@ document.getElementById('musicVolSlider').addEventListener('input', e => onMusic
 document.getElementById('sfxVolSlider').addEventListener('input', e => onSfxVol(e.target.value));
 document.getElementById('touchToggleInput').addEventListener('input', e => onTouchControlsToggle(e.target.checked));
 document.getElementById('settingsCloseBtn').addEventListener('click', closeSettings);
+document.getElementById('introStartBtn').addEventListener('click', function() {tryStartMenuMusic();showMain();});
 document.getElementById('gameStartBtn').addEventListener('click', function() {tryStartMenuMusic();showTrkSel();});
 document.getElementById('trackEditorBtn').addEventListener('click', function() {tryStartMenuMusic();showTrackEditor();});
 document.getElementById('mainSettingsBtn').addEventListener('click', function() {tryStartMenuMusic();showSettings();});
@@ -2497,4 +2514,4 @@ const { renderer, start:startRenderLoop }=createRenderPipeline({
   frameUpdate:updateFrame,
   getActiveCamera:()=>state.activeCam
 });
-setupLights(); startRenderLoop(); loadArcadeUser(); showMain();
+setupLights(); startRenderLoop(); loadArcadeUser(); showIntro();
