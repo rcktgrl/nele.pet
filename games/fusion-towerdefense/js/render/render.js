@@ -513,9 +513,10 @@ function drawHoverPreview() {
   ctx.lineWidth = 2;
 
   const scale = getMapScale();
+  const towerPreviewRadius = 20 * getTowerVisualScale();
 
   ctx.beginPath();
-  ctx.arc(x, y, 18 * scale, 0, Math.PI * 2);
+  ctx.arc(x, y, towerPreviewRadius, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
