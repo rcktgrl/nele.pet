@@ -33,6 +33,7 @@ import {
   releaseAllTouchControls,
   setupTouchControls,
   touchState,
+  getGyroSteering,
 } from './touch-controls.js';
 import {
   initAudio,
@@ -1145,7 +1146,9 @@ function drawDash(){
   ctx.fillStyle='#1a1a2e'; ctx.fillRect(0,py,W,2);
   // Steering wheel
   const wr=ph*.66,wx=W/2,wy=H-ph*.07;
-  const sa=(keys['ArrowLeft']||keys['KeyA'])?-.35:(keys['ArrowRight']||keys['KeyD'])?.35:0;
+  const gyroSteer=getGyroSteering();
+  const keySteer=(keys['ArrowLeft']||keys['KeyA'])?-1:(keys['ArrowRight']||keys['KeyD'])?1:0;
+  const sa=(Math.abs(gyroSteer)>0.01?gyroSteer:keySteer)*0.35;
   ctx.save(); ctx.translate(wx,wy); ctx.rotate(sa);
   ctx.beginPath(); ctx.arc(0,0,wr,0,Math.PI*2); ctx.strokeStyle='#1e1e2e'; ctx.lineWidth=wr*.22; ctx.stroke();
   ctx.beginPath(); ctx.arc(0,0,wr,0,Math.PI*2); ctx.strokeStyle='#2a2a3e'; ctx.lineWidth=wr*.14; ctx.stroke();
@@ -2096,7 +2099,9 @@ function updateFrame(dt){
     const brk=(keys['ArrowDown']||keys['KeyS']||touchState.brake)?1:0;
     const left=(keys['ArrowLeft']||keys['KeyA']||touchState.left);
     const right=(keys['ArrowRight']||keys['KeyD']||touchState.right);
-    const str=left&&!right?1:right&&!left?-1:0;
+    const keySteer=left&&!right?1:right&&!left?-1:0;
+    const gyroSteer=getGyroSteering();
+    const str=Math.abs(gyroSteer)>0.01?gyroSteer:keySteer;
     state.pCar.update({thr,brk,str},dt);
     for(const ai of state.aiControllers)ai.update(dt);
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&state.aiCars[i])aiSounds[i].update(state.aiCars[i],state.pCar);}
