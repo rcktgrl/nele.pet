@@ -65,6 +65,7 @@ import {
   clearAiSounds
 } from './audio.js';
 import { buildTrack, pointNearTrack } from './track-gen.js';
+import { TURBORACE_VERSION } from './version.js';
 
 import {
   updateCamera,
@@ -1404,6 +1405,9 @@ scene.background=new THREE.Color(0x050510);
 setupTouchControls(state.gState);
 initTouchSettings();
 initAudioSettings();
+const menuVersionEl=document.querySelector('.menuVersion');
+if(menuVersionEl)menuVersionEl.textContent=TURBORACE_VERSION;
+
 const { renderer, start:startRenderLoop }=createRenderPipeline({
   THREE,
   canvas:gc,
