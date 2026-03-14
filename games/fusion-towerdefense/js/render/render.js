@@ -564,7 +564,14 @@ function drawHoverPreview() {
   } else {
     if (!game.selectedTowerType) return;
 
-    const t = towerTypes[game.selectedTowerType];
+    const selectedDef = getTowerDef(game.selectedTowerType);
+    if (!selectedDef) return;
+
+    const t = towerTypes[game.selectedTowerType] || {
+      cost: selectedDef.stats.cost,
+      range: selectedDef.stats.range
+    };
+
     const f = getFusionPreview(game.selectedTowerType, game.hoveredCell);
     range = f ? f.range : t.range;
 

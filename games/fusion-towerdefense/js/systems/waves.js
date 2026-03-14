@@ -75,6 +75,30 @@ function pickEnemyForBudget(catalog,waveBudget,localBudget,spawnCounts){
   return weighted[weighted.length-1].enemy;
 }
 
+function determinePackCount(enemy,waveBudget,localBudget){
+  const maxByBudget=Math.max(1,Math.floor(localBudget/enemy.cost));
+  const idealByBudget=Math.max(2,Math.round((waveBudget/enemy.cost)/20*4));
+
+  const minPack=maxByBudget>=3?2:1;
+  const target=clamp(idealByBudget, minPack, Math.min(18,maxByBudget));
+  const randomSwing=Math.random()<0.72 ? (Math.random()*0.35+0.9) : (Math.random()*0.6+0.55);
+
+  let packCount=clamp(Math.round(target*randomSwing), minPack, maxByBudget);
+
+  if(maxByBudget>=2 && Math.random()<0.88){
+    packCount=Math.max(2,packCount);
+  }
+
+  return packCount;
+}
+
+function getPackSpacingSec(packCount){
+  const base=0.17+Math.random()*0.22;
+  if(packCount>=8) return clamp(base*0.9,0.12,0.4);
+  if(packCount<=2) return clamp(base*1.15,0.16,0.6);
+  return clamp(base,0.13,0.5);
+}
+
 function buildTimelinePlan(wave,budget,catalog,restrictedKeys=null){
   const duration=getWaveSpawnDurationSec(wave);
   const chunkCount=getChunkCountForDuration(duration);
@@ -83,8 +107,10 @@ function buildTimelinePlan(wave,budget,catalog,restrictedKeys=null){
   const countsByKey={};
   const events=[];
 
+  let carryBudget=0;
+
   for(let chunk=0;chunk<chunkCount;chunk++){
-    let localBudget=chunkBudgets[chunk];
+    let localBudget=chunkBudgets[chunk]+carryBudget;
     let cursor=chunk*chunkDuration;
     const chunkEnd=(chunk+1)*chunkDuration;
 
@@ -95,20 +121,39 @@ function buildTimelinePlan(wave,budget,catalog,restrictedKeys=null){
       const enemy=pickEnemyForBudget(sourceCatalog,budget,localBudget,countsByKey);
       if(!enemy)break;
 
-      const maxBurst=Math.max(1,Math.floor(localBudget/enemy.cost));
-      const burstCount=clamp(Math.round((0.6+Math.random()*0.8)*Math.min(maxBurst,12)),1,maxBurst);
-      const spacing=clamp(0.12+Math.random()*0.42,0.10,0.75);
+      const packCount=determinePackCount(enemy,budget,localBudget);
+      const spacing=getPackSpacingSec(packCount);
 
-      for(let i=0;i<burstCount;i++){
+      for(let i=0;i<packCount;i++){
         events.push({time:cursor,key:enemy.key});
         cursor+=spacing;
       }
 
-      countsByKey[enemy.key]=(countsByKey[enemy.key]||0)+burstCount;
-      localBudget-=enemy.cost*burstCount;
+      countsByKey[enemy.key]=(countsByKey[enemy.key]||0)+packCount;
+      localBudget-=enemy.cost*packCount;
 
-      if(cursor<chunkEnd&&Math.random()<0.82){
-        cursor+=Math.random()*0.25;
+      if(cursor<chunkEnd&&Math.random()<0.88){
+        cursor+=Math.random()*0.3;
+      }
+
+      if(localBudget>0&&localBudget<enemy.cost&&Math.random()<0.8){
+        break;
+      }
+    }
+
+    carryBudget=Math.max(0,localBudget);
+  }
+
+  if(carryBudget>=1){
+    const fallback=pickEnemyForBudget(catalog,budget,carryBudget,countsByKey);
+    if(fallback){
+      const maxByBudget=Math.max(1,Math.floor(carryBudget/fallback.cost));
+      const packCount=maxByBudget>=2?Math.max(2,Math.min(6,maxByBudget)):1;
+      const spacing=getPackSpacingSec(packCount);
+      let cursor=Math.max(0,duration-packCount*spacing);
+      for(let i=0;i<packCount;i++){
+        events.push({time:cursor,key:fallback.key});
+        cursor+=spacing;
       }
     }
   }

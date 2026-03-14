@@ -211,8 +211,23 @@ function updateSelectedTowerStats() {
     return;
   }
 
-  const t = towerTypes[game.selectedTowerType];
   const def = getTowerDef(game.selectedTowerType);
+  if (!def) {
+    ui.selectedTowerStats.innerHTML =
+      'Der ausgewählte Turm ist ungültig. Wähle ihn erneut aus.';
+    return;
+  }
+
+  const t = towerTypes[game.selectedTowerType] || {
+    id: def.id,
+    name: def.name,
+    cost: def.stats.cost,
+    range: def.stats.range,
+    damage: def.stats.damage,
+    fireRate: def.stats.fireRate,
+    projectileSpeed: def.stats.projectileSpeed,
+    color: def.visuals?.color || '#ffffff'
+  };
 
   const displayDamage = t.damage;
 
@@ -512,7 +527,12 @@ function placeTower(cell) {
     if (canApplyFusion) {
 
 
-      const cost = towerTypes[game.selectedTowerType].cost;
+      const selectedTowerDef = getTowerDef(game.selectedTowerType);
+      if (!selectedTowerDef) {
+        return setStatus('Der ausgewählte Turm ist ungültig. Wähle ihn erneut aus.', true, 2.5);
+      }
+
+      const cost = selectedTowerDef.stats.cost;
 
       if (game.money < cost) {
         return setStatus(`Nicht genug Geld für ${f.name}.`, true, 2.5);
