@@ -28,6 +28,34 @@ function resolveBuyableTowerSelections(){
     .filter(Boolean);
 }
 
+
+function warnIfExpectedBuyableMissing(expectedId, stage, resolvedSelections, renderedSelections = null){
+  const resolved = Array.isArray(resolvedSelections) ? resolvedSelections.filter(Boolean) : [];
+  const rendered = Array.isArray(renderedSelections) ? renderedSelections.filter(Boolean) : null;
+  const resolvedIds = resolved.map(t => t.id);
+  const renderedIds = rendered ? rendered.map(t => t.id) : null;
+
+  const missingFromResolved = !resolvedIds.includes(expectedId);
+  const missingFromRendered = renderedIds ? !renderedIds.includes(expectedId) : false;
+
+  if(!missingFromResolved && !missingFromRendered) return;
+
+  const def = getTowerDef(expectedId);
+  const unlockId = def?.unlock?.researchNodeId ?? null;
+  const researchedValue = unlockId ? metaProgress?.researched?.[unlockId] : null;
+
+  console.warn(`[tower-buyables] Expected "${expectedId}" missing at ${stage}.`, {
+    missingFromResolved,
+    missingFromRendered,
+    resolvedIds,
+    renderedIds,
+    defExists: !!def,
+    defBuyable: !!def?.acquire?.buyable,
+    unlockId,
+    researchedValue
+  });
+}
+
 function getFusionPreview(typeId, cell = null) {
   if (!cell) return null;
 
@@ -249,7 +277,9 @@ function buildTowerButtons(){
   ui.towerList.innerHTML='';
 
   const buyableSelections = resolveBuyableTowerSelections();
+  warnIfExpectedBuyableMissing('rapid', 'buildTowerButtons:resolved', buyableSelections, null);
 
+  const renderedSelections=[];
   buyableSelections.forEach(t => {
       const def = getTowerDef(t.id);
       if (!def) return;
@@ -279,7 +309,10 @@ function buildTowerButtons(){
         setStatus(`${def.name} ausgewählt.`);
       });
       ui.towerList.appendChild(b);
+      renderedSelections.push(t);
     });
+
+  warnIfExpectedBuyableMissing('rapid', 'buildTowerButtons:rendered', buyableSelections, renderedSelections);
 
   updateTowerSelectionUI();
   updateSelectedTowerStats();
