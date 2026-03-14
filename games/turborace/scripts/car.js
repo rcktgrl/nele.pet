@@ -1,5 +1,6 @@
 import { THREE } from './three.js';
 import { createCarVisual, getOpponentCarModels, getPlayerCarModel } from './car-model.js';
+import { state } from './state.js';
 
 class Car {
   constructor(data, pos, hdg, isPlayer, scene) {
@@ -88,26 +89,26 @@ class Car {
   }
 
   groundY() {
-    if (!globalThis.trkPts || !globalThis.trkPts.length) return this.data.gndOff;
+    if (!state.trkPts || !state.trkPts.length) return this.data.gndOff;
     let md = Infinity, ny = 0;
-    for (const p of globalThis.trkPts) { const d = (this.pos.x - p.x) ** 2 + (this.pos.z - p.z) **2; if (d < md) { md = d; ny = p.y; } }
+    for (const p of state.trkPts) { const d = (this.pos.x - p.x) ** 2 + (this.pos.z - p.z) **2; if (d < md) { md = d; ny = p.y; } }
     return ny + this.data.gndOff;
   }
 
   boundary(dt) {
-    if (!globalThis.trkPts || !globalThis.trkPts.length) return;
+    if (!state.trkPts || !state.trkPts.length) return;
 
     // ── City tracks: use grid corridors ──
-    if (globalThis.cityCorridors && globalThis.cityCorridors.length) {
+    if (state.cityCorridors && state.cityCorridors.length) {
       const px = this.pos.x, pz = this.pos.z;
       let inside = false;
-      for (const c of globalThis.cityCorridors) {
+      for (const c of state.cityCorridors) {
         if (px > c.x - c.hw && px < c.x + c.hw && pz > c.z - c.hd && pz < c.z + c.hd) { inside = true; break; }
       }
       if (!inside) {
         // Find nearest corridor edge and push back
         let bestDist = Infinity, bestPx = px, bestPz = pz;
-        for (const c of globalThis.cityCorridors) {
+        for (const c of state.cityCorridors) {
           const cx = Math.max(c.x - c.hw, Math.min(c.x + c.hw, px));
           const cz = Math.max(c.z - c.hd, Math.min(c.z + c.hd, pz));
           const d = (px - cx) ** 2 + (pz - cz) ** 2;
@@ -125,19 +126,19 @@ class Car {
 
     // ── Spline-based boundary for normal tracks ──
     let md = Infinity, ni = 0;
-    for (let i = 0; i < globalThis.trkPts.length; i++) {
-      const d = (this.pos.x - globalThis.trkPts[i].x) ** 2 + (this.pos.z - globalThis.trkPts[i].z) ** 2;
+    for (let i = 0; i < state.trkPts.length; i++) {
+      const d = (this.pos.x - state.trkPts[i].x) ** 2 + (this.pos.z - state.trkPts[i].z) ** 2;
       if (d < md) { md = d; ni = i; }
     }
-    const np = globalThis.trkPts[ni];
-    const dist = Math.sqrt(md), maxD = globalThis.trkData.rw * .5 + 1.0;
+    const np = state.trkPts[ni];
+    const dist = Math.sqrt(md), maxD = state.trkData.rw * .5 + 1.0;
     if (dist > maxD) {
       const px = np.x - this.pos.x, pz = np.z - this.pos.z, pl = Math.sqrt(px * px + pz * pz) || 1;
       this.pos.x += px / pl * (dist - maxD + 0.5);
       this.pos.z += pz / pl * (dist - maxD + 0.5);
       this.spd *= 0.45;
-      const nxt = globalThis.trkPts[(ni + 1) % globalThis.trkPts.length];
-      const prv = globalThis.trkPts[(ni + globalThis.trkPts.length - 1) % globalThis.trkPts.length];
+      const nxt = state.trkPts[(ni + 1) % state.trkPts.length];
+      const prv = state.trkPts[(ni + state.trkPts.length - 1) % state.trkPts.length];
       const tx = nxt.x - prv.x, tz = nxt.z - prv.z;
       const trkHdg = Math.atan2(tx, tz);
       let he = ((trkHdg - this.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
@@ -151,8 +152,8 @@ class Car {
   }
 
   progress() {
-    if (!globalThis.trkData) return;
-    const wps = globalThis.trkData.wp, n = wps.length, cr = 22;
+    if (!state.trkData) return;
+    const wps = state.trkData.wp, n = wps.length, cr = 22;
     for (let i = 0; i < n; i++) {
       const w = wps[i];
       const d = Math.sqrt((this.pos.x - w[0]) ** 2 + (this.pos.z - w[2]) ** 2);
@@ -162,28 +163,28 @@ class Car {
           this.lastCP = i; this.cpPassed++;
           if (i === 0 && this.cpPassed >= n) {
             this.cpPassed = 0; this.lap++;
-            const lt = globalThis.raceTime - this.lapStart; this.lapStart = globalThis.raceTime;
+            const lt = state.raceTime - this.lapStart; this.lapStart = state.raceTime;
             if (this.isPlayer) {
-              const startingFinal = this.lap === globalThis.trkData.laps - 1;
+              const startingFinal = this.lap === state.trkData.laps - 1;
               const fmt = globalThis.fmtT || ((secs)=>secs.toFixed(2)+'s');
               if (typeof globalThis.notify === 'function') {
-                globalThis.notify('LAP ' + this.lap + '/' + globalThis.trkData.laps + (this.lap > 1 ? ' · ' + fmt(lt) : ''));
+                globalThis.notify('LAP ' + this.lap + '/' + state.trkData.laps + (this.lap > 1 ? ' · ' + fmt(lt) : ''));
               }
               if (typeof globalThis.announce === 'function') {
                 if (startingFinal) globalThis.announce('Final lap! Push it to the limit!');
                 else if (this.lap > 1) globalThis.announce('Lap ' + (this.lap) + '. ' + fmt(lt));
               }
             }
-            if (this.lap >= globalThis.trkData.laps) {
+            if (this.lap >= state.trkData.laps) {
               this.finished = true;
-              this.finTime = globalThis.raceTime;
+              this.finTime = state.raceTime;
               if (this.isPlayer && typeof globalThis.endRace === 'function') globalThis.endRace();
             }
           }
         }
       }
     }
-    const ni = (this.lastCP + 1 + n) % n, nw = globalThis.trkData.wp[ni];
+    const ni = (this.lastCP + 1 + n) % n, nw = state.trkData.wp[ni];
     const dd = Math.sqrt((this.pos.x - nw[0]) ** 2 + (this.pos.z - nw[2]) ** 2);
     this.totalProg = this.lap * n + this.cpPassed + Math.max(0, 1 - dd / 35);
   }
