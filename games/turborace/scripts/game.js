@@ -83,13 +83,10 @@ import {
 //  STATE
 // ═══════════════════════════════════════════════════════
 const CUSTOM_TRACKS_TABLE='turborace_custom_tracks';
-const LOCAL_GHOST_TOGGLE_KEY='turborace_local_ghost_enabled';
 const ONLINE_GHOST_TOGGLE_KEY='turborace_online_ghost_enabled';
 const ONLINE_GHOST_COUNT_KEY='turborace_online_ghost_count';
-const LOCAL_GHOST_BEST_KEY='turborace_local_ghost_best_v1';
 const GHOST_SAMPLE_MS=100;
 let customTrackSyncAvailable=true;
-let localGhostEnabled=false;
 let onlineGhostEnabled=false;
 let onlineGhostCount=1;
 let ghostReplays=[];
@@ -99,10 +96,6 @@ let ghostVisuals=[];
 function normalizeGhostName(raw){
   const out=String(raw||'').trim().replace(/\s+/g,' ').slice(0,24);
   return out||'Ghost';
-}
-
-function readGhostToggle(){
-  return localStorage.getItem(LOCAL_GHOST_TOGGLE_KEY)==='1';
 }
 
 function readOnlineGhostToggle(){
@@ -117,13 +110,6 @@ function readOnlineGhostCount(){
   return parseOnlineGhostCount(localStorage.getItem(ONLINE_GHOST_COUNT_KEY));
 }
 
-function setGhostToggle(enabled){
-  localGhostEnabled=!!enabled;
-  const input=document.getElementById('ghostToggleInput');
-  if(input&&input.checked!==localGhostEnabled)input.checked=localGhostEnabled;
-  localStorage.setItem(LOCAL_GHOST_TOGGLE_KEY,localGhostEnabled?'1':'0');
-}
-
 function setOnlineGhostToggle(enabled){
   onlineGhostEnabled=!!enabled;
   const input=document.getElementById('onlineGhostToggleInput');
@@ -136,33 +122,6 @@ function setOnlineGhostCount(raw){
   const select=document.getElementById('onlineGhostCountSelect');
   if(select&&Number(select.value)!==onlineGhostCount)select.value=String(onlineGhostCount);
   localStorage.setItem(ONLINE_GHOST_COUNT_KEY,String(onlineGhostCount));
-}
-
-function readStoredGhostBestByTrack(){
-  try{
-    const parsed=JSON.parse(localStorage.getItem(LOCAL_GHOST_BEST_KEY)||'{}');
-    return parsed&&typeof parsed==='object'?parsed:{};
-  }catch(error){
-    console.warn('Failed to read local ghost store',error);
-    return {};
-  }
-}
-
-function getStoredGhostForTrack(trackId){
-  const key=normaliseTrackId(trackId);
-  const all=readStoredGhostBestByTrack();
-  const run=all[key];
-  if(!run||!Array.isArray(run.frames)||run.frames.length<2||!Number.isFinite(run.timeMs))return null;
-  return run;
-}
-
-function saveStoredGhostForTrack(trackId,run){
-  const key=normaliseTrackId(trackId);
-  const all=readStoredGhostBestByTrack();
-  const prev=all[key];
-  if(prev&&Number.isFinite(prev.timeMs)&&prev.timeMs<=run.timeMs)return;
-  all[key]=run;
-  localStorage.setItem(LOCAL_GHOST_BEST_KEY,JSON.stringify(all));
 }
 
 function createGhostTag(){
@@ -208,12 +167,8 @@ function addGhostVisual(replay,idx){
 async function setupGhostReplayFromTrack(trackId){
   ghostReplays=[];
   clearGhostVisual();
-  if(localGhostEnabled){
-    const localReplay=getStoredGhostForTrack(trackId);
-    if(localReplay)ghostReplays.push(localReplay);
-  }
-  if(onlineGhostEnabled&&state.trkData&&state.trkData.id){
-    const data=await loadTrackLeaderboard(state.trkData.id,{force:true,limit:Math.max(10,onlineGhostCount*4)});
+  if(onlineGhostEnabled&&trackId){
+    const data=await loadTrackLeaderboard(trackId,{force:true,limit:Math.max(10,onlineGhostCount*4)});
     for(const entry of data.entries){
       if(ghostReplays.length>=onlineGhostCount)break;
       if(entry.ghost_data&&Array.isArray(entry.ghost_data.frames)&&entry.ghost_data.frames.length>1){
@@ -256,7 +211,6 @@ async function finalizeGhostRecording(){
   ghostRecord.username=normalizeGhostName(user&&user.name);
   ghostRecord.timeMs=Math.round(Math.max(0,state.pCar.finTime)*1000);
   if(ghostRecord.frames.length<2)return null;
-  if(localGhostEnabled)saveStoredGhostForTrack(state.trkData.id,ghostRecord);
   return {
     username:ghostRecord.username,
     carData:{...ghostRecord.carData},
@@ -503,7 +457,7 @@ async function initRace(){
 
   let corridors = state.cityCorridors;
 
-  const ghostModeEnabled=localGhostEnabled||onlineGhostEnabled;
+  const ghostModeEnabled=onlineGhostEnabled;
   const raceCars=instantiateRaceCars({
     trackPoints: state.trkPts,
     cars: CARS,
@@ -1596,7 +1550,6 @@ document.getElementById('quitToMenuBtn').addEventListener('click', showMain);
 document.getElementById('musicVolSlider').addEventListener('input', e => onMusicVol(e.target.value));
 document.getElementById('sfxVolSlider').addEventListener('input', e => onSfxVol(e.target.value));
 document.getElementById('touchToggleInput').addEventListener('input', e => onTouchControlsToggle(e.target.checked));
-document.getElementById('ghostToggleInput').addEventListener('input', e => setGhostToggle(e.target.checked));
 document.getElementById('onlineGhostToggleInput').addEventListener('input', e => setOnlineGhostToggle(e.target.checked));
 document.getElementById('onlineGhostCountSelect').addEventListener('change', e => setOnlineGhostCount(e.target.value));
 document.getElementById('settingsCloseBtn').addEventListener('click', closeSettings);
@@ -1646,7 +1599,6 @@ scene.background=new THREE.Color(0x050510);
 setupTouchControls(state.gState);
 initTouchSettings();
 initAudioSettings();
-setGhostToggle(readGhostToggle());
 setOnlineGhostToggle(readOnlineGhostToggle());
 setOnlineGhostCount(readOnlineGhostCount());
 document.querySelectorAll('.menuVersion').forEach(el=>{

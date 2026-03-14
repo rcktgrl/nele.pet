@@ -140,7 +140,7 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .toggleLbl{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:#667;}
 .touchCfgHint{margin:10px 4px 0;font-size:11px;color:#556;letter-spacing:1px;}
 #touchToggleInput{width:20px;height:20px;accent-color:#ff5500;cursor:pointer;}
-#ghostToggleInput,#onlineGhostToggleInput{width:20px;height:20px;accent-color:#66d9ff;cursor:pointer;}
+#onlineGhostToggleInput{width:20px;height:20px;accent-color:#66d9ff;cursor:pointer;}
 #onlineGhostCountSelect{min-width:170px;background:#0d1320;color:#eef3ff;border:1px solid #243246;border-radius:8px;padding:8px 10px;font:inherit;cursor:pointer;}
 #touchControls{position:fixed;inset:0;display:none;justify-content:space-between;align-items:flex-end;padding:12px;pointer-events:none;z-index:250;}
 .touchCluster{display:flex;gap:10px;pointer-events:none;}
