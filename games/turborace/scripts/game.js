@@ -1436,10 +1436,17 @@ function makeEditableTrackFromGameTrack(src){
 function normaliseStoredTrack(raw){
   if(!raw) return null;
   let track=raw;
-  if(typeof track==='string'){
-    try{ track=JSON.parse(track); }catch{ return null; }
+  for(let i=0;i<3;i++){
+    if(typeof track==='string'){
+      try{ track=JSON.parse(track); }catch{ return null; }
+      continue;
+    }
+    if(track&&typeof track==='object'&&track.track_data!==undefined){
+      track=track.track_data;
+      continue;
+    }
+    break;
   }
-  if(track&&typeof track==='object'&&track.track_data) track=track.track_data;
   if(!track||typeof track!=='object') return null;
   const out=deepClone(track);
   out.id=String(out.id||raw.track_id||'');
@@ -1500,6 +1507,16 @@ function mergeTracksById(...groups){
   return out;
 }
 
+function isAuthPolicyError(error){
+  const msg=String(error&&error.message||'').toLowerCase();
+  return error&&(
+    error.code==='42501' ||
+    msg.includes('row-level security') ||
+    msg.includes('permission denied') ||
+    msg.includes('not authenticated')
+  );
+}
+
 async function syncEditorTracksFromCloud(){
   if(!customTrackSyncAvailable) return;
   let result=await supabase.from(CUSTOM_TRACKS_TABLE)
@@ -1515,6 +1532,10 @@ async function syncEditorTracksFromCloud(){
   }
 
   if(result.error){
+    if(isAuthPolicyError(result.error)){
+      console.info('Custom track cloud sync skipped (auth required).');
+      return;
+    }
     customTrackSyncAvailable=false;
     console.warn('Custom track sync unavailable:',result.error.message||result.error);
     return;
@@ -1527,11 +1548,20 @@ async function syncEditorTracksFromCloud(){
 
 async function uploadCustomTrack(track){
   if(!customTrackSyncAvailable||!track||!track.id) return false;
+  const { data:{session} }=await supabase.auth.getSession();
+  if(!session){
+    console.info('Custom track cloud sync skipped (no signed-in user).');
+    return false;
+  }
   const {error}=await supabase.from(CUSTOM_TRACKS_TABLE).upsert({
     track_id:String(track.id),
     track_data:track
   },{onConflict:'track_id'});
   if(error){
+    if(isAuthPolicyError(error)){
+      console.info('Custom track cloud sync blocked by policy; keeping local save.');
+      return false;
+    }
     console.warn('Failed to sync custom track:',error.message||error);
     customTrackSyncAvailable=false;
     return false;
