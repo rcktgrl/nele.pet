@@ -1,3 +1,5 @@
+const PROJECTILE_RADIUS_SCALE = 0.5;
+
 let _projectileInstanceCounter = 0;
 
 function createProjectileInstanceId() {
@@ -57,7 +59,8 @@ function buildProjectileRuntimeState(projectileTypeId, runtimeData = {}, options
     runtimeData.effects || {}
   );
 
-  const baseRadius = runtimeData.radius ?? effectivePipeline.stats?.radius ?? 4;
+  const rawRadius = runtimeData.radius ?? effectivePipeline.stats?.radius ?? 4;
+  const baseRadius = rawRadius * PROJECTILE_RADIUS_SCALE;
 
   const projectile = {
     instanceId: createProjectileInstanceId(),
