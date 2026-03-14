@@ -347,7 +347,87 @@ function drawTowers() {
     }
   }
 }
-function drawEnemies(){for(const e of game.enemies){ctx.save();ctx.fillStyle=e.isBoss?'#ff667f':(e.color||(e.isFast?'#59f3ff':'#ffe66b'));ctx.beginPath();if(e.isFast){ctx.moveTo(e.x,e.y-e.radius);ctx.lineTo(e.x+e.radius,e.y);ctx.lineTo(e.x,e.y+e.radius);ctx.lineTo(e.x-e.radius,e.y);ctx.closePath()}else ctx.arc(e.x,e.y,e.radius,0,Math.PI*2);ctx.fill();if(e.core){ctx.fillStyle=e.core;ctx.beginPath();ctx.arc(e.x,e.y,Math.max(3,e.radius*.38),0,Math.PI*2);ctx.fill()}const w=30,hp=Math.max(0,e.hp/e.maxHp);ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(e.x-w/2,e.y-e.radius-14,w,5);ctx.fillStyle=e.isBoss?'#ff5edc':(e.isFast?'#a5ff68':'#59f3ff');ctx.fillRect(e.x-w/2,e.y-e.radius-14,w*hp,5);ctx.restore()}}
+function drawEnemies(){
+  for(const e of game.enemies){
+    ctx.save();
+
+    if(e.isBoss){
+      ctx.fillStyle='#ff667f';
+      ctx.beginPath();
+      ctx.arc(e.x,e.y,e.radius,0,Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle='#ff5edc';
+      ctx.beginPath();
+      ctx.arc(e.x,e.y,Math.max(3,e.radius*.38),0,Math.PI*2);
+      ctx.fill();
+    }else{
+      const layers=Array.isArray(e.layers)?e.layers:[];
+      const baseRadius=e.radius;
+
+      for(let i=0;i<layers.length;i++){
+        if(i>e.activeLayerIndex) continue;
+        const layer=layers[i];
+        const layerScale=1+Math.min(.62,i*.18);
+        const r=baseRadius*layerScale;
+        ctx.fillStyle=layer.color||'#ffe66b';
+        ctx.globalAlpha=i===0?1:0.95;
+
+        if(e.isFast){
+          ctx.beginPath();
+          ctx.moveTo(e.x,e.y-r);
+          ctx.lineTo(e.x+r,e.y+r*0.8);
+          ctx.lineTo(e.x-r,e.y+r*0.8);
+          ctx.closePath();
+          ctx.fill();
+        }else{
+          ctx.beginPath();
+          ctx.arc(e.x,e.y,r,0,Math.PI*2);
+          ctx.fill();
+        }
+      }
+
+      ctx.globalAlpha=1;
+      ctx.fillStyle='#111111';
+      if(e.isFast){
+        const core=Math.max(3,baseRadius*.42);
+        ctx.beginPath();
+        ctx.moveTo(e.x,e.y-core);
+        ctx.lineTo(e.x+core,e.y+core*0.75);
+        ctx.lineTo(e.x-core,e.y+core*0.75);
+        ctx.closePath();
+        ctx.fill();
+      }else{
+        ctx.beginPath();
+        ctx.arc(e.x,e.y,Math.max(3,baseRadius*.46),0,Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    const w=34,barX=e.x-w/2,barY=e.y-e.radius-16;
+    ctx.fillStyle='rgba(0,0,0,.45)';
+    ctx.fillRect(barX,barY,w,6);
+
+    if(Array.isArray(e.layers)&&!e.isBoss){
+      const activeIndex=Math.max(0,e.activeLayerIndex||0);
+      const active=e.layers[activeIndex]||null;
+      const lower=activeIndex>0?e.layers[activeIndex-1]:null;
+      ctx.fillStyle=lower?(lower.color||'#ffe66b'):'#000000';
+      ctx.fillRect(barX,barY,w,6);
+
+      if(active){
+        const ratio=Math.max(0,Math.min(1,active.hp/Math.max(1,active.maxHp)));
+        ctx.fillStyle=active.color||'#59f3ff';
+        ctx.fillRect(barX,barY,w*ratio,6);
+      }
+    }else{
+      const hp=Math.max(0,e.hp/Math.max(1,e.maxHp));
+      ctx.fillStyle=e.isBoss?'#ff5edc':'#59f3ff';
+      ctx.fillRect(barX,barY,w*hp,6);
+    }
+
+    ctx.restore();
+  }
+}
 function drawProjectiles() {
   for (const p of game.projectiles) {
     const projectileDef = resolveProjectileDef(p.projectileTypeId || 'basic_bullet');
@@ -484,7 +564,14 @@ function drawHoverPreview() {
   } else {
     if (!game.selectedTowerType) return;
 
-    const t = towerTypes[game.selectedTowerType];
+    const selectedDef = getTowerDef(game.selectedTowerType);
+    if (!selectedDef) return;
+
+    const t = towerTypes[game.selectedTowerType] || {
+      cost: selectedDef.stats.cost,
+      range: selectedDef.stats.range
+    };
+
     const f = getFusionPreview(game.selectedTowerType, game.hoveredCell);
     range = f ? f.range : t.range;
 
