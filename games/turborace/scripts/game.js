@@ -1822,7 +1822,7 @@ function resetEditorCameraToTrack(){
 }
 async function showTrackEditor(){
   ensureEditorBoot();
-  await syncEditorTracksFromCloud();
+  void syncEditorTracksFromCloud().catch(()=>{});
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
   document.getElementById('sEditor').style.display='flex';
   document.getElementById('hud').style.display='none';
@@ -2319,7 +2319,7 @@ function drawTrackPreview(canvas, track, color){
 
 async function showTrkSel(){
   loadEditorTracks();
-  await syncEditorTracksFromCloud();
+  void syncEditorTracksFromCloud().catch(()=>{});
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrk').style.display='flex';
   document.getElementById('btnNxt').disabled=(state.selTrk==null);
