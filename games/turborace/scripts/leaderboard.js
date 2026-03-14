@@ -164,28 +164,55 @@ export async function submitTrackTime(trackId, user, timeMs, car, ghostData = nu
     return false;
   }
 
-  const fastestExisting = Array.isArray(existingRows) && existingRows.length ? existingRows[0] : null;
-  const shouldInsertNew = !fastestExisting || nextTimeMs < Math.max(0, Number(fastestExisting.time_ms) || 0);
+  const rows = Array.isArray(existingRows) ? existingRows : [];
+  const fastestExisting = rows.length ? rows[0] : null;
+  const shouldReplaceExisting = !fastestExisting || nextTimeMs < Math.max(0, Number(fastestExisting.time_ms) || 0);
 
-  if (Array.isArray(existingRows) && existingRows.length) {
-    const idsToDelete = shouldInsertNew
-      ? existingRows.map((row) => row.id)
-      : existingRows.slice(1).map((row) => row.id);
-    if (idsToDelete.length) {
-      const { error: deleteError } = await supabase.from(LEADERBOARD_TABLE)
-        .delete()
-        .in('id', idsToDelete);
-      if (deleteError) {
-        console.error('Leaderboard cleanup delete error:', deleteError);
-        return false;
+  let error = null;
+  if (!fastestExisting) {
+    ({ error } = await supabase.from(LEADERBOARD_TABLE).insert(payload));
+  } else if (shouldReplaceExisting) {
+    ({ error } = await supabase.from(LEADERBOARD_TABLE)
+      .update(payload)
+      .eq('id', fastestExisting.id));
+  }
+
+  const staleRowsToDelete = rows.slice(1);
+  if (!error && staleRowsToDelete.length) {
+    const { error: deleteError } = await supabase.from(LEADERBOARD_TABLE)
+      .delete()
+      .in('id', staleRowsToDelete.map((row) => row.id));
+    if (deleteError) {
+      console.error('Leaderboard cleanup delete error:', deleteError);
+      return false;
+    }
+  }
+
+  if (!error) {
+    const { data: postWriteRows, error: postWriteError } = await supabase.from(LEADERBOARD_TABLE)
+      .select('id,time_ms')
+      .in('track_id', [key, ...legacyKeys])
+      .eq('user_id', userId)
+      .order('time_ms', { ascending: true });
+    if (postWriteError) {
+      console.error('Leaderboard post-write verify error:', postWriteError);
+      return false;
+    }
+    const postRows = Array.isArray(postWriteRows) ? postWriteRows : [];
+    if (postRows.length > 1) {
+      const idsToDelete = postRows.slice(1).map((row) => row.id);
+      if (idsToDelete.length) {
+        const { error: cleanupError } = await supabase.from(LEADERBOARD_TABLE)
+          .delete()
+          .in('id', idsToDelete);
+        if (cleanupError) {
+          console.error('Leaderboard post-write cleanup delete error:', cleanupError);
+          return false;
+        }
       }
     }
   }
 
-  let error = null;
-  if (shouldInsertNew) {
-    ({ error } = await supabase.from(LEADERBOARD_TABLE).insert(payload));
-  }
   if (error) {
     console.error('Leaderboard submit error:', error);
     const msg = String(error.message || '').toLowerCase();
