@@ -64,7 +64,7 @@ import {
   initAiSounds,
   clearAiSounds
 } from './audio.js';
-import { buildTrack, canPlaceDecorAsset } from './track-gen.js';
+import { buildTrack, canPlaceDecorAsset, LATEST_TRACK_GENERATION_VERSION } from './track-gen.js';
 import { TURBORACE_VERSION } from './version.js';
 
 import {
@@ -628,7 +628,9 @@ function makeEditableTrackFromGameTrack(src){
   return {
     id:src.id,name:src.name,desc:src.desc||'',laps:src.laps||3,rw:src.rw||12,previewColor:src.previewColor||'#44aaff',
     useBezier:src.useBezier!==false,timeOfDay:tod,groundColor:hexNumToCss(src.gnd||makeTimeOfDayPreset(tod).gnd),skyColor:hexNumToCss(src.sky||makeTimeOfDayPreset(tod).sky),
-    streetGrid:src.type==='city',gridSize:src.gridSize||70,enableRunoff:src.enableRunoff!==false,nodes:pts,assets:deepClone(src.assets||[]),scenerySeed:Number.isFinite(src.scenerySeed)?(src.scenerySeed>>>0):null,source:src.id,builtin:TRACKS.some(t=>String(t.id)===String(src.id))
+    streetGrid:src.type==='city',gridSize:src.gridSize||70,enableRunoff:src.enableRunoff!==false,
+    trackGenerationVersion:Number.isFinite(src.trackGenerationVersion)?Math.max(1,Math.floor(src.trackGenerationVersion)):1,
+    nodes:pts,assets:deepClone(src.assets||[]),scenerySeed:Number.isFinite(src.scenerySeed)?(src.scenerySeed>>>0):null,source:src.id,builtin:TRACKS.some(t=>String(t.id)===String(src.id))
   };
 }
 function normaliseStoredTrack(raw){
@@ -842,7 +844,7 @@ function editorTrackToGameTrack(){
   let wp, type='circuit', cityRoute=null;
   if(state.editorTrack.streetGrid){ cityRoute=makeCityRouteFromNodes(ordered, state.editorTrack.gridSize||70); wp=makeCityWpFromRoute(cityRoute, state.editorTrack.gridSize||70); type='city'; }
   else wp=state.editorTrack.useBezier?makeBezierPath(ordered,18):ordered.map(n=>[n.x,0,n.z]);
-  return {id:state.editorTrack.id||uniqueTrackId(),name:state.editorTrack.name||'Custom Track',desc:state.editorTrack.desc||'Custom track',laps:+state.editorTrack.laps||3,rw:+state.editorTrack.rw||12,wp,editorNodes:deepClone(ordered),previewColor:state.editorTrack.previewColor||'#44aaff',type,gridSize:state.editorTrack.gridSize||70,enableRunoff:state.editorTrack.enableRunoff!==false,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(state.editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(state.editorTrack.groundColor)||tod.gnd,timeOfDay:state.editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(state.editorTrack.assets||[]),scenerySeed:Number.isFinite(state.editorTrack.scenerySeed)?(state.editorTrack.scenerySeed>>>0):Math.floor(Math.random()*0x100000000),useBezier:!!state.editorTrack.useBezier};
+  return {id:state.editorTrack.id||uniqueTrackId(),name:state.editorTrack.name||'Custom Track',desc:state.editorTrack.desc||'Custom track',laps:+state.editorTrack.laps||3,rw:+state.editorTrack.rw||12,wp,editorNodes:deepClone(ordered),previewColor:state.editorTrack.previewColor||'#44aaff',type,gridSize:state.editorTrack.gridSize||70,enableRunoff:state.editorTrack.enableRunoff!==false,trackGenerationVersion:Number.isFinite(state.editorTrack.trackGenerationVersion)?Math.max(1,Math.floor(state.editorTrack.trackGenerationVersion)):1,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(state.editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(state.editorTrack.groundColor)||tod.gnd,timeOfDay:state.editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(state.editorTrack.assets||[]),scenerySeed:Number.isFinite(state.editorTrack.scenerySeed)?(state.editorTrack.scenerySeed>>>0):Math.floor(Math.random()*0x100000000),useBezier:!!state.editorTrack.useBezier};
 }
 function populateEditorUI(){
   normalizeEditorTrack();
@@ -1017,6 +1019,19 @@ function onEditorMetaChanged(){
 function onEditorStreetGridChanged(){
   onEditorMetaChanged();
 }
+function upgradeEditorTrackToLatestGeneration(){
+  if(!state.editorTrack) return;
+  const current=Number.isFinite(state.editorTrack.trackGenerationVersion)
+    ? Math.max(1,Math.floor(state.editorTrack.trackGenerationVersion))
+    : 1;
+  if(current>=LATEST_TRACK_GENERATION_VERSION){
+    notify('TRACK IS ALREADY ON LATEST GENERATION');
+    return;
+  }
+  state.editorTrack.trackGenerationVersion=LATEST_TRACK_GENERATION_VERSION;
+  requestEditorRebuild(false);
+  notify(`TRACK UPDATED TO GENERATION V${LATEST_TRACK_GENERATION_VERSION}`);
+}
 function onEditorNodeChanged(){
   const node=state.editorTrack.nodes[state.editorSelectedNode];
   if(!node)return;
@@ -1042,6 +1057,7 @@ function createNewEditorTrack(){
     skyColor:'#0d1a2e',
     streetGrid:false,
     enableRunoff:true,
+    trackGenerationVersion:LATEST_TRACK_GENERATION_VERSION,
     gridSize:70,
     nodes:[
       {x:0,z:0,steepness:40,type:'start-finish'},
@@ -1707,6 +1723,7 @@ document.getElementById('delAssetBtn').addEventListener('click', deleteSelectedE
 document.getElementById('resetEditorCamBtn').addEventListener('click', resetEditorCameraToTrack);
 document.getElementById('saveEditorTrackBtn').addEventListener('click', saveEditorTrack);
 document.getElementById('resetEditorTrackBtn').addEventListener('click', resetEditorTrack);
+document.getElementById('upgradeTrackGenerationBtn').addEventListener('click', upgradeEditorTrackToLatestGeneration);
 document.getElementById('closeLeaderboardModalBtn').addEventListener('click', closeTrackLeaderboardModal);
 document.getElementById('leaderboardModal').addEventListener('click', e=>{ if(e.target.id==='leaderboardModal') closeTrackLeaderboardModal(); });
 document.getElementById('menuBtn').addEventListener('click', showMain);

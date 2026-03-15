@@ -131,5 +131,7 @@ export function normalizeEditorTrack(){
   }
   if(!Array.isArray(state.editorTrack.assets)) state.editorTrack.assets=[];
   if(typeof state.editorTrack.enableRunoff!=='boolean') state.editorTrack.enableRunoff=true;
+  if(!Number.isFinite(state.editorTrack.trackGenerationVersion)) state.editorTrack.trackGenerationVersion=1;
+  state.editorTrack.trackGenerationVersion=Math.max(1,Math.floor(state.editorTrack.trackGenerationVersion));
   state.editorTrack.gridSize=Math.max(40,Math.min(120,+state.editorTrack.gridSize||70));
 }

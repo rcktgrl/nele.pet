@@ -2,6 +2,8 @@ import { mat, matE } from "./render/materials.js";
 import { state, scene } from "./state.js";
 import { THREE } from "./three.js";
 
+export const LATEST_TRACK_GENERATION_VERSION = 2;
+
 let roadTex=null;
 
 function hashScenerySeed(source){
@@ -345,6 +347,10 @@ export function canPlaceDecorAsset(data,px,pz,{exclusionPad=4,startBuffer=28}={}
 function buildRunoffProfile(pts,data){
   const n=pts.length;
   if(n<6) return null;
+  const generationVersion=Number.isFinite(data?.trackGenerationVersion)
+    ? Math.max(1,Math.floor(data.trackGenerationVersion))
+    : 1;
+  if(generationVersion<2) return null;
   const zones=getTrackSceneryExclusionZones(data);
   const leftExpand=new Array(Math.max(0,n-1)).fill(0);
   const rightExpand=new Array(Math.max(0,n-1)).fill(0);
@@ -363,7 +369,8 @@ function buildRunoffProfile(pts,data){
     const inLen=Math.hypot(inX,inZ)||1, outLen=Math.hypot(outX,outZ)||1;
     const dot=(inX*outX+inZ*outZ)/(inLen*outLen);
     const curvature=Math.max(0,Math.min(1,(0.995-dot)/0.30));
-    const baseRunoff=rw*(0.10+curvature*0.60);
+    const easedCurvature=curvature*curvature*(3-2*curvature);
+    const baseRunoff=rw*(0.08+easedCurvature*0.58);
     const baseExpand=0.6+(baseRunoff*0.85);
 
     const p=pts[i];
@@ -387,7 +394,7 @@ function buildRunoffProfile(pts,data){
     const turn=Math.sign(inX*outZ-inZ*outX)||1;
     const side=turn>0?-1:1;
     const sharp=Math.min(1,Math.max(0,(0.80-dot)/0.85));
-    const width=Math.min(rw*2,rw*(0.32+sharp*1.68));
+    const width=Math.min(rw*2,rw*(0.28+sharp*1.68));
     const cornerLen=Math.max(10,Math.min(34,Math.round(10+sharp*24)));
     const leadIn=Math.max(3,Math.round(cornerLen*0.25));
     const start=Math.max(1,Math.min(n-3,i-leadIn));
@@ -404,8 +411,8 @@ function buildRunoffProfile(pts,data){
       const fallLen=Math.max(1,node.end-node.peak);
       const riseT=Math.max(0,Math.min(1,(j-node.start)/riseLen));
       const fallT=Math.max(0,Math.min(1,(j-node.peak)/fallLen));
-      const rampIn=Math.sin(riseT*Math.PI*0.5);
-      const rampOut=Math.cos(fallT*Math.PI*0.5);
+      const rampIn=riseT*riseT*(3-2*riseT);
+      const rampOut=1-(fallT*fallT*(3-2*fallT));
       const blend=(j<=node.peak)?rampIn:rampOut;
       const runoffW=node.width*blend;
       const wallExpand=(runoffW*0.9)+0.8;
@@ -420,7 +427,7 @@ function buildRunoffProfile(pts,data){
   }
 
   for(const arr of [leftRunoff,rightRunoff,leftExpand,rightExpand]){
-    for(let pass=0;pass<2;pass++){
+    for(let pass=0;pass<4;pass++){
       for(let j=1;j<arr.length-1;j++) arr[j]=(arr[j-1]+arr[j]+arr[j+1])/3;
     }
   }
