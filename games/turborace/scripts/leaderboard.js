@@ -71,6 +71,12 @@ export function leaderboardTimeToSeconds(timeMs) {
   return numeric / 1000;
 }
 
+function leaderboardComparableTimeMs(timeMs) {
+  const numeric = Math.max(0, Number(timeMs) || 0);
+  if (numeric < 1000) return Math.round(numeric * 1000);
+  return Math.round(numeric);
+}
+
 export function renderLeaderboardRows(container, entries, highlightName) {
   if (!container) return;
   if (!entries || !entries.length) {
@@ -125,7 +131,7 @@ export async function loadTrackLeaderboard(trackId, { force = false, limit = 10,
     car_hex: /^#[0-9a-f]{6}$/i.test(String(row.car_hex || '')) ? String(row.car_hex) : null,
     time_ms: Math.max(0, Number(row.time_ms) || 0),
     ghost_data: sanitizeGhostData(row.ghost_data)
-  }));
+  })).sort((a, b) => leaderboardComparableTimeMs(a.time_ms) - leaderboardComparableTimeMs(b.time_ms));
   const payload = { best: entries[0] || null, entries };
   leaderboardByTrack.set(key, payload);
   return payload;
@@ -157,16 +163,17 @@ export async function submitTrackTime(trackId, user, timeMs, car, ghostData = nu
   const { data: existingRows, error: existingError } = await supabase.from(LEADERBOARD_TABLE)
     .select('id,time_ms,track_id')
     .in('track_id', [key, ...legacyKeys])
-    .eq('user_id', userId)
-    .order('time_ms', { ascending: true });
+    .eq('user_id', userId);
   if (existingError) {
     console.error('Leaderboard existing row lookup error:', existingError);
     return false;
   }
 
   const rows = Array.isArray(existingRows) ? existingRows : [];
-  const fastestExisting = rows.length ? rows[0] : null;
-  const shouldReplaceExisting = !fastestExisting || nextTimeMs < Math.max(0, Number(fastestExisting.time_ms) || 0);
+  const fastestExisting = rows.length
+    ? rows.reduce((best, row) => (leaderboardComparableTimeMs(row.time_ms) < leaderboardComparableTimeMs(best.time_ms) ? row : best), rows[0])
+    : null;
+  const shouldReplaceExisting = !fastestExisting || nextTimeMs < leaderboardComparableTimeMs(fastestExisting.time_ms);
 
   let error = null;
   if (!fastestExisting) {
@@ -177,7 +184,7 @@ export async function submitTrackTime(trackId, user, timeMs, car, ghostData = nu
       .eq('id', fastestExisting.id));
   }
 
-  const staleRowsToDelete = rows.slice(1);
+  const staleRowsToDelete = rows.filter((row) => !fastestExisting || row.id !== fastestExisting.id);
   if (!error && staleRowsToDelete.length) {
     const { error: deleteError } = await supabase.from(LEADERBOARD_TABLE)
       .delete()
