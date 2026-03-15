@@ -919,8 +919,30 @@ function setEditorNodeCount(raw){
     nodes.push({x:last.x+dx*0.8+22,z:last.z+dz*0.8+18,steepness:last.steepness||40,type:'no-auto'});
   }
   while(nodes.length>target){
-    nodes.pop();
+    const next=[];
+    for(let i=0;i<nodes.length;i+=2){
+      const a=nodes[i];
+      const b=nodes[(i+1)%nodes.length];
+      if(!b||next.length>=target){
+        if(next.length<target) next.push({...a});
+        continue;
+      }
+      next.push({
+        x:(a.x+b.x)*0.5,
+        z:(a.z+b.z)*0.5,
+        steepness:Math.round(((a.steepness||40)+(b.steepness||40))*0.5),
+        type:(a.type==='start-finish'||b.type==='start-finish')?'start-finish':'no-auto'
+      });
+    }
+    if(next.length===nodes.length){
+      nodes.pop();
+    }
+    else {
+      nodes.splice(0,nodes.length,...next.slice(0,Math.max(target,3)));
+    }
+    if(nodes.length<target) break;
   }
+  while(nodes.length>target) nodes.pop();
   state.editorSelectedNode=Math.max(0,Math.min(state.editorSelectedNode,nodes.length-1));
   normalizeEditorTrack();
   syncSelectedNodeUI();
@@ -929,13 +951,16 @@ function setEditorNodeCount(raw){
 }
 function syncEditorBrushUI(){
   const kind=state.editorBrushAsset||'tree';
-  const size=state.editorBrushSize||24;
+  const count=Math.max(1,Math.round(state.editorBrushSize||1));
+  const enabled=!!state.editorBrushEnabled;
   const sel=document.getElementById('editorBrushAsset');
   const slider=document.getElementById('editorBrushSize');
   const label=document.getElementById('editorBrushSizeVal');
+  const toggle=document.getElementById('editorBrushEnabled');
   if(sel) sel.value=kind;
-  if(slider) slider.value=size;
-  if(label) label.textContent=String(size);
+  if(slider) slider.value=String(count);
+  if(label) label.textContent=String(count);
+  if(toggle) toggle.checked=enabled;
   document.querySelectorAll('#editorAssetPalette .assetChip').forEach(el=>{
     el.classList.toggle('active', el.dataset.asset===kind);
   });
@@ -945,19 +970,33 @@ function setEditorBrushAsset(kind){
   state.editorBrushAsset=valid.includes(kind)?kind:'tree';
   syncEditorBrushUI();
 }
+function setEditorBrushEnabled(enabled){
+  state.editorBrushEnabled=!!enabled;
+  syncEditorBrushUI();
+}
 function setEditorBrushSize(raw){
-  state.editorBrushSize=Math.max(8,Math.min(80,Math.round(Number(raw)||24)));
+  state.editorBrushSize=Math.max(1,Math.min(25,Math.round(Number(raw)||1)));
   syncEditorBrushUI();
 }
 function paintEditorAssetsAt(x,z){
-  const radius=state.editorBrushSize||24;
+  const count=Math.max(1,Math.round(state.editorBrushSize||1));
   const type=state.editorBrushAsset||'tree';
-  if(!editorCanPlaceAssetAt(x,z)) return false;
-  const exists=state.editorTrack.assets.some(a=>Math.hypot(a.x-x,a.z-z)<Math.max(6,radius*0.3));
-  if(exists) return false;
-  state.editorTrack.assets.push({type,x,z});
-  state.editorSelectedAsset=state.editorTrack.assets.length-1;
-  return true;
+  const spacing=12;
+  let placed=0;
+  for(let i=0;i<count;i++){
+    const angle=(i/count)*Math.PI*2;
+    const ring=Math.floor(i/8)+1;
+    const offset=i===0?0:ring*spacing;
+    const px=x+Math.cos(angle)*offset;
+    const pz=z+Math.sin(angle)*offset;
+    if(!editorCanPlaceAssetAt(px,pz)) continue;
+    const exists=state.editorTrack.assets.some(a=>Math.hypot(a.x-px,a.z-pz)<10);
+    if(exists) continue;
+    state.editorTrack.assets.push({type,x:px,z:pz});
+    state.editorSelectedAsset=state.editorTrack.assets.length-1;
+    placed++;
+  }
+  return placed>0;
 }
 function onEditorMetaChanged(){
   if(!state.editorTrack)return;
@@ -1241,7 +1280,7 @@ function bindEditorCanvas(){
       requestEditorRebuild(false);
       return;
     }
-    if(e.altKey){
+    if(e.altKey&&state.editorBrushEnabled){
       const p=editorClientToGround(e.clientX,e.clientY);
       if(p&&paintEditorAssetsAt(p.x,p.z)) requestEditorRebuild(false);
       state.editorDrag={kind:'brush'};
@@ -1255,7 +1294,7 @@ function bindEditorCanvas(){
       return;
     }
     const p=editorClientToGround(e.clientX,e.clientY);
-    if(p&&paintEditorAssetsAt(p.x,p.z)){
+    if(state.editorBrushEnabled&&p&&paintEditorAssetsAt(p.x,p.z)){
       requestEditorRebuild(false);
       state.editorDrag={kind:'brush'};
       return;
@@ -1297,7 +1336,7 @@ function bindEditorCanvas(){
       state.editorTrack.assets[state.editorDrag.index].x=p.x;
       state.editorTrack.assets[state.editorDrag.index].z=p.z;
     }
-    else if(state.editorDrag.kind==='brush' && paintEditorAssetsAt(p.x,p.z)){
+    else if(state.editorBrushEnabled&&state.editorDrag.kind==='brush' && paintEditorAssetsAt(p.x,p.z)){
       // Brush paints continuously while Alt+dragging.
     }
     requestEditorRebuild(false);
@@ -1657,6 +1696,7 @@ document.getElementById('editorGridSize').addEventListener('input', onEditorMeta
 document.getElementById('editorEnableRunoff').addEventListener('change', onEditorMetaChanged);
 document.getElementById('editorNodeCount').addEventListener('input', e=>setEditorNodeCount(e.target.value));
 document.getElementById('editorBrushAsset').addEventListener('change', e=>setEditorBrushAsset(e.target.value));
+document.getElementById('editorBrushEnabled').addEventListener('change', e=>setEditorBrushEnabled(e.target.checked));
 document.getElementById('editorBrushSize').addEventListener('input', e=>setEditorBrushSize(e.target.value));
 document.getElementById('editorNodeType').addEventListener('change', onEditorNodeChanged);
 document.getElementById('editorSteepness').addEventListener('input', onEditorNodeChanged);
