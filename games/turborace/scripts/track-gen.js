@@ -4,6 +4,40 @@ import { THREE } from "./three.js";
 
 let roadTex=null;
 
+function hashScenerySeed(source){
+  const str=String(source||'turborace-scenery');
+  let h=2166136261;
+  for(let i=0;i<str.length;i++){
+    h^=str.charCodeAt(i);
+    h=Math.imul(h,16777619);
+  }
+  return (h>>>0)||1;
+}
+
+function createSeededRandom(seed){
+  let s=(seed>>>0)||1;
+  return ()=>{
+    s=(Math.imul(1664525,s)+1013904223)>>>0;
+    return s/4294967296;
+  };
+}
+
+function withSeededRandom(seed,fn){
+  const orig=Math.random;
+  Math.random=createSeededRandom(seed);
+  try{return fn();}
+  finally{Math.random=orig;}
+}
+
+function ensureTrackScenerySeed(data){
+  if(!data||typeof data!=='object') return hashScenerySeed('fallback');
+  if(Number.isFinite(data.scenerySeed)) return data.scenerySeed>>>0;
+  const source=(data.id||data.name||'track')+'|'+JSON.stringify(data.wp||[]);
+  const seed=hashScenerySeed(source);
+  data.scenerySeed=seed;
+  return seed;
+}
+
 export function buildTrack(data){
   state.cityCorridors=null; state.cityAiPts=null;
   state.sceneryExclusionZones=[];
@@ -53,9 +87,12 @@ export function buildTrack(data){
 
 export function buildTrackScenery(data){
   if(!state.trkCurve) return;
-  if(data.type==='city') addCityScenery(state.trkCurve,data);
-  else addScenery(state.trkCurve,data);
-  applyPlacedAssets(data);
+  const scenerySeed=ensureTrackScenerySeed(data);
+  withSeededRandom(scenerySeed,()=>{
+    if(data.type==='city') addCityScenery(state.trkCurve,data);
+    else addScenery(state.trkCurve,data);
+    applyPlacedAssets(data);
+  });
 }
 
 function makeRoadTexture(){
