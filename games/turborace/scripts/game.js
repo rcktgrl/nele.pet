@@ -860,6 +860,8 @@ function populateEditorUI(){
   document.getElementById('editorGridSize').value=state.editorTrack.gridSize||70;
   renderEditorTrackList();
   syncSelectedNodeUI();
+  syncEditorNodeCountUI();
+  syncEditorBrushUI();
   requestEditorRebuild(true);
 }
 function renderEditorTrackList(){
@@ -886,6 +888,69 @@ function syncSelectedNodeUI(){
   document.getElementById('editorNodeType').value=node.type||'no-auto';
   document.getElementById('editorSteepness').value=Math.round(node.steepness||40);
   document.getElementById('editorNodeInfo').textContent='Node '+(state.editorSelectedNode+1)+' · '+(node.type==='start-finish'?'Start/finish':'No scenery')+' · Steepness '+Math.round(node.steepness||40);
+}
+function syncEditorNodeCountUI(){
+  const count=(state.editorTrack?.nodes||[]).length;
+  const slider=document.getElementById('editorNodeCount');
+  const label=document.getElementById('editorNodeCountVal');
+  if(slider) slider.value=count;
+  if(label) label.textContent=String(count);
+}
+function setEditorNodeCount(raw){
+  if(!state.editorTrack) return;
+  const target=Math.max(3,Math.min(24,Math.round(Number(raw)||state.editorTrack.nodes.length||3)));
+  const nodes=state.editorTrack.nodes;
+  if(nodes.length===target){
+    syncEditorNodeCountUI();
+    return;
+  }
+  while(nodes.length<target){
+    const last=nodes[nodes.length-1]||{x:0,z:0,steepness:40,type:'no-auto'};
+    const prev=nodes[nodes.length-2]||{x:last.x-80,z:last.z};
+    const dx=last.x-prev.x;
+    const dz=last.z-prev.z;
+    nodes.push({x:last.x+dx*0.8+22,z:last.z+dz*0.8+18,steepness:last.steepness||40,type:'no-auto'});
+  }
+  while(nodes.length>target){
+    nodes.pop();
+  }
+  state.editorSelectedNode=Math.max(0,Math.min(state.editorSelectedNode,nodes.length-1));
+  normalizeEditorTrack();
+  syncSelectedNodeUI();
+  syncEditorNodeCountUI();
+  requestEditorRebuild(false);
+}
+function syncEditorBrushUI(){
+  const kind=state.editorBrushAsset||'tree';
+  const size=state.editorBrushSize||24;
+  const sel=document.getElementById('editorBrushAsset');
+  const slider=document.getElementById('editorBrushSize');
+  const label=document.getElementById('editorBrushSizeVal');
+  if(sel) sel.value=kind;
+  if(slider) slider.value=size;
+  if(label) label.textContent=String(size);
+  document.querySelectorAll('#editorAssetPalette .assetChip').forEach(el=>{
+    el.classList.toggle('active', el.dataset.asset===kind);
+  });
+}
+function setEditorBrushAsset(kind){
+  const valid=['tree','building','park'];
+  state.editorBrushAsset=valid.includes(kind)?kind:'tree';
+  syncEditorBrushUI();
+}
+function setEditorBrushSize(raw){
+  state.editorBrushSize=Math.max(8,Math.min(80,Math.round(Number(raw)||24)));
+  syncEditorBrushUI();
+}
+function paintEditorAssetsAt(x,z){
+  const radius=state.editorBrushSize||24;
+  const type=state.editorBrushAsset||'tree';
+  if(!editorCanPlaceAssetAt(x,z)) return false;
+  const exists=state.editorTrack.assets.some(a=>Math.hypot(a.x-x,a.z-z)<Math.max(6,radius*0.3));
+  if(exists) return false;
+  state.editorTrack.assets.push({type,x,z});
+  state.editorSelectedAsset=state.editorTrack.assets.length-1;
+  return true;
 }
 function onEditorMetaChanged(){
   if(!state.editorTrack)return;
@@ -954,22 +1019,13 @@ function duplicateEditorTrack(){
   populateEditorUI();
 }
 function addEditorNode(){
-  const n=state.editorTrack.nodes[state.editorSelectedNode]||state.editorTrack.nodes[0];
-  state.editorTrack.nodes.splice(state.editorSelectedNode+1,0,{x:n.x+40,z:n.z+20,steepness:n.steepness||40,type:'no-auto'});
-  state.editorSelectedNode=Math.min(state.editorSelectedNode+1,state.editorTrack.nodes.length-1);
-  syncSelectedNodeUI();
-  requestEditorRebuild(false);
+  setEditorNodeCount((state.editorTrack.nodes||[]).length+1);
 }
 function insertEditorNodeAfter(){
   addEditorNode();
 }
 function deleteEditorNode(){
-  if(state.editorTrack.nodes.length<=3) return;
-  state.editorTrack.nodes.splice(state.editorSelectedNode,1);
-  state.editorSelectedNode=Math.max(0,Math.min(state.editorSelectedNode,state.editorTrack.nodes.length-1));
-  normalizeEditorTrack();
-  syncSelectedNodeUI();
-  requestEditorRebuild(false);
+  setEditorNodeCount((state.editorTrack.nodes||[]).length-1);
 }
 function deleteSelectedEditorAsset(){
   if(state.editorSelectedAsset<0) return;
@@ -1120,7 +1176,9 @@ function bindEditorAssetPalette(){
     el.dataset.bound='1';
     el.addEventListener('dragstart',e=>{
       e.dataTransfer.setData('text/plain', el.dataset.asset);
+      setEditorBrushAsset(el.dataset.asset);
     });
+    el.addEventListener('click',()=>setEditorBrushAsset(el.dataset.asset));
   });
 }
 function bindEditorCanvas(){
@@ -1156,11 +1214,9 @@ function bindEditorCanvas(){
   canvas.addEventListener('drop',e=>{
     e.preventDefault();
     const kind=e.dataTransfer.getData('text/plain');
-    if(!kind) return;
+    if(kind) setEditorBrushAsset(kind);
     const p=editorClientToGround(e.clientX,e.clientY);
-    if(!p||!editorCanPlaceAssetAt(p.x,p.z)) return;
-    state.editorTrack.assets.push({type:kind,x:p.x,z:p.z});
-    state.editorSelectedAsset=state.editorTrack.assets.length-1;
+    if(!p||!paintEditorAssetsAt(p.x,p.z)) return;
     requestEditorRebuild(false);
   });
   canvas.addEventListener('pointerdown',e=>{
@@ -1176,6 +1232,12 @@ function bindEditorCanvas(){
       state.editorSelectedAsset=hit.index;
       state.editorDrag={kind:'asset',index:hit.index};
       requestEditorRebuild(false);
+      return;
+    }
+    if(e.altKey){
+      const p=editorClientToGround(e.clientX,e.clientY);
+      if(p&&paintEditorAssetsAt(p.x,p.z)) requestEditorRebuild(false);
+      state.editorDrag={kind:'brush'};
       return;
     }
     if(hit&&hit.kind==='node'){
@@ -1221,6 +1283,9 @@ function bindEditorCanvas(){
     else if(state.editorDrag.kind==='asset' && editorCanPlaceAssetAt(p.x,p.z)){
       state.editorTrack.assets[state.editorDrag.index].x=p.x;
       state.editorTrack.assets[state.editorDrag.index].z=p.z;
+    }
+    else if(state.editorDrag.kind==='brush' && paintEditorAssetsAt(p.x,p.z)){
+      // Brush paints continuously while Alt+dragging.
     }
     requestEditorRebuild(false);
   });
@@ -1577,6 +1642,9 @@ document.getElementById('editorTimeOfDay').addEventListener('change', onEditorMe
 document.getElementById('editorStreetGrid').addEventListener('change', onEditorStreetGridChanged);
 document.getElementById('editorGridSize').addEventListener('input', onEditorMetaChanged);
 document.getElementById('editorEnableRunoff').addEventListener('change', onEditorMetaChanged);
+document.getElementById('editorNodeCount').addEventListener('input', e=>setEditorNodeCount(e.target.value));
+document.getElementById('editorBrushAsset').addEventListener('change', e=>setEditorBrushAsset(e.target.value));
+document.getElementById('editorBrushSize').addEventListener('input', e=>setEditorBrushSize(e.target.value));
 document.getElementById('editorNodeType').addEventListener('change', onEditorNodeChanged);
 document.getElementById('editorSteepness').addEventListener('input', onEditorNodeChanged);
 document.getElementById('addNodeBtn').addEventListener('click', addEditorNode);
