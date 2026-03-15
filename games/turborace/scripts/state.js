@@ -44,6 +44,7 @@ export const state = {
     trkCurve: null,
     trkPts: [],
     trkCurv: [],
+    sceneryExclusionZones: [],
     aiControllers: [],
     cityCorridors: null, // For city tracks: array of {x,z,hw,hd} axis-aligned driveable rectangles
     cityAiPts: null,    // For city tracks: dense waypoints following grid roads exactly
