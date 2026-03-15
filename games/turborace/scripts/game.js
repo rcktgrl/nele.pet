@@ -1077,13 +1077,22 @@ function createNewEditorTrack(){
   populateEditorUI();
 }
 function duplicateEditorTrack(){
-  const sourceNodes=(state.editorTrack?.nodes||[]).map(node=>({x:+node.x||0,z:+node.z||0}));
+  const sourceNodes=(state.editorTrack?.nodes||[]).map((node,idx)=>({
+    x:+node.x||0,
+    z:+node.z||0,
+    steepness:Number.isFinite(node.steepness)?(+node.steepness):40,
+    gravelPitSize:Number.isFinite(node.gravelPitSize)?Math.max(0,Math.min(400,+node.gravelPitSize||100)):100,
+    type:node.type||(idx===0?'start-finish':'no-auto')
+  }));
   createNewEditorTrack();
   if(!sourceNodes.length) return;
   setEditorNodeCount(sourceNodes.length);
   state.editorTrack.nodes.forEach((node,idx)=>{
     node.x=sourceNodes[idx].x;
     node.z=sourceNodes[idx].z;
+    node.steepness=sourceNodes[idx].steepness;
+    node.gravelPitSize=sourceNodes[idx].gravelPitSize;
+    node.type=sourceNodes[idx].type;
   });
   requestEditorRebuild(true);
   notify('NEW TRACK CREATED FROM CURRENT COORDINATES');

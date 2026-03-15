@@ -1,1 +1,1 @@
-export const TURBORACE_VERSION = 'v0.60';
+export const TURBORACE_VERSION = 'v0.61';
