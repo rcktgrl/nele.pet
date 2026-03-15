@@ -147,8 +147,11 @@ export async function submitTrackTime(trackId, user, timeMs, car, ghostData = nu
     return false;
   }
 
-  const userId = sanitizeUserId(user.user_id);
-  const username = sanitizeLeaderboardName(user.name);
+  const sessionUserId = sanitizeUserId(session.user.id);
+  const userId = sessionUserId || sanitizeUserId(user.user_id);
+  const username = sanitizeLeaderboardName(
+    user.name || session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'Player'
+  );
   const nextTimeMs = Math.round(Math.max(0, timeMs || 0) * 1000);
   const payload = {
     track_id: key,
