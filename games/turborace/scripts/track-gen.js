@@ -352,6 +352,35 @@ export function canPlaceDecorAsset(data,px,pz,{exclusionPad=4,startBuffer=28}={}
   return dx*dx+dz*dz>=startBuffer*startBuffer;
 }
 
+
+function getEditorRunoffMultipliers(data,pts){
+  const editorNodes=Array.isArray(data?.editorNodes)?data.editorNodes:[];
+  if(!editorNodes.length||pts.length<2) return null;
+  const multipliers=new Array(pts.length).fill(1);
+  const nodeEntries=editorNodes.map(node=>({
+    x:+node.x||0,
+    z:+node.z||0,
+    multiplier:Math.max(0,Math.min(4,(Number.isFinite(node.gravelPitSize)?(+node.gravelPitSize):100)/100))
+  }));
+  if(!nodeEntries.length) return null;
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    let bestDist2=Infinity;
+    let bestMult=1;
+    for(const node of nodeEntries){
+      const dx=p.x-node.x;
+      const dz=p.z-node.z;
+      const dist2=dx*dx+dz*dz;
+      if(dist2<bestDist2){
+        bestDist2=dist2;
+        bestMult=node.multiplier;
+      }
+    }
+    multipliers[i]=bestMult;
+  }
+  return multipliers;
+}
+
 function buildRunoffProfile(pts,data){
   const n=pts.length;
   if(n<6) return null;
@@ -366,6 +395,7 @@ function buildRunoffProfile(pts,data){
   const rightRunoff=new Array(Math.max(0,n-1)).fill(0);
   const runoffNodes=[];
   const rw=Math.max(6,data.rw||12);
+  const nodeRunoffMultipliers=getEditorRunoffMultipliers(data,pts);
 
   // Always generate a baseline gravel strip around the track. The strip widens
   // with local curvature, while node boosts below keep the larger "outside of
@@ -378,7 +408,8 @@ function buildRunoffProfile(pts,data){
     const dot=(inX*outX+inZ*outZ)/(inLen*outLen);
     const curvature=Math.max(0,Math.min(1,(0.995-dot)/0.30));
     const easedCurvature=curvature*curvature*(3-2*curvature);
-    const baseRunoff=rw*(0.14+easedCurvature*0.78);
+    const nodeMultiplier=nodeRunoffMultipliers?.[i]??1;
+    const baseRunoff=rw*(0.14+easedCurvature*0.78)*nodeMultiplier;
     const baseExpand=1.0+(baseRunoff*1.05);
 
     const p=pts[i];
@@ -402,7 +433,8 @@ function buildRunoffProfile(pts,data){
     const turn=Math.sign(inX*outZ-inZ*outX)||1;
     const side=turn>0?-1:1;
     const sharp=Math.min(1,Math.max(0,(0.80-dot)/0.85));
-    const width=Math.min(rw*2.8,rw*(0.48+sharp*2.1));
+    const nodeMultiplier=nodeRunoffMultipliers?.[i]??1;
+    const width=Math.min(rw*2.8*nodeMultiplier,rw*(0.48+sharp*2.1)*nodeMultiplier);
     const cornerLen=Math.max(10,Math.min(34,Math.round(10+sharp*24)));
     const leadIn=Math.max(3,Math.round(cornerLen*0.25));
     const start=Math.max(1,Math.min(n-3,i-leadIn));

@@ -122,7 +122,7 @@ export function normalizeEditorTrack(){
   if(!Array.isArray(state.editorTrack.nodes)||state.editorTrack.nodes.length<3) state.editorTrack.nodes=[{x:0,z:0,steepness:40,type:'start-finish'},{x:120,z:0,steepness:40,type:'no-auto'},{x:120,z:-120,steepness:40,type:'no-auto'},{x:0,z:-120,steepness:40,type:'no-auto'}];
   let sfCount=0;
   // eslint-disable-next-line no-unused-vars
-  state.editorTrack.nodes.forEach((n,i)=>{ if(typeof n.steepness!=='number') n.steepness=40; n.type=(n.type==='start-finish'&&sfCount++===0)?'start-finish':'no-auto'; });
+  state.editorTrack.nodes.forEach((n,i)=>{ if(typeof n.steepness!=='number') n.steepness=40; if(!Number.isFinite(n.gravelPitSize)) n.gravelPitSize=100; n.gravelPitSize=Math.max(0,Math.min(400,+n.gravelPitSize||100)); n.type=(n.type==='start-finish'&&sfCount++===0)?'start-finish':'no-auto'; });
   if(!state.editorTrack.nodes.some(n=>n.type==='start-finish')) state.editorTrack.nodes[0].type='start-finish';
   if(state.editorTrack.nodes.length){
     const lastIdx=state.editorTrack.nodes.length-1;

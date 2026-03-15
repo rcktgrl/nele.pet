@@ -616,6 +616,7 @@ function makeEditableTrackFromGameTrack(src){
     x:+n.x||0,
     z:+n.z||0,
     steepness:typeof n.steepness==='number'?n.steepness:40,
+    gravelPitSize:Number.isFinite(n.gravelPitSize)?Math.max(0,Math.min(400,+n.gravelPitSize||100)):100,
     type:n.type||(i===0?'start-finish':'no-auto')
   }));
   const pts=[];
@@ -889,7 +890,8 @@ function syncSelectedNodeUI(){
   if(!node)return;
   document.getElementById('editorNodeType').value=node.type||'no-auto';
   document.getElementById('editorSteepness').value=Math.round(node.steepness||40);
-  document.getElementById('editorNodeInfo').textContent='Node '+(state.editorSelectedNode+1)+' · '+(node.type==='start-finish'?'Start/finish':'No scenery')+' · Steepness '+Math.round(node.steepness||40);
+  document.getElementById('editorNodeGravelPitSize').value=Math.round(Number.isFinite(node.gravelPitSize)?node.gravelPitSize:100);
+  document.getElementById('editorNodeInfo').textContent='Node '+(state.editorSelectedNode+1)+' · '+(node.type==='start-finish'?'Start/finish':'No scenery')+' · Steepness '+Math.round(node.steepness||40)+' · Gravel '+Math.round(Number.isFinite(node.gravelPitSize)?node.gravelPitSize:100)+'%';
 }
 function syncEditorNodeCountUI(){
   const count=(state.editorTrack?.nodes||[]).length;
@@ -914,11 +916,11 @@ function setEditorNodeCount(raw){
     return;
   }
   while(nodes.length<target){
-    const last=nodes[nodes.length-1]||{x:0,z:0,steepness:40,type:'no-auto'};
+    const last=nodes[nodes.length-1]||{x:0,z:0,steepness:40,gravelPitSize:100,type:'no-auto'};
     const prev=nodes[nodes.length-2]||{x:last.x-80,z:last.z};
     const dx=last.x-prev.x;
     const dz=last.z-prev.z;
-    nodes.push({x:last.x+dx*0.8+22,z:last.z+dz*0.8+18,steepness:last.steepness||40,type:'no-auto'});
+    nodes.push({x:last.x+dx*0.8+22,z:last.z+dz*0.8+18,steepness:last.steepness||40,gravelPitSize:Number.isFinite(last.gravelPitSize)?last.gravelPitSize:100,type:'no-auto'});
   }
   while(nodes.length>target){
     const next=[];
@@ -933,6 +935,7 @@ function setEditorNodeCount(raw){
         x:(a.x+b.x)*0.5,
         z:(a.z+b.z)*0.5,
         steepness:Math.round(((a.steepness||40)+(b.steepness||40))*0.5),
+        gravelPitSize:Math.round(((Number.isFinite(a.gravelPitSize)?a.gravelPitSize:100)+(Number.isFinite(b.gravelPitSize)?b.gravelPitSize:100))*0.5),
         type:(a.type==='start-finish'||b.type==='start-finish')?'start-finish':'no-auto'
       });
     }
@@ -1040,6 +1043,7 @@ function onEditorNodeChanged(){
     if(i!==state.editorSelectedNode && n.type==='start-finish') n.type='no-auto';
   });
   node.steepness=+document.getElementById('editorSteepness').value||40;
+  node.gravelPitSize=Math.max(0,Math.min(400,+document.getElementById('editorNodeGravelPitSize').value||100));
   syncSelectedNodeUI();
   requestEditorRebuild(false);
 }
@@ -1060,11 +1064,11 @@ function createNewEditorTrack(){
     trackGenerationVersion:LATEST_TRACK_GENERATION_VERSION,
     gridSize:70,
     nodes:[
-      {x:0,z:0,steepness:40,type:'start-finish'},
-      {x:140,z:20,steepness:45,type:'no-auto'},
-      {x:160,z:-120,steepness:55,type:'no-auto'},
-      {x:20,z:-180,steepness:55,type:'no-auto'},
-      {x:-120,z:-90,steepness:35,type:'no-auto'}
+      {x:0,z:0,steepness:40,gravelPitSize:100,type:'start-finish'},
+      {x:140,z:20,steepness:45,gravelPitSize:100,type:'no-auto'},
+      {x:160,z:-120,steepness:55,gravelPitSize:100,type:'no-auto'},
+      {x:20,z:-180,steepness:55,gravelPitSize:100,type:'no-auto'},
+      {x:-120,z:-90,steepness:35,gravelPitSize:100,type:'no-auto'}
     ],
     assets:[],
     scenerySeed:Math.floor(Math.random()*0x100000000)
@@ -1716,6 +1720,7 @@ document.getElementById('editorBrushEnabled').addEventListener('change', e=>setE
 document.getElementById('editorBrushSize').addEventListener('input', e=>setEditorBrushSize(e.target.value));
 document.getElementById('editorNodeType').addEventListener('change', onEditorNodeChanged);
 document.getElementById('editorSteepness').addEventListener('input', onEditorNodeChanged);
+document.getElementById('editorNodeGravelPitSize').addEventListener('input', onEditorNodeChanged);
 document.getElementById('addNodeBtn').addEventListener('click', addEditorNode);
 document.getElementById('insertNodeBtn').addEventListener('click', insertEditorNodeAfter);
 document.getElementById('delNodeBtn').addEventListener('click', deleteEditorNode);
