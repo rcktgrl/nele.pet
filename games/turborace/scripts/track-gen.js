@@ -332,6 +332,16 @@ function pointInsideSceneryExclusion(data,px,pz,pad=0){
   return pointInZoneList(zones,px,pz,pad);
 }
 
+export function canPlaceDecorAsset(data,px,pz,{exclusionPad=4,startBuffer=28}={}){
+  if(pointInsideSceneryExclusion(data,px,pz,exclusionPad)) return false;
+  const sf=data&&Array.isArray(data.wp)&&data.wp[0]
+    ? data.wp[0]
+    : null;
+  if(!sf) return true;
+  const dx=px-sf[0], dz=pz-sf[2];
+  return dx*dx+dz*dz>=startBuffer*startBuffer;
+}
+
 function buildRunoffProfile(pts,data){
   const n=pts.length;
   if(n<6) return null;
@@ -907,9 +917,7 @@ function addCityScenery(curve,data){
 function applyPlacedAssets(data){
   if(!data||!Array.isArray(data.assets)) return;
   data.assets.forEach(asset=>{
-    if(pointInsideSceneryExclusion(data,asset.x,asset.z,4)) return;
-    const sf=data.wp&&data.wp[0]?new THREE.Vector3(data.wp[0][0],0,data.wp[0][2]):new THREE.Vector3();
-    const dx=asset.x-sf.x, dz=asset.z-sf.z; if(dx*dx+dz*dz<28*28) return;
+    if(!canPlaceDecorAsset(data,asset.x,asset.z)) return;
     if(asset.type==='tree'){
       const g=new THREE.Group();
       const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.22,.32,2.2,6),mat(0x5a3418)); trunk.position.y=1.1; g.add(trunk);

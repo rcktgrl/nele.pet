@@ -64,7 +64,7 @@ import {
   initAiSounds,
   clearAiSounds
 } from './audio.js';
-import { buildTrack, pointNearTrack } from './track-gen.js';
+import { buildTrack, canPlaceDecorAsset } from './track-gen.js';
 import { TURBORACE_VERSION } from './version.js';
 
 import {
@@ -1153,7 +1153,7 @@ function closeTrackEditor(){
   showMain();
 }
 function editorCanPlaceAssetAt(x,z){
-  return !pointNearTrack(editorTrackToGameTrack(),x,z,3);
+  return canPlaceDecorAsset(editorTrackToGameTrack(),x,z,{exclusionPad:3,startBuffer:28});
 }
 function drawEditorCanvas(){
   const canvas=document.getElementById('trackEditorCanvas');
