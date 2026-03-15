@@ -1032,6 +1032,7 @@ function upgradeEditorTrackToLatestGeneration(){
     return;
   }
   state.editorTrack.trackGenerationVersion=LATEST_TRACK_GENERATION_VERSION;
+  state.editorTrack.enableRunoff=true;
   requestEditorRebuild(false);
   saveEditorTrack();
 }
@@ -1084,6 +1085,7 @@ function duplicateEditorTrack(){
   clone.source=clone.id;
   clone.builtin=false;
   clone.trackGenerationVersion=LATEST_TRACK_GENERATION_VERSION;
+  clone.enableRunoff=true;
   state.editorTrack=clone;
   state.editorSelectedNode=0;
   state.editorSelectedAsset=-1;
