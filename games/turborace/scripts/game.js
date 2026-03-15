@@ -1033,7 +1033,7 @@ function upgradeEditorTrackToLatestGeneration(){
   }
   state.editorTrack.trackGenerationVersion=LATEST_TRACK_GENERATION_VERSION;
   requestEditorRebuild(false);
-  notify(`TRACK UPDATED TO GENERATION V${LATEST_TRACK_GENERATION_VERSION}`);
+  saveEditorTrack();
 }
 function onEditorNodeChanged(){
   const node=state.editorTrack.nodes[state.editorSelectedNode];
