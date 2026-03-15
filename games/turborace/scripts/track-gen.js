@@ -352,6 +352,28 @@ function buildRunoffProfile(pts,data){
   const rightRunoff=new Array(Math.max(0,n-1)).fill(0);
   const runoffNodes=[];
   const rw=Math.max(6,data.rw||12);
+
+  // Always generate a baseline gravel strip around the track. The strip widens
+  // with local curvature, while node boosts below keep the larger "outside of
+  // corner" behavior from before.
+  for(let i=1;i<n-2;i++){
+    const pPrev=pts[i-1], pCur=pts[i], pNext=pts[i+1];
+    const inX=pCur.x-pPrev.x, inZ=pCur.z-pPrev.z;
+    const outX=pNext.x-pCur.x, outZ=pNext.z-pCur.z;
+    const inLen=Math.hypot(inX,inZ)||1, outLen=Math.hypot(outX,outZ)||1;
+    const dot=(inX*outX+inZ*outZ)/(inLen*outLen);
+    const curvature=Math.max(0,Math.min(1,(0.995-dot)/0.30));
+    const baseRunoff=rw*(0.10+curvature*0.60);
+    const baseExpand=0.6+(baseRunoff*0.85);
+
+    const p=pts[i];
+    if(pointInZoneList(zones,p.x,p.z,10)) continue;
+    leftRunoff[i]=Math.max(leftRunoff[i],baseRunoff);
+    rightRunoff[i]=Math.max(rightRunoff[i],baseRunoff);
+    leftExpand[i]=Math.max(leftExpand[i],baseExpand);
+    rightExpand[i]=Math.max(rightExpand[i],baseExpand);
+  }
+
   // pts is ~900 densely spaced spline points; stride samples ~15 units apart
   // so corner angles are measurable (consecutive pts are only ~1 unit apart)
   const stride=Math.max(1,Math.round(n/60));
