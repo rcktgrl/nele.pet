@@ -555,9 +555,6 @@ globalThis.endRace=endRace;
 
 function showResults(ghostPayload){
   updateResultsUI();
-  if(state.trkData&&state.trkData.id){
-    loadTrackLeaderboard(state.trkData.id,{force:true,limit:10,trackName:state.trkData.name}).then(data=>renderResultsLeaderboard(data.entries));
-  }
   handlePostRaceLeaderboard(notify,ghostPayload);
   document.getElementById('results').style.display='flex';
   document.getElementById('hud').style.display='none';

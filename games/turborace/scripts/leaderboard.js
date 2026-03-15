@@ -235,10 +235,11 @@ export async function handlePostRaceLeaderboard(notify, ghostData = null) {
   currentRaceSubmitted = true;
   const user = await loadArcadeUser();
   const ok = await submitTrackTime(state.trkData.id, user, state.pCar.finTime, state.pCar.data, ghostData, state.trkData.name);
+  const latest = await loadTrackLeaderboard(state.trkData.id, { force: true, limit: 10, trackName: state.trkData.name });
+  renderResultsLeaderboard(latest.entries, user.name);
+  updateTrackCardBestTime(state.trkData.id, state.trkData.name);
+
   if (ok) {
-    const latest = await loadTrackLeaderboard(state.trkData.id, { force: true, limit: 10, trackName: state.trkData.name });
-    renderResultsLeaderboard(latest.entries, user.name);
-    updateTrackCardBestTime(state.trkData.id, state.trkData.name);
     notify('Leaderboard time saved!');
   } else {
     notify('Leaderboard submit skipped (sign in required).');
