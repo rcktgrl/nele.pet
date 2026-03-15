@@ -2,7 +2,7 @@ import { mat, matE } from "./render/materials.js";
 import { state, scene } from "./state.js";
 import { THREE } from "./three.js";
 
-export const LATEST_TRACK_GENERATION_VERSION = 3;
+export const LATEST_TRACK_GENERATION_VERSION = 4;
 
 let roadTex=null;
 
@@ -388,7 +388,11 @@ function buildRunoffProfile(pts,data){
     ? Math.max(1,Math.floor(data.trackGenerationVersion))
     : 1;
   if(generationVersion<2) return null;
-  const zones=getTrackSceneryExclusionZones(data);
+  // Only exclude start/finish area — noAutoZones are for scenery (trees/buildings) only,
+  // not gravel. Including them would suppress gravel across the entire track on custom tracks.
+  const zones=[];
+  const sf=data&&Array.isArray(data.wp)&&data.wp[0]?data.wp[0]:null;
+  if(sf) zones.push({x:sf[0],z:sf[2],r:28});
   const leftExpand=new Array(Math.max(0,n-1)).fill(0);
   const rightExpand=new Array(Math.max(0,n-1)).fill(0);
   const leftRunoff=new Array(Math.max(0,n-1)).fill(0);
