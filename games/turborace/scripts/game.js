@@ -893,12 +893,19 @@ function syncEditorNodeCountUI(){
   const count=(state.editorTrack?.nodes||[]).length;
   const slider=document.getElementById('editorNodeCount');
   const label=document.getElementById('editorNodeCountVal');
-  if(slider) slider.value=count;
+  if(slider){
+    const min=Number(slider.min)||3;
+    const desiredMax=Math.max(100,count,min);
+    slider.max=String(desiredMax);
+    slider.value=String(Math.max(min,Math.min(desiredMax,count)));
+  }
   if(label) label.textContent=String(count);
 }
 function setEditorNodeCount(raw){
   if(!state.editorTrack) return;
-  const target=Math.max(3,Math.min(24,Math.round(Number(raw)||state.editorTrack.nodes.length||3)));
+  const slider=document.getElementById('editorNodeCount');
+  const max=Number(slider?.max)||100;
+  const target=Math.max(3,Math.min(max,Math.round(Number(raw)||state.editorTrack.nodes.length||3)));
   const nodes=state.editorTrack.nodes;
   if(nodes.length===target){
     syncEditorNodeCountUI();
@@ -1245,6 +1252,12 @@ function bindEditorCanvas(){
       syncSelectedNodeUI();
       state.editorDrag={kind:'node',index:hit.index};
       requestEditorRebuild(false);
+      return;
+    }
+    const p=editorClientToGround(e.clientX,e.clientY);
+    if(p&&paintEditorAssetsAt(p.x,p.z)){
+      requestEditorRebuild(false);
+      state.editorDrag={kind:'brush'};
       return;
     }
     editorMouse.mode='pan';
