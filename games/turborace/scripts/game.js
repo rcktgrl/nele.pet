@@ -1083,6 +1083,7 @@ function duplicateEditorTrack(){
   clone.id=uniqueTrackId();
   clone.source=clone.id;
   clone.builtin=false;
+  clone.trackGenerationVersion=LATEST_TRACK_GENERATION_VERSION;
   state.editorTrack=clone;
   state.editorSelectedNode=0;
   state.editorSelectedAsset=-1;
