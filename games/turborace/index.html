@@ -16,7 +16,7 @@
   <div class="menuActions">
     <button id="introStartBtn" class="btn btn-p">START GAME</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.53</div>
+  <div class="menuVersion" aria-label="Game version">v0.54</div>
 </div>
 <div id="hud" role="status" aria-live="polite">
   <div id="raceTop">
@@ -125,7 +125,7 @@
     <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
     <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.53</div>
+  <div class="menuVersion" aria-label="Game version">v0.54</div>
 
 </div>
 
@@ -279,10 +279,14 @@
           </select>
         </label>
         <label class="editorField">
-          <span>Brush Size <strong id="editorBrushSizeVal">24</strong></span>
-          <input id="editorBrushSize" type="range" min="8" max="80" step="2" value="24">
+          <span>Brush Count <strong id="editorBrushSizeVal">1</strong></span>
+          <input id="editorBrushSize" type="range" min="1" max="25" step="1" value="1">
         </label>
-        <div class="editorHint">Drag these into the viewport. Existing placed assets also appear in the 3D editor.</div>
+        <label class="editorField editorFieldInline">
+          <span>Brush Enabled</span>
+          <input id="editorBrushEnabled" type="checkbox">
+        </label>
+        <div class="editorHint">Toggle brush on to paint assets in the viewport. Existing placed assets also appear in the 3D editor.</div>
         <div class="editorAssetPalette" id="editorAssetPalette">
           <div class="assetChip" draggable="true" data-asset="tree">🌲 Tree</div>
           <div class="assetChip" draggable="true" data-asset="building">🏢 Building</div>
