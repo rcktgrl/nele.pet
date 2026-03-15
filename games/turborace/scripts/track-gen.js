@@ -6,6 +6,7 @@ let roadTex=null;
 
 export function buildTrack(data){
   state.cityCorridors=null; state.cityAiPts=null;
+  state.sceneryExclusionZones=[];
   const rm=[]; scene.traverse(o=>{if(o.userData.trk)rm.push(o);}); rm.forEach(o=>scene.remove(o));
   const raw=data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
   const curve=new THREE.CatmullRomCurve3(raw,true,'centripetal',.5);
@@ -42,13 +43,19 @@ export function buildTrack(data){
   const gnd=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),new THREE.MeshLambertMaterial({color:gndCol}));
   gnd.rotation.x=-Math.PI/2; gnd.position.y=-.08; gnd.receiveShadow=true; gnd.userData.trk=true; scene.add(gnd);
   if(!isCity) addGantry(curve,data.rw);
-  if(isCity) addCityScenery(curve,data);
-  else addScenery(curve,data);
-  applyPlacedAssets(data);
+  state.sceneryExclusionZones=getTrackSceneryExclusionZones(data);
+  buildTrackScenery(data);
   scene.background=new THREE.Color(data.sky);
   const fogNear=isCity?120:260, fogFar=isCity?420:680;
   scene.fog=new THREE.Fog(data.sky,fogNear,fogFar);
   return curve;
+}
+
+export function buildTrackScenery(data){
+  if(!state.trkCurve) return;
+  if(data.type==='city') addCityScenery(state.trkCurve,data);
+  else addScenery(state.trkCurve,data);
+  applyPlacedAssets(data);
 }
 
 function makeRoadTexture(){
@@ -267,10 +274,10 @@ function pointInZoneList(zones,px,pz,pad=0){
   return zones.some(z=>{ const dx=px-z.x,dz=pz-z.z,r=(z.r||18)+pad; return dx*dx+dz*dz<=r*r; });
 }
 
-function buildSceneryExclusionZones(curve,data){
+export function getTrackSceneryExclusionZones(data){
   const zones=[];
-  const sf=curve.getPoint(0);
-  zones.push({x:sf.x,z:sf.z,r:18});
+  const sf=data&&Array.isArray(data.wp)&&data.wp[0]?data.wp[0]:null;
+  if(sf) zones.push({x:sf[0],z:sf[2],r:18});
   if(Array.isArray(data?.wp)&&data.wp.length){
     const last=data.wp[data.wp.length-1];
     if(last) zones.push({x:last[0],z:last[2],r:16});
@@ -280,11 +287,18 @@ function buildSceneryExclusionZones(curve,data){
   return zones;
 }
 
+function pointInsideSceneryExclusion(data,px,pz,pad=0){
+  const zones=(state.sceneryExclusionZones&&state.sceneryExclusionZones.length)
+    ? state.sceneryExclusionZones
+    : getTrackSceneryExclusionZones(data);
+  if(pointNearTrack(data,px,pz,pad)) return true;
+  return pointInZoneList(zones,px,pz,pad);
+}
+
 function buildRunoffProfile(pts,data){
   const n=pts.length;
   if(n<6) return null;
-  const curve=new THREE.CatmullRomCurve3(pts,true,'centripetal',.5);
-  const zones=buildSceneryExclusionZones(curve,data);
+  const zones=getTrackSceneryExclusionZones(data);
   const leftExpand=new Array(Math.max(0,n-1)).fill(0);
   const rightExpand=new Array(Math.max(0,n-1)).fill(0);
   const slices=[];
@@ -369,14 +383,12 @@ function addScenery(curve,data){
   const standMat=mat(0x444455),standSeat=mat(0x995522);
   const minOff=data.rw/2+7.0;
   const placed=[];
-  const exclusionZones=buildSceneryExclusionZones(curve,data);
+  const exclusionZones=(state.sceneryExclusionZones&&state.sceneryExclusionZones.length)
+    ? state.sceneryExclusionZones
+    : getTrackSceneryExclusionZones(data);
 
   function onTrack(px,pz,margin){
-    const m2=(data.rw/2+margin)**2;
-    for(let j=0;j<state.trkPts.length;j+=3){
-      if((px-state.trkPts[j].x)**2+(pz-state.trkPts[j].z)**2<m2)return true;
-    }
-    return false;
+    return pointNearTrack(data,px,pz,margin);
   }
   function inExclusion(px,pz,pad=0){return pointInZoneList(exclusionZones,px,pz,pad);}
 
@@ -858,7 +870,7 @@ function addCityScenery(curve,data){
 function applyPlacedAssets(data){
   if(!data||!Array.isArray(data.assets)) return;
   data.assets.forEach(asset=>{
-    if(pointNearTrack(data,asset.x,asset.z,3)) return;
+    if(pointInsideSceneryExclusion(data,asset.x,asset.z,4)) return;
     const sf=data.wp&&data.wp[0]?new THREE.Vector3(data.wp[0][0],0,data.wp[0][2]):new THREE.Vector3();
     const dx=asset.x-sf.x, dz=asset.z-sf.z; if(dx*dx+dz*dz<28*28) return;
     if(asset.type==='tree'){
