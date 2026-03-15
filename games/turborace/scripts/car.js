@@ -5,6 +5,30 @@ import { fmtT } from './util.js';
 import { announce } from './audio.js';
 import { buildGearboxForCar, rpmFromSpeed } from './data/gearboxes.js';
 
+
+function nearestPointOnSegment(px,pz,ax,az,bx,bz){
+  const abx=bx-ax, abz=bz-az;
+  const apx=px-ax, apz=pz-az;
+  const ab2=abx*abx+abz*abz||1;
+  const t=Math.max(0,Math.min(1,(apx*abx+apz*abz)/ab2));
+  return {x:ax+abx*t,z:az+abz*t};
+}
+
+function nearestWallPoint(px,pz,walls){
+  if(!walls||!walls.length) return null;
+  let best=null;
+  let bestD2=Infinity;
+  for(const w of walls){
+    const pt=nearestPointOnSegment(px,pz,w.x0,w.z0,w.x1,w.z1);
+    const d2=(px-pt.x)*(px-pt.x)+(pz-pt.z)*(pz-pt.z);
+    if(d2<bestD2){
+      bestD2=d2;
+      best=pt;
+    }
+  }
+  return best;
+}
+
 class Car {
   constructor(data, pos, hdg, isPlayer, scene) {
     this.data = data; this.isPlayer = isPlayer;
@@ -147,21 +171,51 @@ class Car {
       if (d < md) { md = d; ni = i; }
     }
     const np = state.trkPts[ni];
+    const nxt = state.trkPts[(ni + 1) % state.trkPts.length];
+    const prv = state.trkPts[(ni + state.trkPts.length - 1) % state.trkPts.length];
+    const tx = nxt.x - prv.x, tz = nxt.z - prv.z;
+    const tLen = Math.hypot(tx, tz) || 1;
+    const nx = -tz / tLen, nz = tx / tLen;
+    const sideSign = ((this.pos.x - np.x) * nx + (this.pos.z - np.z) * nz) >= 0 ? 1 : -1;
+    const targetWalls = sideSign > 0 ? state.trkWallRight : state.trkWallLeft;
+    const wallPt = nearestWallPoint(this.pos.x, this.pos.z, targetWalls);
+
+    if (wallPt) {
+      const toWallX = wallPt.x - this.pos.x;
+      const toWallZ = wallPt.z - this.pos.z;
+      const wallDist = Math.hypot(toWallX, toWallZ);
+      if (wallDist < 0.6) {
+        const pushLen = wallDist || 1;
+        const pushBack = 0.6 - wallDist;
+        this.pos.x -= (toWallX / pushLen) * pushBack;
+        this.pos.z -= (toWallZ / pushLen) * pushBack;
+        this.spd *= 0.38;
+        if (this.isReversing) this.revSpd *= 0.4;
+        const trkHdg = Math.atan2(tx, tz);
+        const wrapPi = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+        const targetHdg = this.isReversing ? trkHdg + Math.PI : trkHdg;
+        const hdgErr = wrapPi(targetHdg - this.hdg);
+        const maxCorrection = Math.PI / 16;
+        const correction = Math.max(-maxCorrection, Math.min(maxCorrection, hdgErr * 0.8));
+        this.hdg += correction;
+        this.stuckTimer += dt;
+      } else {
+        this.stuckTimer = Math.max(0, this.stuckTimer - 0.032);
+      }
+      return;
+    }
+
     const dist = Math.sqrt(md), maxD = state.trkData.rw * .5 + 1.0;
     if (dist > maxD) {
       const px = np.x - this.pos.x, pz = np.z - this.pos.z, pl = Math.sqrt(px * px + pz * pz) || 1;
       this.pos.x += px / pl * (dist - maxD + 0.5);
       this.pos.z += pz / pl * (dist - maxD + 0.5);
       this.spd *= 0.45;
-      const nxt = state.trkPts[(ni + 1) % state.trkPts.length];
-      const prv = state.trkPts[(ni + state.trkPts.length - 1) % state.trkPts.length];
-      const tx = nxt.x - prv.x, tz = nxt.z - prv.z;
       const trkHdg = Math.atan2(tx, tz);
       const wrapPi = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-      // Keep boundary recovery aligned to the track's forward tangent.
       const targetHdg = this.isReversing ? trkHdg + Math.PI : trkHdg;
       const hdgErr = wrapPi(targetHdg - this.hdg);
-      const maxCorrection = Math.PI / 18; // 10°
+      const maxCorrection = Math.PI / 18;
       const correction = Math.max(-maxCorrection, Math.min(maxCorrection, hdgErr * 0.75));
       this.hdg += correction;
       this.stuckTimer += dt;

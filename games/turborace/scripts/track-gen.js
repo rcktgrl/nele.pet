@@ -2,7 +2,7 @@ import { mat, matE } from "./render/materials.js";
 import { state, scene } from "./state.js";
 import { THREE } from "./three.js";
 
-export const LATEST_TRACK_GENERATION_VERSION = 2;
+export const LATEST_TRACK_GENERATION_VERSION = 3;
 
 let roadTex=null;
 
@@ -47,6 +47,8 @@ export function buildTrack(data){
   const raw=data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
   const curve=new THREE.CatmullRomCurve3(raw,true,'centripetal',.5);
   state.trkCurve=curve; state.trkPts=curve.getSpacedPoints(500);
+  state.trkWallLeft=[];
+  state.trkWallRight=[];
   // Precompute per-point curvature (0=straight, 1=very tight) for AI adaptive lookahead
   state.trkCurv=[];
   const N=state.trkPts.length;
@@ -198,8 +200,10 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
   const leftExpand=(runoffProfile&&runoffProfile.leftExpand)||[];
   const rightExpand=(runoffProfile&&runoffProfile.rightExpand)||[];
 
+  const leftWalls=[];
+  const rightWalls=[];
+
   function intrudesTrackInterior(px,pz,segIndex){
-    // Ignore nearby centerline segments and only test for self-overlap on very sharp corners.
     const localWindow=8;
     let best=Infinity;
     for(let j=0;j<n-1;j++){
@@ -233,10 +237,11 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
       }
       if(intersects) continue;
 
-      // Prevent barrier quads from being generated inside the track when the
-      // inside edge of an extremely sharp corner intersects itself.
       if(intrudesTrackInterior(b0x,b0z,i)||intrudesTrackInterior(b1x,b1z,i)) continue;
       emitted.push({x0:b0x,z0:b0z,x1:b1x,z1:b1z});
+
+      if(side<0) leftWalls.push({x0:b0x,z0:b0z,x1:b1x,z1:b1z});
+      else rightWalls.push({x0:b0x,z0:b0z,x1:b1x,z1:b1z});
 
       vL.push(b0x,p0.y,b0z, b1x,p1.y,b1z, b1x,p1.y+h,b1z, b0x,p0.y+h,b0z);
       iL.push(vi,vi+1,vi+2,vi,vi+2,vi+3); vi+=4;
@@ -249,6 +254,9 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
     const tm=new THREE.Mesh(mkGeo(vT,iT),new THREE.MeshLambertMaterial({color:side===-1?0xff2211:0xffffff,side:THREE.DoubleSide}));
     tm.userData.trk=true; scene.add(tm);
   }
+
+  state.trkWallLeft=leftWalls;
+  state.trkWallRight=rightWalls;
 }
 
 function addGantry(curve,rw){
@@ -370,8 +378,8 @@ function buildRunoffProfile(pts,data){
     const dot=(inX*outX+inZ*outZ)/(inLen*outLen);
     const curvature=Math.max(0,Math.min(1,(0.995-dot)/0.30));
     const easedCurvature=curvature*curvature*(3-2*curvature);
-    const baseRunoff=rw*(0.08+easedCurvature*0.58);
-    const baseExpand=0.6+(baseRunoff*0.85);
+    const baseRunoff=rw*(0.14+easedCurvature*0.78);
+    const baseExpand=1.0+(baseRunoff*1.05);
 
     const p=pts[i];
     if(pointInZoneList(zones,p.x,p.z,10)) continue;
@@ -394,7 +402,7 @@ function buildRunoffProfile(pts,data){
     const turn=Math.sign(inX*outZ-inZ*outX)||1;
     const side=turn>0?-1:1;
     const sharp=Math.min(1,Math.max(0,(0.80-dot)/0.85));
-    const width=Math.min(rw*2,rw*(0.28+sharp*1.68));
+    const width=Math.min(rw*2.8,rw*(0.48+sharp*2.1));
     const cornerLen=Math.max(10,Math.min(34,Math.round(10+sharp*24)));
     const leadIn=Math.max(3,Math.round(cornerLen*0.25));
     const start=Math.max(1,Math.min(n-3,i-leadIn));
@@ -415,7 +423,7 @@ function buildRunoffProfile(pts,data){
       const rampOut=1-(fallT*fallT*(3-2*fallT));
       const blend=(j<=node.peak)?rampIn:rampOut;
       const runoffW=node.width*blend;
-      const wallExpand=(runoffW*0.9)+0.8;
+      const wallExpand=(runoffW*1.12)+1.2;
       if(node.side<0){
         leftRunoff[j]=Math.max(leftRunoff[j],runoffW);
         leftExpand[j]=Math.max(leftExpand[j],wallExpand);
