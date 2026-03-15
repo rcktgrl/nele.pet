@@ -338,7 +338,10 @@ function buildRunoffProfile(pts,data){
   const zones=getTrackSceneryExclusionZones(data);
   const leftExpand=new Array(Math.max(0,n-1)).fill(0);
   const rightExpand=new Array(Math.max(0,n-1)).fill(0);
-  const slices=[];
+  const leftRunoff=new Array(Math.max(0,n-1)).fill(0);
+  const rightRunoff=new Array(Math.max(0,n-1)).fill(0);
+  const runoffNodes=[];
+  const rw=Math.max(6,data.rw||12);
   // pts is ~900 densely spaced spline points; stride samples ~15 units apart
   // so corner angles are measurable (consecutive pts are only ~1 unit apart)
   const stride=Math.max(1,Math.round(n/60));
@@ -351,56 +354,81 @@ function buildRunoffProfile(pts,data){
     if(dot>0.80) continue;
     const turn=Math.sign(inX*outZ-inZ*outX)||1;
     const side=turn>0?-1:1;
-    const sharp=Math.min(1,Math.max(0,(0.80-dot)/1.80));
-    const exitLen=Math.max(6,Math.min(24,Math.round(8+sharp*16)));
-    const start=Math.min(n-3,i+1);
-    const end=Math.min(n-2,start+exitLen);
-    for(let j=start;j<=end;j++){
+    const sharp=Math.min(1,Math.max(0,(0.80-dot)/0.85));
+    const width=Math.min(rw*2,rw*(0.32+sharp*1.68));
+    const cornerLen=Math.max(10,Math.min(34,Math.round(10+sharp*24)));
+    const leadIn=Math.max(3,Math.round(cornerLen*0.25));
+    const start=Math.max(1,Math.min(n-3,i-leadIn));
+    const peak=Math.min(n-3,i+Math.round(cornerLen*0.25));
+    const end=Math.min(n-2,start+cornerLen);
+    runoffNodes.push({index:i,side,start,peak,end,width,sharp});
+  }
+
+  for(const node of runoffNodes){
+    for(let j=node.start;j<=node.end;j++){
       const p=pts[j];
       if(pointInZoneList(zones,p.x,p.z,10)) continue;
-      const extra=2.8+sharp*3.6;
-      if(side<0) leftExpand[j]=Math.max(leftExpand[j],extra);
-      else rightExpand[j]=Math.max(rightExpand[j],extra);
-      if(j<n-2){
-        const blend=Math.sin(((j-start+1)/(end-start+2))*Math.PI);
-        slices.push({index:j,side,outerExtra:5.6+sharp*5.2*blend});
+      const riseLen=Math.max(1,node.peak-node.start);
+      const fallLen=Math.max(1,node.end-node.peak);
+      const riseT=Math.max(0,Math.min(1,(j-node.start)/riseLen));
+      const fallT=Math.max(0,Math.min(1,(j-node.peak)/fallLen));
+      const rampIn=Math.sin(riseT*Math.PI*0.5);
+      const rampOut=Math.cos(fallT*Math.PI*0.5);
+      const blend=(j<=node.peak)?rampIn:rampOut;
+      const runoffW=node.width*blend;
+      const wallExpand=(runoffW*0.9)+0.8;
+      if(node.side<0){
+        leftRunoff[j]=Math.max(leftRunoff[j],runoffW);
+        leftExpand[j]=Math.max(leftExpand[j],wallExpand);
+      }else{
+        rightRunoff[j]=Math.max(rightRunoff[j],runoffW);
+        rightExpand[j]=Math.max(rightExpand[j],wallExpand);
       }
     }
   }
-  if(!slices.length) return null;
-  return {pts,slices,leftExpand,rightExpand,rw:data.rw};
+
+  for(const arr of [leftRunoff,rightRunoff,leftExpand,rightExpand]){
+    for(let pass=0;pass<2;pass++){
+      for(let j=1;j<arr.length-1;j++) arr[j]=(arr[j-1]+arr[j]+arr[j+1])/3;
+    }
+  }
+
+  const hasRunoff=leftRunoff.some(v=>v>0.05)||rightRunoff.some(v=>v>0.05);
+  if(!hasRunoff) return null;
+  return {pts,leftRunoff,rightRunoff,leftExpand,rightExpand,rw,nodes:runoffNodes};
 }
 
 function addGravelRunoff(profile){
-  const {pts,slices,rw}=profile;
+  const {pts,rw,leftRunoff,rightRunoff}=profile;
   const n=pts.length;
   const verts=[]; const idx=[];
   let vi=0;
   const y=0.011;
-  const used=new Set();
-  for(const seg of slices){
-    const i=seg.index;
-    if(i<1||i>=n-2) continue;
-    const key=`${i}:${seg.side}`;
-    if(used.has(key)) continue;
-    used.add(key);
-    const p0=pts[i], p1=pts[i+1];
-    const t0=new THREE.Vector3().subVectors(pts[(i+1)%n],pts[(i-1+n)%n]).normalize();
-    const t1=new THREE.Vector3().subVectors(pts[(i+2)%n],pts[i]).normalize();
-    const r0=new THREE.Vector3(-t0.z,0,t0.x).normalize();
-    const r1=new THREE.Vector3(-t1.z,0,t1.x).normalize();
-    const inner=rw/2+1.75;
-    const outer=inner+seg.outerExtra;
-    const s=seg.side;
-    const in0=new THREE.Vector3(p0.x+r0.x*s*inner,y,p0.z+r0.z*s*inner);
-    const out0=new THREE.Vector3(p0.x+r0.x*s*outer,y,p0.z+r0.z*s*outer);
-    const in1=new THREE.Vector3(p1.x+r1.x*s*inner,y,p1.z+r1.z*s*inner);
-    const out1=new THREE.Vector3(p1.x+r1.x*s*outer,y,p1.z+r1.z*s*outer);
-    if(segmentsIntersect2D(in0.x,in0.z,in1.x,in1.z,out0.x,out0.z,out1.x,out1.z)) continue;
-    verts.push(in0.x,in0.y,in0.z, out0.x,out0.y,out0.z, out1.x,out1.y,out1.z, in1.x,in1.y,in1.z);
-    idx.push(vi,vi+1,vi+2,vi,vi+2,vi+3);
-    vi+=4;
-  }
+
+  const appendSide=(side,widths)=>{
+    for(let i=1;i<n-2;i++){
+      const w0=widths[i]||0;
+      const w1=widths[i+1]||0;
+      if(w0<0.05&&w1<0.05) continue;
+      const p0=pts[i], p1=pts[i+1];
+      const t0=new THREE.Vector3().subVectors(pts[(i+1)%n],pts[(i-1+n)%n]).normalize();
+      const t1=new THREE.Vector3().subVectors(pts[(i+2)%n],pts[i]).normalize();
+      const r0=new THREE.Vector3(-t0.z,0,t0.x).normalize();
+      const r1=new THREE.Vector3(-t1.z,0,t1.x).normalize();
+      const inner=rw/2+1.75;
+      const in0=new THREE.Vector3(p0.x+r0.x*side*inner,y,p0.z+r0.z*side*inner);
+      const out0=new THREE.Vector3(p0.x+r0.x*side*(inner+w0),y,p0.z+r0.z*side*(inner+w0));
+      const in1=new THREE.Vector3(p1.x+r1.x*side*inner,y,p1.z+r1.z*side*inner);
+      const out1=new THREE.Vector3(p1.x+r1.x*side*(inner+w1),y,p1.z+r1.z*side*(inner+w1));
+      if(segmentsIntersect2D(in0.x,in0.z,in1.x,in1.z,out0.x,out0.z,out1.x,out1.z)) continue;
+      verts.push(in0.x,in0.y,in0.z, out0.x,out0.y,out0.z, out1.x,out1.y,out1.z, in1.x,in1.y,in1.z);
+      idx.push(vi,vi+1,vi+2,vi,vi+2,vi+3);
+      vi+=4;
+    }
+  };
+
+  appendSide(-1,leftRunoff);
+  appendSide(1,rightRunoff);
   if(!verts.length) return;
   const geo=new THREE.BufferGeometry();
   geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
