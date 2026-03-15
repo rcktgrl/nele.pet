@@ -907,9 +907,10 @@ function syncEditorNodeCountUI(){
 }
 function setEditorNodeCount(raw){
   if(!state.editorTrack) return;
+  const nodes=state.editorTrack.nodes;
   const slider=document.getElementById('editorNodeCount');
   const max=Number(slider?.max)||100;
-  const target=Math.max(3,Math.min(max,Math.round(Number(raw)||state.editorTrack.nodes.length||3)));
+  const target=Math.max(3,Math.min(max,Math.round(Number(raw)||nodes.length||3)));
   if(nodes.length===target){
     syncEditorNodeCountUI();
     return;
@@ -1031,8 +1032,9 @@ function upgradeEditorTrackToLatestGeneration(){
     return;
   }
   state.editorTrack.trackGenerationVersion=LATEST_TRACK_GENERATION_VERSION;
+  state.editorTrack.enableRunoff=true;
   requestEditorRebuild(false);
-  notify(`TRACK UPDATED TO GENERATION V${LATEST_TRACK_GENERATION_VERSION}`);
+  saveEditorTrack();
 }
 function onEditorNodeChanged(){
   const node=state.editorTrack.nodes[state.editorSelectedNode];
@@ -1077,25 +1079,18 @@ function createNewEditorTrack(){
   populateEditorUI();
 }
 function duplicateEditorTrack(){
-  const sourceNodes=(state.editorTrack?.nodes||[]).map((node,idx)=>({
-    x:+node.x||0,
-    z:+node.z||0,
-    steepness:Number.isFinite(node.steepness)?(+node.steepness):40,
-    gravelPitSize:Number.isFinite(node.gravelPitSize)?Math.max(0,Math.min(400,+node.gravelPitSize||100)):100,
-    type:node.type||(idx===0?'start-finish':'no-auto')
-  }));
-  createNewEditorTrack();
-  if(!sourceNodes.length) return;
-  setEditorNodeCount(sourceNodes.length);
-  state.editorTrack.nodes.forEach((node,idx)=>{
-    node.x=sourceNodes[idx].x;
-    node.z=sourceNodes[idx].z;
-    node.steepness=sourceNodes[idx].steepness;
-    node.gravelPitSize=sourceNodes[idx].gravelPitSize;
-    node.type=sourceNodes[idx].type;
-  });
+  if(!state.editorTrack) return;
+  const clone=deepClone(state.editorTrack);
+  clone.id=uniqueTrackId();
+  clone.source=clone.id;
+  clone.builtin=false;
+  clone.trackGenerationVersion=LATEST_TRACK_GENERATION_VERSION;
+  clone.enableRunoff=true;
+  state.editorTrack=clone;
+  state.editorSelectedNode=0;
+  state.editorSelectedAsset=-1;
   requestEditorRebuild(true);
-  notify('NEW TRACK CREATED FROM CURRENT COORDINATES');
+  notify('TRACK DUPLICATED');
   populateEditorUI();
 }
 function addEditorNode(){
