@@ -910,7 +910,6 @@ function setEditorNodeCount(raw){
   const slider=document.getElementById('editorNodeCount');
   const max=Number(slider?.max)||100;
   const target=Math.max(3,Math.min(max,Math.round(Number(raw)||state.editorTrack.nodes.length||3)));
-  const nodes=state.editorTrack.nodes;
   if(nodes.length===target){
     syncEditorNodeCountUI();
     return;
@@ -1078,10 +1077,16 @@ function createNewEditorTrack(){
   populateEditorUI();
 }
 function duplicateEditorTrack(){
-  const data=editorTrackToGameTrack();
-  state.editorTrack=makeEditableTrackFromGameTrack(data);
-  state.editorTrack.id=uniqueTrackId();
-  state.editorTrack.name+=' Copy';
+  const sourceNodes=(state.editorTrack?.nodes||[]).map(node=>({x:+node.x||0,z:+node.z||0}));
+  createNewEditorTrack();
+  if(!sourceNodes.length) return;
+  setEditorNodeCount(sourceNodes.length);
+  state.editorTrack.nodes.forEach((node,idx)=>{
+    node.x=sourceNodes[idx].x;
+    node.z=sourceNodes[idx].z;
+  });
+  requestEditorRebuild(true);
+  notify('NEW TRACK CREATED FROM CURRENT COORDINATES');
   populateEditorUI();
 }
 function addEditorNode(){
