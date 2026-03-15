@@ -16,7 +16,7 @@
   <div class="menuActions">
     <button id="introStartBtn" class="btn btn-p">START GAME</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.52</div>
+  <div class="menuVersion" aria-label="Game version">v0.53</div>
 </div>
 <div id="hud" role="status" aria-live="polite">
   <div id="raceTop">
@@ -125,7 +125,7 @@
     <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
     <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.52</div>
+  <div class="menuVersion" aria-label="Game version">v0.53</div>
 
 </div>
 
@@ -177,7 +177,7 @@
         <div class="editorLabel">Track</div>
         <label class="editorField">
           <span>Track Node Count <strong id="editorNodeCountVal">5</strong></span>
-          <input id="editorNodeCount" type="range" min="3" max="24" value="5">
+          <input id="editorNodeCount" type="range" min="3" max="100" value="5">
         </label>
         <label class="editorField">
           <span>Name</span>
@@ -305,7 +305,7 @@
 
     <section class="editorCanvasPanel">
       <canvas id="trackEditorCanvas" width="1100" height="720"></canvas>
-      <div class="editorCanvasHint">WASD move · Mouse wheel zoom · Right mouse rotate · Left mouse drag nodes or assets · Alt+drag paints brush · Shift snaps to grid</div>
+      <div class="editorCanvasHint">WASD move · Mouse wheel zoom · Right mouse rotate · Left mouse drag nodes or assets/paint brush · Shift snaps to grid</div>
       <div class="editorPreviewBanner" id="editorPreviewBanner">Live 3D editor view</div>
     </section>
   </div>
