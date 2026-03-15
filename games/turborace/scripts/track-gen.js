@@ -288,16 +288,19 @@ function buildRunoffProfile(pts,data){
   const leftExpand=new Array(Math.max(0,n-1)).fill(0);
   const rightExpand=new Array(Math.max(0,n-1)).fill(0);
   const slices=[];
-  for(let i=2;i<n-3;i++){
-    const pPrev=pts[i-1], pCur=pts[i], pNext=pts[i+1];
+  // pts is ~900 densely spaced spline points; stride samples ~15 units apart
+  // so corner angles are measurable (consecutive pts are only ~1 unit apart)
+  const stride=Math.max(1,Math.round(n/60));
+  for(let i=stride;i<n-stride-1;i++){
+    const pPrev=pts[i-stride], pCur=pts[i], pNext=pts[i+stride];
     const inX=pCur.x-pPrev.x, inZ=pCur.z-pPrev.z;
     const outX=pNext.x-pCur.x, outZ=pNext.z-pCur.z;
     const inLen=Math.hypot(inX,inZ)||1, outLen=Math.hypot(outX,outZ)||1;
     const dot=(inX*outX+inZ*outZ)/(inLen*outLen);
-    if(dot>0.45) continue; // include moderate corners so runoff is more consistent
+    if(dot>0.80) continue;
     const turn=Math.sign(inX*outZ-inZ*outX)||1;
     const side=turn>0?-1:1;
-    const sharp=Math.min(1,Math.max(0,(0.45-dot)/1.45));
+    const sharp=Math.min(1,Math.max(0,(0.80-dot)/1.80));
     const exitLen=Math.max(6,Math.min(24,Math.round(8+sharp*16)));
     const start=Math.min(n-3,i+1);
     const end=Math.min(n-2,start+exitLen);
