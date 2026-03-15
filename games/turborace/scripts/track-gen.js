@@ -388,7 +388,11 @@ function buildRunoffProfile(pts,data){
     ? Math.max(1,Math.floor(data.trackGenerationVersion))
     : 1;
   if(generationVersion<2) return null;
-  const zones=getTrackSceneryExclusionZones(data);
+  // Only exclude the start/finish area from gravel — not noAutoZones, which
+  // are a scenery-placement constraint and would otherwise suppress gravel on
+  // any track whose nodes are spaced closer than ~128 units apart.
+  const sf=Array.isArray(data?.wp)&&data.wp[0];
+  const zones=sf?[{x:sf[0],z:sf[2],r:28}]:[];
   const leftExpand=new Array(Math.max(0,n-1)).fill(0);
   const rightExpand=new Array(Math.max(0,n-1)).fill(0);
   const leftRunoff=new Array(Math.max(0,n-1)).fill(0);
