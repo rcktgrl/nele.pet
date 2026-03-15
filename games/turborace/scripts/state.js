@@ -33,6 +33,8 @@ export const state = {
     editorTrack: null,
     editorSelectedNode: 0,
     editorSelectedAsset: -1,
+    editorBrushAsset: 'tree',
+    editorBrushSize: 24,
     editorDrag: null,
     editorNeedsRebuild: false,
     editorLastRebuild: 0,

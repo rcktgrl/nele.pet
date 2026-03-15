@@ -129,6 +129,8 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .editorAssetPalette{display:flex;flex-wrap:wrap;gap:8px;}
 .assetChip{padding:8px 12px;border-radius:999px;border:1px solid #263243;background:#0d1320;color:#eaf0ff;font-size:12px;cursor:grab;}
 .assetChip:active{cursor:grabbing;}
+.assetChip.active{border-color:#ff5500;background:rgba(255,85,0,.18);color:#fff;box-shadow:0 0 0 1px rgba(255,85,0,.25) inset;}
+
 @media (max-width: 1200px){.editorWrap{grid-template-columns:1fr; height:auto;} #trackEditorCanvas{min-height:520px;}}
 
 .editorScreen{background:rgba(2,4,8,.32);backdrop-filter:blur(1px);}
