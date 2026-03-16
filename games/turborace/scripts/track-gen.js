@@ -67,12 +67,13 @@ export function buildTrack(data){
   const adaptBarrier=smoothEdgePts;
 
   if(!roadTex)roadTex=makeRoadTexture();
+  let runoffProfile=null;
   if(!isCity){
     addRibbon(curve,data.rw,900,0,0,0,.005,true,roadTex);
     addRibbon(curve,.30,300,0,0xffffff,0,.028,false);
     addKerbAdaptive(adaptKerb,data.rw,1);
     addKerbAdaptive(adaptKerb,data.rw,-1);
-    const runoffProfile=(data.enableRunoff===false)?null:buildRunoffProfile(adaptBarrier,data);
+    runoffProfile=(data.enableRunoff===false)?null:buildRunoffProfile(adaptBarrier,data);
     addBarriersAdaptive(adaptBarrier,data.rw,runoffProfile);
     if(runoffProfile) addGravelRunoff(runoffProfile);
   }
@@ -82,6 +83,16 @@ export function buildTrack(data){
   gnd.rotation.x=-Math.PI/2; gnd.position.y=-.08; gnd.receiveShadow=true; gnd.userData.trk=true; scene.add(gnd);
   if(!isCity) addGantry(curve,data.rw);
   state.sceneryExclusionZones=getTrackSceneryExclusionZones(data);
+  // Add gravel pit areas as scenery exclusion zones so trees/buildings don't spawn on them
+  if(runoffProfile){
+    const rw=data.rw||12;
+    for(const node of runoffProfile.nodes){
+      for(let j=node.start;j<=node.end;j+=5){
+        const p=adaptBarrier[Math.min(j,adaptBarrier.length-1)];
+        state.sceneryExclusionZones.push({x:p.x,z:p.z,r:rw/2+2+node.width});
+      }
+    }
+  }
   buildTrackScenery(data);
   scene.background=new THREE.Color(data.sky);
   const fogNear=isCity?120:260, fogFar=isCity?420:680;
@@ -164,6 +175,8 @@ function addKerbAdaptive(pts,rw,side){
     const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
     const c0x=p0.x+r0.x*ko,c0z=p0.z+r0.z*ko;
     const c1x=p1.x+r1.x*ko,c1z=p1.z+r1.z*ko;
+    // Skip reversed segments — fold-back on tight inner corners creates a loop
+    if((c1x-c0x)*(p1.x-p0.x)+(c1z-c0z)*(p1.z-p0.z)<=0) continue;
     let intersects=false;
     for(let s=0;s<emitted.length-2;s++){
       const e=emitted[s];
@@ -228,7 +241,8 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
       const off1=side*(rw/2+2.0+expand1);
       const b0x=p0.x+r0.x*off0,b0z=p0.z+r0.z*off0;
       const b1x=p1.x+r1.x*off1,b1z=p1.z+r1.z*off1;
-
+      // Skip reversed segments — fold-back on tight inner corners creates a loop
+      if((b1x-b0x)*(p1.x-p0.x)+(b1z-b0z)*(p1.z-p0.z)<=0) continue;
       let intersects=false;
       for(let s=0;s<emitted.length-2;s++){
         const e=emitted[s];
@@ -550,7 +564,7 @@ function addScenery(curve,data){
       // ── Trees (dense, varied sizes) ──
       const treeOff=s*(minOff+2+Math.random()*6);
       const tpos=p.clone().addScaledVector(r,treeOff);
-      if(!onTrack(tpos.x,tpos.z,6)&&!inExclusion(tpos.x,tpos.z,4)){
+      if(!onTrack(tpos.x,tpos.z,2)&&!inExclusion(tpos.x,tpos.z,4)){
         const tg=new THREE.Group();
         const h=1.0+Math.random()*1.2;
         const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.15,.25,h,5),tmk);
@@ -572,7 +586,7 @@ function addScenery(curve,data){
         trunk2.position.set(0,h2/2,0); tg2.add(trunk2);
         const cn2=new THREE.Mesh(new THREE.ConeGeometry(1.2+Math.random(),2.5+Math.random()*2,6),tlv);
         cn2.position.set(0,h2+1.5,0); tg2.add(cn2);
-        if(!inExclusion(tp2.x,tp2.z,4)){
+        if(!onTrack(tp2.x,tp2.z,2)&&!inExclusion(tp2.x,tp2.z,4)){
           tg2.position.set(tp2.x,p.y,tp2.z); tg2.rotation.y=Math.random()*Math.PI*2;
           tg2.userData.trk=true; scene.add(tg2);
         }
@@ -584,7 +598,7 @@ function addScenery(curve,data){
         const bpos=p.clone().addScaledVector(r,bOff);
         let bClose=false;
         for(const bl of placed){if((bpos.x-bl.x)**2+(bpos.z-bl.z)**2<144)bClose=true;}
-        if(!bClose&&!onTrack(bpos.x,bpos.z,10)&&!inExclusion(bpos.x,bpos.z,6)){
+        if(!bClose&&!onTrack(bpos.x,bpos.z,5)&&!inExclusion(bpos.x,bpos.z,6)){
           const bw=4+Math.random()*6, bd=3+Math.random()*5, bh=4+Math.random()*8;
           const bm=[bmk,bmk2,bmk3][Math.floor(Math.random()*3)];
           const bld=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),bm);
