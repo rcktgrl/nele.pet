@@ -864,6 +864,8 @@ function editorTrackToGameTrack(){
   if(state.editorTrack.streetGrid){ cityRoute=makeCityRouteFromNodes(ordered, state.editorTrack.gridSize||70); wp=makeCityWpFromRoute(cityRoute, state.editorTrack.gridSize||70); type='city'; }
   else wp=state.editorTrack.useBezier?makeBezierPath(ordered,18):ordered.map(n=>[n.x,0,n.z]);
   wp=thinCheckpoints(wp,50);
+  const maxWp=ordered.length*2;
+  if(wp.length>maxWp){ const step=wp.length/maxWp; wp=Array.from({length:maxWp},(_,i)=>wp[Math.round(i*step)]); }
   return {id:state.editorTrack.id||uniqueTrackId(),name:state.editorTrack.name||'Custom Track',desc:state.editorTrack.desc||'Custom track',laps:+state.editorTrack.laps||3,rw:+state.editorTrack.rw||12,wp,editorNodes:deepClone(ordered),previewColor:state.editorTrack.previewColor||'#44aaff',type,gridSize:state.editorTrack.gridSize||70,enableRunoff:state.editorTrack.enableRunoff!==false,trackGenerationVersion:Number.isFinite(state.editorTrack.trackGenerationVersion)?Math.max(1,Math.floor(state.editorTrack.trackGenerationVersion)):1,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(state.editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(state.editorTrack.groundColor)||tod.gnd,timeOfDay:state.editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(state.editorTrack.assets||[]),scenerySeed:Number.isFinite(state.editorTrack.scenerySeed)?(state.editorTrack.scenerySeed>>>0):Math.floor(Math.random()*0x100000000),useBezier:!!state.editorTrack.useBezier,fogDist:Number.isFinite(state.editorTrack.fogDist)?state.editorTrack.fogDist:1200};
 }
 function populateEditorUI(){
