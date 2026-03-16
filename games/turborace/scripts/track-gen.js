@@ -40,8 +40,37 @@ function ensureTrackScenerySeed(data){
   return seed;
 }
 
+function addCheckpointFlags(data){
+  const wps=data.wp, n=wps.length, rw=data.rw||12;
+  // Place flags right at the track edge on each side
+  const flagEdge=rw/2+0.3;
+  const poleMat=mat(0x222222);
+  const flagMat=new THREE.MeshLambertMaterial({color:0xffcc00,side:THREE.DoubleSide});
+  for(let i=0;i<n;i++){
+    const w=wps[i];
+    const prev=wps[(i-1+n)%n], next=wps[(i+1)%n];
+    const tx=next[0]-prev[0], tz=next[2]-prev[2];
+    const tl=Math.sqrt(tx*tx+tz*tz)||1;
+    const nx=-tz/tl, nz=tx/tl; // right-side normal
+    const ang=Math.atan2(tx,tz);
+    for(const s of[-1,1]){
+      const fx=w[0]+nx*s*flagEdge, fz=w[2]+nz*s*flagEdge;
+      const g=new THREE.Group();
+      const pole=new THREE.Mesh(new THREE.BoxGeometry(0.09,2.8,0.09),poleMat);
+      pole.position.set(0,1.4,0); g.add(pole);
+      const flag=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.5),flagMat);
+      // flag hangs from pole top, extends inward toward track center
+      flag.position.set(0.45*-s,2.6,0);
+      g.add(flag);
+      g.rotation.y=ang;
+      g.position.set(fx,w[1],fz);
+      g.userData.trk=true; scene.add(g);
+    }
+  }
+}
+
 export function buildTrack(data){
-  state.cityCorridors=null; state.cityAiPts=null;
+  state.cityCorridors=null; state.cityAiPts=null; state.gravelProfile=null;
   state.sceneryExclusionZones=[];
   const rm=[]; scene.traverse(o=>{if(o.userData.trk)rm.push(o);}); rm.forEach(o=>scene.remove(o));
   const raw=data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
@@ -75,7 +104,8 @@ export function buildTrack(data){
     addKerbAdaptive(adaptKerb,data.rw,-1);
     runoffProfile=(data.enableRunoff===false)?null:buildRunoffProfile(adaptBarrier,data);
     addBarriersAdaptive(adaptBarrier,data.rw,runoffProfile);
-    if(runoffProfile) addGravelRunoff(runoffProfile);
+    if(runoffProfile){ addGravelRunoff(runoffProfile); state.gravelProfile=runoffProfile; }
+    addCheckpointFlags(data);
   }
   // Ground plane
   const gndCol=isCity?data.gnd:0x1a3018;
