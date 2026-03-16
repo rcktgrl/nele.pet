@@ -222,10 +222,12 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
     const h=1.15;
     for(let i=0;i<n-1;i++){
       const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
-      const expand=side<0?(leftExpand[i]||0):(rightExpand[i]||0);
-      const off=side*(rw/2+2.0+expand);
-      const b0x=p0.x+r0.x*off,b0z=p0.z+r0.z*off;
-      const b1x=p1.x+r1.x*off,b1z=p1.z+r1.z*off;
+      const expand0=side<0?(leftExpand[i]||0):(rightExpand[i]||0);
+      const expand1=side<0?(leftExpand[i+1]||0):(rightExpand[i+1]||0);
+      const off0=side*(rw/2+2.0+expand0);
+      const off1=side*(rw/2+2.0+expand1);
+      const b0x=p0.x+r0.x*off0,b0z=p0.z+r0.z*off0;
+      const b1x=p1.x+r1.x*off1,b1z=p1.z+r1.z*off1;
 
       let intersects=false;
       for(let s=0;s<emitted.length-2;s++){
