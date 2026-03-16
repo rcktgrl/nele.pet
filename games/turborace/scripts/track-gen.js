@@ -125,7 +125,9 @@ export function buildTrack(data){
   }
   buildTrackScenery(data);
   scene.background=new THREE.Color(data.sky);
-  const fogNear=isCity?120:380, fogFar=isCity?420:1200;
+  const defaultFogFar=isCity?420:1200;
+  const fogFar=isCity?420:(Number.isFinite(data.fogDist)?data.fogDist:defaultFogFar);
+  const fogNear=isCity?120:Math.round(fogFar*0.32);
   scene.fog=new THREE.Fog(data.sky,fogNear,fogFar);
   return curve;
 }
