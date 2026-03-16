@@ -311,7 +311,15 @@ function updateHUD(){
   document.getElementById('speedNum').textContent=Math.round((state.pCar.isReversing?state.pCar.revSpd:state.pCar.spd)*3.6);
   document.getElementById('gearNum').textContent=state.pCar.gear===0?'R':state.pCar.gear;
   document.getElementById('lapVal').textContent=`${Math.min(state.pCar.lap+1,state.trkData.laps)} / ${state.trkData.laps}`;
+  const totalCp=state.trkData.wp.length;
+  document.getElementById('cpVal').textContent=`${state.pCar.cpPassed} / ${totalCp}`;
   document.getElementById('timer').textContent=fmtT(state.raceTime);
+  const lapTimesEl=document.getElementById('lapTimes');
+  if(state.pCar.lapTimes&&state.pCar.lapTimes.length){
+    lapTimesEl.innerHTML=state.pCar.lapTimes.map((t,i)=>`L${i+1} ${fmtT(t)}`).join('<br>');
+  } else {
+    lapTimesEl.textContent='';
+  }
   const all=[state.pCar,...state.aiCars].sort((a,b)=>b.totalProg-a.totalProg);
   const p=all.indexOf(state.pCar)+1;
   document.getElementById('posNum').innerHTML=`${p}<sup style="font-size:18px">${getOrd(p)}</sup>`;

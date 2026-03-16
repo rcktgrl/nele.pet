@@ -267,8 +267,8 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
       const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
       const expand0=side<0?(leftExpand[i]||0):(rightExpand[i]||0);
       const expand1=side<0?(leftExpand[i+1]||0):(rightExpand[i+1]||0);
-      const off0=side*(rw/2+2.0+expand0);
-      const off1=side*(rw/2+2.0+expand1);
+      const off0=side*(rw/2+1.75+expand0);
+      const off1=side*(rw/2+1.75+expand1);
       const b0x=p0.x+r0.x*off0,b0z=p0.z+r0.z*off0;
       const b1x=p1.x+r1.x*off1,b1z=p1.z+r1.z*off1;
       // Skip reversed segments — fold-back on tight inner corners creates a loop
@@ -460,7 +460,7 @@ function buildRunoffProfile(pts,data){
     const easedCurvature=curvature*curvature*(3-2*curvature);
     const nodeMultiplier=nodeRunoffMultipliers?.[i]??1;
     const baseRunoff=rw*(0.14+easedCurvature*0.78)*nodeMultiplier;
-    const baseExpand=1.0+(baseRunoff*1.05);
+    const baseExpand=baseRunoff;
 
     const p=pts[i];
     if(pointInZoneList(zones,p.x,p.z,10)) continue;
@@ -505,7 +505,7 @@ function buildRunoffProfile(pts,data){
       const rampOut=1-(fallT*fallT*(3-2*fallT));
       const blend=(j<=node.peak)?rampIn:rampOut;
       const runoffW=node.width*blend;
-      const wallExpand=(runoffW*1.12)+1.2;
+      const wallExpand=runoffW;
       if(node.side<0){
         leftRunoff[j]=Math.max(leftRunoff[j],runoffW);
         leftExpand[j]=Math.max(leftExpand[j],wallExpand);

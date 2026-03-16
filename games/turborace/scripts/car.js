@@ -40,6 +40,7 @@ class Car {
     this.rpm = this.gearbox.idleRpm;
     this.lap = 0; this.lastCP = 0; this.cpPassed = 0;
     this.totalProg = 0; this.finished = false; this.finTime = 0; this.lapStart = 0;
+    this.lapTimes = [];
     this.tl = []; this.wh = [];
     this.prevGear = 1; this.rpmDrop = 0; // for gear-shift RPM dip
     this.stuckTimer = 0;               // for boundary recovery
@@ -263,6 +264,7 @@ class Car {
           if (i === 0 && this.cpPassed >= n) {
             this.cpPassed = 0; this.lap++;
             const lt = state.raceTime - this.lapStart; this.lapStart = state.raceTime;
+            this.lapTimes.push(lt);
             if (this.isPlayer) {
               const startingFinal = this.lap === state.trkData.laps - 1;
               const fmt = fmtT || ((secs)=>secs.toFixed(2)+'s');
