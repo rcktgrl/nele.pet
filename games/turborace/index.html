@@ -16,13 +16,15 @@
   <div class="menuActions">
     <button id="introStartBtn" class="btn btn-p">START GAME</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.54</div>
+  <div class="menuVersion" aria-label="Game version">v0.62</div>
 </div>
 <div id="hud" role="status" aria-live="polite">
   <div id="raceTop">
     <div id="lapNum">LAP</div>
     <div id="lapVal">1 / 3</div>
+    <div id="cpRow"><span id="cpLabel">CP</span> <span id="cpVal">0 / 0</span></div>
     <div id="timer">00:00.000</div>
+    <div id="lapTimes"></div>
   </div>
   <div id="pos"><div id="posNum">1<sup style="font-size:20px">ST</sup></div><div id="posLabel">POSITION</div></div>
   <div id="speedBox" class="hudBottomDock"><div id="speedNum">0</div><div id="speedUnit">KM/H</div></div>
@@ -125,7 +127,7 @@
     <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
     <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.54</div>
+  <div class="menuVersion" aria-label="Game version">v0.62</div>
 
 </div>
 
@@ -237,6 +239,12 @@
           <label class="editorField editorCheckbox">
             <span>Gravel Runoff</span>
             <input id="editorEnableRunoff" type="checkbox" checked>
+          </label>
+        </div>
+        <div class="editorGrid2">
+          <label class="editorField">
+            <span>Fog Distance <strong id="editorFogDistVal">1200</strong></span>
+            <input id="editorFogDist" type="range" min="100" max="2000" step="50" value="1200">
           </label>
         </div>
         <div class="editorGrid2">

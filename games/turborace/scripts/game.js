@@ -311,7 +311,15 @@ function updateHUD(){
   document.getElementById('speedNum').textContent=Math.round((state.pCar.isReversing?state.pCar.revSpd:state.pCar.spd)*3.6);
   document.getElementById('gearNum').textContent=state.pCar.gear===0?'R':state.pCar.gear;
   document.getElementById('lapVal').textContent=`${Math.min(state.pCar.lap+1,state.trkData.laps)} / ${state.trkData.laps}`;
+  const totalCp=state.trkData.wp.length;
+  document.getElementById('cpVal').textContent=`${state.pCar.cpPassed} / ${totalCp}`;
   document.getElementById('timer').textContent=fmtT(state.raceTime);
+  const lapTimesEl=document.getElementById('lapTimes');
+  if(state.pCar.lapTimes&&state.pCar.lapTimes.length){
+    lapTimesEl.innerHTML=state.pCar.lapTimes.map((t,i)=>`L${i+1} ${fmtT(t)}`).join('<br>');
+  } else {
+    lapTimesEl.textContent='';
+  }
   const all=[state.pCar,...state.aiCars].sort((a,b)=>b.totalProg-a.totalProg);
   const p=all.indexOf(state.pCar)+1;
   document.getElementById('posNum').innerHTML=`${p}<sup style="font-size:18px">${getOrd(p)}</sup>`;
@@ -845,7 +853,7 @@ function editorTrackToGameTrack(){
   let wp, type='circuit', cityRoute=null;
   if(state.editorTrack.streetGrid){ cityRoute=makeCityRouteFromNodes(ordered, state.editorTrack.gridSize||70); wp=makeCityWpFromRoute(cityRoute, state.editorTrack.gridSize||70); type='city'; }
   else wp=state.editorTrack.useBezier?makeBezierPath(ordered,18):ordered.map(n=>[n.x,0,n.z]);
-  return {id:state.editorTrack.id||uniqueTrackId(),name:state.editorTrack.name||'Custom Track',desc:state.editorTrack.desc||'Custom track',laps:+state.editorTrack.laps||3,rw:+state.editorTrack.rw||12,wp,editorNodes:deepClone(ordered),previewColor:state.editorTrack.previewColor||'#44aaff',type,gridSize:state.editorTrack.gridSize||70,enableRunoff:state.editorTrack.enableRunoff!==false,trackGenerationVersion:Number.isFinite(state.editorTrack.trackGenerationVersion)?Math.max(1,Math.floor(state.editorTrack.trackGenerationVersion)):1,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(state.editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(state.editorTrack.groundColor)||tod.gnd,timeOfDay:state.editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(state.editorTrack.assets||[]),scenerySeed:Number.isFinite(state.editorTrack.scenerySeed)?(state.editorTrack.scenerySeed>>>0):Math.floor(Math.random()*0x100000000),useBezier:!!state.editorTrack.useBezier};
+  return {id:state.editorTrack.id||uniqueTrackId(),name:state.editorTrack.name||'Custom Track',desc:state.editorTrack.desc||'Custom track',laps:+state.editorTrack.laps||3,rw:+state.editorTrack.rw||12,wp,editorNodes:deepClone(ordered),previewColor:state.editorTrack.previewColor||'#44aaff',type,gridSize:state.editorTrack.gridSize||70,enableRunoff:state.editorTrack.enableRunoff!==false,trackGenerationVersion:Number.isFinite(state.editorTrack.trackGenerationVersion)?Math.max(1,Math.floor(state.editorTrack.trackGenerationVersion)):1,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(state.editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(state.editorTrack.groundColor)||tod.gnd,timeOfDay:state.editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(state.editorTrack.assets||[]),scenerySeed:Number.isFinite(state.editorTrack.scenerySeed)?(state.editorTrack.scenerySeed>>>0):Math.floor(Math.random()*0x100000000),useBezier:!!state.editorTrack.useBezier,fogDist:Number.isFinite(state.editorTrack.fogDist)?state.editorTrack.fogDist:1200};
 }
 function populateEditorUI(){
   normalizeEditorTrack();
@@ -861,6 +869,9 @@ function populateEditorUI(){
   document.getElementById('editorStreetGrid').checked=!!state.editorTrack.streetGrid;
   document.getElementById('editorEnableRunoff').checked=state.editorTrack.enableRunoff!==false;
   document.getElementById('editorGridSize').value=state.editorTrack.gridSize||70;
+  const fogDistVal=Number.isFinite(state.editorTrack.fogDist)?state.editorTrack.fogDist:1200;
+  document.getElementById('editorFogDist').value=fogDistVal;
+  document.getElementById('editorFogDistVal').textContent=fogDistVal;
   renderEditorTrackList();
   syncSelectedNodeUI();
   syncEditorNodeCountUI();
@@ -1017,6 +1028,9 @@ function onEditorMetaChanged(){
   state.editorTrack.streetGrid=document.getElementById('editorStreetGrid').checked;
   state.editorTrack.enableRunoff=document.getElementById('editorEnableRunoff').checked;
   state.editorTrack.gridSize=Math.max(40,Math.min(120,+document.getElementById('editorGridSize').value||70));
+  const fd=Math.max(100,Math.min(2000,+document.getElementById('editorFogDist').value||1200));
+  state.editorTrack.fogDist=fd;
+  document.getElementById('editorFogDistVal').textContent=fd;
   requestEditorRebuild(false);
 }
 function onEditorStreetGridChanged(){
@@ -1723,6 +1737,7 @@ document.getElementById('editorTimeOfDay').addEventListener('change', onEditorMe
 document.getElementById('editorStreetGrid').addEventListener('change', onEditorStreetGridChanged);
 document.getElementById('editorGridSize').addEventListener('input', onEditorMetaChanged);
 document.getElementById('editorEnableRunoff').addEventListener('change', onEditorMetaChanged);
+document.getElementById('editorFogDist').addEventListener('input', onEditorMetaChanged);
 document.getElementById('editorNodeCount').addEventListener('input', e=>setEditorNodeCount(e.target.value));
 document.getElementById('editorBrushAsset').addEventListener('change', e=>setEditorBrushAsset(e.target.value));
 document.getElementById('editorBrushEnabled').addEventListener('change', e=>setEditorBrushEnabled(e.target.checked));

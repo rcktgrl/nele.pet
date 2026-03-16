@@ -40,8 +40,37 @@ function ensureTrackScenerySeed(data){
   return seed;
 }
 
+function addCheckpointFlags(data){
+  const wps=data.wp, n=wps.length, rw=data.rw||12;
+  // Place flags right at the track edge on each side
+  const flagEdge=rw/2+0.3;
+  const poleMat=mat(0x222222);
+  const flagMat=new THREE.MeshLambertMaterial({color:0xffcc00,side:THREE.DoubleSide});
+  for(let i=0;i<n;i++){
+    const w=wps[i];
+    const prev=wps[(i-1+n)%n], next=wps[(i+1)%n];
+    const tx=next[0]-prev[0], tz=next[2]-prev[2];
+    const tl=Math.sqrt(tx*tx+tz*tz)||1;
+    const nx=-tz/tl, nz=tx/tl; // right-side normal
+    const ang=Math.atan2(tx,tz);
+    for(const s of[-1,1]){
+      const fx=w[0]+nx*s*flagEdge, fz=w[2]+nz*s*flagEdge;
+      const g=new THREE.Group();
+      const pole=new THREE.Mesh(new THREE.BoxGeometry(0.09,2.8,0.09),poleMat);
+      pole.position.set(0,1.4,0); g.add(pole);
+      const flag=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.5),flagMat);
+      // flag hangs from pole top, extends inward toward track center
+      flag.position.set(0.45*-s,2.6,0);
+      g.add(flag);
+      g.rotation.y=ang;
+      g.position.set(fx,w[1],fz);
+      g.userData.trk=true; scene.add(g);
+    }
+  }
+}
+
 export function buildTrack(data){
-  state.cityCorridors=null; state.cityAiPts=null;
+  state.cityCorridors=null; state.cityAiPts=null; state.gravelProfile=null;
   state.sceneryExclusionZones=[];
   const rm=[]; scene.traverse(o=>{if(o.userData.trk)rm.push(o);}); rm.forEach(o=>scene.remove(o));
   const raw=data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
@@ -75,7 +104,8 @@ export function buildTrack(data){
     addKerbAdaptive(adaptKerb,data.rw,-1);
     runoffProfile=(data.enableRunoff===false)?null:buildRunoffProfile(adaptBarrier,data);
     addBarriersAdaptive(adaptBarrier,data.rw,runoffProfile);
-    if(runoffProfile) addGravelRunoff(runoffProfile);
+    if(runoffProfile){ addGravelRunoff(runoffProfile); state.gravelProfile=runoffProfile; }
+    addCheckpointFlags(data);
   }
   // Ground plane
   const gndCol=isCity?data.gnd:0x1a3018;
@@ -95,7 +125,9 @@ export function buildTrack(data){
   }
   buildTrackScenery(data);
   scene.background=new THREE.Color(data.sky);
-  const fogNear=isCity?120:260, fogFar=isCity?420:680;
+  const defaultFogFar=isCity?420:1200;
+  const fogFar=isCity?420:(Number.isFinite(data.fogDist)?data.fogDist:defaultFogFar);
+  const fogNear=isCity?120:Math.round(fogFar*0.32);
   scene.fog=new THREE.Fog(data.sky,fogNear,fogFar);
   return curve;
 }
@@ -237,8 +269,8 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
       const p0=pts[i],p1=pts[i+1],r0=norms[i],r1=norms[i+1];
       const expand0=side<0?(leftExpand[i]||0):(rightExpand[i]||0);
       const expand1=side<0?(leftExpand[i+1]||0):(rightExpand[i+1]||0);
-      const off0=side*(rw/2+2.0+expand0);
-      const off1=side*(rw/2+2.0+expand1);
+      const off0=side*(rw/2+1.75+expand0);
+      const off1=side*(rw/2+1.75+expand1);
       const b0x=p0.x+r0.x*off0,b0z=p0.z+r0.z*off0;
       const b1x=p1.x+r1.x*off1,b1z=p1.z+r1.z*off1;
       // Skip reversed segments — fold-back on tight inner corners creates a loop
@@ -430,7 +462,7 @@ function buildRunoffProfile(pts,data){
     const easedCurvature=curvature*curvature*(3-2*curvature);
     const nodeMultiplier=nodeRunoffMultipliers?.[i]??1;
     const baseRunoff=rw*(0.14+easedCurvature*0.78)*nodeMultiplier;
-    const baseExpand=1.0+(baseRunoff*1.05);
+    const baseExpand=baseRunoff;
 
     const p=pts[i];
     if(pointInZoneList(zones,p.x,p.z,10)) continue;
@@ -475,7 +507,7 @@ function buildRunoffProfile(pts,data){
       const rampOut=1-(fallT*fallT*(3-2*fallT));
       const blend=(j<=node.peak)?rampIn:rampOut;
       const runoffW=node.width*blend;
-      const wallExpand=(runoffW*1.12)+1.2;
+      const wallExpand=runoffW;
       if(node.side<0){
         leftRunoff[j]=Math.max(leftRunoff[j],runoffW);
         leftExpand[j]=Math.max(leftExpand[j],wallExpand);

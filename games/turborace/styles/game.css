@@ -8,6 +8,10 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 #lapNum{font-size:13px;color:#666;letter-spacing:3px;text-transform:uppercase;}
 #lapVal{font-size:26px;font-weight:700;color:#ffd700;text-shadow:0 0 20px #ffd700aa;}
 #timer{font-size:18px;color:#ccc;letter-spacing:2px;margin-top:2px;}
+#cpRow{font-size:13px;color:#888;letter-spacing:2px;margin-top:1px;}
+#cpLabel{color:#555;}
+#cpVal{color:#aaa;}
+#lapTimes{margin-top:5px;font-size:12px;color:#666;letter-spacing:1px;line-height:1.6;}
 #pos{position:absolute;top:16px;left:20px;font-family:'Orbitron',monospace;}
 #posNum{font-size:46px;font-weight:900;color:#00ffaa;text-shadow:0 0 25px #00ffaa88;line-height:1;}
 #posLabel{font-size:11px;color:#666;letter-spacing:3px;}

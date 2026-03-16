@@ -40,10 +40,12 @@ class Car {
     this.rpm = this.gearbox.idleRpm;
     this.lap = 0; this.lastCP = 0; this.cpPassed = 0;
     this.totalProg = 0; this.finished = false; this.finTime = 0; this.lapStart = 0;
+    this.lapTimes = [];
     this.tl = []; this.wh = [];
     this.prevGear = 1; this.rpmDrop = 0; // for gear-shift RPM dip
     this.stuckTimer = 0;               // for boundary recovery
     this.isReversing = false; this.revSpd = 0; this.reverseTimer = 0;
+    this.onGravel = false;
     const visual = createCarVisual(this.data);
     this.mesh = visual.mesh; this.tl = visual.tailLights; this.wh = visual.wheels;
     this.mesh.position.copy(this.pos); this.mesh.rotation.y = this.hdg;
@@ -104,11 +106,14 @@ class Car {
       const dragCoeff = (this.data.accel - this.data.maxSpd * rollCoeff) / (this.data.maxSpd * this.data.maxSpd);
       const drag = this.spd * this.spd * dragCoeff;
       const roll = this.spd * rollCoeff;
-      const bForce = brk * this.data.brake;
+      const bForce = brk * this.data.brake * (this.onGravel ? 0.5 : 1.0);
       this.spd = Math.max(0, Math.min(this.data.maxSpd, this.spd + (thrust - drag - roll - bForce) * dt));
+      // Gravel: gradually drag speed down to 80 km/h max (22.2 m/s)
+      if (this.onGravel && this.spd > 22.2) this.spd = Math.max(22.2, this.spd - 18 * dt);
       // Steering
       const sf = Math.max(.28, 1 - this.spd / this.data.maxSpd * .60);
-      if (this.spd > .5) this.hdg += str * this.data.hdl * 2.2 * sf * dt;
+      const hdlMult = this.onGravel ? 0.5 : 1.0;
+      if (this.spd > .5) this.hdg += str * this.data.hdl * hdlMult * 2.2 * sf * dt;
       // Move forward
       const fwd = new THREE.Vector3(Math.sin(this.hdg), 0, Math.cos(this.hdg));
       this.pos.addScaledVector(fwd, this.spd * dt);
@@ -125,7 +130,7 @@ class Car {
     const bOn = brk > .1 || this.isReversing;
     const bc = bOn ? 0xee1100 : 0x440500, be = bOn ? 0x881100 : 0x100100;
     for (const t of this.tl) { t.material.color.set(bc); t.material.emissive.set(be); }
-    this.boundary(dt); this.progress();
+    this.boundary(dt); this.checkGravel(); this.progress();
   }
 
   groundY() {
@@ -224,6 +229,28 @@ class Car {
     }
   }
 
+  checkGravel() {
+    const profile = state.gravelProfile;
+    if (!profile) { this.onGravel = false; return; }
+    const { pts, leftRunoff, rightRunoff, rw } = profile;
+    const n = pts.length;
+    let md = Infinity, ni = 0;
+    for (let i = 0; i < n; i++) {
+      const d = (this.pos.x - pts[i].x) ** 2 + (this.pos.z - pts[i].z) ** 2;
+      if (d < md) { md = d; ni = i; }
+    }
+    const p = pts[ni];
+    const nxt = pts[(ni + 1) % n], prv = pts[(ni + n - 1) % n];
+    const tx = nxt.x - prv.x, tz = nxt.z - prv.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    const nx = -tz / tl, nz = tx / tl;
+    const lat = (this.pos.x - p.x) * nx + (this.pos.z - p.z) * nz;
+    const latAbs = Math.abs(lat);
+    const inner = rw / 2 + 1.75;
+    const gravelW = lat >= 0 ? (rightRunoff[ni] || 0) : (leftRunoff[ni] || 0);
+    this.onGravel = latAbs > inner && latAbs < inner + gravelW;
+  }
+
   progress() {
     if (!state.trkData) return;
     const wps = state.trkData.wp, n = wps.length, cr = 22;
@@ -237,6 +264,7 @@ class Car {
           if (i === 0 && this.cpPassed >= n) {
             this.cpPassed = 0; this.lap++;
             const lt = state.raceTime - this.lapStart; this.lapStart = state.raceTime;
+            this.lapTimes.push(lt);
             if (this.isPlayer) {
               const startingFinal = this.lap === state.trkData.laps - 1;
               const fmt = fmtT || ((secs)=>secs.toFixed(2)+'s');
