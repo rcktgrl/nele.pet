@@ -11,6 +11,7 @@ let gyroEnabled=true;
 
 const GYRO_MAX_TILT=24;
 const GYRO_DEADZONE=2.2;
+const GYRO_SENSITIVITY=0.2;
 
 function canUseGyro(){
   return typeof window!=='undefined' && 'DeviceOrientationEvent' in window;
@@ -32,7 +33,7 @@ function updateGyroSteer(){
   }
   // Normalize so steering starts at 0 at the deadzone edge (no jump discontinuity)
   const normalized=(abs-GYRO_DEADZONE)/(GYRO_MAX_TILT-GYRO_DEADZONE);
-  gyroState.steer=clamp(Math.sign(gyroState.gamma)*normalized,-1,1);
+  gyroState.steer=clamp(Math.sign(gyroState.gamma)*normalized*GYRO_SENSITIVITY,-1,1);
 }
 
 function setGyroStatus(msg,tappable=false){
@@ -71,6 +72,7 @@ function updateGyroStatusText(){
 }
 
 function updateGyroBars(){
+  // Use raw gamma (no deadzone) so the dot always tracks physical tilt
   const pct=50+clamp(gyroState.gamma/GYRO_MAX_TILT,-1,1)*50;
   const pos=pct+'%';
   const sd=document.getElementById('gyroSettingsDot');
