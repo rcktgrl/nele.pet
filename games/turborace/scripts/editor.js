@@ -574,9 +574,68 @@ export function duplicateEditorTrack(){
   populateEditorUI();
 }
 
-export function addEditorNode(){ setEditorNodeCount((state.editorTrack.nodes||[]).length+1); }
-export function insertEditorNodeAfter(){ addEditorNode(); }
-export function deleteEditorNode(){ setEditorNodeCount((state.editorTrack.nodes||[]).length-1); }
+function sampleEditorCurve(t){
+  // Sample the current editor track's CatmullRom curve at parameter t [0,1)
+  const nodes=state.editorTrack.nodes;
+  const pts=nodes.map(n=>new THREE.Vector3(+n.x||0,0,+n.z||0));
+  const curve=new THREE.CatmullRomCurve3(pts,true,'centripetal',0.5);
+  return curve.getPoint(t);
+}
+function interpNodeProps(a,b){
+  return {
+    steepness:Math.round(((a.steepness||40)+(b.steepness||40))*0.5),
+    gravelPitSize:Math.round(((Number.isFinite(a.gravelPitSize)?a.gravelPitSize:100)+(Number.isFinite(b.gravelPitSize)?b.gravelPitSize:100))*0.5),
+    gravelLeft:Math.round(((Number.isFinite(a.gravelLeft)?a.gravelLeft:0)+(Number.isFinite(b.gravelLeft)?b.gravelLeft:0))*0.5),
+    gravelRight:Math.round(((Number.isFinite(a.gravelRight)?a.gravelRight:0)+(Number.isFinite(b.gravelRight)?b.gravelRight:0))*0.5),
+    type:'no-auto'
+  };
+}
+export function addEditorNode(){
+  // Insert a new node AFTER the selected node (in driving direction)
+  // Position is sampled from the existing curve so the track shape doesn't change
+  if(!state.editorTrack) return;
+  const nodes=state.editorTrack.nodes;
+  if(nodes.length<3) return;
+  const sel=state.editorSelectedNode;
+  const t=(sel+0.5)/nodes.length;
+  const pt=sampleEditorCurve(t);
+  const newNode={x:pt.x,z:pt.z,...interpNodeProps(nodes[sel],nodes[(sel+1)%nodes.length])};
+  nodes.splice(sel+1,0,newNode);
+  state.editorSelectedNode=sel+1;
+  normalizeEditorTrack();
+  syncSelectedNodeUI();
+  syncEditorNodeCountUI();
+  requestEditorRebuild(false);
+}
+export function insertEditorNodeAfter(){
+  // Insert a new node BEFORE the selected node (opposite/reverse direction)
+  // Position is sampled from the existing curve so the track shape doesn't change
+  if(!state.editorTrack) return;
+  const nodes=state.editorTrack.nodes;
+  if(nodes.length<3) return;
+  const sel=state.editorSelectedNode;
+  const t=((sel-0.5)+nodes.length)%nodes.length/nodes.length;
+  const pt=sampleEditorCurve(t);
+  const newNode={x:pt.x,z:pt.z,...interpNodeProps(nodes[(sel-1+nodes.length)%nodes.length],nodes[sel])};
+  nodes.splice(sel,0,newNode);
+  state.editorSelectedNode=sel;
+  normalizeEditorTrack();
+  syncSelectedNodeUI();
+  syncEditorNodeCountUI();
+  requestEditorRebuild(false);
+}
+export function deleteEditorNode(){
+  // Delete only the currently selected node
+  if(!state.editorTrack) return;
+  const nodes=state.editorTrack.nodes;
+  if(nodes.length<=3) return;
+  nodes.splice(state.editorSelectedNode,1);
+  state.editorSelectedNode=Math.max(0,Math.min(state.editorSelectedNode,nodes.length-1));
+  normalizeEditorTrack();
+  syncSelectedNodeUI();
+  syncEditorNodeCountUI();
+  requestEditorRebuild(false);
+}
 
 export function deleteSelectedEditorAsset(){
   if(state.editorSelectedAsset<0) return;
