@@ -124,6 +124,7 @@
   <div class="menuActions">
     <button id="gameStartBtn" class="btn btn-p">START RACE</button>
     <button id="trackEditorBtn" class="btn btn-s">TRACK EDITOR</button>
+    <button id="carEditorBtn" class="btn btn-s">CAR EDITOR</button>
     <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
     <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
   </div>
@@ -357,6 +358,106 @@
   <div class="menuActions menuActions-inline">
     <button id="menuBtn" class="btn btn-p">MENU</button>
     <button id="raceAgainBtn" class="btn btn-s">RACE AGAIN</button>
+  </div>
+</div>
+
+<!-- CAR EDITOR -->
+<div class="screen editorScreen" id="sCarEditor" style="display:none">
+  <div class="editorWrap">
+    <aside class="editorSidebar">
+      <div class="editorTop">
+        <div>
+          <h2>Car Editor</h2>
+          <div class="editorSub">Build with cubes, cylinders, wedges &amp; wheels. WASD moves camera, right-click orbits.</div>
+        </div>
+        <button id="ceCloseBtn" class="btn btn-s btn-tight">BACK</button>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Designs</div>
+        <div class="editorList" id="ceDesignList"></div>
+        <div class="editorRow">
+          <button id="ceNewBtn"       class="btn btn-p btn-tight">NEW</button>
+          <button id="ceSaveBtn"      class="btn btn-s btn-tight">SAVE</button>
+          <button id="ceDelDesignBtn" class="btn btn-s btn-tight">DELETE</button>
+          <button id="ceExportBtn"    class="btn btn-s btn-tight">EXPORT CODE</button>
+        </div>
+        <label class="editorField" style="margin-top:8px">
+          <span>Name</span>
+          <input id="ceDesignName" type="text" maxlength="40">
+        </label>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Add Part &nbsp;<span id="cePartCount" style="color:#ffd700">0</span> placed</div>
+        <div class="editorGrid2">
+          <label class="editorField">
+            <span>Shape</span>
+            <select id="ceShapePicker">
+              <option value="cube">Cube</option>
+              <option value="cylinder">Cylinder</option>
+              <option value="wedge">Wedge</option>
+              <option value="wheel">Wheel</option>
+            </select>
+          </label>
+          <label class="editorField">
+            <span>Material</span>
+            <select id="ceMaterialPicker">
+              <option value="solid">Solid</option>
+              <option value="glass">Glass</option>
+              <option value="light">Light</option>
+            </select>
+          </label>
+        </div>
+        <label class="editorField">
+          <span>Colour</span>
+          <input id="cePartColor" type="color" value="#4488ff">
+        </label>
+        <div class="editorRow">
+          <button id="cePlaceBtn" class="btn btn-p btn-tight">PLACE MODE</button>
+        </div>
+        <div class="editorHint">Enable Place Mode, then click the 3D view to place a part. Colour &amp; material apply to selected part too.</div>
+      </div>
+
+      <div id="cePartProps" class="editorSection" style="display:none">
+        <div class="editorLabel">Selected: <span id="cePartType" style="color:#ffcc00;text-transform:capitalize"></span></div>
+        <div class="editorGrid2">
+          <label class="editorField"><span>X</span><input id="ceX" type="number" step="0.25"></label>
+          <label class="editorField"><span>Y</span><input id="ceY" type="number" step="0.25"></label>
+        </div>
+        <div class="editorGrid2">
+          <label class="editorField"><span>Z</span><input id="ceZ" type="number" step="0.25"></label>
+          <label class="editorField"><span>Rot Y °</span><input id="ceRY" type="number" step="5"></label>
+        </div>
+        <div class="editorGrid2">
+          <label class="editorField"><span>Rot X °</span><input id="ceRX" type="number" step="5"></label>
+          <label class="editorField"><span>Rot Z °</span><input id="ceRZ" type="number" step="5"></label>
+        </div>
+        <div class="editorGrid2">
+          <label class="editorField"><span>Scale X</span><input id="ceSX" type="number" step="0.1" min="0.05"></label>
+          <label class="editorField"><span>Scale Y</span><input id="ceSY" type="number" step="0.1" min="0.05"></label>
+        </div>
+        <label class="editorField">
+          <span>Scale Z</span><input id="ceSZ" type="number" step="0.1" min="0.05">
+        </label>
+        <!-- Wheel-only: steering toggle -->
+        <label id="ceSteeringRow" class="editorField editorCheckbox" style="display:none">
+          <span>Steering Wheel</span>
+          <input type="checkbox" id="ceSteeringToggle">
+        </label>
+        <div class="editorRow" style="margin-top:8px">
+          <button id="ceMirrorBtn"  class="btn btn-s btn-tight">MIRROR X</button>
+          <button id="ceDelPartBtn" class="btn btn-s btn-tight">DELETE</button>
+        </div>
+        <div class="editorHint">Arrow keys move XZ · Q/E up/down · R/F rotate Y · Del deletes · Mirror creates X-axis copy</div>
+      </div>
+    </aside>
+
+    <section class="editorCanvasPanel">
+      <div id="carEditorInteract"></div>
+      <div class="editorPreviewBanner">Car Editor · 3D View</div>
+      <div class="editorCanvasHint">WASD pan · wheel zoom · right-click orbit · click to select/place · drag to move</div>
+    </section>
   </div>
 </div>
 
