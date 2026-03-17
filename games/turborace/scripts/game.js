@@ -10,7 +10,8 @@ import {
   showCarEditor, closeCarEditor,
   updateCarEditorCamera, handleCarEditorKeys,
   deleteSelectedPart, onPartPropChange, onNameChange,
-  saveDesign, newDesign, deleteDesign, togglePlaceMode
+  saveDesign, newDesign, deleteDesign, togglePlaceMode,
+  mirrorSelectedPart, exportDesignAsCode
 } from './car-editor.js';
 import {
   isTouchControlsVisibleInState,
@@ -171,9 +172,13 @@ document.getElementById('ceSaveBtn').addEventListener('click',saveDesign);
 document.getElementById('ceDelDesignBtn').addEventListener('click',deleteDesign);
 document.getElementById('cePlaceBtn').addEventListener('click',togglePlaceMode);
 document.getElementById('ceDelPartBtn').addEventListener('click',deleteSelectedPart);
+document.getElementById('ceMirrorBtn').addEventListener('click',mirrorSelectedPart);
+document.getElementById('ceExportBtn').addEventListener('click',exportDesignAsCode);
 document.getElementById('ceDesignName').addEventListener('input',onNameChange);
-['ceX','ceY','ceZ','ceRX','ceRY','ceRZ','ceSX','ceSY','ceSZ','cePartColor'].forEach(id=>{
-  document.getElementById(id).addEventListener('input',onPartPropChange);
+['ceX','ceY','ceZ','ceRX','ceRY','ceRZ','ceSX','ceSY','ceSZ',
+ 'cePartColor','ceMaterialPicker','ceSteeringToggle'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('input',onPartPropChange);
 });
 document.getElementById('mainSettingsBtn').addEventListener('click',function(){tryStartMenuMusic();showSettings();});
 document.getElementById('backToSelectionBtn').addEventListener('click',()=>{ window.location.href='../index.html'; });
