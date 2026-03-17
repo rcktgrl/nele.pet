@@ -271,7 +271,7 @@ function setupSteerSlider(){
   slider.addEventListener('pointermove',e=>{
     if(e.pointerId!==sliderPointerId)return;
     e.preventDefault();
-    applyThumb(getSteerValue-(e.clientX));
+    applyThumb(getSteerValue(e.clientX));
   });
   function releaseSlider(e){
     if(e.pointerId!==sliderPointerId)return;
