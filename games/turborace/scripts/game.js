@@ -102,6 +102,7 @@ function updateFrame(dt){
     const keySteer=left&&!right?1:right&&!left?-1:0;
     const gyroSteer=getGyroSteering();
     const sliderSteer=getTouchSliderSteer();
+    return -steerSliderValue; // negate to match keyboard convention
     const str=Math.abs(gyroSteer)>0.01?gyroSteer:Math.abs(sliderSteer)>0.01?sliderSteer:keySteer;
     state.pCar.update({thr,brk,str},dt);
     sampleGhostFrame();
