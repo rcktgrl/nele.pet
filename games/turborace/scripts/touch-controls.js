@@ -1,7 +1,10 @@
+import { state } from './state.js';
+import { toggleCam } from './camera.js';
 const TOUCH_TOGGLE_KEY='turborace_touch_controls';
 const touchPointers={throttle:new Set(),brake:new Set(),left:new Set(),right:new Set()};
 export const touchState={throttle:false,brake:false,left:false,right:false};
 const gyroState={available:false,active:false,permission:'unknown',gamma:0,steer:0};
+const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 let touchControlsEnabled=false;
 
 const GYRO_MAX_TILT=24;
@@ -61,7 +64,7 @@ function updateGyroStatusText(){
 
 function onDeviceOrientation(event){
   if(typeof event.gamma!=='number')return;
-  gyroState.gamma=event.gamma;
+  gyroState.gamma=isIOS?-event.gamma:event.gamma;
   updateGyroSteer();
 }
 
@@ -111,6 +114,8 @@ export function getGyroSteering(){
   return gyroState.active?gyroState.steer:0;
 }
 
+export function isTouchControlsEnabled(){ return touchControlsEnabled; }
+
 export function isTouchControlsVisibleInState(state){
   return touchControlsEnabled&&(state==='racing'||state==='cooldown');
 }
@@ -159,7 +164,7 @@ export function releaseAllTouchControls(){
   setTouchControl('right',false);
 }
 
-export function setupTouchControls(gState){
+export function setupTouchControls({pauseRace,resumeRace}={}){
   const root=document.getElementById('touchControls');
   if(!root)return;
   root.querySelectorAll('[data-control]').forEach(btn=>{
@@ -184,12 +189,14 @@ export function setupTouchControls(gState){
   root.querySelectorAll('[data-tap]').forEach(btn=>{
     const onTap=(e)=>{
       e.preventDefault();
-      if(btn.dataset.tap==='camera' && (gState==='racing'||gState==='cooldown')) toggleCam();
+      const gs=state.gState;
+      if(btn.dataset.tap==='camera' && (gs==='racing'||gs==='cooldown')) toggleCam();
       if(btn.dataset.tap==='pause'){
-        if(gState==='racing'||gState==='cooldown') pauseRace();
-        else if(gState==='paused') resumeRace();
+        if(gs==='racing'||gs==='cooldown') pauseRace&&pauseRace();
+        else if(gs==='paused') resumeRace&&resumeRace();
       }
     };
+    btn.addEventListener('pointerdown',e=>{ e.preventDefault(); btn.setPointerCapture(e.pointerId); });
     btn.addEventListener('pointerup',onTap);
     btn.addEventListener('contextmenu',e=>e.preventDefault());
   });

@@ -16,7 +16,7 @@ import {
   normaliseTrackId, renderResultsLeaderboard,
   handlePostRaceLeaderboard
 } from './leaderboard.js';
-import { updateTouchControlsVisibility, releaseAllTouchControls } from './touch-controls.js';
+import { updateTouchControlsVisibility, releaseAllTouchControls, isTouchControlsEnabled } from './touch-controls.js';
 import { fmtT } from './util.js';
 import { notify } from './notify.js';
 import {
@@ -66,7 +66,7 @@ export async function initRace(){
   state.raceTime=0; state.gState='countdown';
   resetCurrentRaceSubmitted();
   document.getElementById('hud').style.display='block';
-  document.getElementById('hint').style.display='block';
+  document.getElementById('hint').style.display=isTouchControlsEnabled()?'none':'block';
   updateTouchControlsVisibility(state.gState);
   document.getElementById('camLabel').textContent='[ C ] COCKPIT VIEW';
   state.camMode='chase'; dc.style.display='none';

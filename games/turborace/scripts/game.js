@@ -200,7 +200,7 @@ document.getElementById('raceAgainBtn').addEventListener('click',restartRace);
 //  BOOT
 // ═══════════════════════════════════════════════════════
 scene.background=new THREE.Color(0x050510);
-setupTouchControls(state.gState);
+setupTouchControls({pauseRace,resumeRace});
 initTouchSettings();
 initAudioSettings();
 setOnlineGhostToggle(readOnlineGhostToggle());
