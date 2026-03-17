@@ -9,6 +9,7 @@ export const dc=document.getElementById('dc'),dctx=dc.getContext('2d');
 export const mmc=document.getElementById('mmc'),mmctx=mmc.getContext('2d');
 
 export const camEditor=new THREE.PerspectiveCamera(55,1,.1,3000);
+export const camCarEditor=new THREE.PerspectiveCamera(55,1,.05,500);
 export const raycaster=new THREE.Raycaster();
 export const editorGroundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
 

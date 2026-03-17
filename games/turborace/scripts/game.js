@@ -3,9 +3,15 @@ import { createRenderPipeline } from './render/pipeline.js';
 import { THREE } from './three.js';
 import {
   gc, scene, clock,
-  camChase, camCock, camEditor,
+  camChase, camCock, camEditor, camCarEditor,
   state, raceCamOrbit, keys
 } from './state.js';
+import {
+  showCarEditor, closeCarEditor,
+  updateCarEditorCamera, handleCarEditorKeys,
+  deleteSelectedPart, onPartPropChange, onNameChange,
+  saveDesign, newDesign, deleteDesign, togglePlaceMode
+} from './car-editor.js';
 import {
   isTouchControlsVisibleInState,
   onTouchControlsToggle,
@@ -64,6 +70,11 @@ document.addEventListener('keydown',e=>{
     if(leaderboardModal&&leaderboardModal.style.display==='flex'){ closeTrackLeaderboardModal(); return; }
     if(state.gState==='racing'||state.gState==='cooldown')pauseRace();
     else if(state.gState==='paused')resumeRace();
+    else if(state.gState==='carEditor')closeCarEditor();
+  }
+  if((e.code==='Delete'||e.code==='Backspace')&&state.gState==='carEditor'){
+    e.preventDefault();
+    deleteSelectedPart();
   }
 });
 document.addEventListener('keyup',e=>{ keys[e.code]=false; });
@@ -114,6 +125,9 @@ function updateFrame(dt){
     updateAudio(0,0,dt,state.pCar,keys); updateCamera();
     updateGhostReplay();
     if(document.getElementById('results').style.display==='flex') updateResultsUI();
+  }else if(state.gState==='carEditor'){
+    updateCarEditorCamera(dt);
+    handleCarEditorKeys(dt);
   }else if(state.gState==='editorPreview'){
     updateEditorPreviewCamera(dt);
   }else if(state.gState==='editor'){
@@ -150,6 +164,17 @@ document.getElementById('settingsCloseBtn').addEventListener('click',closeSettin
 document.getElementById('introStartBtn').addEventListener('click',function(){tryStartMenuMusic();showMain();});
 document.getElementById('gameStartBtn').addEventListener('click',function(){tryStartMenuMusic();showTrkSel();});
 document.getElementById('trackEditorBtn').addEventListener('click',function(){tryStartMenuMusic();showTrackEditor();});
+document.getElementById('carEditorBtn').addEventListener('click',function(){showCarEditor();});
+document.getElementById('ceCloseBtn').addEventListener('click',closeCarEditor);
+document.getElementById('ceNewBtn').addEventListener('click',newDesign);
+document.getElementById('ceSaveBtn').addEventListener('click',saveDesign);
+document.getElementById('ceDelDesignBtn').addEventListener('click',deleteDesign);
+document.getElementById('cePlaceBtn').addEventListener('click',togglePlaceMode);
+document.getElementById('ceDelPartBtn').addEventListener('click',deleteSelectedPart);
+document.getElementById('ceDesignName').addEventListener('input',onNameChange);
+['ceX','ceY','ceZ','ceRX','ceRY','ceRZ','ceSX','ceSY','ceSZ','cePartColor'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',onPartPropChange);
+});
 document.getElementById('mainSettingsBtn').addEventListener('click',function(){tryStartMenuMusic();showSettings();});
 document.getElementById('backToSelectionBtn').addEventListener('click',()=>{ window.location.href='../index.html'; });
 document.getElementById('showTrkSelBtn').addEventListener('click',showTrkSel);
@@ -214,7 +239,7 @@ const {renderer,start:startRenderLoop}=createRenderPipeline({
   canvas:gc,
   scene,
   clock,
-  cameras:[camChase,camCock,camEditor],
+  cameras:[camChase,camCock,camEditor,camCarEditor],
   resizeOverlays:resizeDC,
   frameUpdate:updateFrame,
   getActiveCamera:()=>state.activeCam

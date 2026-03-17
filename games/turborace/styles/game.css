@@ -134,6 +134,10 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .assetChip{padding:8px 12px;border-radius:999px;border:1px solid #263243;background:#0d1320;color:#eaf0ff;font-size:12px;cursor:grab;}
 .assetChip:active{cursor:grabbing;}
 .assetChip.active{border-color:#ff5500;background:rgba(255,85,0,.18);color:#fff;box-shadow:0 0 0 1px rgba(255,85,0,.25) inset;}
+/* Car Editor */
+#carEditorInteract{width:100%;flex:1;border-radius:12px;border:1px solid #1b2635;cursor:crosshair;min-height:400px;}
+#carEditorInteract.place-active{cursor:cell;}
+.btn-active{border-color:#ff5500!important;background:rgba(255,85,0,.22)!important;color:#fff!important;}
 
 @media (max-width: 1200px){.editorWrap{grid-template-columns:1fr; height:auto;} #trackEditorCanvas{min-height:520px;}}
 
