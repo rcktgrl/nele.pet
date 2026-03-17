@@ -423,22 +423,32 @@ export function setEditorNodeCount(raw){
 export function syncEditorBrushUI(){
   const kind=state.editorBrushAsset||'tree';
   const count=Math.max(1,Math.round(state.editorBrushSize||1));
+  const spacing=Math.max(6,Math.min(60,Math.round(state.editorBrushSpacing||12)));
   const enabled=!!state.editorBrushEnabled;
   const sel=document.getElementById('editorBrushAsset');
   const slider=document.getElementById('editorBrushSize');
   const label=document.getElementById('editorBrushSizeVal');
   const toggle=document.getElementById('editorBrushEnabled');
+  const spacingSlider=document.getElementById('editorBrushSpacing');
+  const spacingLabel=document.getElementById('editorBrushSpacingVal');
   if(sel) sel.value=kind;
   if(slider) slider.value=String(count);
   if(label) label.textContent=String(count);
   if(toggle) toggle.checked=enabled;
+  if(spacingSlider) spacingSlider.value=String(spacing);
+  if(spacingLabel) spacingLabel.textContent=String(spacing);
   document.querySelectorAll('#editorAssetPalette .assetChip').forEach(el=>{
     el.classList.toggle('active',el.dataset.asset===kind);
   });
 }
 
+export function setEditorBrushSpacing(raw){
+  state.editorBrushSpacing=Math.max(6,Math.min(60,Math.round(Number(raw)||12)));
+  syncEditorBrushUI();
+}
+
 export function setEditorBrushAsset(kind){
-  const valid=['tree','building','park'];
+  const valid=['tree','building','park','stand'];
   state.editorBrushAsset=valid.includes(kind)?kind:'tree';
   syncEditorBrushUI();
 }
@@ -456,7 +466,7 @@ export function setEditorBrushSize(raw){
 function paintEditorAssetsAt(x,z){
   const count=Math.max(1,Math.round(state.editorBrushSize||1));
   const type=state.editorBrushAsset||'tree';
-  const spacing=12;
+  const spacing=Math.max(6,Math.min(60,state.editorBrushSpacing||12));
   let placed=0;
   for(let i=0;i<count;i++){
     const angle=(i/count)*Math.PI*2;
@@ -465,7 +475,7 @@ function paintEditorAssetsAt(x,z){
     const px=x+Math.cos(angle)*offset;
     const pz=z+Math.sin(angle)*offset;
     if(!editorCanPlaceAssetAt(px,pz)) continue;
-    const exists=state.editorTrack.assets.some(a=>Math.hypot(a.x-px,a.z-pz)<10);
+    const exists=state.editorTrack.assets.some(a=>Math.hypot(a.x-px,a.z-pz)<spacing*0.8);
     if(exists) continue;
     state.editorTrack.assets.push({type,x:px,z:pz});
     state.editorSelectedAsset=state.editorTrack.assets.length-1;
@@ -728,7 +738,7 @@ export function drawEditorCanvas(){
   state.editorTrack.assets.forEach((a,i)=>{
     const p=editorWorldToOverlay(new THREE.Vector3(a.x,3,a.z),canvas);
     if(!p) return;
-    ctx.fillStyle=i===state.editorSelectedAsset?'#ffd166':(a.type==='building'?'#c792ea':a.type==='park'?'#55dd88':'#66cc66');
+    ctx.fillStyle=i===state.editorSelectedAsset?'#ffd166':(a.type==='building'?'#c792ea':a.type==='park'?'#55dd88':a.type==='stand'?'#ff9944':'#66cc66');
     ctx.strokeStyle='#091018';
     ctx.lineWidth=2;
     if(a.type==='building'){
@@ -737,6 +747,9 @@ export function drawEditorCanvas(){
     }else if(a.type==='park'){
       ctx.fillRect(p.x-10,p.y-10,20,20);
       ctx.strokeRect(p.x-10,p.y-10,20,20);
+    }else if(a.type==='stand'){
+      ctx.fillRect(p.x-14,p.y-5,28,10);
+      ctx.strokeRect(p.x-14,p.y-5,28,10);
     }else{
       ctx.beginPath();
       ctx.arc(p.x,p.y,8,0,Math.PI*2);
