@@ -2,7 +2,7 @@ import { mat, matE } from "./render/materials.js";
 import { state, scene } from "./state.js";
 import { THREE } from "./three.js";
 
-export const LATEST_TRACK_GENERATION_VERSION = 4;
+export const LATEST_TRACK_GENERATION_VERSION = 5;
 
 let roadTex=null;
 

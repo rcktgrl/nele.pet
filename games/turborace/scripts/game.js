@@ -666,7 +666,9 @@ function normaliseStoredTrack(raw){
       ? out.editorNodes
       : (Array.isArray(out.nodes)&&out.nodes.length>=3 ? out.nodes : null);
     if(!nodes) return null;
-    out.wp=nodes.map(n=>[+n.x||0,0,+n.z||0]);
+    out.wp=thinCheckpoints(nodes.map(n=>[+n.x||0,0,+n.z||0]),50);
+    const maxWp=nodes.length*2;
+    if(out.wp.length>maxWp){const step=out.wp.length/maxWp;out.wp=Array.from({length:maxWp},(_,i)=>out.wp[Math.round(i*step)]);}
   }
   const updatedAt=Date.parse(out.updatedAt||out.updated_at||raw.updated_at||'');
   out.updatedAt=Number.isFinite(updatedAt)?new Date(updatedAt).toISOString():new Date(0).toISOString();
