@@ -30,7 +30,9 @@ function updateGyroSteer(){
     gyroState.steer=0;
     return;
   }
-  gyroState.steer=clamp(gyroState.gamma/GYRO_MAX_TILT,-1,1);
+  // Normalize so steering starts at 0 at the deadzone edge (no jump discontinuity)
+  const normalized=(abs-GYRO_DEADZONE)/(GYRO_MAX_TILT-GYRO_DEADZONE);
+  gyroState.steer=clamp(Math.sign(gyroState.gamma)*normalized,-1,1);
 }
 
 function setGyroStatus(msg,tappable=false){
@@ -68,10 +70,31 @@ function updateGyroStatusText(){
   setGyroStatus('GYRO: ready. Tilt phone left/right to steer.');
 }
 
+function updateGyroBars(){
+  const pct=50+clamp(gyroState.gamma/GYRO_MAX_TILT,-1,1)*50;
+  const pos=pct+'%';
+  const sd=document.getElementById('gyroSettingsDot');
+  if(sd)sd.style.left=pos;
+  const td=document.getElementById('gyroSteerDot');
+  if(td)td.style.left=pos;
+}
+
+function updateGyroBarVisibility(){
+  const steerBar=document.getElementById('gyroSteerBar');
+  const settingsBar=document.getElementById('gyroSettingsBar');
+  const leftBtns=document.querySelectorAll('#touchClusterLeft [data-control]');
+  const gyroActive=gyroState.active&&gyroEnabled;
+  const inGameGyro=gyroActive&&touchControlsEnabled;
+  if(steerBar)steerBar.style.display=inGameGyro?'flex':'none';
+  leftBtns.forEach(b=>{b.style.display=inGameGyro?'none':'';});
+  if(settingsBar)settingsBar.style.display=gyroActive?'block':'none';
+}
+
 function onDeviceOrientation(event){
   if(typeof event.gamma!=='number')return;
   gyroState.gamma=isIOS?-event.gamma:event.gamma;
   updateGyroSteer();
+  updateGyroBars();
 }
 
 function activateGyroListener(){
@@ -80,6 +103,7 @@ function activateGyroListener(){
   gyroState.active=true;
   gyroState.available=true;
   updateGyroStatusText();
+  updateGyroBarVisibility();
 }
 
 function deactivateGyroListener(){
@@ -88,7 +112,9 @@ function deactivateGyroListener(){
   gyroState.active=false;
   gyroState.gamma=0;
   updateGyroSteer();
+  updateGyroBars();
   updateGyroStatusText();
+  updateGyroBarVisibility();
 }
 
 async function ensureGyroPermission(){
@@ -153,6 +179,7 @@ export function onTouchControlsToggle(enabled){
   else deactivateGyroListener();
   updateTouchControlsVisibility(state.gState);
   updateHintVisibility();
+  updateGyroBarVisibility();
   updateGyroStatusText();
 }
 
@@ -163,6 +190,7 @@ export function onGyroToggle(enabled){
   localStorage.setItem(GYRO_TOGGLE_KEY,gyroEnabled?'1':'0');
   if(gyroEnabled&&touchControlsEnabled)ensureGyroPermission();
   else deactivateGyroListener();
+  updateGyroBarVisibility();
   updateGyroStatusText();
 }
 
