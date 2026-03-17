@@ -253,11 +253,15 @@ class Car {
 
   progress() {
     if (!state.trkData) return;
-    const wps = state.trkData.wp, n = wps.length, cr = 22;
+    const wps = state.trkData.wp, n = wps.length;
     for (let i = 0; i < n; i++) {
       const w = wps[i];
-      const d = Math.sqrt((this.pos.x - w[0]) ** 2 + (this.pos.z - w[2]) ** 2);
-      if (d < cr && i !== this.lastCP) {
+      const prev = wps[(i - 1 + n) % n], next = wps[(i + 1) % n];
+      const tx = next[0] - prev[0], tz = next[2] - prev[2];
+      const tl = Math.sqrt(tx * tx + tz * tz) || 1;
+      const dx = this.pos.x - w[0], dz = this.pos.z - w[2];
+      const longDist = Math.abs(dx * (tx / tl) + dz * (tz / tl));
+      if (longDist < 12 && i !== this.lastCP) {
         const exp = (this.lastCP + 1 + n) % n;
         if (i === exp) {
           this.lastCP = i; this.cpPassed++;
