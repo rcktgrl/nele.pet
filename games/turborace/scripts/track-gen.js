@@ -40,12 +40,13 @@ function ensureTrackScenerySeed(data){
   return seed;
 }
 
-function addCheckpointFlags(data){
+function addCheckpointFlags(data, runoffProfile){
   const wps=data.wp, n=wps.length, rw=data.rw||12;
-  // Place flags right at the track edge on each side
-  const flagEdge=rw/2+1.75;
   const poleMat=mat(0x222222);
   const flagMat=new THREE.MeshLambertMaterial({color:0xffcc00,side:THREE.DoubleSide});
+  const splinePts=runoffProfile?runoffProfile.pts:null;
+  const leftExpand=runoffProfile?runoffProfile.leftExpand:null;
+  const rightExpand=runoffProfile?runoffProfile.rightExpand:null;
   for(let i=0;i<n;i++){
     const w=wps[i];
     const prev=wps[(i-1+n)%n], next=wps[(i+1)%n];
@@ -53,7 +54,22 @@ function addCheckpointFlags(data){
     const tl=Math.sqrt(tx*tx+tz*tz)||1;
     const nx=-tz/tl, nz=tx/tl; // right-side normal
     const ang=Math.atan2(tx,tz);
+    // Find nearest spline point to get per-side wall expansion from gravel
+    let expL=0, expR=0;
+    if(splinePts){
+      let bestDist=Infinity, bestIdx=0;
+      for(let j=0;j<splinePts.length;j++){
+        const dx=splinePts[j].x-w[0], dz=splinePts[j].z-w[2];
+        const d=dx*dx+dz*dz;
+        if(d<bestDist){bestDist=d; bestIdx=j;}
+      }
+      expL=leftExpand[bestIdx]||0;
+      expR=rightExpand[bestIdx]||0;
+    }
     for(const s of[-1,1]){
+      // s=-1 = left side, s=1 = right side (matches barrier placement convention)
+      const expand=s<0?expL:expR;
+      const flagEdge=rw/2+1.75+expand;
       const fx=w[0]+nx*s*flagEdge, fz=w[2]+nz*s*flagEdge;
       const g=new THREE.Group();
       const pole=new THREE.Mesh(new THREE.BoxGeometry(0.09,2.8,0.09),poleMat);
@@ -105,7 +121,7 @@ export function buildTrack(data){
     runoffProfile=(data.enableRunoff===false)?null:buildRunoffProfile(adaptBarrier,data);
     addBarriersAdaptive(adaptBarrier,data.rw,runoffProfile);
     if(runoffProfile){ addGravelRunoff(runoffProfile); state.gravelProfile=runoffProfile; }
-    addCheckpointFlags(data);
+    addCheckpointFlags(data, runoffProfile);
   }
   // Ground plane
   const gndCol=isCity?data.gnd:0x1a3018;
