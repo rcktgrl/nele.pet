@@ -13,7 +13,8 @@ import {
   initTouchSettings,
   setupTouchControls,
   touchState,
-  getGyroSteering
+  getGyroSteering,
+  getTouchSliderSteer
 } from './touch-controls.js';
 import {
   initAudioSettings,
@@ -100,7 +101,8 @@ function updateFrame(dt){
     const right=(keys['ArrowRight']||keys['KeyD']||touchState.right);
     const keySteer=left&&!right?1:right&&!left?-1:0;
     const gyroSteer=getGyroSteering();
-    const str=Math.abs(gyroSteer)>0.01?gyroSteer:keySteer;
+    const sliderSteer=getTouchSliderSteer();
+    const str=Math.abs(gyroSteer)>0.01?gyroSteer:Math.abs(sliderSteer)>0.01?sliderSteer:keySteer;
     state.pCar.update({thr,brk,str},dt);
     sampleGhostFrame();
     for(const ai of state.aiControllers)ai.update(dt);
