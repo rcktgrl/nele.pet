@@ -1,11 +1,13 @@
 import { state } from './state.js';
 import { toggleCam } from './camera.js';
 const TOUCH_TOGGLE_KEY='turborace_touch_controls';
+const GYRO_TOGGLE_KEY='turborace_gyro_enabled';
 const touchPointers={throttle:new Set(),brake:new Set(),left:new Set(),right:new Set()};
 export const touchState={throttle:false,brake:false,left:false,right:false};
 const gyroState={available:false,active:false,permission:'unknown',gamma:0,steer:0};
 const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 let touchControlsEnabled=false;
+let gyroEnabled=true;
 
 const GYRO_MAX_TILT=24;
 const GYRO_DEADZONE=2.2;
@@ -28,7 +30,9 @@ function updateGyroSteer(){
     gyroState.steer=0;
     return;
   }
-  gyroState.steer=clamp(gyroState.gamma/GYRO_MAX_TILT,-1,1);
+  // Normalize so steering starts at 0 at the deadzone edge (no jump discontinuity)
+  const normalized=(abs-GYRO_DEADZONE)/(GYRO_MAX_TILT-GYRO_DEADZONE);
+  gyroState.steer=clamp(Math.sign(gyroState.gamma)*normalized,-1,1);
 }
 
 function setGyroStatus(msg,tappable=false){
@@ -51,6 +55,10 @@ function updateGyroStatusText(){
     setGyroStatus('GYRO: enable touch controls to use tilt steering.');
     return;
   }
+  if(!gyroEnabled){
+    setGyroStatus('GYRO: disabled. Toggle above to enable tilt steering.');
+    return;
+  }
   if(gyroState.active){
     setGyroStatus('GYRO: active tilt steering.');
     return;
@@ -62,10 +70,31 @@ function updateGyroStatusText(){
   setGyroStatus('GYRO: ready. Tilt phone left/right to steer.');
 }
 
+function updateGyroBars(){
+  const pct=50+clamp(gyroState.gamma/GYRO_MAX_TILT,-1,1)*50;
+  const pos=pct+'%';
+  const sd=document.getElementById('gyroSettingsDot');
+  if(sd)sd.style.left=pos;
+  const td=document.getElementById('gyroSteerDot');
+  if(td)td.style.left=pos;
+}
+
+function updateGyroBarVisibility(){
+  const steerBar=document.getElementById('gyroSteerBar');
+  const settingsBar=document.getElementById('gyroSettingsBar');
+  const leftBtns=document.querySelectorAll('#touchClusterLeft [data-control]');
+  const gyroActive=gyroState.active&&gyroEnabled;
+  const inGameGyro=gyroActive&&touchControlsEnabled;
+  if(steerBar)steerBar.style.display=inGameGyro?'flex':'none';
+  leftBtns.forEach(b=>{b.style.display=inGameGyro?'none':'';});
+  if(settingsBar)settingsBar.style.display=gyroActive?'block':'none';
+}
+
 function onDeviceOrientation(event){
   if(typeof event.gamma!=='number')return;
   gyroState.gamma=isIOS?-event.gamma:event.gamma;
   updateGyroSteer();
+  updateGyroBars();
 }
 
 function activateGyroListener(){
@@ -74,6 +103,7 @@ function activateGyroListener(){
   gyroState.active=true;
   gyroState.available=true;
   updateGyroStatusText();
+  updateGyroBarVisibility();
 }
 
 function deactivateGyroListener(){
@@ -82,10 +112,16 @@ function deactivateGyroListener(){
   gyroState.active=false;
   gyroState.gamma=0;
   updateGyroSteer();
+  updateGyroBars();
   updateGyroStatusText();
+  updateGyroBarVisibility();
 }
 
 async function ensureGyroPermission(){
+  if(!gyroEnabled){
+    deactivateGyroListener();
+    return;
+  }
   if(!canUseGyro()){
     gyroState.permission='unsupported';
     updateGyroStatusText();
@@ -126,6 +162,13 @@ export function updateTouchControlsVisibility(gState){
   root.style.display=isTouchControlsVisibleInState(gState)?'flex':'none';
 }
 
+function updateHintVisibility(){
+  const hint=document.getElementById('hint');
+  if(!hint)return;
+  if(hint.style.display==='none'&&!touchControlsEnabled)return;
+  if(touchControlsEnabled){hint.style.display='none';}
+}
+
 export function onTouchControlsToggle(enabled){
   touchControlsEnabled=!!enabled;
   const input=document.getElementById('touchToggleInput');
@@ -134,7 +177,20 @@ export function onTouchControlsToggle(enabled){
   if(!touchControlsEnabled)releaseAllTouchControls();
   if(touchControlsEnabled)ensureGyroPermission();
   else deactivateGyroListener();
-  updateTouchControlsVisibility();
+  updateTouchControlsVisibility(state.gState);
+  updateHintVisibility();
+  updateGyroBarVisibility();
+  updateGyroStatusText();
+}
+
+export function onGyroToggle(enabled){
+  gyroEnabled=!!enabled;
+  const input=document.getElementById('gyroToggleInput');
+  if(input&&input.checked!==gyroEnabled)input.checked=gyroEnabled;
+  localStorage.setItem(GYRO_TOGGLE_KEY,gyroEnabled?'1':'0');
+  if(gyroEnabled&&touchControlsEnabled)ensureGyroPermission();
+  else deactivateGyroListener();
+  updateGyroBarVisibility();
   updateGyroStatusText();
 }
 
@@ -143,6 +199,10 @@ export function initTouchSettings(){
   touchControlsEnabled=(saved==='1');
   const input=document.getElementById('touchToggleInput');
   if(input)input.checked=touchControlsEnabled;
+  const savedGyro=localStorage.getItem(GYRO_TOGGLE_KEY);
+  gyroEnabled=(savedGyro===null)?true:(savedGyro==='1');
+  const gyroInput=document.getElementById('gyroToggleInput');
+  if(gyroInput)gyroInput.checked=gyroEnabled;
   updateGyroStatusText();
 }
 
@@ -215,9 +275,9 @@ export function setupTouchControls({pauseRace,resumeRace}={}){
   const gyroStatusEl=document.getElementById('gyroStatus');
   if(gyroStatusEl){
     gyroStatusEl.addEventListener('click',()=>{
-      if(gyroState.permission==='required'&&touchControlsEnabled)ensureGyroPermission();
+      if(gyroState.permission==='required'&&touchControlsEnabled&&gyroEnabled)ensureGyroPermission();
     });
   }
-  if(touchControlsEnabled)ensureGyroPermission();
+  if(touchControlsEnabled&&gyroEnabled)ensureGyroPermission();
   else updateGyroStatusText();
 }

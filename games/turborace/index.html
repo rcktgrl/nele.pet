@@ -40,7 +40,11 @@
     <button class="touchBtn touchBtn-small" data-tap="camera" aria-label="Toggle camera">CAM</button>
     <button class="touchBtn touchBtn-small" data-tap="pause" aria-label="Pause">⏸</button>
   </div>
-  <div class="touchCluster touchCluster-left">
+  <div class="touchCluster touchCluster-left" id="touchClusterLeft">
+    <div id="gyroSteerBar" class="gyroSteerBar" style="display:none" aria-label="Gyro steering">
+      <div class="gyroSteerDz"></div>
+      <div class="gyroSteerDot" id="gyroSteerDot"></div>
+    </div>
     <button class="touchBtn touchBtn-small" data-control="left" aria-label="Steer left">◀</button>
     <button class="touchBtn touchBtn-small" data-control="right" aria-label="Steer right">▶</button>
   </div>
@@ -80,6 +84,15 @@
     <span class="toggleLbl">TOUCH CONTROLS</span>
     <input type="checkbox" id="touchToggleInput">
   </label>
+  <label class="toggleRow" for="gyroToggleInput">
+    <span class="toggleLbl">GYRO STEERING</span>
+    <input type="checkbox" id="gyroToggleInput">
+  </label>
+  <div class="touchCfgHint" id="gyroStatus" aria-live="polite">GYRO: checking availability...</div>
+  <div id="gyroSettingsBar" class="gyroSettingsBar" style="display:none" aria-hidden="true">
+    <div class="gyroSettingsDz"></div>
+    <div class="gyroSettingsDot" id="gyroSettingsDot"></div>
+  </div>
   <label class="toggleRow" for="onlineGhostToggleInput">
     <span class="toggleLbl">ONLINE LEADERBOARD GHOSTS</span>
     <input type="checkbox" id="onlineGhostToggleInput">
@@ -102,7 +115,6 @@
   <div class="touchCfgHint">Auto-throttle on touch. Hold BRAKE for slowing down or reverse.</div>
   <div class="touchCfgHint">When online ghost mode is enabled, AI cars are replaced by ghost cars.</div>
   <div class="touchCfgHint">Online ghost count pulls from the highest-ranked leaderboard entries with ghost data.</div>
-  <div class="touchCfgHint" id="gyroStatus" aria-live="polite">GYRO: checking availability...</div>
   <div class="s-sep"></div>
   <div class="ctrl-grid">
     <span>THROTTLE</span><span>W / ↑</span>

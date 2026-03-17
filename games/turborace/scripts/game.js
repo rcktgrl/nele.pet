@@ -9,6 +9,7 @@ import {
 import {
   isTouchControlsVisibleInState,
   onTouchControlsToggle,
+  onGyroToggle,
   initTouchSettings,
   setupTouchControls,
   touchState,
@@ -144,6 +145,7 @@ document.getElementById('quitToMenuBtn').addEventListener('click',showMain);
 document.getElementById('musicVolSlider').addEventListener('input',e=>onMusicVol(e.target.value));
 document.getElementById('sfxVolSlider').addEventListener('input',e=>onSfxVol(e.target.value));
 document.getElementById('touchToggleInput').addEventListener('input',e=>onTouchControlsToggle(e.target.checked));
+document.getElementById('gyroToggleInput').addEventListener('input',e=>onGyroToggle(e.target.checked));
 document.getElementById('onlineGhostToggleInput').addEventListener('input',e=>setOnlineGhostToggle(e.target.checked));
 document.getElementById('onlineGhostCountSelect').addEventListener('change',e=>setOnlineGhostCount(e.target.value));
 document.getElementById('settingsCloseBtn').addEventListener('click',closeSettings);
