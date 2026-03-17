@@ -104,11 +104,11 @@ export function buildTrack(data){
   state.cityCorridors=null; state.cityAiPts=null; state.gravelProfile=null;
   state.sceneryExclusionZones=[];
   const rm=[]; scene.traverse(o=>{if(o.userData.trk)rm.push(o);}); rm.forEach(o=>scene.remove(o));
-  // When useBezier is true, data.wp contains the Bezier-shaped path with steepness baked in.
-  // Use it directly so per-node curvature adjustments are reflected in the rendered track.
-  // For non-Bezier tracks, prefer editorNodes (full unthinnned node set) over the thinned wp.
-  const raw=data.useBezier&&Array.isArray(data.wp)&&data.wp.length>=3
-    ? data.wp.map(w=>new THREE.Vector3(w[0],w[1]||0,w[2]))
+  // splinePts holds the full unthinned Bezier path (steepness baked in) and is the most
+  // accurate source for track geometry. Fall back to editorNodes (raw control points, good
+  // for Catmull-Rom) or wp (thinned checkpoints, last resort).
+  const raw=Array.isArray(data.splinePts)&&data.splinePts.length>=3
+    ? data.splinePts.map(w=>new THREE.Vector3(w[0],w[1]||0,w[2]))
     : Array.isArray(data.editorNodes)&&data.editorNodes.length>=3
       ? data.editorNodes.map(n=>new THREE.Vector3(+n.x||0,0,+n.z||0))
       : data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
