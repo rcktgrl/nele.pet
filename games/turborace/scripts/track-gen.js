@@ -89,7 +89,13 @@ export function buildTrack(data){
   state.cityCorridors=null; state.cityAiPts=null; state.gravelProfile=null;
   state.sceneryExclusionZones=[];
   const rm=[]; scene.traverse(o=>{if(o.userData.trk)rm.push(o);}); rm.forEach(o=>scene.remove(o));
-  const raw=data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
+  // Prefer editorNodes as spline control points — they are the full unthinnned node set.
+  // data.wp is thinned to ≥50 m spacing for checkpoint detection; using it as spline
+  // control points causes the mesh to follow those sparse checkpoints and skip nodes
+  // that are closer together, rather than following the actual track layout.
+  const raw=Array.isArray(data.editorNodes)&&data.editorNodes.length>=3
+    ? data.editorNodes.map(n=>new THREE.Vector3(+n.x||0,0,+n.z||0))
+    : data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
   const curve=new THREE.CatmullRomCurve3(raw,true,'centripetal',.5);
   state.trkCurve=curve; state.trkPts=curve.getSpacedPoints(500);
   state.trkWallLeft=[];
