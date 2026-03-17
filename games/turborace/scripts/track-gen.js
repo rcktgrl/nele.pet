@@ -49,8 +49,23 @@ function addCheckpointFlags(data, runoffProfile){
   const rightExpand=runoffProfile?runoffProfile.rightExpand:null;
   for(let i=0;i<n;i++){
     const w=wps[i];
-    const prev=wps[(i-1+n)%n], next=wps[(i+1)%n];
-    const tx=next[0]-prev[0], tz=next[2]-prev[2];
+    // Use the actual spline tangent so flags align with the rendered track and walls.
+    // Falling back to prev/next wp direction only when the spline isn't available.
+    let tx, tz;
+    if(state.trkCurve&&state.trkPts.length){
+      const pts=state.trkPts, pn=pts.length;
+      let bestDist=Infinity, bestIdx=0;
+      for(let j=0;j<pn;j++){
+        const dx=pts[j].x-w[0], dz=pts[j].z-w[2];
+        const d=dx*dx+dz*dz;
+        if(d<bestDist){bestDist=d; bestIdx=j;}
+      }
+      const tang=state.trkCurve.getTangentAt(bestIdx/pn);
+      tx=tang.x; tz=tang.z;
+    }else{
+      const prev=wps[(i-1+n)%n], next=wps[(i+1)%n];
+      tx=next[0]-prev[0]; tz=next[2]-prev[2];
+    }
     const tl=Math.sqrt(tx*tx+tz*tz)||1;
     const nx=-tz/tl, nz=tx/tl; // right-side normal
     const ang=Math.atan2(tx,tz);
@@ -89,13 +104,14 @@ export function buildTrack(data){
   state.cityCorridors=null; state.cityAiPts=null; state.gravelProfile=null;
   state.sceneryExclusionZones=[];
   const rm=[]; scene.traverse(o=>{if(o.userData.trk)rm.push(o);}); rm.forEach(o=>scene.remove(o));
-  // Prefer editorNodes as spline control points — they are the full unthinnned node set.
-  // data.wp is thinned to ≥50 m spacing for checkpoint detection; using it as spline
-  // control points causes the mesh to follow those sparse checkpoints and skip nodes
-  // that are closer together, rather than following the actual track layout.
-  const raw=Array.isArray(data.editorNodes)&&data.editorNodes.length>=3
-    ? data.editorNodes.map(n=>new THREE.Vector3(+n.x||0,0,+n.z||0))
-    : data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
+  // splinePts holds the full unthinned Bezier path (steepness baked in) and is the most
+  // accurate source for track geometry. Fall back to editorNodes (raw control points, good
+  // for Catmull-Rom) or wp (thinned checkpoints, last resort).
+  const raw=Array.isArray(data.splinePts)&&data.splinePts.length>=3
+    ? data.splinePts.map(w=>new THREE.Vector3(w[0],w[1]||0,w[2]))
+    : Array.isArray(data.editorNodes)&&data.editorNodes.length>=3
+      ? data.editorNodes.map(n=>new THREE.Vector3(+n.x||0,0,+n.z||0))
+      : data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
   const curve=new THREE.CatmullRomCurve3(raw,true,'centripetal',.5);
   state.trkCurve=curve; state.trkPts=curve.getSpacedPoints(500);
   state.trkWallLeft=[];
