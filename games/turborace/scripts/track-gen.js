@@ -85,6 +85,50 @@ function addCheckpointFlags(data, runoffProfile){
   }
 }
 
+function addCityCheckpointPoles(data){
+  const wps=data.wp, n=wps.length, rw=data.rw||12;
+  const swW=3;
+  const wallOff=rw/2+swW; // right at the wall edge
+  const poleMat=mat(0x444455);
+  const bulbMat=matE(0xffeedd,0xaa8844);
+  const flagMat=new THREE.MeshLambertMaterial({color:0xffcc00,side:THREE.DoubleSide});
+  const poolMat=new THREE.MeshBasicMaterial({color:0xffcc44,transparent:true,opacity:0.15,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
+  const poolGeo=new THREE.CircleGeometry(12,16);
+  const sfPt=state.trkCurve.getPoint(0);
+  const sfExclude=15;
+  for(let i=0;i<n;i++){
+    const w=wps[i];
+    if(Math.hypot(w[0]-sfPt.x,w[2]-sfPt.z)<sfExclude)continue;
+    const prev=wps[(i-1+n)%n],next=wps[(i+1)%n];
+    const tx=next[0]-prev[0],tz=next[2]-prev[2];
+    const tl=Math.sqrt(tx*tx+tz*tz)||1;
+    const nx=-tz/tl,nz=tx/tl; // right-side normal
+    const ang=Math.atan2(tx,tz);
+    // Place on right side, aligned with city walls
+    const lx=w[0]+nx*wallOff, lz=w[2]+nz*wallOff;
+    // Cylindrical city-style pole
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,6.5,5),poleMat);
+    pole.position.set(lx,3.25,lz); pole.userData.trk=true; scene.add(pole);
+    // Arm extends inward over road
+    const armDx=-nx*2.0, armDz=-nz*2.0;
+    const arm=new THREE.Mesh(new THREE.BoxGeometry(.05,.05,2.8),poleMat);
+    arm.position.set(lx+armDx*0.4,6.3,lz+armDz*0.4);
+    arm.rotation.y=Math.atan2(nx,nz); arm.userData.trk=true; scene.add(arm);
+    const bx2=lx+armDx, bz2=lz+armDz;
+    const bulb=new THREE.Mesh(new THREE.BoxGeometry(.6,.12,.35),bulbMat);
+    bulb.position.set(bx2,6.2,bz2); bulb.userData.trk=true; scene.add(bulb);
+    // Yellow checkpoint flag panel on pole
+    const flag=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.5),flagMat);
+    flag.position.set(lx-nx*0.45,2.6,lz-nz*0.45);
+    flag.rotation.y=ang; flag.userData.trk=true; scene.add(flag);
+    // Light pool on road surface
+    const pool=new THREE.Mesh(poolGeo,poolMat);
+    pool.rotation.x=-Math.PI/2;
+    pool.position.set(w[0],0.06,w[2]);
+    pool.userData.trk=true; scene.add(pool);
+  }
+}
+
 export function buildTrack(data){
   state.cityCorridors=null; state.cityAiPts=null; state.gravelProfile=null;
   state.sceneryExclusionZones=[];
@@ -122,6 +166,8 @@ export function buildTrack(data){
     addBarriersAdaptive(adaptBarrier,data.rw,runoffProfile);
     if(runoffProfile){ addGravelRunoff(runoffProfile); state.gravelProfile=runoffProfile; }
     addCheckpointFlags(data, runoffProfile);
+  } else {
+    addCityCheckpointPoles(data);
   }
   // Ground plane
   const gndCol=isCity?data.gnd:0x1a3018;
@@ -972,9 +1018,9 @@ function addCityScenery(curve,data){
     if(pointInNoAutoZone(data,p.x,p.z,6))continue;
     const t=new THREE.Vector3().subVectors(nx,p).normalize();
     const r=new THREE.Vector3(-t.z,0,t.x).normalize();
-    const side=(i%8<4)?-1:1;
-    // Place on outer edge of sidewalk
-    const off=side*(roadW/2+swW*0.8);
+    const side=1; // keep lamps on one side of road only
+    // Place at wall edge, aligned with city walls
+    const off=side*(roadW/2+swW);
     const lx=p.x+r.x*off, lz=p.z+r.z*off;
     let inBld=false;
     for(const b of placed){if(Math.abs(lx-b.x)<b.w/2+1&&Math.abs(lz-b.z)<b.d/2+1){inBld=true;break;}}
