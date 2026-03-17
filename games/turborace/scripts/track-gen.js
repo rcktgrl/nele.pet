@@ -43,7 +43,7 @@ function ensureTrackScenerySeed(data){
 function addCheckpointFlags(data){
   const wps=data.wp, n=wps.length, rw=data.rw||12;
   // Place flags right at the track edge on each side
-  const flagEdge=rw/2+0.3;
+  const flagEdge=rw/2+1.75;
   const poleMat=mat(0x222222);
   const flagMat=new THREE.MeshLambertMaterial({color:0xffcc00,side:THREE.DoubleSide});
   for(let i=0;i<n;i++){
