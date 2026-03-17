@@ -636,7 +636,7 @@ function addGravelRunoff(profile){
   geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
   geo.setIndex(idx);
   geo.computeVertexNormals();
-  const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x6f6752,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1}));
+  const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color:0x6f6752,side:THREE.DoubleSide,fog:false}));
   mesh.userData.trk=true;
   mesh.receiveShadow=true;
   scene.add(mesh);
@@ -648,6 +648,9 @@ function addScenery(curve,data){
   const bmk=mat(0x2a2a3a),bmk2=mat(0x3a3a4a),bmk3=mat(0x222238);
   const roofMat=mat(0x333344);
   const standMat=mat(0x444455),standSeat=mat(0x995522);
+  const resCols=[0x8b4a3a,0xc4b090,0xd8d0c8,0xc8b870,0xa8bc98,0xa49898,0xb0886a,0xc8c0b0];
+  const roofCols=[0x3a3028,0x5a3020,0x282820,0x3a2a20,0x4a3828,0x604030];
+  const shopCols=[0xc8c0b0,0xb0a898,0xd8d0c0,0x888898,0xa8b0b8,0xb8c0a8];
   const minOff=data.rw/2+7.0;
   const placed=[];
   const exclusionZones=(state.sceneryExclusionZones&&state.sceneryExclusionZones.length)
@@ -695,22 +698,66 @@ function addScenery(curve,data){
         }
       }
 
-      // ── Buildings (varied, better quality) ──
-      if(Math.random()<0.18){
+      // ── Buildings (varied types) ──
+      if(Math.random()<0.28){
         const bOff=s*(data.rw/2+16+Math.random()*14);
         const bpos=p.clone().addScaledVector(r,bOff);
         let bClose=false;
         for(const bl of placed){if((bpos.x-bl.x)**2+(bpos.z-bl.z)**2<144)bClose=true;}
         if(!bClose&&!onTrack(bpos.x,bpos.z,5)&&!inExclusion(bpos.x,bpos.z,6)){
-          const bw=4+Math.random()*6, bd=3+Math.random()*5, bh=4+Math.random()*8;
-          const bm=[bmk,bmk2,bmk3][Math.floor(Math.random()*3)];
-          const bld=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),bm);
-          bld.position.set(bpos.x,p.y+bh/2,bpos.z);
-          bld.rotation.y=Math.atan2(t.x,t.z)+Math.random()*0.3-0.15;
-          bld.castShadow=true; bld.userData.trk=true; scene.add(bld);
-          // Roof accent
-          const roof=new THREE.Mesh(new THREE.BoxGeometry(bw+0.3,0.3,bd+0.3),roofMat);
-          roof.position.set(bpos.x,p.y+bh+0.15,bpos.z); roof.userData.trk=true; scene.add(roof);
+          const bRot=Math.atan2(t.x,t.z)+Math.random()*0.3-0.15;
+          const btype=Math.floor(Math.random()*6);
+          if(btype<=1){
+            // Residential house: box + pitched pyramid roof
+            const bw=5+Math.random()*5, bd=4+Math.random()*4, bh=3+Math.random()*3.5;
+            const bcol=resCols[Math.floor(Math.random()*resCols.length)];
+            const bld=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),mat(bcol));
+            bld.position.set(bpos.x,p.y+bh/2,bpos.z); bld.rotation.y=bRot;
+            bld.castShadow=true; bld.userData.trk=true; scene.add(bld);
+            const roofH=bh*0.55, rcol=roofCols[Math.floor(Math.random()*roofCols.length)];
+            const roof=new THREE.Mesh(new THREE.ConeGeometry(Math.hypot(bw,bd)*0.55,roofH,4),mat(rcol));
+            roof.position.set(bpos.x,p.y+bh+roofH/2,bpos.z); roof.rotation.y=bRot+Math.PI/4;
+            roof.userData.trk=true; scene.add(roof);
+          }else if(btype===2){
+            // Terraced row house: narrow with pitched roof
+            const bw=3.5+Math.random()*2.5, bd=4+Math.random()*3, bh=3.5+Math.random()*2.5;
+            const bcol=resCols[Math.floor(Math.random()*resCols.length)];
+            for(let u=0;u<2+Math.floor(Math.random()*3);u++){
+              const off=new THREE.Vector3(-t.z,0,t.x).normalize().multiplyScalar(u*(bw+0.3)*s);
+              const bld=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),mat(bcol));
+              bld.position.set(bpos.x+off.x,p.y+bh/2,bpos.z+off.z); bld.rotation.y=bRot;
+              bld.castShadow=true; bld.userData.trk=true; scene.add(bld);
+              const roofH=bh*0.45, rcol=roofCols[Math.floor(Math.random()*roofCols.length)];
+              const roof=new THREE.Mesh(new THREE.ConeGeometry(Math.hypot(bw,bd)*0.58,roofH,4),mat(rcol));
+              roof.position.set(bpos.x+off.x,p.y+bh+roofH/2,bpos.z+off.z); roof.rotation.y=bRot+Math.PI/4;
+              roof.userData.trk=true; scene.add(roof);
+            }
+          }else if(btype===3){
+            // Corner shop / small commercial: wide flat
+            const bw=8+Math.random()*6, bd=5+Math.random()*4, bh=3+Math.random()*2;
+            const bld=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),mat(shopCols[Math.floor(Math.random()*shopCols.length)]));
+            bld.position.set(bpos.x,p.y+bh/2,bpos.z); bld.rotation.y=bRot;
+            bld.castShadow=true; bld.userData.trk=true; scene.add(bld);
+            const roof=new THREE.Mesh(new THREE.BoxGeometry(bw+0.5,0.22,bd+0.5),mat(0x555555));
+            roof.position.set(bpos.x,p.y+bh+0.11,bpos.z); roof.userData.trk=true; scene.add(roof);
+          }else if(btype===4){
+            // Low garage / workshop
+            const bw=7+Math.random()*5, bd=5+Math.random()*4, bh=2.5+Math.random()*1.5;
+            const bld=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),mat(0x909088));
+            bld.position.set(bpos.x,p.y+bh/2,bpos.z); bld.rotation.y=bRot;
+            bld.userData.trk=true; scene.add(bld);
+            const roof=new THREE.Mesh(new THREE.BoxGeometry(bw+0.4,0.18,bd+0.4),mat(0x606060));
+            roof.position.set(bpos.x,p.y+bh+0.09,bpos.z); roof.userData.trk=true; scene.add(roof);
+          }else{
+            // Industrial/office block (original style)
+            const bw=4+Math.random()*6, bd=3+Math.random()*5, bh=4+Math.random()*8;
+            const bm=[bmk,bmk2,bmk3][Math.floor(Math.random()*3)];
+            const bld=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),bm);
+            bld.position.set(bpos.x,p.y+bh/2,bpos.z); bld.rotation.y=bRot;
+            bld.castShadow=true; bld.userData.trk=true; scene.add(bld);
+            const roof=new THREE.Mesh(new THREE.BoxGeometry(bw+0.3,0.3,bd+0.3),roofMat);
+            roof.position.set(bpos.x,p.y+bh+0.15,bpos.z); roof.userData.trk=true; scene.add(roof);
+          }
           placed.push({x:bpos.x,z:bpos.z});
         }
       }
@@ -744,11 +791,11 @@ function addScenery(curve,data){
         geo.setIndex(idx); geo.computeVertexNormals();
         const stand=new THREE.Mesh(geo,standMat);
         stand.position.set(gpos.x,p.y,gpos.z);
-        stand.rotation.y=gang; stand.userData.trk=true; scene.add(stand);
+        stand.rotation.y=gang-Math.PI/2; stand.userData.trk=true; scene.add(stand);
         // Seat strips on slope
         const seatStrip=new THREE.Mesh(new THREE.BoxGeometry(gw,0.15,gd+0.1),standSeat);
-        seatStrip.position.set(gpos.x,p.y+gh*0.45,gpos.z-trackSide*0.3);
-        seatStrip.rotation.y=gang;
+        seatStrip.position.set(gpos.x-r.x*s*0.3,p.y+gh*0.45,gpos.z-r.z*s*0.3);
+        seatStrip.rotation.y=gang-Math.PI/2;
         seatStrip.rotation.x=trackSide*Math.atan2(gh-0.3,gd)*0.3;
         seatStrip.userData.trk=true; scene.add(seatStrip);
       }
@@ -1146,6 +1193,42 @@ function applyPlacedAssets(data){
       g.position.set(asset.x,0,asset.z); g.userData.trk=true; scene.add(g);
     }else if(asset.type==='park'){
       const park=new THREE.Mesh(new THREE.BoxGeometry(16,0.08,16),new THREE.MeshLambertMaterial({color:0x295a2b})); park.position.set(asset.x,0.04,asset.z); park.userData.trk=true; scene.add(park);
+    }else if(asset.type==='stand'){
+      const pts=state.trkPts;
+      if(!pts||!pts.length) return;
+      let nearIdx=0,nearDist=Infinity;
+      for(let j=0;j<pts.length;j++){
+        const dx=pts[j].x-asset.x,dz=pts[j].z-asset.z;
+        const d=dx*dx+dz*dz;
+        if(d<nearDist){nearDist=d;nearIdx=j;}
+      }
+      const n=pts.length;
+      const tp=pts[nearIdx],tnx=pts[(nearIdx+1)%n];
+      const tx=new THREE.Vector3().subVectors(tnx,tp).normalize();
+      const tr=new THREE.Vector3(-tx.z,0,tx.x);
+      const gang=Math.atan2(tx.x,tx.z);
+      const dotR=(asset.x-tp.x)*tr.x+(asset.z-tp.z)*tr.z;
+      const sSign=dotR>=0?1:-1;
+      const trackSide=sSign>0?-1:1;
+      const gw=12,gd=5,gh=5;
+      const verts=new Float32Array([
+        -gw/2,0,trackSide*gd/2,   gw/2,0,trackSide*gd/2,
+        -gw/2,0.3,trackSide*gd/2, gw/2,0.3,trackSide*gd/2,
+        -gw/2,0,-trackSide*gd/2,  gw/2,0,-trackSide*gd/2,
+        -gw/2,gh,-trackSide*gd/2, gw/2,gh,-trackSide*gd/2,
+      ]);
+      const sidx=[0,1,3,0,3,2, 4,6,7,4,7,5, 2,3,7,2,7,6, 0,4,5,0,5,1, 0,2,6,0,6,4, 1,5,7,1,7,3];
+      const geo=new THREE.BufferGeometry();
+      geo.setAttribute('position',new THREE.BufferAttribute(verts,3));
+      geo.setIndex(sidx); geo.computeVertexNormals();
+      const stand=new THREE.Mesh(geo,mat(0x444455));
+      stand.position.set(asset.x,0,asset.z);
+      stand.rotation.y=gang-Math.PI/2; stand.userData.trk=true; scene.add(stand);
+      const seatStrip=new THREE.Mesh(new THREE.BoxGeometry(gw,0.15,gd+0.1),mat(0x995522));
+      seatStrip.position.set(asset.x-tr.x*sSign*0.3,gh*0.45,asset.z-tr.z*sSign*0.3);
+      seatStrip.rotation.y=gang-Math.PI/2;
+      seatStrip.rotation.x=trackSide*Math.atan2(gh-0.3,gd)*0.3;
+      seatStrip.userData.trk=true; scene.add(seatStrip);
     }else{
       const h=8+((Math.abs(asset.x)+Math.abs(asset.z))%18);
       const b=new THREE.Mesh(new THREE.BoxGeometry(8,h,8),new THREE.MeshLambertMaterial({color:0x4a445d})); b.position.set(asset.x,h/2,asset.z); b.castShadow=true; b.userData.trk=true; scene.add(b);

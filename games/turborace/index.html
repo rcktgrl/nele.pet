@@ -299,11 +299,16 @@
             <option value="tree">🌲 Tree</option>
             <option value="building">🏢 Building</option>
             <option value="park">🟩 Park</option>
+            <option value="stand">🏟 Stand</option>
           </select>
         </label>
         <label class="editorField">
           <span>Brush Count <strong id="editorBrushSizeVal">1</strong></span>
           <input id="editorBrushSize" type="range" min="1" max="25" step="1" value="1">
+        </label>
+        <label class="editorField">
+          <span>Brush Spacing <strong id="editorBrushSpacingVal">12</strong>m</span>
+          <input id="editorBrushSpacing" type="range" min="6" max="60" step="1" value="12">
         </label>
         <label class="editorField editorFieldInline">
           <span>Brush Enabled</span>
@@ -314,6 +319,7 @@
           <div class="assetChip" draggable="true" data-asset="tree">🌲 Tree</div>
           <div class="assetChip" draggable="true" data-asset="building">🏢 Building</div>
           <div class="assetChip" draggable="true" data-asset="park">🟩 Park</div>
+          <div class="assetChip" draggable="true" data-asset="stand">🏟 Stand</div>
         </div>
         <div class="editorRow">
           <button id="delAssetBtn" class="btn btn-s btn-tight">DELETE ASSET</button>

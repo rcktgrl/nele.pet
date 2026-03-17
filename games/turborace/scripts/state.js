@@ -36,6 +36,7 @@ export const state = {
     editorBrushEnabled: false,
     editorBrushAsset: 'tree',
     editorBrushSize: 1,
+    editorBrushSpacing: 12,
     editorDrag: null,
     editorNeedsRebuild: false,
     editorLastRebuild: 0,

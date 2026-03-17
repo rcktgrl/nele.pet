@@ -35,7 +35,7 @@ import {
 } from './race.js';
 import {
   editorRebuildScene, drawEditorCanvas,
-  setEditorNodeCount, setEditorBrushAsset, setEditorBrushEnabled, setEditorBrushSize,
+  setEditorNodeCount, setEditorBrushAsset, setEditorBrushEnabled, setEditorBrushSize, setEditorBrushSpacing,
   onEditorMetaChanged, onEditorStreetGridChanged, onEditorNodeChanged,
   addEditorNode, insertEditorNodeAfter, deleteEditorNode, deleteSelectedEditorAsset,
   createNewEditorTrack, duplicateEditorTrack, deleteEditorTrack, resetEditorTrack,
@@ -177,6 +177,7 @@ document.getElementById('editorNodeCount').addEventListener('input',e=>setEditor
 document.getElementById('editorBrushAsset').addEventListener('change',e=>setEditorBrushAsset(e.target.value));
 document.getElementById('editorBrushEnabled').addEventListener('change',e=>setEditorBrushEnabled(e.target.checked));
 document.getElementById('editorBrushSize').addEventListener('input',e=>setEditorBrushSize(e.target.value));
+document.getElementById('editorBrushSpacing').addEventListener('input',e=>setEditorBrushSpacing(e.target.value));
 document.getElementById('editorNodeType').addEventListener('change',onEditorNodeChanged);
 document.getElementById('editorSteepness').addEventListener('input',onEditorNodeChanged);
 document.getElementById('editorNodeGravelPitSize').addEventListener('input',onEditorNodeChanged);
