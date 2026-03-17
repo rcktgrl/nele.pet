@@ -445,6 +445,31 @@ function getEditorRunoffMultipliers(data,pts){
   return multipliers;
 }
 
+function getEditorRunoffAbsoluteSides(data,pts){
+  const editorNodes=Array.isArray(data?.editorNodes)?data.editorNodes:[];
+  if(!editorNodes.length||pts.length<2) return null;
+  const leftSizes=new Array(pts.length).fill(0);
+  const rightSizes=new Array(pts.length).fill(0);
+  const nodeEntries=editorNodes.map(node=>({
+    x:+node.x||0,
+    z:+node.z||0,
+    left:Math.max(0,Math.min(20,Number.isFinite(node.gravelLeft)?(+node.gravelLeft):0)),
+    right:Math.max(0,Math.min(20,Number.isFinite(node.gravelRight)?(+node.gravelRight):0))
+  }));
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    let bestDist2=Infinity, bestLeft=0, bestRight=0;
+    for(const node of nodeEntries){
+      const dx=p.x-node.x, dz=p.z-node.z;
+      const dist2=dx*dx+dz*dz;
+      if(dist2<bestDist2){ bestDist2=dist2; bestLeft=node.left; bestRight=node.right; }
+    }
+    leftSizes[i]=bestLeft;
+    rightSizes[i]=bestRight;
+  }
+  return {leftSizes,rightSizes};
+}
+
 function buildRunoffProfile(pts,data){
   const n=pts.length;
   if(n<6) return null;
@@ -464,6 +489,7 @@ function buildRunoffProfile(pts,data){
   const runoffNodes=[];
   const rw=Math.max(6,data.rw||12);
   const nodeRunoffMultipliers=getEditorRunoffMultipliers(data,pts);
+  const absoluteSides=getEditorRunoffAbsoluteSides(data,pts);
 
   // Always generate a baseline gravel strip around the track. The strip widens
   // with local curvature, while node boosts below keep the larger "outside of
@@ -482,14 +508,19 @@ function buildRunoffProfile(pts,data){
 
     const p=pts[i];
     if(pointInZoneList(zones,p.x,p.z,10)) continue;
-    leftRunoff[i]=Math.max(leftRunoff[i],baseRunoff);
-    rightRunoff[i]=Math.max(rightRunoff[i],baseRunoff);
-    leftExpand[i]=Math.max(leftExpand[i],baseExpand);
-    rightExpand[i]=Math.max(rightExpand[i],baseExpand);
+    // Apply absolute left/right meter sizes from node sliders
+    const absLeft=absoluteSides?absoluteSides.leftSizes[i]:0;
+    const absRight=absoluteSides?absoluteSides.rightSizes[i]:0;
+    leftRunoff[i]=Math.max(leftRunoff[i],baseRunoff,absLeft);
+    rightRunoff[i]=Math.max(rightRunoff[i],baseRunoff,absRight);
+    leftExpand[i]=Math.max(leftExpand[i],baseExpand,absLeft);
+    rightExpand[i]=Math.max(rightExpand[i],baseExpand,absRight);
   }
 
   // pts is ~900 densely spaced spline points; stride samples ~15 units apart
-  // so corner angles are measurable (consecutive pts are only ~1 unit apart)
+  // so corner angles are measurable (consecutive pts are only ~1 unit apart).
+  // Threshold lowered to 0.97 (from 0.80) so gentler bends also get extra runoff.
+  const CORNER_THRESHOLD=0.97;
   const stride=Math.max(1,Math.round(n/60));
   for(let i=stride;i<n-stride-1;i++){
     const pPrev=pts[i-stride], pCur=pts[i], pNext=pts[i+stride];
@@ -497,16 +528,16 @@ function buildRunoffProfile(pts,data){
     const outX=pNext.x-pCur.x, outZ=pNext.z-pCur.z;
     const inLen=Math.hypot(inX,inZ)||1, outLen=Math.hypot(outX,outZ)||1;
     const dot=(inX*outX+inZ*outZ)/(inLen*outLen);
-    if(dot>0.80) continue;
+    if(dot>CORNER_THRESHOLD) continue;
     const turn=Math.sign(inX*outZ-inZ*outX)||1;
     const side=turn>0?-1:1;
-    const sharp=Math.min(1,Math.max(0,(0.80-dot)/0.85));
+    const sharp=Math.min(1,Math.max(0,(CORNER_THRESHOLD-dot)/(CORNER_THRESHOLD+1)));
     const nodeMultiplier=nodeRunoffMultipliers?.[i]??1;
-    const width=Math.min(rw*2.8*nodeMultiplier,rw*(0.48+sharp*2.1)*nodeMultiplier);
-    const cornerLen=Math.max(10,Math.min(34,Math.round(10+sharp*24)));
-    const leadIn=Math.max(3,Math.round(cornerLen*0.25));
+    const width=Math.min(rw*2.8*nodeMultiplier,rw*(0.25+sharp*2.5)*nodeMultiplier);
+    const cornerLen=Math.max(12,Math.min(50,Math.round(12+sharp*38)));
+    const leadIn=Math.max(4,Math.round(cornerLen*0.3));
     const start=Math.max(1,Math.min(n-3,i-leadIn));
-    const peak=Math.min(n-3,i+Math.round(cornerLen*0.25));
+    const peak=Math.min(n-3,i+Math.round(cornerLen*0.2));
     const end=Math.min(n-2,start+cornerLen);
     runoffNodes.push({index:i,side,start,peak,end,width,sharp});
   }
@@ -519,8 +550,9 @@ function buildRunoffProfile(pts,data){
       const fallLen=Math.max(1,node.end-node.peak);
       const riseT=Math.max(0,Math.min(1,(j-node.start)/riseLen));
       const fallT=Math.max(0,Math.min(1,(j-node.peak)/fallLen));
-      const rampIn=riseT*riseT*(3-2*riseT);
-      const rampOut=1-(fallT*fallT*(3-2*fallT));
+      // Smoother quintic easing for gradual thickness buildup
+      const rampIn=riseT*riseT*riseT*(riseT*(riseT*6-15)+10);
+      const rampOut=1-(fallT*fallT*fallT*(fallT*(fallT*6-15)+10));
       const blend=(j<=node.peak)?rampIn:rampOut;
       const runoffW=node.width*blend;
       const wallExpand=runoffW;
@@ -534,8 +566,9 @@ function buildRunoffProfile(pts,data){
     }
   }
 
+  // More smoothing passes for a gradual, natural thickness transition
   for(const arr of [leftRunoff,rightRunoff,leftExpand,rightExpand]){
-    for(let pass=0;pass<4;pass++){
+    for(let pass=0;pass<8;pass++){
       for(let j=1;j<arr.length-1;j++) arr[j]=(arr[j-1]+arr[j]+arr[j+1])/3;
     }
   }

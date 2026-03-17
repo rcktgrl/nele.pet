@@ -916,8 +916,16 @@ function syncSelectedNodeUI(){
   if(!node)return;
   document.getElementById('editorNodeType').value=node.type||'no-auto';
   document.getElementById('editorSteepness').value=Math.round(node.steepness||40);
-  document.getElementById('editorNodeGravelPitSize').value=Math.round(Number.isFinite(node.gravelPitSize)?node.gravelPitSize:100);
-  document.getElementById('editorNodeInfo').textContent='Node '+(state.editorSelectedNode+1)+' · '+(node.type==='start-finish'?'Start/finish':'No scenery')+' · Steepness '+Math.round(node.steepness||40)+' · Gravel '+Math.round(Number.isFinite(node.gravelPitSize)?node.gravelPitSize:100)+'%';
+  const gpv=Math.round(Number.isFinite(node.gravelPitSize)?node.gravelPitSize:100);
+  document.getElementById('editorNodeGravelPitSize').value=gpv;
+  document.getElementById('editorNodeGravelPitSizeVal').textContent=gpv;
+  const glv=Number.isFinite(node.gravelLeft)?node.gravelLeft:0;
+  document.getElementById('editorNodeGravelLeft').value=glv;
+  document.getElementById('editorNodeGravelLeftVal').textContent=glv;
+  const grv=Number.isFinite(node.gravelRight)?node.gravelRight:0;
+  document.getElementById('editorNodeGravelRight').value=grv;
+  document.getElementById('editorNodeGravelRightVal').textContent=grv;
+  document.getElementById('editorNodeInfo').textContent='Node '+(state.editorSelectedNode+1)+' · '+(node.type==='start-finish'?'Start/finish':'No scenery')+' · Steepness '+Math.round(node.steepness||40)+' · Gravel '+gpv+'%';
 }
 function syncEditorNodeCountUI(){
   const count=(state.editorTrack?.nodes||[]).length;
@@ -1074,6 +1082,8 @@ function onEditorNodeChanged(){
   });
   node.steepness=+document.getElementById('editorSteepness').value||40;
   node.gravelPitSize=Math.max(0,Math.min(400,+document.getElementById('editorNodeGravelPitSize').value||100));
+  node.gravelLeft=Math.max(0,Math.min(20,+document.getElementById('editorNodeGravelLeft').value||0));
+  node.gravelRight=Math.max(0,Math.min(20,+document.getElementById('editorNodeGravelRight').value||0));
   syncSelectedNodeUI();
   requestEditorRebuild(false);
 }
@@ -1760,6 +1770,8 @@ document.getElementById('editorBrushSize').addEventListener('input', e=>setEdito
 document.getElementById('editorNodeType').addEventListener('change', onEditorNodeChanged);
 document.getElementById('editorSteepness').addEventListener('input', onEditorNodeChanged);
 document.getElementById('editorNodeGravelPitSize').addEventListener('input', onEditorNodeChanged);
+document.getElementById('editorNodeGravelLeft').addEventListener('input', onEditorNodeChanged);
+document.getElementById('editorNodeGravelRight').addEventListener('input', onEditorNodeChanged);
 document.getElementById('addNodeBtn').addEventListener('click', addEditorNode);
 document.getElementById('insertNodeBtn').addEventListener('click', insertEditorNodeAfter);
 document.getElementById('delNodeBtn').addEventListener('click', deleteEditorNode);
