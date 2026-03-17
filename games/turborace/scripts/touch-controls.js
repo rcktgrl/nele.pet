@@ -251,7 +251,7 @@ function setupSteerSlider(){
     if(!sliderRect)return 0;
     const center=sliderRect.left+sliderRect.width/2;
     const maxOffset=sliderRect.width/2-26;
-    return clamp((clientX-center)/Math.max(maxOffset,1),-1,1);
+    return clamp(-(clientX-center)/Math.max(maxOffset,1),-1,1);
   }
   function applyThumb(value){
     steerSliderValue=value;
