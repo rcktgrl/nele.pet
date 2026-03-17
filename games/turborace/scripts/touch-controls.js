@@ -4,6 +4,8 @@ const TOUCH_TOGGLE_KEY='turborace_touch_controls';
 const GYRO_TOGGLE_KEY='turborace_gyro_enabled';
 const touchPointers={throttle:new Set(),brake:new Set(),left:new Set(),right:new Set()};
 export const touchState={throttle:false,brake:false,left:false,right:false};
+let steerSliderValue=0;
+let sliderPointerId=null;
 const gyroState={available:false,active:false,permission:'unknown',gamma:0,steer:0};
 const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 let touchControlsEnabled=false;
@@ -86,11 +88,11 @@ function updateGyroBars(){
 function updateGyroBarVisibility(){
   const steerBar=document.getElementById('gyroSteerBar');
   const settingsBar=document.getElementById('gyroSettingsBar');
-  const leftBtns=document.querySelectorAll('#touchClusterLeft [data-control]');
+  const slider=document.getElementById('touchSteerSlider');
   const gyroActive=gyroState.active&&gyroEnabled;
   const inGameGyro=gyroActive&&touchControlsEnabled;
   if(steerBar)steerBar.style.display=inGameGyro?'flex':'none';
-  leftBtns.forEach(b=>{b.style.display=inGameGyro?'none':'';});
+  if(slider)slider.style.display=inGameGyro?'none':'flex';
   if(settingsBar)settingsBar.style.display=gyroActive?'block':'none';
 }
 
@@ -153,6 +155,8 @@ async function ensureGyroPermission(){
 export function getGyroSteering(){
   return gyroState.active?gyroState.steer:0;
 }
+
+export function getTouchSliderSteer(){return steerSliderValue;}
 
 // Raw normalized gamma for HUD visualization — tracks physical tilt smoothly without deadzone or curve
 export function getGyroVisualSteer(){
@@ -232,6 +236,54 @@ export function releaseAllTouchControls(){
   setTouchControl('brake',false);
   setTouchControl('left',false);
   setTouchControl('right',false);
+  steerSliderValue=0;
+  sliderPointerId=null;
+  const thumb=document.getElementById('touchSteerThumb');
+  if(thumb){thumb.classList.remove('dragging');thumb.style.transform='translate(-50%,-50%)';}
+}
+
+function setupSteerSlider(){
+  const slider=document.getElementById('touchSteerSlider');
+  const thumb=document.getElementById('touchSteerThumb');
+  if(!slider||!thumb)return;
+  let sliderRect=null;
+  function getSteerValue(clientX){
+    if(!sliderRect)return 0;
+    const center=sliderRect.left+sliderRect.width/2;
+    const maxOffset=sliderRect.width/2-26;
+    return clamp((clientX-center)/Math.max(maxOffset,1),-1,1);
+  }
+  function applyThumb(value){
+    steerSliderValue=value;
+    if(!sliderRect)return;
+    const maxOffset=sliderRect.width/2-26;
+    thumb.style.transform=`translate(calc(-50% + ${value*maxOffset}px),-50%)`;
+  }
+  slider.addEventListener('pointerdown',e=>{
+    if(sliderPointerId!==null)return;
+    e.preventDefault();
+    slider.setPointerCapture(e.pointerId);
+    sliderPointerId=e.pointerId;
+    sliderRect=slider.getBoundingClientRect();
+    thumb.classList.add('dragging');
+    applyThumb(getSteerValue(e.clientX));
+  });
+  slider.addEventListener('pointermove',e=>{
+    if(e.pointerId!==sliderPointerId)return;
+    e.preventDefault();
+    applyThumb(getSteerValue(e.clientX));
+  });
+  function releaseSlider(e){
+    if(e.pointerId!==sliderPointerId)return;
+    sliderPointerId=null;
+    sliderRect=null;
+    thumb.classList.remove('dragging');
+    steerSliderValue=0;
+    thumb.style.transform='translate(-50%,-50%)';
+  }
+  slider.addEventListener('pointerup',releaseSlider);
+  slider.addEventListener('pointercancel',releaseSlider);
+  slider.addEventListener('contextmenu',e=>e.preventDefault());
 }
 
 export function setupTouchControls({pauseRace,resumeRace}={}){
@@ -270,6 +322,7 @@ export function setupTouchControls({pauseRace,resumeRace}={}){
     btn.addEventListener('pointerup',onTap);
     btn.addEventListener('contextmenu',e=>e.preventDefault());
   });
+  setupSteerSlider();
   window.addEventListener('pointerup',e=>{
     Object.keys(touchPointers).forEach(name=>{
       if(touchPointers[name].has(e.pointerId)){
