@@ -157,7 +157,7 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .touchCluster-left{align-items:flex-end;}
 .touchCluster-right{align-items:flex-end;}
 .touchCluster-utility{position:absolute;top:12px;right:12px;align-items:flex-start;}
-.touchBtn{pointer-events:auto;touch-action:none;min-width:80px;min-height:54px;padding:0 14px;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:rgba(7,10,20,.72);color:#eef2ff;font-family:'Orbitron',monospace;font-size:12px;letter-spacing:1px;}
+.touchBtn{pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;min-width:80px;min-height:54px;padding:0 14px;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:rgba(7,10,20,.72);color:#eef2ff;font-family:'Orbitron',monospace;font-size:12px;letter-spacing:1px;}
 .touchBtn-small{min-width:58px;min-height:58px;padding:0 8px;font-size:13px;}
 .touchBtn-primary{background:rgba(255,90,20,.78);border-color:rgba(255,140,100,.8);}
 .touchBtn.active{transform:translateY(1px) scale(.98);background:rgba(80,140,255,.78);border-color:rgba(140,180,255,.9);}

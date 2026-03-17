@@ -28,9 +28,11 @@ function updateGyroSteer(){
   gyroState.steer=clamp(gyroState.gamma/GYRO_MAX_TILT,-1,1);
 }
 
-function setGyroStatus(msg){
+function setGyroStatus(msg,tappable=false){
   const el=document.getElementById('gyroStatus');
-  if(el)el.textContent=msg;
+  if(!el)return;
+  el.textContent=msg;
+  el.style.cursor=tappable?'pointer':'';
 }
 
 function updateGyroStatusText(){
@@ -51,7 +53,7 @@ function updateGyroStatusText(){
     return;
   }
   if(gyroState.permission==='required'){
-    setGyroStatus('GYRO: tap TOUCH CONTROLS again to allow motion access.');
+    setGyroStatus('GYRO: tap here to allow motion access (iOS requires a gesture).',true);
     return;
   }
   setGyroStatus('GYRO: ready. Tilt phone left/right to steer.');
@@ -203,6 +205,12 @@ export function setupTouchControls(gState){
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden)releaseAllTouchControls();
   });
+  const gyroStatusEl=document.getElementById('gyroStatus');
+  if(gyroStatusEl){
+    gyroStatusEl.addEventListener('click',()=>{
+      if(gyroState.permission==='required'&&touchControlsEnabled)ensureGyroPermission();
+    });
+  }
   if(touchControlsEnabled)ensureGyroPermission();
   else updateGyroStatusText();
 }
