@@ -288,14 +288,13 @@ export function editorTrackToGameTrack(){
   for(let i=0;i<nodes.length;i++) ordered.push(nodes[(startIdx+i)%nodes.length]);
   let wp,type='circuit',cityRoute=null;
   let splinePts=null;
-  if(state.editorTrack.streetGrid){ cityRoute=makeCityRouteFromNodes(ordered,state.editorTrack.gridSize||70); wp=makeCityWpFromRoute(cityRoute,state.editorTrack.gridSize||70); type='city'; }
+  if(state.editorTrack.streetGrid){ cityRoute=makeCityRouteFromNodes(ordered,state.editorTrack.gridSize||70); wp=makeCityWpFromRoute(cityRoute,state.editorTrack.gridSize||70); type='city'; wp=thinCheckpoints(wp,50); }
   else{
     const bezier=state.editorTrack.useBezier?makeBezierPath(ordered,18):null;
-    wp=bezier||ordered.map(n=>[n.x,0,n.z]);
-    // Keep the full Bezier path for track geometry — thinning/capping it loses the steepness shape
+    // Checkpoints are the raw control nodes — user places them intentionally, no thinning needed
+    wp=ordered.map(n=>[n.x,0,n.z]);
     if(bezier) splinePts=bezier;
   }
-  wp=thinCheckpoints(wp,50);
   return {id:state.editorTrack.id||uniqueTrackId(),name:state.editorTrack.name||'Custom Track',desc:state.editorTrack.desc||'Custom track',laps:+state.editorTrack.laps||3,rw:+state.editorTrack.rw||12,wp,editorNodes:deepClone(ordered),splinePts,previewColor:state.editorTrack.previewColor||'#44aaff',type,gridSize:state.editorTrack.gridSize||70,enableRunoff:state.editorTrack.enableRunoff!==false,trackGenerationVersion:Number.isFinite(state.editorTrack.trackGenerationVersion)?Math.max(1,Math.floor(state.editorTrack.trackGenerationVersion)):1,cityRoute,noAutoZones:buildNoAutoZones(ordered),sky:cssToHexNum(state.editorTrack.skyColor)||tod.sky,gnd:cssToHexNum(state.editorTrack.groundColor)||tod.gnd,timeOfDay:state.editorTrack.timeOfDay||'day',ambient:tod.ambient,ambientIntensity:tod.ambientIntensity,sun:tod.sun,sunIntensity:tod.sunIntensity,fill:tod.fill,fillIntensity:tod.fillIntensity,assets:deepClone(state.editorTrack.assets||[]),scenerySeed:Number.isFinite(state.editorTrack.scenerySeed)?(state.editorTrack.scenerySeed>>>0):Math.floor(Math.random()*0x100000000),useBezier:!!state.editorTrack.useBezier,fogDist:Number.isFinite(state.editorTrack.fogDist)?state.editorTrack.fogDist:1200};
 }
 
