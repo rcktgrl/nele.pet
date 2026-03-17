@@ -41,7 +41,8 @@ import {
   onEditorMetaChanged, onEditorStreetGridChanged, onEditorNodeChanged,
   addEditorNode, insertEditorNodeAfter, deleteEditorNode, deleteSelectedEditorAsset,
   createNewEditorTrack, duplicateEditorTrack, deleteEditorTrack, resetEditorTrack,
-  saveEditorTrack, upgradeEditorTrackToLatestGeneration, showTrackEditor
+  saveEditorTrack, upgradeEditorTrackToLatestGeneration, showTrackEditor,
+  reverseEditorTrack
 } from './editor.js';
 import {
   showMain, showIntro, showTrkSel, showCarSel,
@@ -190,6 +191,7 @@ document.getElementById('editorNodeGravelRight').addEventListener('input',onEdit
 document.getElementById('addNodeBtn').addEventListener('click',addEditorNode);
 document.getElementById('insertNodeBtn').addEventListener('click',insertEditorNodeAfter);
 document.getElementById('delNodeBtn').addEventListener('click',deleteEditorNode);
+document.getElementById('reverseDirectionBtn').addEventListener('click',reverseEditorTrack);
 document.getElementById('delAssetBtn').addEventListener('click',deleteSelectedEditorAsset);
 document.getElementById('resetEditorCamBtn').addEventListener('click',camResetEditorCam);
 document.getElementById('saveEditorTrackBtn').addEventListener('click',saveEditorTrack);

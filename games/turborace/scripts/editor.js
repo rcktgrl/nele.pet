@@ -648,6 +648,24 @@ export function deleteEditorNode(){
   requestEditorRebuild(false);
 }
 
+export function reverseEditorTrack(){
+  if(!state.editorTrack) return;
+  const nodes=state.editorTrack.nodes;
+  if(nodes.length<3) return;
+  // Find the start-finish node index before reversing
+  const sfIdx=nodes.findIndex(n=>n.type==='start-finish');
+  // Reverse the node order
+  nodes.reverse();
+  // After reversal the start-finish node is at a new index; keep it as-is
+  // Update selected node to track the same node
+  const newSel=nodes.length-1-state.editorSelectedNode;
+  state.editorSelectedNode=Math.max(0,Math.min(newSel,nodes.length-1));
+  normalizeEditorTrack();
+  syncSelectedNodeUI();
+  syncEditorNodeCountUI();
+  requestEditorRebuild(false);
+}
+
 export function deleteSelectedEditorAsset(){
   if(state.editorSelectedAsset<0) return;
   state.editorTrack.assets.splice(state.editorSelectedAsset,1);
@@ -734,6 +752,54 @@ export function drawEditorCanvas(){
     });
     ctx.closePath();
     ctx.stroke();
+    // Draw direction arrows at evenly spaced intervals along the track
+    const projected=data.wp.map(p=>editorWorldToOverlay(new THREE.Vector3(p[0],0.2,p[2]),canvas)).filter(Boolean);
+    if(projected.length>=2){
+      // Accumulate arc lengths to pick evenly-spaced arrow positions
+      const arcLen=[0];
+      for(let i=1;i<projected.length;i++){
+        const dx=projected[i].x-projected[i-1].x,dy=projected[i].y-projected[i-1].y;
+        arcLen.push(arcLen[i-1]+Math.hypot(dx,dy));
+      }
+      // Also close the path: last point back to first
+      const closeDx=projected[0].x-projected[projected.length-1].x,closeDy=projected[0].y-projected[projected.length-1].y;
+      const totalLen=arcLen[arcLen.length-1]+Math.hypot(closeDx,closeDy);
+      const arrowCount=Math.max(3,Math.min(12,Math.floor(totalLen/120)));
+      const arrowColor=(state.editorTrack.previewColor||'#44aaff');
+      ctx.fillStyle=arrowColor;
+      ctx.strokeStyle='#091018';
+      for(let a=0;a<arrowCount;a++){
+        const targetLen=(a+0.5)/arrowCount*totalLen;
+        // Find segment index
+        let seg=0;
+        const allPts=[...projected,projected[0]];
+        const allLens=[...arcLen,totalLen];
+        for(let i=1;i<allPts.length;i++){
+          if(allLens[i]>=targetLen){ seg=i-1; break; }
+        }
+        const segStart=allPts[seg],segEnd=allPts[(seg+1)%allPts.length];
+        const segDist=allLens[seg+1<allLens.length?seg+1:allLens.length-1]-allLens[seg];
+        if(segDist<1) continue;
+        const t=(targetLen-allLens[seg])/segDist;
+        const ax=segStart.x+(segEnd.x-segStart.x)*t;
+        const ay=segStart.y+(segEnd.y-segStart.y)*t;
+        const angle=Math.atan2(segEnd.y-segStart.y,segEnd.x-segStart.x);
+        const size=11;
+        ctx.save();
+        ctx.translate(ax,ay);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(size,0);
+        ctx.lineTo(-size*0.55,size*0.52);
+        ctx.lineTo(-size*0.25,0);
+        ctx.lineTo(-size*0.55,-size*0.52);
+        ctx.closePath();
+        ctx.fill();
+        ctx.lineWidth=1.5;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
   }
   state.editorTrack.assets.forEach((a,i)=>{
     const p=editorWorldToOverlay(new THREE.Vector3(a.x,3,a.z),canvas);
