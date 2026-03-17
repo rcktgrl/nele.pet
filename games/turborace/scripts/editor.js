@@ -574,9 +574,62 @@ export function duplicateEditorTrack(){
   populateEditorUI();
 }
 
-export function addEditorNode(){ setEditorNodeCount((state.editorTrack.nodes||[]).length+1); }
-export function insertEditorNodeAfter(){ addEditorNode(); }
-export function deleteEditorNode(){ setEditorNodeCount((state.editorTrack.nodes||[]).length-1); }
+export function addEditorNode(){
+  // Insert a new node AFTER the selected node (in driving direction)
+  if(!state.editorTrack) return;
+  const nodes=state.editorTrack.nodes;
+  if(nodes.length<3) return;
+  const sel=state.editorSelectedNode;
+  const a=nodes[sel];
+  const b=nodes[(sel+1)%nodes.length];
+  const newNode={
+    x:(a.x+b.x)*0.5,
+    z:(a.z+b.z)*0.5,
+    steepness:Math.round(((a.steepness||40)+(b.steepness||40))*0.5),
+    gravelPitSize:Math.round(((Number.isFinite(a.gravelPitSize)?a.gravelPitSize:100)+(Number.isFinite(b.gravelPitSize)?b.gravelPitSize:100))*0.5),
+    type:'no-auto'
+  };
+  nodes.splice(sel+1,0,newNode);
+  state.editorSelectedNode=sel+1;
+  normalizeEditorTrack();
+  syncSelectedNodeUI();
+  syncEditorNodeCountUI();
+  requestEditorRebuild(false);
+}
+export function insertEditorNodeAfter(){
+  // Insert a new node BEFORE the selected node (opposite/reverse direction)
+  if(!state.editorTrack) return;
+  const nodes=state.editorTrack.nodes;
+  if(nodes.length<3) return;
+  const sel=state.editorSelectedNode;
+  const a=nodes[(sel-1+nodes.length)%nodes.length];
+  const b=nodes[sel];
+  const newNode={
+    x:(a.x+b.x)*0.5,
+    z:(a.z+b.z)*0.5,
+    steepness:Math.round(((a.steepness||40)+(b.steepness||40))*0.5),
+    gravelPitSize:Math.round(((Number.isFinite(a.gravelPitSize)?a.gravelPitSize:100)+(Number.isFinite(b.gravelPitSize)?b.gravelPitSize:100))*0.5),
+    type:'no-auto'
+  };
+  nodes.splice(sel,0,newNode);
+  state.editorSelectedNode=sel;
+  normalizeEditorTrack();
+  syncSelectedNodeUI();
+  syncEditorNodeCountUI();
+  requestEditorRebuild(false);
+}
+export function deleteEditorNode(){
+  // Delete only the currently selected node
+  if(!state.editorTrack) return;
+  const nodes=state.editorTrack.nodes;
+  if(nodes.length<=3) return;
+  nodes.splice(state.editorSelectedNode,1);
+  state.editorSelectedNode=Math.max(0,Math.min(state.editorSelectedNode,nodes.length-1));
+  normalizeEditorTrack();
+  syncSelectedNodeUI();
+  syncEditorNodeCountUI();
+  requestEditorRebuild(false);
+}
 
 export function deleteSelectedEditorAsset(){
   if(state.editorSelectedAsset<0) return;
