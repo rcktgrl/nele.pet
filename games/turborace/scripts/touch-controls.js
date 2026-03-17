@@ -32,8 +32,10 @@ function updateGyroSteer(){
     return;
   }
   // Normalize so steering starts at 0 at the deadzone edge (no jump discontinuity)
-  const normalized=(abs-GYRO_DEADZONE)/(GYRO_MAX_TILT-GYRO_DEADZONE);
-  gyroState.steer=clamp(Math.sign(gyroState.gamma)*normalized*GYRO_SENSITIVITY,-1,1);
+  const normalized=Math.min((abs-GYRO_DEADZONE)/(GYRO_MAX_TILT-GYRO_DEADZONE),1);
+  // Power curve: sensitivity shapes response but max tilt always reaches full steering (1.0)
+  const curved=Math.pow(normalized,1/GYRO_SENSITIVITY);
+  gyroState.steer=clamp(Math.sign(gyroState.gamma)*curved,-1,1);
 }
 
 function setGyroStatus(msg,tappable=false){
@@ -150,6 +152,12 @@ async function ensureGyroPermission(){
 
 export function getGyroSteering(){
   return gyroState.active?gyroState.steer:0;
+}
+
+// Raw normalized gamma for HUD visualization — tracks physical tilt smoothly without deadzone or curve
+export function getGyroVisualSteer(){
+  if(!gyroState.active)return 0;
+  return clamp(gyroState.gamma/GYRO_MAX_TILT,-1,1);
 }
 
 export function isTouchControlsEnabled(){ return touchControlsEnabled; }

@@ -2,7 +2,7 @@
 import { THREE } from './three.js';
 import { state, dc, dctx, mmctx, keys } from './state.js';
 import { fmtT } from './util.js';
-import { getGyroSteering } from './touch-controls.js';
+import { getGyroSteering, getGyroVisualSteer } from './touch-controls.js';
 
 // ═══════════════════════════════════════════════════════
 //  HUD
@@ -44,9 +44,10 @@ export function drawDash(){
   ctx.fillStyle='#1a1a2e'; ctx.fillRect(0,py,W,2);
   // Steering wheel
   const wr=ph*.66,wx=W/2,wy=H-ph*.07;
-  const gyroSteer=getGyroSteering();
+  const gyroVisual=getGyroVisualSteer();
   const keySteer=(keys['ArrowLeft']||keys['KeyA'])?-1:(keys['ArrowRight']||keys['KeyD'])?1:0;
-  const sa=(Math.abs(gyroSteer)>0.01?gyroSteer:keySteer)*0.35;
+  // Use raw gamma-based visual steer for the indicator so it tracks physical tilt smoothly
+  const sa=(Math.abs(gyroVisual)>0.01?gyroVisual:keySteer)*0.35;
   ctx.save(); ctx.translate(wx,wy); ctx.rotate(sa);
   ctx.beginPath(); ctx.arc(0,0,wr,0,Math.PI*2); ctx.strokeStyle='#1e1e2e'; ctx.lineWidth=wr*.22; ctx.stroke();
   ctx.beginPath(); ctx.arc(0,0,wr,0,Math.PI*2); ctx.strokeStyle='#2a2a3e'; ctx.lineWidth=wr*.14; ctx.stroke();
