@@ -29,6 +29,7 @@ class CarModelBuilder{
       case 0: return this.buildWedgeMesh();
       case 2: return this.buildJeepMesh();
       case 3: return this.buildHatchMesh();
+      case 4: return this.buildViperGTSMesh();
       default: return this.buildSportsMesh();
     }
   }
@@ -143,6 +144,85 @@ class CarModelBuilder{
     return g;
   }
 
+  // ── Viper GTS Concept — curved & slanted panels ─────
+  buildViperGTSMesh(){
+    const g=new THREE.Group(), C=this.data.col;
+    const Bm=mat(C), Dm=mat(0x0a0a0a), Gm=matT(0x44aacc,.46);
+    const Wm=mat(0x0a0a0a), Rm=mat(0x999999);
+    const Lm=matE(0xffffff,0x665533);
+    // Sharp nose cone (tapered cylinder pointing forward along +Z)
+    addC(g,0.0,0.55,1.0,0,0.28,1.90,Dm,-Math.PI/2,0,0);
+    // Front splitter (very low, wide)
+    addB(g,2.06,0.05,0.50,0,0.14,2.10,Dm);
+    // Front lower valance – pitched back
+    addB(g,1.82,0.18,0.42,0,0.22,2.12,Dm,-0.28,0,0);
+    // Hood – two angled panels rising toward screen
+    addB(g,1.92,0.10,1.22,0,0.26,1.38,Bm,0.08,0,0);
+    addB(g,1.88,0.14,0.84,0,0.36,0.74,Bm,0.18,0,0);
+    // Hood spine ridge (cylinder running front-to-back)
+    addC(g,0.058,0.058,2.18,0,0.44,1.06,Dm,Math.PI/2,0,0);
+    // Hood vent slits
+    [-0.42,0.42].forEach(x=>addB(g,0.26,0.03,0.52,x,0.46,1.02,Dm));
+    // Lower body slab (full length)
+    addB(g,2.04,0.30,4.20,0,0.38,-0.05,Bm);
+    // Upper body deck
+    addB(g,1.84,0.16,2.95,0,0.56,-0.10,Bm);
+    // Rear haunches – wider and sculpted
+    addB(g,2.24,0.40,1.28,0,0.40,-1.66,Bm);
+    // Haunch side panels – compound angle outward (slanted)
+    [-1,1].forEach(s=>addB(g,0.16,0.40,1.22,s*1.12,0.40,-1.66,Bm,0,0,s*-0.20));
+    // Fender flare lips – canted outward panels over each wheel
+    [-1,1].forEach(s=>{
+      addB(g,0.18,0.12,0.86,s*1.05,0.54,1.38,Dm,0,0,s*0.18);  // front
+      addB(g,0.22,0.16,1.0,s*1.09,0.56,-1.38,Dm,0,0,s*0.22);  // rear (wider)
+    });
+    // Side sills – slightly outward-canted
+    [-1,1].forEach(s=>addB(g,0.10,0.12,3.85,s*1.05,0.20,-0.05,Dm,0,0,s*0.05));
+    // Side air intakes (scoops)
+    [-1,1].forEach(s=>{
+      addB(g,0.10,0.28,0.82,s*1.04,0.54,-0.36,Dm);
+      addB(g,0.05,0.26,0.78,s*1.06,0.54,-0.36,Dm);
+    });
+    // Shoulder crease lines (thin cylinders running front-to-back along each side)
+    [-1,1].forEach(s=>addC(g,0.028,0.028,3.80,s*0.91,0.60,-0.04,Dm,Math.PI/2,0,0));
+    // Cabin
+    addB(g,1.38,0.24,1.64,0,0.74,0.04,Bm);
+    // Roof – low and flat
+    addB(g,1.34,0.06,1.60,0,0.90,0.04,Dm);
+    // Windscreen – very raked (65°)
+    addB(g,1.24,0.40,0.06,0,0.78,0.89,Gm,0.65,0,0);
+    // Rear fastback glass – steep dive
+    addB(g,1.20,0.34,0.06,0,0.78,-0.79,Gm,-0.62,0,0);
+    // Side windows
+    [-1,1].forEach(s=>addB(g,0.06,0.20,1.44,s*0.70,0.78,0.04,Gm));
+    // Rear deck
+    addB(g,1.90,0.12,0.62,0,0.62,-1.96,Bm);
+    // Diffuser – steep upward angle
+    addB(g,2.08,0.20,0.64,0,0.24,-2.15,Dm,-0.44,0,0);
+    // Rear wing
+    addB(g,1.96,0.06,0.72,0,1.08,-1.96,Dm);
+    // Wing endplates
+    [-0.92,0.92].forEach(x=>addB(g,0.06,0.42,0.74,x,0.88,-1.96,Dm));
+    // Wing standoffs
+    [-0.56,0.56].forEach(x=>addB(g,0.05,0.36,0.05,x,0.90,-1.94,Dm));
+    // Headlights – razor-thin slits, angled outward (slanted in Z)
+    [-0.60,0.60].forEach(x=>addB(g,0.52,0.055,0.05,x,0.35,2.20,Lm,0,0,x>0?-0.18:0.18));
+    // Full-width DRL bar (thin horizontal cylinder, left-to-right)
+    addC(g,0.022,0.022,1.92,0,0.29,2.20,Lm,0,0,Math.PI/2);
+    // Tail lights – angled slits mirroring headlights
+    this.tl=[];
+    [-0.64,0.64].forEach(x=>{
+      const m=matE(0xff1100,0x440000);
+      const t=addB(g,0.54,0.055,0.05,x,0.40,-2.06,m,0,0,x>0?0.18:-0.18);
+      this.tl.push(t);
+    });
+    // Full-width LED tail bar
+    addC(g,0.022,0.022,1.86,0,0.36,-2.06,matE(0xff1100,0x330000),0,0,Math.PI/2);
+    // Wheels – wide, low profile
+    this.wh=wheels(g,Wm,Rm,0.33,0.26,0.30,0.33,[[-1.08,1.38],[1.08,1.38],[-1.08,-1.38],[1.08,-1.38]]);
+    return g;
+  }
+
   // ── Hatchback (Flash Hatch) ─────────────────────────
   buildHatchMesh(){
     const g=new THREE.Group(), C=this.data.col;
@@ -183,6 +263,14 @@ class CarModelBuilder{
 
 function addB(g,w,h,d,x,y,z,m,rx,ry,rz){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+  mesh.position.set(x,y,z);
+  if(rx)mesh.rotation.x=rx;
+  if(ry)mesh.rotation.y=ry;
+  if(rz)mesh.rotation.z=rz;
+  g.add(mesh); return mesh;
+}
+function addC(g,rTop,rBot,h,x,y,z,m,rx,ry,rz){
+  const mesh=new THREE.Mesh(new THREE.CylinderGeometry(rTop,rBot,h,12),m);
   mesh.position.set(x,y,z);
   if(rx)mesh.rotation.x=rx;
   if(ry)mesh.rotation.y=ry;

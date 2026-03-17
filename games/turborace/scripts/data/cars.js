@@ -11,4 +11,7 @@ export const CARS=[
   // id 3: Hatchback (yellow) — 220 kph, fastest accel
   {id:3,name:'Flash Hatch',desc:'Pocket rocket, explosive acceleration',hex:'#eecc22',col:0xeecc22,
    maxSpd:61,accel:11.0,brake:20,hdl:0.70,aiSpd:0.97,gndOff:0.36,camH:1.90,stats:{s:68,a:100,h:54}},
+  // id 4: Viper GTS concept — sculpted curves, updated Viper GT shape (test model)
+  {id:4,name:'Viper GTS',desc:'Next-gen concept, sculpted and curved',hex:'#ff6600',col:0xff6600,
+   maxSpd:66,accel:9.5,brake:22,hdl:0.86,aiSpd:1.02,gndOff:0.30,camH:1.40,stats:{s:92,a:85,h:90}},
 ];
