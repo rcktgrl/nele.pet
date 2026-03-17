@@ -965,41 +965,42 @@ function addCityScenery(curve,data){
     }
   }
 
-  // ── 5. STREET LAMPS on sidewalks, yellow pools on road ──
+  // ── 5. STREET LAMPS at checkpoint waypoints — one side, aligned with city walls ──
   // S/F exclusion zone — no lamps near start/finish
   const sfPt=curve.getPoint(0);
-  const sfExclude=15; // metres exclusion radius around S/F
+  const sfExclude=15;
 
-  const lPts=curve.getSpacedPoints(120);
-  for(let i=0;i<lPts.length;i+=4){
-    const p=lPts[i],nx=lPts[(i+1)%lPts.length];
+  const wps=data.wp, nwp=wps.length;
+  for(let i=0;i<nwp;i++){
+    const w=wps[i];
     // Skip if near start/finish
-    if(Math.abs(p.x-sfPt.x)<sfExclude&&Math.abs(p.z-sfPt.z)<sfExclude)continue;
-    if(pointInNoAutoZone(data,p.x,p.z,6))continue;
-    const t=new THREE.Vector3().subVectors(nx,p).normalize();
-    const r=new THREE.Vector3(-t.z,0,t.x).normalize();
-    const side=(i%8<4)?-1:1;
-    // Place on outer edge of sidewalk
-    const off=side*(roadW/2+swW*0.8);
-    const lx=p.x+r.x*off, lz=p.z+r.z*off;
+    if(Math.hypot(w[0]-sfPt.x,w[2]-sfPt.z)<sfExclude)continue;
+    if(pointInNoAutoZone(data,w[0],w[2],6))continue;
+    const prev=wps[(i-1+nwp)%nwp],next=wps[(i+1)%nwp];
+    const tx=next[0]-prev[0],tz=next[2]-prev[2];
+    const tl=Math.sqrt(tx*tx+tz*tz)||1;
+    const rx=-tz/tl, rz=tx/tl; // right-side normal
+    // One side only, at wall edge
+    const off=roadW/2+swW;
+    const lx=w[0]+rx*off, lz=w[2]+rz*off;
     let inBld=false;
     for(const b of placed){if(Math.abs(lx-b.x)<b.w/2+1&&Math.abs(lz-b.z)<b.d/2+1){inBld=true;break;}}
     if(inBld)continue;
-    // Pole on sidewalk
+    // Pole on sidewalk at wall edge
     const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,6.5,5),poleMat);
     pole.position.set(lx,3.25,lz); pole.userData.trk=true; scene.add(pole);
-    // Arm extends over road
-    const armDx=-r.x*side*2.0, armDz=-r.z*side*2.0;
+    // Arm extends inward over road
+    const armDx=-rx*2.0, armDz=-rz*2.0;
     const arm=new THREE.Mesh(new THREE.BoxGeometry(.05,.05,2.8),poleMat);
     arm.position.set(lx+armDx*0.4,6.3,lz+armDz*0.4);
-    arm.rotation.y=Math.atan2(r.x,r.z); arm.userData.trk=true; scene.add(arm);
+    arm.rotation.y=Math.atan2(rx,rz); arm.userData.trk=true; scene.add(arm);
     const bx2=lx+armDx, bz2=lz+armDz;
     const bulb=new THREE.Mesh(new THREE.BoxGeometry(.6,.12,.35),bulbMat);
     bulb.position.set(bx2,6.2,bz2); bulb.userData.trk=true; scene.add(bulb);
     // Yellow transparent pool on road surface
     const pool=new THREE.Mesh(poolGeo,poolMat);
     pool.rotation.x=-Math.PI/2;
-    pool.position.set(p.x,0.06,p.z);
+    pool.position.set(w[0],0.06,w[2]);
     pool.userData.trk=true; scene.add(pool);
   }
 
