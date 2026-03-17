@@ -9,7 +9,7 @@ const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform===
 let touchControlsEnabled=false;
 let gyroEnabled=true;
 
-const GYRO_MAX_TILT=24;
+const GYRO_MAX_TILT=45;
 const GYRO_DEADZONE=2.2;
 const GYRO_SENSITIVITY=0.2;
 
