@@ -173,7 +173,7 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .gyroSteerDot{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:#ff5500;box-shadow:0 0 12px #ff5500cc;transition:left .04s linear;}
 
 /* Touch steer slider */
-.touchSteerSlider{pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;position:relative;width:160px;min-height:58px;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:rgba(7,10,20,.72);display:flex;align-items:center;overflow:hidden;flex-shrink:0;}
+.touchSteerSlider{pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;position:relative;width:300px;min-height:58px;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:rgba(7,10,20,.72);display:flex;align-items:center;overflow:hidden;flex-shrink:0;}
 .touchSteerCenter{position:absolute;top:25%;bottom:25%;left:50%;transform:translateX(-50%);width:2px;background:rgba(255,255,255,.2);border-radius:1px;}
 .touchSteerThumb{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:42px;border-radius:10px;background:rgba(80,140,255,.78);border:1px solid rgba(140,180,255,.9);transition:transform .12s ease-out;}
 .touchSteerThumb.dragging{transition:none;background:rgba(80,140,255,.95);}
