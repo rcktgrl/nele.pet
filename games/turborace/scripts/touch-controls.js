@@ -1,11 +1,13 @@
 import { state } from './state.js';
 import { toggleCam } from './camera.js';
 const TOUCH_TOGGLE_KEY='turborace_touch_controls';
+const GYRO_TOGGLE_KEY='turborace_gyro_enabled';
 const touchPointers={throttle:new Set(),brake:new Set(),left:new Set(),right:new Set()};
 export const touchState={throttle:false,brake:false,left:false,right:false};
 const gyroState={available:false,active:false,permission:'unknown',gamma:0,steer:0};
 const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 let touchControlsEnabled=false;
+let gyroEnabled=true;
 
 const GYRO_MAX_TILT=24;
 const GYRO_DEADZONE=2.2;
@@ -51,6 +53,10 @@ function updateGyroStatusText(){
     setGyroStatus('GYRO: enable touch controls to use tilt steering.');
     return;
   }
+  if(!gyroEnabled){
+    setGyroStatus('GYRO: disabled. Toggle above to enable tilt steering.');
+    return;
+  }
   if(gyroState.active){
     setGyroStatus('GYRO: active tilt steering.');
     return;
@@ -86,6 +92,10 @@ function deactivateGyroListener(){
 }
 
 async function ensureGyroPermission(){
+  if(!gyroEnabled){
+    deactivateGyroListener();
+    return;
+  }
   if(!canUseGyro()){
     gyroState.permission='unsupported';
     updateGyroStatusText();
@@ -126,6 +136,13 @@ export function updateTouchControlsVisibility(gState){
   root.style.display=isTouchControlsVisibleInState(gState)?'flex':'none';
 }
 
+function updateHintVisibility(){
+  const hint=document.getElementById('hint');
+  if(!hint)return;
+  if(hint.style.display==='none'&&!touchControlsEnabled)return;
+  if(touchControlsEnabled){hint.style.display='none';}
+}
+
 export function onTouchControlsToggle(enabled){
   touchControlsEnabled=!!enabled;
   const input=document.getElementById('touchToggleInput');
@@ -134,7 +151,18 @@ export function onTouchControlsToggle(enabled){
   if(!touchControlsEnabled)releaseAllTouchControls();
   if(touchControlsEnabled)ensureGyroPermission();
   else deactivateGyroListener();
-  updateTouchControlsVisibility();
+  updateTouchControlsVisibility(state.gState);
+  updateHintVisibility();
+  updateGyroStatusText();
+}
+
+export function onGyroToggle(enabled){
+  gyroEnabled=!!enabled;
+  const input=document.getElementById('gyroToggleInput');
+  if(input&&input.checked!==gyroEnabled)input.checked=gyroEnabled;
+  localStorage.setItem(GYRO_TOGGLE_KEY,gyroEnabled?'1':'0');
+  if(gyroEnabled&&touchControlsEnabled)ensureGyroPermission();
+  else deactivateGyroListener();
   updateGyroStatusText();
 }
 
@@ -143,6 +171,10 @@ export function initTouchSettings(){
   touchControlsEnabled=(saved==='1');
   const input=document.getElementById('touchToggleInput');
   if(input)input.checked=touchControlsEnabled;
+  const savedGyro=localStorage.getItem(GYRO_TOGGLE_KEY);
+  gyroEnabled=(savedGyro===null)?true:(savedGyro==='1');
+  const gyroInput=document.getElementById('gyroToggleInput');
+  if(gyroInput)gyroInput.checked=gyroEnabled;
   updateGyroStatusText();
 }
 
@@ -215,9 +247,9 @@ export function setupTouchControls({pauseRace,resumeRace}={}){
   const gyroStatusEl=document.getElementById('gyroStatus');
   if(gyroStatusEl){
     gyroStatusEl.addEventListener('click',()=>{
-      if(gyroState.permission==='required'&&touchControlsEnabled)ensureGyroPermission();
+      if(gyroState.permission==='required'&&touchControlsEnabled&&gyroEnabled)ensureGyroPermission();
     });
   }
-  if(touchControlsEnabled)ensureGyroPermission();
+  if(touchControlsEnabled&&gyroEnabled)ensureGyroPermission();
   else updateGyroStatusText();
 }
