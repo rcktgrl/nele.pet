@@ -9,7 +9,7 @@ import { updateAudio, aiSounds } from './audio.js';
 import { updateCamera, updateEditorPreviewCamera } from './camera.js';
 import { updateHUD, drawDash, drawMinimap } from './hud.js';
 import { ghostVisuals, sampleGhostFrame, updateGhostReplay, shouldRenderGhostsForState } from './ghost.js';
-import { updateResultsUI } from './race.js';
+import { updateResultsUI, endRace } from './race.js';
 import { editorRebuildScene } from './editor.js';
 
 function isTouchDevice() {
@@ -96,6 +96,22 @@ function updateRacingState(dt) {
   updateGhostState();
 }
 
+
+function updateTrainingState(dt) {
+  state.raceTime += dt;
+  updateAiControllers(dt);
+  updateAiAudio();
+  if (state.training.visible && state.pCar) {
+    updateRaceView({ thr: 0, brk: 0, dt, hud: true, dash: true, minimap: true });
+  }
+  if ((state.training.config?.maxSimulationTime || 45) <= state.raceTime) {
+    endRace();
+    return;
+  }
+  const unfinished = state.aiCars.some((car) => !car.finished);
+  if (!unfinished) endRace();
+}
+
 function updateCooldownState(dt) {
   state.raceTime += dt;
   state.pCar.update({ thr: 0, brk: 0.3, str: 0 }, dt);
@@ -140,6 +156,9 @@ export function updateGameFrame(dt) {
       break;
     case 'cooldown':
       updateCooldownState(dt);
+      break;
+    case 'training':
+      updateTrainingState(dt);
       break;
     case 'editorPreview':
     case 'editor':

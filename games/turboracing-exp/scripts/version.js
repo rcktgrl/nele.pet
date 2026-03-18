@@ -1,1 +1,1 @@
-export const TURBORACING_EXP_VERSION = 'v0.96-exp';
+export const TURBORACING_EXP_VERSION = 'v0.97-exp';

@@ -24,6 +24,7 @@ export function showSettings(){
 
 export function closeSettings(){
   document.getElementById('settingsModal').style.display='none';
+  const trainModal=document.getElementById('trainAiModal'); if(trainModal) trainModal.style.display='none';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -40,6 +41,7 @@ export function showIntro(){
   releaseAllTouchControls();
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
+  const trainModal=document.getElementById('trainAiModal'); if(trainModal) trainModal.style.display='none';
   clearGhostVisual();
   dc.style.display='none';
 }
@@ -54,6 +56,7 @@ export function showMain(){
   releaseAllTouchControls();
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
+  const trainModal=document.getElementById('trainAiModal'); if(trainModal) trainModal.style.display='none';
   dc.style.display='none';
   const epb=document.getElementById('editorPreviewBanner'); if(epb)epb.style.display='none';
   const epbtn=document.getElementById('editorPreviewBtn'); if(epbtn)epbtn.textContent='3D PREVIEW';
@@ -62,7 +65,7 @@ export function showMain(){
   clearGhostVisual();
   if(audioReady)startMusic();
   for(const c of state.allCars)scene.remove(c.mesh);
-  state.allCars=[]; state.aiCars=[]; state.pCar=null;
+  state.allCars=[]; state.aiCars=[]; state.pCar=null; state.training.running=false; state.raceMode='race';
 }
 
 // ═══════════════════════════════════════════════════════

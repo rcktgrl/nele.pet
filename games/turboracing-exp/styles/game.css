@@ -210,3 +210,21 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
   .ctrl-grid{grid-template-columns:1fr;font-size:11px;gap:4px;padding:14px;}
   .ctrl-grid span:nth-child(odd){margin-top:6px;}
 }
+
+#trainAiModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.82);z-index:420;padding:16px;}
+.trainAiPanel{width:min(1100px,100%);max-height:calc(100vh - 24px);overflow:auto;background:#0a0f1c;border:1px solid #223041;border-radius:14px;padding:24px;box-shadow:0 16px 50px rgba(0,0,0,.4);}
+.trainAiPanel h2,.trainAiPanel h3{font-family:'Orbitron',monospace;letter-spacing:3px;text-transform:uppercase;}
+.trainAiPanel h2{margin-bottom:16px;color:#d3dcff;text-align:center;}
+.trainAiPanel h3{font-size:13px;color:#8fa5d3;margin:14px 0 10px;}
+.trainAiGrid{display:grid;grid-template-columns:1fr 1.3fr;gap:16px;}
+.trainAiSection{padding:14px;border:1px solid rgba(255,255,255,.06);border-radius:10px;background:rgba(255,255,255,.025);}
+.trainAiList{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;}
+.trainAiPick{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:#0d1320;border:1px solid #1f2b3c;color:#d8e3ff;font-size:13px;}
+.trainAiPick input{accent-color:#ff5500;}
+.trainAiFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;}
+.trainAiFields label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#a9b6d0;}
+.trainAiFields input{background:#0d1320;color:#eef3ff;border:1px solid #243246;border-radius:8px;padding:9px 10px;font:inherit;}
+.trainAiJson{width:100%;min-height:180px;background:#08101c;color:#d8f1ff;border:1px solid #223041;border-radius:10px;padding:12px;font:12px/1.45 monospace;resize:vertical;}
+.trainAiMeta,.trainAiStatus{margin-top:10px;font-size:12px;color:#95a6d0;}
+.trainAiStatus{color:#ffd28f;}
+@media (max-width: 900px){.trainAiGrid{grid-template-columns:1fr;}}
