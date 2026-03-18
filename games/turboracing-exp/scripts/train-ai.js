@@ -299,27 +299,27 @@ export class TrainableAIController {
     this.workerSnapshot = null;
     const bootstrapNode = snapshot.nodes[0] || { x: 0, z: 1, steepness: 0 };
     const nextNode = snapshot.nodes[1] || bootstrapNode;
-    const targetSteer = clamp(bootstrapNode.x / Math.max(8, Math.abs(bootstrapNode.z) + 4), -1, 1);
-    const pathSteer = clamp((targetSteer * 0.72) + clamp(nextNode.x / Math.max(14, Math.abs(nextNode.z) + 6), -1, 1) * 0.28, -1, 1);
+    const steerNear = clamp(bootstrapNode.x / Math.max(7, Math.abs(bootstrapNode.z) + 3), -1, 1);
+    const steerFar = clamp(nextNode.x / Math.max(12, Math.abs(nextNode.z) + 5), -1, 1);
+    const pilotSteer = clamp((steerNear * 0.7) + (steerFar * 0.3) - snapshot.headingRelative * 0.55, -1, 1);
     const cornerSeverity = Math.max(Math.abs(bootstrapNode.steepness || 0), Math.abs(nextNode.steepness || 0), Math.abs(snapshot.headingRelative || 0));
-    const desiredSpeedRatio = clamp(1 - cornerSeverity * 0.72, 0.28, 1);
+    const desiredSpeedRatio = clamp(1 - cornerSeverity * 0.78, 0.24, 1);
     const speedError = desiredSpeedRatio - snapshot.speedRatio;
-    const baseThr = clamp(0.42 + Math.max(0, speedError) * 1.15, 0.18, 1);
-    const baseBrk = clamp(Math.max(0, -speedError) * 1.35, 0, 1);
-    const isStartingFromRest = this.telemetry.aliveTime < 2.2 && this.car.spd < Math.max(4.5, this.car.data.maxSpd * 0.16);
-    const isStuck = this.car.spd < 0.35 && this.telemetry.aliveTime > 1.2;
-    let thr = clamp((outputs[0] + 1) * 0.5, 0, 1);
-    let brk = clamp((outputs[1] + 1) * 0.5, 0, 1);
-    let str = clamp(outputs[2], -1, 1);
-    const assistWeight = isStuck ? 0.92 : clamp(0.82 - this.telemetry.aliveTime * 0.045, 0.35, 0.82);
-    thr = clamp(baseThr * assistWeight + thr * (1 - assistWeight), 0, 1);
-    brk = clamp(baseBrk * assistWeight + brk * (1 - assistWeight), 0, 1);
-    str = clamp(pathSteer * assistWeight + str * (1 - assistWeight), -1, 1);
+    const pilotThr = clamp(0.35 + Math.max(0, speedError) * 1.25, 0.12, 1);
+    const pilotBrk = clamp(Math.max(0, -speedError) * 1.45, 0, 1);
+    const isStartingFromRest = this.telemetry.aliveTime < 1.6 && this.car.spd < Math.max(4.5, this.car.data.maxSpd * 0.16);
+    const isStuck = this.car.spd < 0.35 && this.telemetry.aliveTime > 1.1;
+    const nnThr = outputs[0];
+    const nnBrk = outputs[1];
+    const nnStr = outputs[2];
+    let thr = clamp(pilotThr + nnThr * 0.55 - Math.max(0, nnBrk) * 0.18, 0, 1);
+    let brk = clamp(pilotBrk + Math.max(0, nnBrk) * 0.6 - Math.max(0, nnThr) * 0.12, 0, 1);
+    let str = clamp(pilotSteer + nnStr * 0.9, -1, 1);
     if (isStartingFromRest || isStuck) {
       this.bootstrapTimer += dt;
-      thr = Math.max(thr, 0.72);
-      brk = Math.min(brk, 0.12);
-      str = clamp(pathSteer + Math.sin(this.explorationSeed + this.telemetry.aliveTime * 4.5) * 0.08, -1, 1);
+      thr = Math.max(thr, 0.76);
+      brk = Math.min(brk, 0.08);
+      str = clamp(pilotSteer + Math.sin(this.explorationSeed + this.telemetry.aliveTime * 4.5) * 0.04, -1, 1);
     } else {
       this.bootstrapTimer = Math.max(0, this.bootstrapTimer - dt * 2);
     }

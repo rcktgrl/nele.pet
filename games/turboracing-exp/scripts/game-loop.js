@@ -99,12 +99,13 @@ function updateRacingState(dt) {
 
 function updateTrainingState(dt) {
   const tickRate = Math.max(0.25, state.training.config?.tickRate || 1);
-  const totalDt = dt * tickRate;
-  const steps = Math.max(1, Math.ceil(tickRate));
-  const stepDt = totalDt / steps;
+  const fixedStep = 1 / 60;
+  const budget = tickRate + (state.training.tickCarry || 0);
+  const steps = Math.max(1, Math.floor(budget));
+  state.training.tickCarry = budget - steps;
   for (let step = 0; step < steps; step += 1) {
-    state.raceTime += stepDt;
-    updateAiControllers(stepDt);
+    state.raceTime += fixedStep;
+    updateAiControllers(fixedStep);
     if (state.raceTime >= (state.training.config?.maxSimulationTime || 45)) break;
   }
   if (state.training.visible && state.pCar) {

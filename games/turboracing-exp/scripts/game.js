@@ -9,7 +9,7 @@ import {
   setupTouchControls,
 } from './touch-controls.js';
 import { initAudioSettings, onMusicVol, onSfxVol, startMusic, audioReady } from './audio.js';
-import { toggleCam } from './camera.js';
+import { toggleCam, adjustTrainingCameraZoom } from './camera.js';
 import { setupLights } from './lighting.js';
 import { resizeDC } from './hud.js';
 import { setOnlineGhostToggle, setOnlineGhostCount, readOnlineGhostToggle, readOnlineGhostCount } from './ghost.js';
@@ -78,6 +78,12 @@ function bindKeyboardInput() {
 function bindPointerInput() {
   document.addEventListener('pointermove', updateRaceCameraOrbit);
   gc.addEventListener('contextmenu', (event) => event.preventDefault());
+  gc.addEventListener('wheel', (event) => {
+    if (state.gState === 'training') {
+      event.preventDefault();
+      adjustTrainingCameraZoom(event.deltaY);
+    }
+  }, { passive: false });
 }
 
 function bindSettingsControls() {

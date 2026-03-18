@@ -71,6 +71,7 @@ export const state = {
       selectedCarIds: [],
       currentTrackId: null,
       currentCarId: null,
+      tickCarry: 0,
       config: null,
       controller: null,
       workerPool: null,

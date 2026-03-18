@@ -40,6 +40,11 @@ export function updateTrainingFreeCamera(dt){
   updateEditorPreviewCamera(dt);
 }
 
+export function adjustTrainingCameraZoom(deltaY){
+  editorCam.distance=Math.max(70,Math.min(1400,editorCam.distance*(1+Math.sign(deltaY)*0.08)));
+}
+
+
 export function updateCamera(){
   if(!state.pCar)return;
   const now=performance.now();

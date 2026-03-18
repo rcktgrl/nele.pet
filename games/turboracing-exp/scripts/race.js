@@ -267,7 +267,9 @@ export async function initRace(options = {}) {
   state.allCars = playerControlled ? raceCars.allCars : raceCars.aiCars;
   if (!trainingMode) await setupGhostReplayFromTrack(state.trkData && state.trkData.id);
 
-  state.raceTime = 0; state.gState = 'countdown';
+  state.raceTime = 0;
+  if (trainingMode) state.training.tickCarry = 0;
+  state.gState = 'countdown';
   resetCurrentRaceSubmitted();
   document.getElementById('hud').style.display = trainingMode && !state.training.visible ? 'none' : 'block';
   document.getElementById('hint').style.display = isTouchControlsEnabled() && !trainingMode ? 'none' : 'block';
@@ -460,6 +462,7 @@ export function stopTraining({ saveBest = true, exitToMenu = true } = {}) {
   state.raceMode = 'race';
   state.training.currentTrackId = null;
   state.training.currentCarId = null;
+  state.training.tickCarry = 0;
   updateTrainingStatus('Training per ESC beendet. Beste KI wurde behalten.');
   if (exitToMenu) {
     const pauseMenu = document.getElementById('pauseMenu');
