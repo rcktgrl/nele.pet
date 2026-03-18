@@ -98,11 +98,17 @@ function updateRacingState(dt) {
 
 
 function updateTrainingState(dt) {
-  state.raceTime += dt;
-  updateAiControllers(dt);
+  const tickRate = Math.max(0.25, state.training.config?.tickRate || 1);
+  const totalDt = dt * tickRate;
+  const steps = Math.max(1, Math.ceil(tickRate));
+  const stepDt = totalDt / steps;
+  for (let step = 0; step < steps; step += 1) {
+    state.raceTime += stepDt;
+    updateAiControllers(stepDt);
+  }
   updateAiAudio();
   if (state.training.visible && state.pCar) {
-    updateAudio(0, 0, dt, state.pCar, keys);
+    updateAudio(0, 0, totalDt, state.pCar, keys);
     updateTrainingFreeCamera(dt);
     updateHUD();
     drawMinimap();

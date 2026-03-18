@@ -8,6 +8,7 @@ const DEFAULT_CONFIG = {
   mutationRate: 0.14,
   mutationStrength: 0.22,
   eliteCount: 4,
+  tickRate: 1,
   rewards: {
     progress: 18,
     speed: 0.06,
@@ -47,6 +48,7 @@ function mergeConfig(config = {}) {
   merged.mutationRate = clamp(+merged.mutationRate || 0.14, 0.001, 1);
   merged.mutationStrength = clamp(+merged.mutationStrength || 0.22, 0.001, 3);
   merged.eliteCount = clamp(Math.round(merged.eliteCount || 4), 1, merged.populationSize);
+  merged.tickRate = clamp(+merged.tickRate || 1, 0.25, 12);
   return merged;
 }
 
@@ -145,6 +147,10 @@ function computeClearance(car, trackData, cityCorridors) {
   return { left: width * 0.5, right: width * 0.5 };
 }
 
+function wrapAngle(angle) {
+  return ((angle + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+}
+
 function getNodeBundle(car, context, lookahead) {
   const navPts = context.cityAiPoints ? context.cityAiPoints.pts : context.trackPoints;
   const curv = context.cityAiPoints ? context.cityAiPoints.curv : context.trackCurvature;
@@ -172,6 +178,24 @@ function getNodeBundle(car, context, lookahead) {
 
 export function createTrainingSnapshot(car, context, config = DEFAULT_CONFIG) {
   const nodes = getNodeBundle(car, context, config.nodeLookahead);
+  const navPts = context.cityAiPoints ? context.cityAiPoints.pts : context.trackPoints;
+  let headingRelative = 0;
+  if (navPts?.length) {
+    let closestIndex = 0;
+    let minDistance = Infinity;
+    for (let index = 0; index < navPts.length; index += 1) {
+      const point = navPts[index];
+      const d = (car.pos.x - point.x) ** 2 + (car.pos.z - point.z) ** 2;
+      if (d < minDistance) {
+        minDistance = d;
+        closestIndex = index;
+      }
+    }
+    const current = navPts[closestIndex];
+    const next = navPts[(closestIndex + 1) % navPts.length] || current;
+    const trackHeading = Math.atan2(next.x - current.x, next.z - current.z);
+    headingRelative = wrapAngle(car.hdg - trackHeading) / Math.PI;
+  }
   const clearance = computeClearance(car, context.trackData, context.cityCorridors || context.corridors);
   const speedRatio = car.data.maxSpd > 0 ? car.spd / car.data.maxSpd : 0;
   const primary = [car.data.hdl || 0, car.data.brake || 0, car.data.maxSpd || 0];
@@ -188,6 +212,7 @@ export function createTrainingSnapshot(car, context, config = DEFAULT_CONFIG) {
     speed: car.spd,
     speedRatio,
     onGravel: !!car.onGravel,
+    headingRelative,
     inputs: [
       primary[0] / 1.2,
       primary[1] / 24,
@@ -198,6 +223,7 @@ export function createTrainingSnapshot(car, context, config = DEFAULT_CONFIG) {
       clamp(clearance.left / 20, 0, 2),
       clamp(clearance.right / 20, 0, 2),
       speedRatio,
+      headingRelative,
       car.onGravel ? 1 : -1,
     ],
   };

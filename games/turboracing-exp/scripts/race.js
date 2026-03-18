@@ -77,6 +77,7 @@ function normaliseTrainingConfig(raw = {}) {
     mutationRate: +raw.mutationRate,
     mutationStrength: +raw.mutationStrength,
     eliteCount: +raw.eliteCount,
+    tickRate: +raw.tickRate,
     rewards: {
       progress: +raw.rewardProgress,
       speed: +raw.rewardSpeed,
@@ -159,9 +160,9 @@ function applyTrainingCars(selection) {
   state.selTrk = track?.id ?? state.selTrk;
   state.selCar = chooseTrainingCarIndex();
   if (selection.visible) {
-    startRace({ mode: 'training' });
+    startRace({ mode: 'training', skipCountdown: true });
   } else {
-    void initRace({ mode: 'training' });
+    void initRace({ mode: 'training', skipCountdown: true });
   }
   const ui = getTrainingUiElements();
   if (ui.exportArea) ui.exportArea.value = manager.exportJSON();
@@ -196,6 +197,7 @@ export function exportTrainingJsonToUi() {
 
 export async function initRace(options = {}) {
   const mode = options.mode || state.raceMode || 'race';
+  const skipCountdown = !!options.skipCountdown;
   const trainingMode = mode === 'training';
   state.raceMode = mode;
 
@@ -231,7 +233,7 @@ export async function initRace(options = {}) {
     scene,
     createAIController: (aiCar, i) => {
       if (trainingMode) {
-        const inputSize = 3 + trainingConfig.nodeLookahead * 3 + 2 + 2 + 1 + 1;
+        const inputSize = 3 + trainingConfig.nodeLookahead * 3 + 2 + 2 + 1 + 1 + 1;
         return new AI(aiCar, .044 + i * .010, trainingContext, {
           config: trainingConfig,
           genome: manager.getGenomeAt(i, inputSize),
@@ -259,9 +261,12 @@ export async function initRace(options = {}) {
   if (trainingMode && state.training.visible) resetFreeCameraToTrack(state.trkPts);
   if (!trainingMode) startGhostRecording();
   if (ghostModeEnabled && ghostVisuals.length === 0) notify('Ghost mode enabled: no matching ghost data for this track yet.');
-  if (trainingMode && !state.training.visible) {
-    state.gState = 'training';
-    updateTrainingStatus(`Generation ${state.training.generation || 1} · Episode ${state.training.episode + 1} · ${state.trkData?.name || 'Track'} · 0 cm`);
+  if (skipCountdown || trainingMode) {
+    document.getElementById('cd').style.display = 'none';
+    state.gState = trainingMode ? 'training' : 'racing';
+    if (trainingMode) updateTrainingStatus(`Generation ${state.training.generation || 1} · Episode ${state.training.episode + 1} · ${state.trkData?.name || 'Track'} · 0 cm`);
+    updateTouchControlsVisibility(state.gState);
+    startMusic();
   } else {
     doCountdown();
   }
@@ -324,7 +329,7 @@ function finishTrainingGeneration() {
   const bestCm = winner?.telemetry?.progressCm || 0;
   updateTrainingStatus(`Gen ${state.training.generation} fertig · ${formatProgressCm(bestCm)} · Fitness ${winner ? winner.fitness.toFixed(2) : '0.00'} · ${state.trkData?.name || 'Track'}`);
   if (state.training.running) {
-    void initRace({ mode: 'training' });
+    void initRace({ mode: 'training', skipCountdown: true });
   }
 }
 
@@ -402,7 +407,7 @@ export function restartRace() {
   document.getElementById('settingsModal').style.display = 'none';
   releaseAllTouchControls();
   document.getElementById('results').style.display = 'none';
-  void initRace({ mode: state.raceMode });
+  void initRace({ mode: state.raceMode, skipCountdown: true });
 }
 
 export function stopTraining({ saveBest = true, exitToMenu = true } = {}) {
@@ -437,5 +442,8 @@ export function stopTraining({ saveBest = true, exitToMenu = true } = {}) {
     if (main) main.style.display = 'flex';
     document.getElementById('hud').style.display = 'none';
     document.getElementById('hint').style.display = 'none';
+    const modal = document.getElementById('trainAiModal');
+    if (modal) modal.style.display = 'flex';
+    updateTrainingSelectionUi();
   }
 }

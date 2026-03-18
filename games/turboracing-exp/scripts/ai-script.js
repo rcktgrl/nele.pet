@@ -30,7 +30,7 @@ export class AI extends TrainableAIController {
   constructor(car, _la, context, options = {}) {
     const config = mergeConfig(options.config || {});
     const probe = context();
-    const inputSize = 3 + config.nodeLookahead * 3 + 2 + 2 + 1 + 1;
+    const inputSize = 3 + config.nodeLookahead * 3 + 2 + 2 + 1 + 1 + 1;
     const genome = options.genome || createFallbackGenome(inputSize);
     super(car, genome, context, config);
     this.aggression = clamp(options.aggression ?? car.aiAgg ?? 1, 0.4, 1.6);
