@@ -9,11 +9,15 @@ import {
   setupTouchControls,
 } from './touch-controls.js';
 import { initAudioSettings, onMusicVol, onSfxVol, startMusic, audioReady } from './audio.js';
-import { toggleCam } from './camera.js';
+import { toggleCam, adjustTrainingCameraZoom } from './camera.js';
 import { setupLights } from './lighting.js';
 import { resizeDC } from './hud.js';
 import { setOnlineGhostToggle, setOnlineGhostCount, readOnlineGhostToggle, readOnlineGhostCount } from './ghost.js';
-import { pauseRace, resumeRace, startRace, restartRace } from './race.js';
+import {
+  pauseRace, resumeRace, startRace, restartRace,
+  openTrainingModal, closeTrainingModal, startTrainingFromUi,
+  importTrainingJsonFromUi, exportTrainingJsonToUi, updateTrainingSelectionUi, stopTraining
+} from './race.js';
 import {
   setEditorNodeCount, setEditorBrushAsset, setEditorBrushEnabled, setEditorBrushSize, setEditorBrushSpacing,
   onEditorMetaChanged, onEditorStreetGridChanged, onEditorNodeChanged,
@@ -56,7 +60,9 @@ function bindKeyboardInput() {
         return;
       }
 
-      if (state.gState === 'racing' || state.gState === 'cooldown') {
+      if (state.gState === 'training') {
+        stopTraining();
+      } else if (state.gState === 'racing' || state.gState === 'cooldown') {
         pauseRace();
       } else if (state.gState === 'paused') {
         resumeRace();
@@ -72,6 +78,12 @@ function bindKeyboardInput() {
 function bindPointerInput() {
   document.addEventListener('pointermove', updateRaceCameraOrbit);
   gc.addEventListener('contextmenu', (event) => event.preventDefault());
+  gc.addEventListener('wheel', (event) => {
+    if (state.gState === 'training') {
+      event.preventDefault();
+      adjustTrainingCameraZoom(event.deltaY);
+    }
+  }, { passive: false });
 }
 
 function bindSettingsControls() {
@@ -84,6 +96,11 @@ function bindSettingsControls() {
   document.getElementById('settingsCloseBtn').addEventListener('click', closeSettings);
   document.getElementById('showSettingsBtn').addEventListener('click', showSettings);
   document.getElementById('mainSettingsBtn').addEventListener('click', () => { tryStartMenuMusic(); showSettings(); });
+  document.getElementById('trainAiBtn').addEventListener('click', () => { tryStartMenuMusic(); openTrainingModal(); });
+  document.getElementById('trainAiCloseBtn').addEventListener('click', closeTrainingModal);
+  document.getElementById('trainAiStartBtn').addEventListener('click', startTrainingFromUi);
+  document.getElementById('trainAiImportBtn').addEventListener('click', importTrainingJsonFromUi);
+  document.getElementById('trainAiExportBtn').addEventListener('click', exportTrainingJsonToUi);
 }
 
 function bindMenuButtons() {
@@ -170,6 +187,7 @@ function bindUi() {
 function applyStoredSettings() {
   setOnlineGhostToggle(readOnlineGhostToggle());
   setOnlineGhostCount(readOnlineGhostCount());
+  updateTrainingSelectionUi();
 }
 
 function updateVersionLabels() {

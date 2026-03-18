@@ -14,6 +14,37 @@ import {
 
 'use strict';
 
+
+function getTrackBoundsFromPoints(points){
+  let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  for(const point of points||[]){
+    if(point.x<minX)minX=point.x;
+    if(point.x>maxX)maxX=point.x;
+    if(point.z<minZ)minZ=point.z;
+    if(point.z>maxZ)maxZ=point.z;
+  }
+  if(!isFinite(minX)) return {minX:-150,maxX:150,minZ:-150,maxZ:150};
+  return {minX,maxX,minZ,maxZ};
+}
+
+export function resetFreeCameraToTrack(points){
+  const b=getTrackBoundsFromPoints(points);
+  editorCam.target.set((b.minX+b.maxX)/2,0,(b.minZ+b.maxZ)/2);
+  const span=Math.max(180,Math.max(b.maxX-b.minX,b.maxZ-b.minZ));
+  editorCam.distance=Math.max(180,span*1.15);
+  editorCam.pitch=1.16;
+  editorCam.yaw=0;
+}
+
+export function updateTrainingFreeCamera(dt){
+  updateEditorPreviewCamera(dt);
+}
+
+export function adjustTrainingCameraZoom(deltaY){
+  editorCam.distance=Math.max(70,Math.min(1400,editorCam.distance*(1+Math.sign(deltaY)*0.08)));
+}
+
+
 export function updateCamera(){
   if(!state.pCar)return;
   const now=performance.now();

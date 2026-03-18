@@ -51,7 +51,7 @@ function updateHudPosition() {
 }
 
 export function updateHUD() {
-  if (!state.pCar || !state.trkData || (state.gState !== 'racing' && state.gState !== 'finished')) {
+  if (!state.pCar || !state.trkData || !['racing','finished','training'].includes(state.gState)) {
     return;
   }
 
