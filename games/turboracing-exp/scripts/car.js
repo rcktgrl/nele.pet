@@ -1,33 +1,12 @@
 import { THREE } from './three.js';
-import { createCarVisual, getOpponentCarModels, getPlayerCarModel } from './car-model.js';
+import { createCarVisual } from './car-model.js';
 import { state } from './state.js';
-import { fmtT } from './util.js';
+import { fmtT } from './utils/format.js';
+import { nearestWallPoint, wrapAngle } from './utils/geometry.js';
 import { announce } from './audio.js';
-import { buildGearboxForCar, rpmFromSpeed } from './data/gearboxes.js';
+import { buildGearboxForCar, rpmFromSpeed } from '../data/gearboxes.js';
 
 
-function nearestPointOnSegment(px,pz,ax,az,bx,bz){
-  const abx=bx-ax, abz=bz-az;
-  const apx=px-ax, apz=pz-az;
-  const ab2=abx*abx+abz*abz||1;
-  const t=Math.max(0,Math.min(1,(apx*abx+apz*abz)/ab2));
-  return {x:ax+abx*t,z:az+abz*t};
-}
-
-function nearestWallPoint(px,pz,walls){
-  if(!walls||!walls.length) return null;
-  let best=null;
-  let bestD2=Infinity;
-  for(const w of walls){
-    const pt=nearestPointOnSegment(px,pz,w.x0,w.z0,w.x1,w.z1);
-    const d2=(px-pt.x)*(px-pt.x)+(pz-pt.z)*(pz-pt.z);
-    if(d2<bestD2){
-      bestD2=d2;
-      best=pt;
-    }
-  }
-  return best;
-}
 
 class Car {
   constructor(data, pos, hdg, isPlayer, scene) {
@@ -197,9 +176,8 @@ class Car {
         this.spd *= 0.38;
         if (this.isReversing) this.revSpd *= 0.4;
         const trkHdg = Math.atan2(tx, tz);
-        const wrapPi = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
         const targetHdg = this.isReversing ? trkHdg + Math.PI : trkHdg;
-        const hdgErr = wrapPi(targetHdg - this.hdg);
+        const hdgErr = wrapAngle(targetHdg - this.hdg);
         const maxCorrection = Math.PI / 16;
         const correction = Math.max(-maxCorrection, Math.min(maxCorrection, hdgErr * 0.8));
         this.hdg += correction;
@@ -217,9 +195,8 @@ class Car {
       this.pos.z += pz / pl * (dist - maxD + 0.5);
       this.spd *= 0.45;
       const trkHdg = Math.atan2(tx, tz);
-      const wrapPi = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       const targetHdg = this.isReversing ? trkHdg + Math.PI : trkHdg;
-      const hdgErr = wrapPi(targetHdg - this.hdg);
+      const hdgErr = wrapAngle(targetHdg - this.hdg);
       const maxCorrection = Math.PI / 18;
       const correction = Math.max(-maxCorrection, Math.min(maxCorrection, hdgErr * 0.75));
       this.hdg += correction;
@@ -315,14 +292,14 @@ function buildRaceGrid(trackPoints){
 
 export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene, createAIController, aiCount=4 }){
   const grid=buildRaceGrid(trackPoints);
-  const playerCar=new Car(getPlayerCarModel(cars, selectedCarIndex),grid[0].pos,grid[0].hdg,true,scene);
+  const playerCar=new Car(cars[selectedCarIndex],grid[0].pos,grid[0].hdg,true,scene);
 
   const aiCars=[];
   const aiControllers=[];
   const count=Math.max(0,Math.min(4,Math.floor(aiCount)||0));
-  const aiModels=getOpponentCarModels(cars, selectedCarIndex,count);
+  const aiIndexes=cars.map((_, index) => index).filter((index) => index !== selectedCarIndex);
   for(let i=0;i<count;i++){
-    const aiCar=new Car(aiModels[i],grid[i+1].pos,grid[i+1].hdg,false,scene);
+    const aiCar=new Car(cars[aiIndexes[i % aiIndexes.length]],grid[i+1].pos,grid[i+1].hdg,false,scene);
     aiCar.aiAgg=.86+i*.04;
     aiCars.push(aiCar);
     aiControllers.push(createAIController(aiCar,i));
