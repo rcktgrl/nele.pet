@@ -16,7 +16,7 @@
   <div class="menuActions">
     <button id="introStartBtn" class="btn btn-p">START GAME</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.93-exp</div>
+  <div class="menuVersion" aria-label="Game version">v0.102-exp</div>
 </div>
 <div id="hud" role="status" aria-live="polite">
   <div id="raceTop">
@@ -131,6 +131,64 @@
   </div>
 </div>
 
+
+<div id="trainAiModal">
+  <div class="trainAiPanel" role="dialog" aria-modal="true" aria-labelledby="trainAiTitle">
+    <h2 id="trainAiTitle">Train-AI Lab</h2>
+    <form id="trainAiForm">
+      <div class="trainAiGrid">
+        <section class="trainAiSection">
+          <h3>Rotation</h3>
+          <div id="trainTrackList" class="trainAiList"></div>
+          <h3>Autos</h3>
+          <div id="trainCarList" class="trainAiList"></div>
+          <label class="toggleRow" for="trainAiVisible">
+            <span class="toggleLbl">SIMULATION SICHTBAR</span>
+            <input type="checkbox" id="trainAiVisible" checked>
+          </label>
+        </section>
+        <section class="trainAiSection">
+          <h3>Simulation</h3>
+          <div class="trainAiFields">
+            <label><span>KI-Autos</span><input name="populationSize" type="number" min="1" max="200" value="24"></label>
+            <label><span>Max Sim Seconds</span><input name="maxSimulationTime" type="number" min="5" max="600" value="45"></label>
+            <label><span>Node Lookahead</span><input name="nodeLookahead" type="number" min="1" max="8" value="3"></label>
+            <label><span>Hidden Layers</span><input name="hiddenLayers" type="number" min="1" max="6" value="2"></label>
+            <label><span>Neurons / Layer</span><input name="neuronsPerLayer" type="number" min="2" max="64" value="12"></label>
+            <label><span>Elite Count</span><input name="eliteCount" type="number" min="1" max="50" value="4"></label>
+            <label><span>Mutation Rate</span><input name="mutationRate" type="number" min="0.01" max="1" step="0.01" value="0.14"></label>
+            <label><span>Mutation Strength</span><input name="mutationStrength" type="number" min="0.01" max="3" step="0.01" value="0.22"></label>
+            <label><span>Tickrate / Speed</span><input name="tickRate" type="number" min="0.25" max="12" step="0.25" value="1"></label>
+            <label><span>Joker Sims</span><input name="jokerCarrySimulations" type="number" min="0" max="20" step="1" value="3"></label>
+          </div>
+          <h3>Rewards</h3>
+          <div class="trainAiFields">
+            <label><span>Progress</span><input name="rewardProgress" type="number" step="0.1" value="18"></label>
+            <label><span>Speed</span><input name="rewardSpeed" type="number" step="0.01" value="0.06"></label>
+            <label><span>Finish</span><input name="rewardFinish" type="number" step="1" value="140"></label>
+            <label><span>Survival</span><input name="rewardSurvival" type="number" step="0.1" value="0.7"></label>
+            <label><span>Gravel Penalty</span><input name="rewardGravelPenalty" type="number" step="0.1" value="1.2"></label>
+            <label><span>Wall Penalty</span><input name="rewardWallPenalty" type="number" step="0.1" value="3.4"></label>
+            <label><span>Steering Penalty</span><input name="rewardSteeringPenalty" type="number" step="0.01" value="0.05"></label>
+          </div>
+        </section>
+      </div>
+      <section class="trainAiSection">
+        <h3>JSON Import / Export</h3>
+        <textarea id="trainAiJson" class="trainAiJson" spellcheck="false" placeholder="Hier erscheint das exportierte KI-JSON."></textarea>
+        <div class="trainAiMeta">Generation: <strong id="trainAiGeneration">0</strong> · Episode: <strong id="trainAiEpisode">0</strong></div>
+        <div id="trainAiStatus" class="trainAiStatus">Train-AI bereit.</div>
+      </section>
+      <div class="menuActions menuActions-inline">
+        <button type="button" id="trainAiImportBtn" class="btn btn-s">JSON LADEN</button>
+        <button type="button" id="trainAiExportBtn" class="btn btn-s">JSON SPEICHERN</button>
+        <button type="button" id="trainAiCloseBtn" class="btn btn-s">SCHLIESSEN</button>
+        <button type="button" id="trainAiStartBtn" class="btn btn-p">TRAINING STARTEN</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- MAIN MENU -->
 <div class="screen" id="sMain">
   <h1>F³ Racing Experimental</h1>
@@ -138,10 +196,11 @@
   <div class="menuActions">
     <button id="gameStartBtn" class="btn btn-p">START RACE</button>
     <button id="trackEditorBtn" class="btn btn-s">TRACK EDITOR</button>
+    <button id="trainAiBtn" class="btn btn-s">TRAIN-AI</button>
 <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
     <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.93-exp</div>
+  <div class="menuVersion" aria-label="Game version">v0.102-exp</div>
 
 </div>
 
