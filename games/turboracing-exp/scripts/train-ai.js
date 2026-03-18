@@ -114,6 +114,26 @@ function crossoverGenome(a, b) {
   return out;
 }
 
+
+function genomeDeterministicSeed(genome) {
+  let hash = 2166136261;
+  for (const layer of genome?.layers || []) {
+    for (const row of layer.weights || []) {
+      for (const weight of row || []) {
+        const value = Math.round((Number(weight) || 0) * 1000);
+        hash ^= value & 0xffffffff;
+        hash = Math.imul(hash, 16777619);
+      }
+    }
+    for (const bias of layer.biases || []) {
+      const value = Math.round((Number(bias) || 0) * 1000);
+      hash ^= value & 0xffffffff;
+      hash = Math.imul(hash, 16777619);
+    }
+  }
+  return ((hash >>> 0) / 0xffffffff) * Math.PI * 2;
+}
+
 function forwardPass(genome, inputs) {
   let activations = inputs;
   genome.layers.forEach((layer) => {
@@ -248,7 +268,7 @@ export class TrainableAIController {
     this.telemetry = { aliveTime: 0, gravelTime: 0, wallContacts: 0, maxSpeed: 0, steerEffort: 0, progressCm: 0, snapshots: [] };
     this.lastStuckTimer = 0;
     this.bootstrapTimer = 0;
-    this.explorationSeed = Math.random() * Math.PI * 2;
+    this.explorationSeed = genomeDeterministicSeed(this.genome);
     this.workerId = nextWorkerControllerId++;
     this.workerSnapshot = null;
     this.pendingWorkerAction = null;

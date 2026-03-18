@@ -292,14 +292,21 @@ class Car {
 function buildRaceGrid(trackPoints, totalCars=5, stackedStart=false){
   const n=trackPoints.length;
   if(!n)return Array.from({length:totalCars},()=>({pos:new THREE.Vector3(0,0,0),hdg:0}));
+  if (stackedStart) {
+    const idx=((n - 16) % n + n) % n;
+    const pt=trackPoints[idx];
+    const ptF=trackPoints[(idx+5)%n];
+    const hdg=Math.atan2(ptF.x-pt.x, ptF.z-pt.z);
+    return Array.from({length:totalCars},()=>({pos:pt.clone(),hdg}));
+  }
   const grid=[];
   const carsPerRow=Math.max(2, Math.ceil(Math.sqrt(totalCars)));
   const rowStep=16;
-  const sideOff=stackedStart?0.08:2.6;
+  const sideOff=2.6;
   for(let slot=0;slot<totalCars;slot++){
-    const row=stackedStart?1:(1+Math.floor(slot/carsPerRow));
-    const lane=stackedStart?0:(slot%carsPerRow);
-    const centered=stackedStart?((slot-totalCars/2)*0.04):(lane-(carsPerRow-1)/2);
+    const row=1+Math.floor(slot/carsPerRow);
+    const lane=slot%carsPerRow;
+    const centered=lane-(carsPerRow-1)/2;
     const idx=((n - row*rowStep) % n + n) % n;
     const pt=trackPoints[idx];
     const ptF=trackPoints[(idx+5)%n];
