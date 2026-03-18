@@ -27,6 +27,66 @@ import {
 import { getTrackById, getAllTracks, loadTracksFromFolder, loadEditorTracks } from './editor.js';
 import { createTrainingManager, createTrainingWorkerPool, mergeConfig, parseTrainingJson } from './train-ai.js';
 
+const TRAINING_UI_STORAGE_KEY = 'turboracing_exp_train_ai_ui';
+
+
+function loadTrainingUiPrefs() {
+  try {
+    const raw = localStorage.getItem(TRAINING_UI_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveTrainingUiPrefs(selection) {
+  const payload = {
+    visible: !!selection.visible,
+    selectedTrackIds: (selection.selectedTrackIds || []).map(String),
+    selectedCarIds: (selection.selectedCarIds || []).map((value) => Number(value)),
+    config: mergeConfig(selection.config || state.training.config || {}),
+  };
+  localStorage.setItem(TRAINING_UI_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function hydrateTrainingUiState() {
+  const saved = loadTrainingUiPrefs();
+  if (!saved) return;
+  if (Array.isArray(saved.selectedTrackIds) && saved.selectedTrackIds.length) state.training.selectedTrackIds = saved.selectedTrackIds.map(String);
+  if (Array.isArray(saved.selectedCarIds) && saved.selectedCarIds.length) state.training.selectedCarIds = saved.selectedCarIds.map((value) => Number(value));
+  if (typeof saved.visible === 'boolean') state.training.visible = saved.visible;
+  if (saved.config) state.training.config = mergeConfig(saved.config);
+}
+
+function applyTrainingFormValues() {
+  const config = state.training.config || mergeConfig({});
+  const visibleToggle = document.getElementById('trainAiVisible');
+  if (visibleToggle) visibleToggle.checked = state.training.visible !== false;
+  const fieldMap = {
+    nodeLookahead: config.nodeLookahead,
+    populationSize: config.populationSize,
+    maxSimulationTime: config.maxSimulationTime,
+    hiddenLayers: config.hiddenLayers,
+    neuronsPerLayer: config.neuronsPerLayer,
+    mutationRate: config.mutationRate,
+    mutationStrength: config.mutationStrength,
+    eliteCount: config.eliteCount,
+    tickRate: config.tickRate,
+    jokerCarrySimulations: config.jokerCarrySimulations,
+    rewardProgress: config.rewards.progress,
+    rewardSpeed: config.rewards.speed,
+    rewardFinish: config.rewards.finish,
+    rewardSurvival: config.rewards.survival,
+    rewardGravelPenalty: config.rewards.gravelPenalty,
+    rewardWallPenalty: config.rewards.wallPenalty,
+    rewardSteeringPenalty: config.rewards.steeringPenalty,
+  };
+  Object.entries(fieldMap).forEach(([name, value]) => {
+    const input = document.querySelector(`#trainAiForm [name="${name}"]`);
+    if (input && value != null) input.value = String(value);
+  });
+}
 
 function formatProgressCm(progressCm = 0) {
   const meters = (progressCm / 100).toFixed(2);
@@ -96,7 +156,13 @@ function getTrainingSelection() {
   const selectedTrackIds = readCheckedValues('train-track');
   const selectedCarIds = readCheckedValues('train-car').map((value) => Number(value));
   const config = normaliseTrainingConfig(Object.fromEntries(new FormData(document.getElementById('trainAiForm')).entries()));
-  return { visible, selectedTrackIds, selectedCarIds, config };
+  const selection = { visible, selectedTrackIds, selectedCarIds, config };
+  state.training.visible = visible;
+  state.training.selectedTrackIds = selectedTrackIds;
+  state.training.selectedCarIds = selectedCarIds;
+  state.training.config = config;
+  saveTrainingUiPrefs(selection);
+  return selection;
 }
 
 function ensureTrainingManager(config) {
@@ -128,6 +194,7 @@ function lockTrainingSimulationSelection() {
 }
 
 export async function openTrainingModal() {
+  hydrateTrainingUiState();
   loadEditorTracks();
   await loadTracksFromFolder().catch(() => {});
   const ui = getTrainingUiElements();
@@ -145,13 +212,16 @@ export function closeTrainingModal() {
 export function updateTrainingSelectionUi() {
   const trackWrap = document.getElementById('trainTrackList');
   const carWrap = document.getElementById('trainCarList');
+  const trackDefaults = state.training.selectedTrackIds.length ? state.training.selectedTrackIds.map(String) : [String(state.selTrk ?? getAllTracks()[0]?.id ?? '')];
+  const carDefaults = state.training.selectedCarIds.length ? state.training.selectedCarIds.map((value) => Number(value)) : [Number(state.selCar ?? 0)];
   if (trackWrap) {
     const tracks = getAllTracks();
-    trackWrap.innerHTML = tracks.map((track, index) => `<label class="trainAiPick"><input type="checkbox" name="train-track" value="${track.id}" ${index < Math.min(3, tracks.length) ? 'checked' : ''}> <span>${track.name}</span></label>`).join('');
+    trackWrap.innerHTML = tracks.map((track) => `<label class="trainAiPick"><input type="checkbox" name="train-track" value="${track.id}" ${trackDefaults.includes(String(track.id)) ? 'checked' : ''}> <span>${track.name}</span></label>`).join('');
   }
   if (carWrap) {
-    carWrap.innerHTML = CARS.map((car) => `<label class="trainAiPick"><input type="checkbox" name="train-car" value="${car.id}" ${car.id < 2 ? 'checked' : ''}> <span>${car.name}</span></label>`).join('');
+    carWrap.innerHTML = CARS.map((car) => `<label class="trainAiPick"><input type="checkbox" name="train-car" value="${car.id}" ${carDefaults.includes(Number(car.id)) ? 'checked' : ''}> <span>${car.name}</span></label>`).join('');
   }
+  applyTrainingFormValues();
   if (state.training.controller) {
     const ui = getTrainingUiElements();
     if (ui.exportArea && !ui.exportArea.value.trim()) ui.exportArea.value = state.training.controller.exportJSON();
@@ -164,6 +234,7 @@ function applyTrainingCars(selection) {
   state.training.visible = selection.visible;
   state.training.selectedTrackIds = selection.selectedTrackIds;
   state.training.selectedCarIds = selection.selectedCarIds;
+  saveTrainingUiPrefs(selection);
   const manager = ensureTrainingManager(selection.config);
   const { track, carId } = lockTrainingSimulationSelection();
   state.selTrk = track?.id ?? state.selTrk;

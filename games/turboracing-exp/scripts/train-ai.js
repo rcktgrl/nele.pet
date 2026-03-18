@@ -377,15 +377,24 @@ export class TrainingManager {
       carIndex: index,
     })).sort((a, b) => b.fitness - a.fitness);
     this.population = scored.slice(0, this.config.populationSize);
-    this.bestEntry = scored[0] || this.bestEntry;
-    if (scored[0] && this.config.jokerCarrySimulations > 0) {
-      this.jokerGenome = cloneGenome(scored[0].genome);
+    const generationBest = scored[0] || null;
+    if (generationBest && (!this.bestEntry || generationBest.fitness >= this.bestEntry.fitness)) {
+      this.bestEntry = { ...generationBest, genome: cloneGenome(generationBest.genome), telemetry: deepClone(generationBest.telemetry) };
+    }
+    const champion = this.bestEntry ? { ...this.bestEntry, genome: cloneGenome(this.bestEntry.genome), telemetry: deepClone(this.bestEntry.telemetry) } : generationBest;
+    if (champion && this.config.jokerCarrySimulations > 0) {
+      this.jokerGenome = cloneGenome(champion.genome);
       this.jokerRemaining = this.config.jokerCarrySimulations;
-      this.bestEntry.jokerRemaining = this.jokerRemaining;
+      champion.jokerRemaining = this.jokerRemaining;
+      this.bestEntry = champion;
     }
     const elites = this.population.slice(0, this.config.eliteCount).map((entry) => entry.genome);
+    if (champion?.genome) elites.unshift(cloneGenome(champion.genome));
     const next = [];
-    if (this.jokerGenome && this.jokerRemaining > 0) {
+    if (champion?.genome) {
+      next.push({ genome: cloneGenome(champion.genome), fitness: champion.fitness || 0, source: 'champion' });
+    }
+    if (this.jokerGenome && this.jokerRemaining > 0 && next.length < this.config.populationSize) {
       next.push({ genome: cloneGenome(this.jokerGenome), fitness: 0, source: 'joker', jokerRemaining: this.jokerRemaining });
       this.jokerRemaining -= 1;
     }
@@ -398,9 +407,9 @@ export class TrainingManager {
       const b = elites[Math.floor(Math.random() * elites.length)];
       next.push({ genome: mutateGenome(crossoverGenome(a, b), this.config), fitness: 0, source: 'bred' });
     }
-    this.population = next;
+    this.population = next.slice(0, this.config.populationSize);
     this.generation += 1;
-    return scored[0] || null;
+    return champion || generationBest || null;
   }
 
   exportJSON() {

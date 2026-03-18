@@ -1,6 +1,6 @@
 {
   "name": "nele-pet",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "private": true,
   "devDependencies": {
     "@eslint/js": "^10.0.1",
