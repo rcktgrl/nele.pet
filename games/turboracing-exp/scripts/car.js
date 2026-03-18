@@ -264,20 +264,31 @@ class Car {
         }
       }
     }
-    if (state.trkPts && state.trkPts.length && state.trkDist && state.trkDist.length === state.trkPts.length) {
-      let bestIndex = 0;
+    if (state.trkPts && state.trkPts.length > 1 && state.trkDist && state.trkDist.length === state.trkPts.length) {
       let bestDistance = Infinity;
-      for (let index = 0; index < state.trkPts.length; index += 1) {
-        const point = state.trkPts[index];
-        const d = (this.pos.x - point.x) ** 2 + (this.pos.z - point.z) ** 2;
+      let lapDistance = 0;
+      const segmentCount = state.trkPts.length;
+      for (let index = 0; index < segmentCount; index += 1) {
+        const start = state.trkPts[index];
+        const end = state.trkPts[(index + 1) % segmentCount];
+        const segX = end.x - start.x;
+        const segZ = end.z - start.z;
+        const segLenSq = segX * segX + segZ * segZ;
+        if (segLenSq <= 1e-12) continue;
+        const relX = this.pos.x - start.x;
+        const relZ = this.pos.z - start.z;
+        const t = Math.max(0, Math.min(1, (relX * segX + relZ * segZ) / segLenSq));
+        const projX = start.x + segX * t;
+        const projZ = start.z + segZ * t;
+        const d = (this.pos.x - projX) ** 2 + (this.pos.z - projZ) ** 2;
         if (d < bestDistance) {
           bestDistance = d;
-          bestIndex = index;
+          const segLen = Math.sqrt(segLenSq);
+          lapDistance = (state.trkDist[index] || 0) + segLen * t;
         }
       }
-      const lapDistance = state.trkDist[bestIndex] || 0;
       this.progressMeters = this.lap * (state.trkLen || 0) + lapDistance;
-      this.progressCm = Math.max(0, Math.round(this.progressMeters * 100));
+      this.progressCm = Math.max(0, this.progressMeters * 100);
       this.totalProg = this.progressMeters;
       return;
     }
@@ -285,7 +296,7 @@ class Car {
     const dd = Math.sqrt((this.pos.x - nw[0]) ** 2 + (this.pos.z - nw[2]) ** 2);
     this.totalProg = this.lap * n + this.cpPassed + Math.max(0, 1 - dd / 35);
     this.progressMeters = this.totalProg;
-    this.progressCm = Math.round(this.totalProg * 100);
+    this.progressCm = this.totalProg * 100;
   }
 }
 
