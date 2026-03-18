@@ -1,5 +1,5 @@
 'use strict';
-import { CARS } from './data/cars.js';
+import { CARS } from '../data/cars.js';
 import { THREE } from './three.js';
 import { state, scene, dc } from './state.js';
 import { createCarVisual } from './car-model.js';
@@ -11,8 +11,8 @@ import {
 } from './leaderboard.js';
 import { clearGhostVisual } from './ghost.js';
 import {
-  getAllTracks, loadEditorTracks, syncEditorTracksFromCloud,
-  loadTracksFromFolder, makeEditableTrackFromGameTrack
+  loadEditorTracks, syncEditorTracksFromCloud,
+  loadTracksFromFolder
 } from './editor.js';
 
 // ═══════════════════════════════════════════════════════

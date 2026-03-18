@@ -4,8 +4,8 @@ const WHEEL_CIRCUMFERENCE_M = 2 * Math.PI * WHEEL_RADIUS_M;
 const GEARBOX_LIBRARY = {
   offroad4: { name: 'Offroad 4', gearRatios: [3.90, 2.30, 1.52, 1.00], reverseRatio: 3.40 },
   touring5: { name: 'Touring 5', gearRatios: [3.55, 2.18, 1.52, 1.16, 0.90], reverseRatio: 3.20 },
-  sport6:   { name: 'Sport 6',   gearRatios: [3.30, 2.18, 1.62, 1.28, 1.04, 0.86], reverseRatio: 3.05 },
-  race7:    { name: 'Race 7',    gearRatios: [3.20, 2.25, 1.72, 1.40, 1.15, 0.97, 0.84], reverseRatio: 2.95 },
+  sport6: { name: 'Sport 6', gearRatios: [3.30, 2.18, 1.62, 1.28, 1.04, 0.86], reverseRatio: 3.05 },
+  race7: { name: 'Race 7', gearRatios: [3.20, 2.25, 1.72, 1.40, 1.15, 0.97, 0.84], reverseRatio: 2.95 },
 };
 
 function clamp(value, min, max) {

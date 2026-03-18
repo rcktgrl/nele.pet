@@ -1,5 +1,5 @@
 'use strict';
-import { CARS } from './data/cars.js';
+import { CARS } from '../data/cars.js';
 import { state, scene, dc } from './state.js';
 import { buildTrack } from './track-gen.js';
 import { instantiateRaceCars } from './car.js';
@@ -9,7 +9,7 @@ import {
   initAudio, initAiSounds, clearAiSounds,
   stopAudio, stopMusic, playBeep,
   playVictoryJingle, playLossSound,
-  startMusic, audioReady, aiSounds, announce
+  startMusic, audioReady, announce
 } from './audio.js';
 import {
   resetCurrentRaceSubmitted, leaderboardByTrack,
@@ -17,7 +17,7 @@ import {
   handlePostRaceLeaderboard
 } from './leaderboard.js';
 import { updateTouchControlsVisibility, releaseAllTouchControls, isTouchControlsEnabled } from './touch-controls.js';
-import { fmtT } from './util.js';
+import { fmtT } from './utils/format.js';
 import { notify } from './notify.js';
 import {
   onlineGhostEnabled, ghostVisuals, clearGhostVisual,
