@@ -682,7 +682,7 @@ export function resetEditorTrack(){
 
 export async function saveEditorTrack(){
   const data=editorTrackToGameTrack();
-  data.id=TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))?uniqueTrackId():(state.editorTrack.id||uniqueTrackId());
+  data.id=(TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))||state.editorTrack.builtin)?uniqueTrackId():(state.editorTrack.id||uniqueTrackId());
   data.name=state.editorTrack.name||'Custom Track';
   data.updatedAt=new Date().toISOString();
   state.editorTrack.id=data.id;
@@ -700,7 +700,7 @@ export async function saveEditorTrack(){
 
 export function deleteEditorTrack(){
   if(!state.editorTrack) return;
-  if(TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))){
+  if(TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))||state.editorTrack.builtin){
     notify('BUILT-IN TRACKS CANNOT BE DELETED'); return;
   }
   const id=String(state.editorTrack.id);
