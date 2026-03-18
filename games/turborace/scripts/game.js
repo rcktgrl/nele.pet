@@ -1,4 +1,5 @@
 import { TURBORACE_VERSION } from './version.js';
+import { resolveCarCollisions } from './car.js';
 import { createRenderPipeline } from './render/pipeline.js';
 import { THREE } from './three.js';
 import {
@@ -107,6 +108,7 @@ function updateFrame(dt){
     state.pCar.update({thr,brk,str},dt);
     sampleGhostFrame();
     for(const ai of state.aiControllers)ai.update(dt);
+    resolveCarCollisions(state.allCars);
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&state.aiCars[i])aiSounds[i].update(state.aiCars[i],state.pCar);}
     updateAudio(thr,brk,dt,state.pCar,keys); updateCamera(); updateHUD(); drawDash(); drawMinimap();
     updateGhostReplay();
@@ -114,6 +116,7 @@ function updateFrame(dt){
     state.raceTime+=dt;
     state.pCar.update({thr:0,brk:0.3,str:0},dt);
     for(const ai of state.aiControllers){if(!ai.car.finished)ai.update(dt);}
+    resolveCarCollisions(state.allCars);
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&state.aiCars[i])aiSounds[i].update(state.aiCars[i],state.pCar);}
     updateAudio(0,0,dt,state.pCar,keys); updateCamera();
     updateGhostReplay();
@@ -128,6 +131,7 @@ function updateFrame(dt){
     if(state.gState==='finished'){
       state.raceTime+=dt;
       for(const ai of state.aiControllers){if(!ai.car.finished)ai.update(dt);}
+      resolveCarCollisions(state.allCars);
       updateHUD(); drawMinimap();
     }
     updateCamera();

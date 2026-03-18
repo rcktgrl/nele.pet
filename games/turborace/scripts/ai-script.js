@@ -88,23 +88,25 @@ export class AI {
     let str=Math.max(-1,Math.min(1,he*1.8));
     const ts=Math.abs(he);
 
-    const scanDist=Math.round(12+speedFrac*70);
-    let worstCurv=0, worstDist=Infinity;
+    const diff=DIFF[state.aiDifficulty]||DIFF.medium;
+    // Scan every corner ahead and take the worst required braking across all of them.
+    // Fixes high-speed crashes: previously only the single worst-curvature point was used,
+    // meaning a close tight corner could be ignored if a gentler curve was farther away.
+    const ptSpacing=2;
+    const scanDist=Math.round(16+speedFrac*90);
+    let reqBrake=0;
     for(let k=1;k<scanDist;k++){
       const ki=(ci+k)%n;
-      if(navCurv[ki]>worstCurv){worstCurv=navCurv[ki]; worstDist=k;}
-    }
-
-    const diff=DIFF[state.aiDifficulty]||DIFF.medium;
-    // Corner speed floor lowered for better cornering: was 0.25, now uses difficulty preset
-    const cornerSpeed=c.data.maxSpd*(diff.cornerSpeedFloor+0.75*(1-worstCurv));
-    const speedOverTarget=c.spd-cornerSpeed;
-    const ptSpacing=2;
-    const distToCorner=worstDist*ptSpacing;
-    let reqBrake=0;
-    if(speedOverTarget>0&&distToCorner>0){
-      const reqDecel=(c.spd*c.spd-cornerSpeed*cornerSpeed)/(2*distToCorner);
-      reqBrake=Math.min(1,reqDecel/c.data.brake);
+      const curv=navCurv[ki];
+      if(curv<0.05)continue;
+      const cornerSpd=c.data.maxSpd*(diff.cornerSpeedFloor+0.75*(1-curv));
+      const dist=k*ptSpacing;
+      const speedOver=c.spd-cornerSpd;
+      if(speedOver>0&&dist>0){
+        const decel=(c.spd*c.spd-cornerSpd*cornerSpd)/(2*dist);
+        const brake=Math.min(1,decel/c.data.brake);
+        if(brake>reqBrake)reqBrake=brake;
+      }
     }
 
     // Throttle/brake driven purely by corner speed — not by heading error.
@@ -120,9 +122,15 @@ export class AI {
         const np=trackPoints[ci];
         const pullAngle=Math.atan2(np.x-c.pos.x,np.z-c.pos.z);
         let pullErr=((pullAngle-c.hdg+Math.PI*3)%(Math.PI*2))-Math.PI;
+        // Double the pull strength when on gravel so AI actively steers back to track
+        const gravelBoost=c.onGravel?2.2:1.0;
         const pushFactor=Math.min(1,(edgeDist-wallDist*0.5)/(wallDist*0.5));
-        str=Math.max(-1,Math.min(1,str+pullErr*pushFactor*1.5));
+        str=Math.max(-1,Math.min(1,str+pullErr*pushFactor*1.5*gravelBoost));
       }
+    }
+    // Gravel recovery: reduce throttle and steer back even when not near wall edge
+    if(c.onGravel){
+      thr=Math.min(thr,0.7);
     }
 
     thr*=c.data.aiSpd*c.aiAgg*diff.aggMult*diff.spdMult;
