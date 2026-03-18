@@ -12,8 +12,7 @@ import {
   startMusic, audioReady, announce
 } from './audio.js';
 import {
-  resetCurrentRaceSubmitted, leaderboardByTrack,
-  normaliseTrackId, renderResultsLeaderboard,
+  resetCurrentRaceSubmitted, getCurrentTrackLeaderboard, renderResultsLeaderboard,
   handlePostRaceLeaderboard
 } from './leaderboard.js';
 import { updateTouchControlsVisibility, releaseAllTouchControls, isTouchControlsEnabled } from './touch-controls.js';
@@ -171,8 +170,8 @@ export function updateResultsUI(){
   document.getElementById('ptime').textContent=`Your time: ${fmtT(state.pCar.finTime||state.raceTime)}  ·  P${pp}`;
   const carName=(state.pCar&&state.pCar.data&&state.pCar.data.name)?state.pCar.data.name:'Unknown';
   document.getElementById('runCar').textContent=`Run car: ${carName}`;
-  const cached=leaderboardByTrack.get(normaliseTrackId(state.trkData&&state.trkData.id,state.trkData&&state.trkData.name));
-  renderResultsLeaderboard(cached?cached.entries:[]);
+  const cached = getCurrentTrackLeaderboard();
+  renderResultsLeaderboard(cached.entries);
 }
 
 export function startRace(){
