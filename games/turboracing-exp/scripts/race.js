@@ -5,6 +5,7 @@ import { buildTrack } from './track-gen.js';
 import { instantiateRaceCars } from './car.js';
 import { AI } from './ai-script.js';
 import { setupLights } from './lighting.js';
+import { resetFreeCameraToTrack } from './camera.js';
 import {
   initAudio, initAiSounds, clearAiSounds,
   stopAudio, stopMusic, playBeep,
@@ -25,6 +26,12 @@ import {
 } from './ghost.js';
 import { getTrackById, getAllTracks, loadTracksFromFolder, loadEditorTracks } from './editor.js';
 import { createTrainingManager, mergeConfig, parseTrainingJson } from './train-ai.js';
+
+
+function formatProgressCm(progressCm = 0) {
+  const meters = (progressCm / 100).toFixed(2);
+  return `${progressCm.toLocaleString('de-DE')} cm (${meters} m)`;
+}
 
 function trainingContext() {
   return {
@@ -220,6 +227,7 @@ export async function initRace(options = {}) {
     selectedCarIndex: trainingMode ? chooseTrainingCarIndex() : state.selCar,
     aiCount: ghostModeEnabled ? 0 : aiCount,
     playerControlled,
+    stackedStart: trainingMode,
     scene,
     createAIController: (aiCar, i) => {
       if (trainingMode) {
@@ -244,15 +252,16 @@ export async function initRace(options = {}) {
   document.getElementById('hud').style.display = trainingMode && !state.training.visible ? 'none' : 'block';
   document.getElementById('hint').style.display = isTouchControlsEnabled() && !trainingMode ? 'none' : 'block';
   updateTouchControlsVisibility(state.gState);
-  document.getElementById('camLabel').textContent = '[ C ] COCKPIT VIEW';
-  state.camMode = 'chase'; dc.style.display = 'none';
-  document.getElementById('speedBox').style.display = 'block';
-  document.getElementById('gearBox').style.display = 'block';
+  document.getElementById('camLabel').textContent = trainingMode ? '[ WASD ] TRAIN FREECAM' : '[ C ] COCKPIT VIEW';
+  state.camMode = trainingMode ? 'free' : 'chase'; dc.style.display = 'none';
+  document.getElementById('speedBox').style.display = trainingMode ? 'none' : 'block';
+  document.getElementById('gearBox').style.display = trainingMode ? 'none' : 'block';
+  if (trainingMode && state.training.visible) resetFreeCameraToTrack(state.trkPts);
   if (!trainingMode) startGhostRecording();
   if (ghostModeEnabled && ghostVisuals.length === 0) notify('Ghost mode enabled: no matching ghost data for this track yet.');
   if (trainingMode && !state.training.visible) {
     state.gState = 'training';
-    updateTrainingStatus(`Generation ${state.training.generation || 1} · Episode ${state.training.episode + 1} · ${state.trkData?.name || 'Track'}`);
+    updateTrainingStatus(`Generation ${state.training.generation || 1} · Episode ${state.training.episode + 1} · ${state.trkData?.name || 'Track'} · 0 cm`);
   } else {
     doCountdown();
   }
@@ -312,7 +321,8 @@ function finishTrainingGeneration() {
   manager.saveToStorage();
   const ui = getTrainingUiElements();
   if (ui.exportArea) ui.exportArea.value = manager.exportJSON();
-  updateTrainingStatus(`Gen ${state.training.generation} fertig · Best Fitness ${winner ? winner.fitness.toFixed(2) : '0.00'} · ${state.trkData?.name || 'Track'}`);
+  const bestCm = winner?.telemetry?.progressCm || 0;
+  updateTrainingStatus(`Gen ${state.training.generation} fertig · ${formatProgressCm(bestCm)} · Fitness ${winner ? winner.fitness.toFixed(2) : '0.00'} · ${state.trkData?.name || 'Track'}`);
   if (state.training.running) {
     void initRace({ mode: 'training' });
   }
@@ -395,7 +405,37 @@ export function restartRace() {
   void initRace({ mode: state.raceMode });
 }
 
-export function stopTraining() {
+export function stopTraining({ saveBest = true, exitToMenu = true } = {}) {
+  const manager = state.training.controller;
+  if (saveBest && manager) {
+    if (state.aiControllers?.length) {
+      const liveBest = state.aiControllers
+        .map((controller, index) => ({
+          genome: controller.exportData().genome,
+          telemetry: controller.exportData().telemetry,
+          fitness: (controller.car.progressCm || 0) + controller.telemetry.maxSpeed,
+          carIndex: index,
+        }))
+        .sort((a, b) => (b.telemetry.progressCm || 0) - (a.telemetry.progressCm || 0))[0];
+      if (liveBest && (!manager.bestEntry || (liveBest.telemetry.progressCm || 0) >= (manager.bestEntry.telemetry?.progressCm || 0))) {
+        manager.bestEntry = liveBest;
+      }
+    }
+    manager.saveToStorage();
+    const ui = getTrainingUiElements();
+    if (ui.exportArea) ui.exportArea.value = manager.exportJSON();
+  }
   state.training.running = false;
+  state.gState = 'menu';
   state.raceMode = 'race';
+  updateTrainingStatus('Training per ESC beendet. Beste KI wurde behalten.');
+  if (exitToMenu) {
+    const pauseMenu = document.getElementById('pauseMenu');
+    if (pauseMenu) pauseMenu.style.display = 'none';
+    document.querySelectorAll('.screen,#results').forEach((screen) => { screen.style.display = 'none'; });
+    const main = document.getElementById('sMain');
+    if (main) main.style.display = 'flex';
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('hint').style.display = 'none';
+  }
 }

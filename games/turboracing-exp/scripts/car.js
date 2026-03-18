@@ -18,7 +18,7 @@ class Car {
     this.shiftWarnRpm = Math.round(this.redlineRpm * 0.78);
     this.rpm = this.gearbox.idleRpm;
     this.lap = 0; this.lastCP = 0; this.cpPassed = 0;
-    this.totalProg = 0; this.finished = false; this.finTime = 0; this.lapStart = 0;
+    this.totalProg = 0; this.progressMeters = 0; this.progressCm = 0; this.finished = false; this.finTime = 0; this.lapStart = 0;
     this.lapTimes = [];
     this.tl = []; this.wh = [];
     this.prevGear = 1; this.rpmDrop = 0; // for gear-shift RPM dip
@@ -264,23 +264,42 @@ class Car {
         }
       }
     }
+    if (state.trkPts && state.trkPts.length && state.trkDist && state.trkDist.length === state.trkPts.length) {
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      for (let index = 0; index < state.trkPts.length; index += 1) {
+        const point = state.trkPts[index];
+        const d = (this.pos.x - point.x) ** 2 + (this.pos.z - point.z) ** 2;
+        if (d < bestDistance) {
+          bestDistance = d;
+          bestIndex = index;
+        }
+      }
+      const lapDistance = state.trkDist[bestIndex] || 0;
+      this.progressMeters = this.lap * (state.trkLen || 0) + lapDistance;
+      this.progressCm = Math.max(0, Math.round(this.progressMeters * 100));
+      this.totalProg = this.progressMeters;
+      return;
+    }
     const ni = (this.lastCP + 1 + n) % n, nw = state.trkData.wp[ni];
     const dd = Math.sqrt((this.pos.x - nw[0]) ** 2 + (this.pos.z - nw[2]) ** 2);
     this.totalProg = this.lap * n + this.cpPassed + Math.max(0, 1 - dd / 35);
+    this.progressMeters = this.totalProg;
+    this.progressCm = Math.round(this.totalProg * 100);
   }
 }
 
-function buildRaceGrid(trackPoints, totalCars=5){
+function buildRaceGrid(trackPoints, totalCars=5, stackedStart=false){
   const n=trackPoints.length;
   if(!n)return Array.from({length:totalCars},()=>({pos:new THREE.Vector3(0,0,0),hdg:0}));
   const grid=[];
   const carsPerRow=Math.max(2, Math.ceil(Math.sqrt(totalCars)));
   const rowStep=16;
-  const sideOff=2.6;
+  const sideOff=stackedStart?0.08:2.6;
   for(let slot=0;slot<totalCars;slot++){
-    const row=1+Math.floor(slot/carsPerRow);
-    const lane=slot%carsPerRow;
-    const centered=lane-(carsPerRow-1)/2;
+    const row=stackedStart?1:(1+Math.floor(slot/carsPerRow));
+    const lane=stackedStart?0:(slot%carsPerRow);
+    const centered=stackedStart?((slot-totalCars/2)*0.04):(lane-(carsPerRow-1)/2);
     const idx=((n - row*rowStep) % n + n) % n;
     const pt=trackPoints[idx];
     const ptF=trackPoints[(idx+5)%n];
@@ -292,9 +311,9 @@ function buildRaceGrid(trackPoints, totalCars=5){
   return grid;
 }
 
-export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene, createAIController, aiCount=4, playerControlled=true }){
+export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene, createAIController, aiCount=4, playerControlled=true, stackedStart=false }){
   const totalCars=(playerControlled?1:0)+Math.max(0,Math.floor(aiCount)||0);
-  const grid=buildRaceGrid(trackPoints, Math.max(1,totalCars));
+  const grid=buildRaceGrid(trackPoints, Math.max(1,totalCars), stackedStart);
   const playerTemplate=cars[selectedCarIndex]||cars[0];
   const playerCar=playerControlled?new Car(playerTemplate,grid[0].pos,grid[0].hdg,true,scene):null;
 

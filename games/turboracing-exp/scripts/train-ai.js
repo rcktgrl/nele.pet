@@ -205,7 +205,9 @@ export function createTrainingSnapshot(car, context, config = DEFAULT_CONFIG) {
 
 function scoreCar(car, telemetry, config) {
   const rewards = config.rewards;
-  return car.totalProg * rewards.progress + telemetry.maxSpeed * rewards.speed + telemetry.aliveTime * rewards.survival + (car.finished ? rewards.finish : 0) - telemetry.gravelTime * rewards.gravelPenalty - telemetry.wallContacts * rewards.wallPenalty - telemetry.steerEffort * rewards.steeringPenalty;
+  const progressMeters = Number.isFinite(car.progressMeters) ? car.progressMeters : car.totalProg;
+  const progressCm = Number.isFinite(car.progressCm) ? car.progressCm : Math.round(progressMeters * 100);
+  return progressCm * rewards.progress * 0.01 + telemetry.maxSpeed * rewards.speed + telemetry.aliveTime * rewards.survival + (car.finished ? rewards.finish : 0) - telemetry.gravelTime * rewards.gravelPenalty - telemetry.wallContacts * rewards.wallPenalty - telemetry.steerEffort * rewards.steeringPenalty;
 }
 
 export class TrainableAIController {
@@ -214,8 +216,10 @@ export class TrainableAIController {
     this.genome = cloneGenome(genome);
     this.getContext = getContext;
     this.config = mergeConfig(config);
-    this.telemetry = { aliveTime: 0, gravelTime: 0, wallContacts: 0, maxSpeed: 0, steerEffort: 0, snapshots: [] };
+    this.telemetry = { aliveTime: 0, gravelTime: 0, wallContacts: 0, maxSpeed: 0, steerEffort: 0, progressCm: 0, snapshots: [] };
     this.lastStuckTimer = 0;
+    this.bootstrapTimer = 0;
+    this.explorationSeed = Math.random() * Math.PI * 2;
   }
 
   exportData() {
@@ -238,13 +242,26 @@ export class TrainableAIController {
     const snapshot = createTrainingSnapshot(this.car, context, this.config);
     this.lastSnapshot = snapshot;
     const outputs = forwardPass(this.genome, snapshot.inputs);
-    const thr = clamp((outputs[0] + 1) * 0.5, 0, 1);
-    const brk = clamp((outputs[1] + 1) * 0.5, 0, 1);
-    const str = clamp(outputs[2], -1, 1);
+    const bootstrapNode = snapshot.nodes[0] || { x: 0, z: 1, steepness: 0 };
+    const targetSteer = clamp(bootstrapNode.x / Math.max(8, Math.abs(bootstrapNode.z) + 4), -1, 1);
+    const isStartingFromRest = this.telemetry.aliveTime < 2.2 && this.car.spd < Math.max(4.5, this.car.data.maxSpd * 0.16);
+    const isStuck = this.car.spd < 0.35 && this.telemetry.aliveTime > 1.2;
+    let thr = clamp((outputs[0] + 1) * 0.5, 0, 1);
+    let brk = clamp((outputs[1] + 1) * 0.5, 0, 1);
+    let str = clamp(outputs[2], -1, 1);
+    if (isStartingFromRest || isStuck) {
+      this.bootstrapTimer += dt;
+      thr = Math.max(thr, 0.72);
+      brk = Math.min(brk, 0.12);
+      str = clamp(targetSteer + Math.sin(this.explorationSeed + this.telemetry.aliveTime * 4.5) * 0.18, -1, 1);
+    } else {
+      this.bootstrapTimer = Math.max(0, this.bootstrapTimer - dt * 2);
+    }
     this.car.update({ thr, brk, str }, dt);
     this.telemetry.aliveTime += dt;
     this.telemetry.maxSpeed = Math.max(this.telemetry.maxSpeed, this.car.spd);
     this.telemetry.steerEffort += Math.abs(str);
+    this.telemetry.progressCm = Math.max(this.telemetry.progressCm, this.car.progressCm || 0);
     if (this.car.onGravel) this.telemetry.gravelTime += dt;
     if (this.car.stuckTimer > this.lastStuckTimer && this.car.stuckTimer > 0.15) this.telemetry.wallContacts += 1;
     this.lastStuckTimer = this.car.stuckTimer;
@@ -263,7 +280,7 @@ export class TrainingManager {
 
   initPopulation(inputSize) {
     this.inputSize = inputSize;
-    this.population = Array.from({ length: this.config.populationSize }, () => ({ genome: createGenome(this.config, inputSize), fitness: 0 }));
+    this.population = Array.from({ length: this.config.populationSize }, () => ({ genome: createGenome(this.config, inputSize), fitness: 0, source: 'random' }));
     this.generation = 1;
   }
 
@@ -319,7 +336,7 @@ export class TrainingManager {
   importJSON(jsonString) {
     const parsed = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
     this.config = mergeConfig(parsed.config || {});
-    this.population = Array.isArray(parsed.population) ? parsed.population.map((entry) => ({ genome: cloneGenome(entry.genome), fitness: +entry.fitness || 0 })) : [];
+    this.population = Array.isArray(parsed.population) ? parsed.population.map((entry) => ({ genome: cloneGenome(entry.genome), fitness: +entry.fitness || 0, source: entry.source || 'imported' })) : [];
     this.generation = Math.max(1, Math.round(parsed.generation || 1));
     this.bestEntry = parsed.bestEntry || null;
     const firstGenome = this.population[0]?.genome;

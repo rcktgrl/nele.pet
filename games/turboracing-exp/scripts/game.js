@@ -16,7 +16,7 @@ import { setOnlineGhostToggle, setOnlineGhostCount, readOnlineGhostToggle, readO
 import {
   pauseRace, resumeRace, startRace, restartRace,
   openTrainingModal, closeTrainingModal, startTrainingFromUi,
-  importTrainingJsonFromUi, exportTrainingJsonToUi, updateTrainingSelectionUi
+  importTrainingJsonFromUi, exportTrainingJsonToUi, updateTrainingSelectionUi, stopTraining
 } from './race.js';
 import {
   setEditorNodeCount, setEditorBrushAsset, setEditorBrushEnabled, setEditorBrushSize, setEditorBrushSpacing,
@@ -60,7 +60,9 @@ function bindKeyboardInput() {
         return;
       }
 
-      if (state.gState === 'racing' || state.gState === 'cooldown') {
+      if (state.gState === 'training') {
+        stopTraining();
+      } else if (state.gState === 'racing' || state.gState === 'cooldown') {
         pauseRace();
       } else if (state.gState === 'paused') {
         resumeRace();
