@@ -589,14 +589,23 @@ async function updateUsernameEverywhere(newUsername) {
   if (leaderboardError) {
     if (leaderboardError.code === 'PGRST202') {
       // The RPC hasn't been deployed yet — fall back to a direct table update.
-      const { error: fallbackSyncError } = await supabase
-        .from('turborace_leaderboard')
-        .update({ username: safeUsername })
-        .eq('user_id', user.id);
+      const leaderboardTables = ['turborace_leaderboard', 'turboracing_exp_leaderboard'];
+      const fallbackErrors = [];
 
-      if (fallbackSyncError) {
+      for (const table of leaderboardTables) {
+        const { error: fallbackSyncError } = await supabase
+          .from(table)
+          .update({ username: safeUsername })
+          .eq('user_id', user.id);
+
+        if (fallbackSyncError) {
+          fallbackErrors.push(`${table}: ${friendlyAuthError(fallbackSyncError)}`);
+        }
+      }
+
+      if (fallbackErrors.length) {
         accountFeedback.textContent =
-          `${friendlyAuthError(fallbackSyncError)} (profile updated, but leaderboard sync failed)`;
+          `${fallbackErrors.join(' | ')} (profile updated, but leaderboard sync failed)`;
         return;
       }
 
