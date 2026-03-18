@@ -1,7 +1,7 @@
 import { supabase } from './supabase.js';
 import { sanitizeUserId, sanitizeLeaderboardName, loadArcadeUser } from './user.js';
 import { state } from './state.js';
-import { fmtT } from './util.js';
+import { fmtT } from './utils/format.js';
 
 export const LEADERBOARD_TABLE = 'turboracing_exp_leaderboard';
 export const leaderboardByTrack = new Map();

@@ -180,3 +180,7 @@ export function updateGhostReplay(){
     }
   }
 }
+
+export function shouldRenderGhostsForState(gameState){
+  return gameState==='countdown'||gameState==='racing'||gameState==='cooldown'||gameState==='finished';
+}
