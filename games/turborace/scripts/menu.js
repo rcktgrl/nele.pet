@@ -218,16 +218,13 @@ export function drawTrackPreview(canvas,track,color){
   ctx.fillText('S/F',sfx+12,sfz+4);
 }
 
-export async function showTrkSel(){
-  loadEditorTracks();
-  await loadTracksFromFolder().catch(()=>{});
-  void syncEditorTracksFromCloud().catch(()=>{});
-  document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
-  document.getElementById('sTrk').style.display='flex';
-  document.getElementById('btnNxt').disabled=(state.selTrk==null);
+function buildTrackCards(tracks, container, nextBtnId){
   const COLORS=['#4488ff','#44cc66','#ffaa22','#ff4488','#22ddaa','#dd66ff','#66bbff'];
-  const tt=document.getElementById('trkCards'); tt.innerHTML='';
-  const tracks=getAllTracks();
+  container.innerHTML='';
+  if(!tracks.length){
+    const msg=document.createElement('p'); msg.textContent='No tracks found.'; msg.style.color='#778';
+    container.appendChild(msg); return;
+  }
   tracks.forEach((t,i)=>{
     const card=document.createElement('div'); card.className='tcard'+(String(state.selTrk)===String(t.id)?' sel':'');
     const canvas=document.createElement('canvas'); canvas.width=280; canvas.height=230;
@@ -245,14 +242,35 @@ export async function showTrkSel(){
     });
     card.appendChild(canvas); card.appendChild(h3); card.appendChild(p); card.appendChild(best); card.appendChild(leaderboardBtn);
     card.onclick=()=>{
-      document.querySelectorAll('#trkCards .tcard').forEach(x=>x.classList.remove('sel'));
-      card.classList.add('sel'); state.selTrk=t.id; document.getElementById('btnNxt').disabled=false;
+      container.querySelectorAll('.tcard').forEach(x=>x.classList.remove('sel'));
+      card.classList.add('sel'); state.selTrk=t.id; document.getElementById(nextBtnId).disabled=false;
     };
-    tt.appendChild(card);
+    container.appendChild(card);
     drawTrackPreview(canvas,t,t.previewColor||COLORS[i%COLORS.length]);
   });
-  await Promise.all(tracks.map(async(t)=>{
+  return Promise.all(tracks.map(async(t)=>{
     await loadTrackLeaderboard(t.id,{limit:1,trackName:t.name});
     updateTrackCardBestTime(t.id,t.name);
   }));
+}
+
+export async function showTrkSel(){
+  await loadTracksFromFolder().catch(()=>{});
+  document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
+  document.getElementById('sTrk').style.display='flex';
+  document.getElementById('btnNxt').disabled=(state.selTrk==null);
+  const tracks=state.folderTracks;
+  await buildTrackCards(tracks,document.getElementById('trkCards'),'btnNxt');
+}
+
+export async function showOnlineTrkSel(){
+  loadEditorTracks();
+  document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
+  document.getElementById('sOnlineTrk').style.display='flex';
+  document.getElementById('btnOnlineNxt').disabled=true;
+  const loadingMsg=document.createElement('p'); loadingMsg.textContent='Loading online tracks...'; loadingMsg.style.color='#778';
+  const container=document.getElementById('onlineTrkCards'); container.innerHTML=''; container.appendChild(loadingMsg);
+  await syncEditorTracksFromCloud().catch(()=>{});
+  document.getElementById('btnOnlineNxt').disabled=(state.selTrk==null||!state.editorTracks.some(t=>String(t.id)===String(state.selTrk)));
+  await buildTrackCards(state.editorTracks,container,'btnOnlineNxt');
 }

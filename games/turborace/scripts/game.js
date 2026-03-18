@@ -46,7 +46,7 @@ import {
 } from './editor.js';
 import {
   showMain, showIntro, showTrkSel, showCarSel,
-  showSettings, closeSettings
+  showOnlineTrkSel, showSettings, closeSettings
 } from './menu.js';
 import {
   closeTrackLeaderboardModal
@@ -160,6 +160,9 @@ document.getElementById('backToSelectionBtn').addEventListener('click',()=>{ win
 document.getElementById('showTrkSelBtn').addEventListener('click',showTrkSel);
 document.getElementById('btnGo').addEventListener('click',startRace);
 document.getElementById('trkSelBackBtn').addEventListener('click',showMain);
+document.getElementById('loadOnlineTracksBtn').addEventListener('click',showOnlineTrkSel);
+document.getElementById('onlineTrkBackBtn').addEventListener('click',showTrkSel);
+document.getElementById('btnOnlineNxt').addEventListener('click',showCarSel);
 document.getElementById('btnNxt').addEventListener('click',showCarSel);
 document.getElementById('closeEditorBtn').addEventListener('click',closeTrackEditor);
 document.getElementById('newTrackBtn').addEventListener('click',createNewEditorTrack);
