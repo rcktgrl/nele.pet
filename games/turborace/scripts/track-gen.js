@@ -1038,7 +1038,6 @@ function addCityScenery(curve,data){
     const w=wps[i];
     // Skip if near start/finish
     if(Math.hypot(w[0]-sfPt.x,w[2]-sfPt.z)<sfExclude)continue;
-    if(pointInNoAutoZone(data,w[0],w[2],6))continue;
     const prev=wps[(i-1+nwp)%nwp],next=wps[(i+1)%nwp];
     const tx=next[0]-prev[0],tz=next[2]-prev[2];
     const tl=Math.sqrt(tx*tx+tz*tz)||1;
