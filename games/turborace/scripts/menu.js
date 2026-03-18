@@ -13,7 +13,7 @@ import {
 import { clearGhostVisual } from './ghost.js';
 import {
   getAllTracks, loadEditorTracks, syncEditorTracksFromCloud,
-  makeEditableTrackFromGameTrack
+  loadTracksFromFolder, makeEditableTrackFromGameTrack
 } from './editor.js';
 
 // ═══════════════════════════════════════════════════════
@@ -221,6 +221,7 @@ export function drawTrackPreview(canvas,track,color){
 
 export async function showTrkSel(){
   loadEditorTracks();
+  void loadTracksFromFolder().catch(()=>{});
   void syncEditorTracksFromCloud().catch(()=>{});
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrk').style.display='flex';

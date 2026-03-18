@@ -42,7 +42,7 @@ import {
   addEditorNode, insertEditorNodeAfter, deleteEditorNode, deleteSelectedEditorAsset,
   createNewEditorTrack, duplicateEditorTrack, deleteEditorTrack, resetEditorTrack,
   saveEditorTrack, upgradeEditorTrackToLatestGeneration, showTrackEditor,
-  reverseEditorTrack
+  reverseEditorTrack, exportTrackAsJSON
 } from './editor.js';
 import {
   showMain, showIntro, showTrkSel, showCarSel,
@@ -195,6 +195,7 @@ document.getElementById('reverseDirectionBtn').addEventListener('click',reverseE
 document.getElementById('delAssetBtn').addEventListener('click',deleteSelectedEditorAsset);
 document.getElementById('resetEditorCamBtn').addEventListener('click',camResetEditorCam);
 document.getElementById('saveEditorTrackBtn').addEventListener('click',saveEditorTrack);
+document.getElementById('exportTrackJsonBtn').addEventListener('click',exportTrackAsJSON);
 document.getElementById('resetEditorTrackBtn').addEventListener('click',resetEditorTrack);
 document.getElementById('upgradeTrackGenerationBtn').addEventListener('click',upgradeEditorTrackToLatestGeneration);
 document.getElementById('closeLeaderboardModalBtn').addEventListener('click',closeTrackLeaderboardModal);

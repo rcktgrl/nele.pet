@@ -29,6 +29,7 @@ export const state = {
     carCardPreviews: [],
     carCardPreviewLastTime: 0,
     carCardPreviewRaf: 0,
+    folderTracks: [],
     editorTracks: [],
     editorTrack: null,
     editorSelectedNode: 0,
