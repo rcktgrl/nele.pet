@@ -106,17 +106,25 @@ function ensureTrainingManager(config) {
   return state.training.controller;
 }
 
-function chooseTrainingTrack() {
+function getTrainingTrackSelection() {
   const selected = state.training.selectedTrackIds.length ? state.training.selectedTrackIds : getAllTracks().map((track) => String(track.id));
   if (!selected.length) return getTrackById(state.selTrk);
   const nextIndex = state.training.episode % selected.length;
   return getTrackById(selected[nextIndex]);
 }
 
-function chooseTrainingCarIndex() {
+function getTrainingCarSelection() {
   const selected = state.training.selectedCarIds.length ? state.training.selectedCarIds : CARS.map((car) => car.id);
   if (!selected.length) return 0;
   return selected[state.training.episode % selected.length];
+}
+
+function lockTrainingSimulationSelection() {
+  const track = getTrainingTrackSelection();
+  const carId = getTrainingCarSelection();
+  state.training.currentTrackId = track?.id ?? state.selTrk;
+  state.training.currentCarId = carId;
+  return { track, carId };
 }
 
 export async function openTrainingModal() {
@@ -157,9 +165,9 @@ function applyTrainingCars(selection) {
   state.training.selectedTrackIds = selection.selectedTrackIds;
   state.training.selectedCarIds = selection.selectedCarIds;
   const manager = ensureTrainingManager(selection.config);
-  const track = chooseTrainingTrack();
+  const { track, carId } = lockTrainingSimulationSelection();
   state.selTrk = track?.id ?? state.selTrk;
-  state.selCar = chooseTrainingCarIndex();
+  state.selCar = carId;
   if (selection.visible) {
     startRace({ mode: 'training', skipCountdown: true });
   } else {
@@ -209,9 +217,12 @@ export async function initRace(options = {}) {
   if (trainingMode) { stopAudio(); stopMusic(); }
 
   if (trainingMode) {
-    const track = chooseTrainingTrack();
+    const { track, carId } = state.training.currentTrackId != null && state.training.currentCarId != null
+      ? { track: getTrackById(state.training.currentTrackId), carId: state.training.currentCarId }
+      : lockTrainingSimulationSelection();
     state.trkData = track;
     state.selTrk = track?.id ?? state.selTrk;
+    state.selCar = carId;
   } else {
     state.trkData = getTrackById(state.selTrk);
   }
@@ -226,13 +237,16 @@ export async function initRace(options = {}) {
   const manager = trainingMode ? ensureTrainingManager(trainingConfig) : null;
   if (trainingMode && !state.training.workerPool) state.training.workerPool = createTrainingWorkerPool();
 
+  const trainingCarIndex = trainingMode ? (state.training.currentCarId ?? state.selCar ?? 0) : state.selCar;
   const raceCars = instantiateRaceCars({
     trackPoints: state.trkPts,
     cars: CARS,
-    selectedCarIndex: trainingMode ? chooseTrainingCarIndex() : state.selCar,
+    selectedCarIndex: trainingCarIndex,
+    aiCarIndex: trainingCarIndex,
     aiCount: ghostModeEnabled ? 0 : aiCount,
     playerControlled,
     stackedStart: trainingMode,
+    uniformCarForAll: trainingMode,
     scene,
     createAIController: (aiCar, i) => {
       if (trainingMode) {
@@ -268,7 +282,10 @@ export async function initRace(options = {}) {
   if (skipCountdown || trainingMode) {
     document.getElementById('cd').style.display = 'none';
     state.gState = trainingMode ? 'training' : 'racing';
-    if (trainingMode) updateTrainingStatus(`Generation ${state.training.generation || 1} · Episode ${state.training.episode + 1} · ${state.trkData?.name || 'Track'} · 0 cm`);
+    if (trainingMode) {
+      const simCar = CARS[state.training.currentCarId]?.name || CARS[state.selCar]?.name || 'Unknown Car';
+      updateTrainingStatus(`Generation ${state.training.generation || 1} · Episode ${state.training.episode + 1} · ${state.trkData?.name || 'Track'} · ${simCar} · 0 cm`);
+    }
     updateTouchControlsVisibility(state.gState);
     startMusic();
   } else {
@@ -331,7 +348,10 @@ function finishTrainingGeneration() {
   const ui = getTrainingUiElements();
   if (ui.exportArea) ui.exportArea.value = manager.exportJSON();
   const bestCm = winner?.telemetry?.progressCm || 0;
-  updateTrainingStatus(`Gen ${state.training.generation} fertig · ${formatProgressCm(bestCm)} · Fitness ${winner ? winner.fitness.toFixed(2) : '0.00'} · ${state.trkData?.name || 'Track'}`);
+  const completedCar = CARS[state.training.currentCarId]?.name || CARS[state.selCar]?.name || 'Unknown Car';
+  updateTrainingStatus(`Gen ${state.training.generation} fertig · ${formatProgressCm(bestCm)} · Fitness ${winner ? winner.fitness.toFixed(2) : '0.00'} · ${state.trkData?.name || 'Track'} · ${completedCar}`);
+  state.training.currentTrackId = null;
+  state.training.currentCarId = null;
   if (state.training.running) {
     void initRace({ mode: 'training', skipCountdown: true });
   }
@@ -438,6 +458,8 @@ export function stopTraining({ saveBest = true, exitToMenu = true } = {}) {
   if (state.training.workerPool) { state.training.workerPool.dispose(); state.training.workerPool = null; }
   state.gState = 'menu';
   state.raceMode = 'race';
+  state.training.currentTrackId = null;
+  state.training.currentCarId = null;
   updateTrainingStatus('Training per ESC beendet. Beste KI wurde behalten.');
   if (exitToMenu) {
     const pauseMenu = document.getElementById('pauseMenu');

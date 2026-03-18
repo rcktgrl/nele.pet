@@ -311,7 +311,7 @@ function buildRaceGrid(trackPoints, totalCars=5, stackedStart=false){
   return grid;
 }
 
-export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene, createAIController, aiCount=4, playerControlled=true, stackedStart=false }){
+export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, aiCarIndex=selectedCarIndex, scene, createAIController, aiCount=4, playerControlled=true, stackedStart=false, uniformCarForAll=false }){
   const totalCars=(playerControlled?1:0)+Math.max(0,Math.floor(aiCount)||0);
   const grid=buildRaceGrid(trackPoints, Math.max(1,totalCars), stackedStart);
   const playerTemplate=cars[selectedCarIndex]||cars[0];
@@ -320,11 +320,11 @@ export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene
   const aiCars=[];
   const aiControllers=[];
   const count=Math.max(0,Math.floor(aiCount)||0);
-  const aiIndexes=cars.map((_, index) => index).filter((index) => index !== selectedCarIndex);
+  const aiIndexes=uniformCarForAll?[aiCarIndex]:cars.map((_, index) => index).filter((index) => index !== selectedCarIndex);
   for(let i=0;i<count;i++){
     const gridIndex=playerControlled?i+1:i;
-    const aiSourceIndex=aiIndexes.length?aiIndexes[i % aiIndexes.length]:selectedCarIndex;
-    const aiCar=new Car(cars[aiSourceIndex],grid[gridIndex].pos,grid[gridIndex].hdg,false,scene);
+    const aiSourceIndex=uniformCarForAll?aiCarIndex:(aiIndexes.length?aiIndexes[i % aiIndexes.length]:selectedCarIndex);
+    const aiCar=new Car(cars[aiSourceIndex]||playerTemplate,grid[gridIndex].pos,grid[gridIndex].hdg,false,scene);
     aiCar.aiAgg=.86+i*.04;
     aiCars.push(aiCar);
     aiControllers.push(createAIController(aiCar,i));

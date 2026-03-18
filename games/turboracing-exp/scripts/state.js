@@ -69,6 +69,8 @@ export const state = {
       agentIndex: 0,
       selectedTrackIds: [],
       selectedCarIds: [],
+      currentTrackId: null,
+      currentCarId: null,
       config: null,
       controller: null,
       workerPool: null,
