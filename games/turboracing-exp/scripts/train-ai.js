@@ -255,8 +255,9 @@ export function createTrainingSnapshot(car, context, config = DEFAULT_CONFIG) {
 function scoreCar(car, telemetry, config) {
   const rewards = config.rewards;
   const progressMeters = Number.isFinite(car.progressMeters) ? car.progressMeters : car.totalProg;
-  const progressCm = Number.isFinite(car.progressCm) ? car.progressCm : Math.round(progressMeters * 100);
-  return progressCm * rewards.progress * 0.01 + telemetry.maxSpeed * rewards.speed + telemetry.aliveTime * rewards.survival + (car.finished ? rewards.finish : 0) - telemetry.gravelTime * rewards.gravelPenalty - telemetry.wallContacts * rewards.wallPenalty - telemetry.steerEffort * rewards.steeringPenalty;
+  const currentProgressCm = Number.isFinite(car.progressCm) ? car.progressCm : progressMeters * 100;
+  const bestProgressCm = Math.max(currentProgressCm, Number.isFinite(telemetry?.progressCm) ? telemetry.progressCm : 0);
+  return bestProgressCm * rewards.progress * 0.01 + telemetry.maxSpeed * rewards.speed + telemetry.aliveTime * rewards.survival + (car.finished ? rewards.finish : 0) - telemetry.gravelTime * rewards.gravelPenalty - telemetry.wallContacts * rewards.wallPenalty - telemetry.steerEffort * rewards.steeringPenalty;
 }
 
 export class TrainableAIController {
@@ -293,21 +294,32 @@ export class TrainableAIController {
     if (!context.trackPoints?.length || this.car.finished) return;
     const snapshot = createTrainingSnapshot(this.car, context, this.config);
     this.lastSnapshot = snapshot;
-    const outputs = this.pendingWorkerAction || forwardPass(this.genome, snapshot.inputs);
+    const outputs = forwardPass(this.genome, snapshot.inputs);
     this.pendingWorkerAction = null;
-    this.workerSnapshot = snapshot;
+    this.workerSnapshot = null;
     const bootstrapNode = snapshot.nodes[0] || { x: 0, z: 1, steepness: 0 };
+    const nextNode = snapshot.nodes[1] || bootstrapNode;
     const targetSteer = clamp(bootstrapNode.x / Math.max(8, Math.abs(bootstrapNode.z) + 4), -1, 1);
+    const pathSteer = clamp((targetSteer * 0.72) + clamp(nextNode.x / Math.max(14, Math.abs(nextNode.z) + 6), -1, 1) * 0.28, -1, 1);
+    const cornerSeverity = Math.max(Math.abs(bootstrapNode.steepness || 0), Math.abs(nextNode.steepness || 0), Math.abs(snapshot.headingRelative || 0));
+    const desiredSpeedRatio = clamp(1 - cornerSeverity * 0.72, 0.28, 1);
+    const speedError = desiredSpeedRatio - snapshot.speedRatio;
+    const baseThr = clamp(0.42 + Math.max(0, speedError) * 1.15, 0.18, 1);
+    const baseBrk = clamp(Math.max(0, -speedError) * 1.35, 0, 1);
     const isStartingFromRest = this.telemetry.aliveTime < 2.2 && this.car.spd < Math.max(4.5, this.car.data.maxSpd * 0.16);
     const isStuck = this.car.spd < 0.35 && this.telemetry.aliveTime > 1.2;
     let thr = clamp((outputs[0] + 1) * 0.5, 0, 1);
     let brk = clamp((outputs[1] + 1) * 0.5, 0, 1);
     let str = clamp(outputs[2], -1, 1);
+    const assistWeight = isStuck ? 0.92 : clamp(0.82 - this.telemetry.aliveTime * 0.045, 0.35, 0.82);
+    thr = clamp(baseThr * assistWeight + thr * (1 - assistWeight), 0, 1);
+    brk = clamp(baseBrk * assistWeight + brk * (1 - assistWeight), 0, 1);
+    str = clamp(pathSteer * assistWeight + str * (1 - assistWeight), -1, 1);
     if (isStartingFromRest || isStuck) {
       this.bootstrapTimer += dt;
       thr = Math.max(thr, 0.72);
       brk = Math.min(brk, 0.12);
-      str = clamp(targetSteer + Math.sin(this.explorationSeed + this.telemetry.aliveTime * 4.5) * 0.18, -1, 1);
+      str = clamp(pathSteer + Math.sin(this.explorationSeed + this.telemetry.aliveTime * 4.5) * 0.08, -1, 1);
     } else {
       this.bootstrapTimer = Math.max(0, this.bootstrapTimer - dt * 2);
     }

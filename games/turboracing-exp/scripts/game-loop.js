@@ -107,7 +107,6 @@ function updateTrainingState(dt) {
     updateAiControllers(stepDt);
     if (state.raceTime >= (state.training.config?.maxSimulationTime || 45)) break;
   }
-  state.training.workerPool?.schedule(state.aiControllers);
   if (state.training.visible && state.pCar) {
     updateTrainingFreeCamera(dt);
     updateHUD();
