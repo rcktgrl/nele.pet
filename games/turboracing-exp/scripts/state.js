@@ -56,5 +56,19 @@ export const state = {
     cityCorridors: null, // For city tracks: array of {x,z,hw,hd} axis-aligned driveable rectangles
     cityAiPts: null,    // For city tracks: dense waypoints following grid roads exactly
     gravelProfile: null, // Runoff profile used for gravel physics detection
-    renderer: null
+    renderer: null,
+    raceMode: 'race',
+    training: {
+      visible: true,
+      running: false,
+      generation: 0,
+      episode: 0,
+      agentIndex: 0,
+      selectedTrackIds: [],
+      selectedCarIds: [],
+      config: null,
+      controller: null,
+      bestGenome: null,
+      status: ''
+    }
 };
