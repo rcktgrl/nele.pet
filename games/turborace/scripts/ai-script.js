@@ -2,9 +2,9 @@ import { state } from './state.js';
 
 // Difficulty presets — applied on top of base AI behaviour
 const DIFF = {
-  easy:   { aggMult: 0.78, spdMult: 0.82, cornerSpeedFloor: 0.15 },
-  medium: { aggMult: 1.00, spdMult: 1.00, cornerSpeedFloor: 0.20 },
-  hard:   { aggMult: 1.10, spdMult: 1.08, cornerSpeedFloor: 0.25 },
+  easy:   { aggMult: 0.78, spdMult: 0.82, cornerSpeedFloor: 0.38 },
+  medium: { aggMult: 1.00, spdMult: 1.00, cornerSpeedFloor: 0.46 },
+  hard:   { aggMult: 1.10, spdMult: 1.08, cornerSpeedFloor: 0.54 },
 };
 
 export class AI {
@@ -55,14 +55,10 @@ export class AI {
       const look=Math.round(4+speedFrac*12);
       ti=(ci+look)%n;
     } else {
-      // Increased look-ahead: was 3+speedFrac*25, now 3+speedFrac*35
-      const maxLook=Math.round(3+speedFrac*35);
-      ti=ci;
-      for(let step=1;step<=maxLook;step++){
-        const si=(ci+step)%n;
-        if(navCurv[si]>0.25){ ti=si; break; }
-        ti=si;
-      }
+      // Stable fixed look-ahead proportional to speed — avoids oscillating target that caused
+      // left/right steering wobble when the curvature-break target jumped around
+      const look=Math.round(6+speedFrac*22);
+      ti=(ci+look)%n;
     }
 
     let tgtX=navPts[ti].x, tgtZ=navPts[ti].z;
@@ -89,12 +85,10 @@ export class AI {
     const dx=tgtX-c.pos.x,dz=tgtZ-c.pos.z;
     const dh=Math.atan2(dx,dz);
     let he=((dh-c.hdg+Math.PI*3)%(Math.PI*2))-Math.PI;
-    // Reduced steering multiplier: was 2.5, now 2.0 to reduce overcorrection
-    let str=Math.max(-1,Math.min(1,he*2.0));
+    let str=Math.max(-1,Math.min(1,he*1.8));
     const ts=Math.abs(he);
 
-    // Increased scan distance: was 20+speedFrac*80, now 20+speedFrac*120 for earlier braking
-    const scanDist=Math.round(20+speedFrac*120);
+    const scanDist=Math.round(12+speedFrac*70);
     let worstCurv=0, worstDist=Infinity;
     for(let k=1;k<scanDist;k++){
       const ki=(ci+k)%n;
@@ -113,10 +107,11 @@ export class AI {
       reqBrake=Math.min(1,reqDecel/c.data.brake);
     }
 
-    let thr=ts<.30?1:Math.max(.45,1-ts*0.8);
-    let brk=Math.max(ts>.70?(ts-.70)*1.5:0, reqBrake);
-    // Lowered brake threshold: was 0.2, now 0.15 to ease throttle sooner
-    if(brk>0.15) thr=Math.min(thr,1-brk);
+    // Throttle/brake driven purely by corner speed — not by heading error.
+    // Steering-based penalties were the root cause of slowing to a crawl and stopping.
+    let thr=1.0;
+    let brk=reqBrake;
+    if(brk>0.05) thr=Math.min(thr,1-brk);
 
     if(!cityCorridors&&trackData){
       const edgeDist=Math.sqrt(md);
