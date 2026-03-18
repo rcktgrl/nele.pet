@@ -160,8 +160,9 @@ class Car {
           if (d < bestDist) { bestDist = d; bestPx = cx; bestPz = cz; }
         }
         this.pos.x = bestPx; this.pos.z = bestPz;
-        this.spd *= 0.4;
-        if (this.isReversing) this.revSpd *= 0.3;
+        // Wall deflects rather than stops — reduce speed lightly
+        this.spd *= 0.82;
+        if (this.isReversing) this.revSpd *= 0.7;
         this.stuckTimer += dt;
       } else {
         this.stuckTimer = Math.max(0, this.stuckTimer - 0.04);
@@ -194,8 +195,10 @@ class Car {
         const pushBack = 0.6 - wallDist;
         this.pos.x -= (toWallX / pushLen) * pushBack;
         this.pos.z -= (toWallZ / pushLen) * pushBack;
-        this.spd *= 0.38;
-        if (this.isReversing) this.revSpd *= 0.4;
+        // Wall deflects the car rather than stopping it: keep most of the speed
+        // so it slides along the barrier instead of getting stuck
+        this.spd *= 0.82;
+        if (this.isReversing) this.revSpd *= 0.7;
         const trkHdg = Math.atan2(tx, tz);
         const wrapPi = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
         const targetHdg = this.isReversing ? trkHdg + Math.PI : trkHdg;
@@ -215,7 +218,7 @@ class Car {
       const px = np.x - this.pos.x, pz = np.z - this.pos.z, pl = Math.sqrt(px * px + pz * pz) || 1;
       this.pos.x += px / pl * (dist - maxD + 0.5);
       this.pos.z += pz / pl * (dist - maxD + 0.5);
-      this.spd *= 0.45;
+      this.spd *= 0.85;
       const trkHdg = Math.atan2(tx, tz);
       const wrapPi = (a) => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       const targetHdg = this.isReversing ? trkHdg + Math.PI : trkHdg;
@@ -329,6 +332,56 @@ export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene
   }
 
   return { playerCar, aiCars, aiControllers, allCars:[playerCar,...aiCars] };
+}
+
+// Car-to-car collision resolution — call once per frame after all cars are updated.
+// Uses circle-based collision (radius ~1.8 units) with impulse-based momentum transfer.
+export function resolveCarCollisions(allCars) {
+  const CAR_RADIUS = 1.8;
+  const MIN_DIST = CAR_RADIUS * 2;
+  for (let i = 0; i < allCars.length; i++) {
+    for (let j = i + 1; j < allCars.length; j++) {
+      const a = allCars[i], b = allCars[j];
+      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist >= MIN_DIST || dist < 0.01) continue;
+
+      // Push the two cars apart so they no longer overlap
+      const nx = dx / dist, nz = dz / dist;
+      const overlap = (MIN_DIST - dist) * 0.5;
+      a.pos.x -= nx * overlap; a.pos.z -= nz * overlap;
+      b.pos.x += nx * overlap; b.pos.z += nz * overlap;
+      a.mesh.position.copy(a.pos); b.mesh.position.copy(b.pos);
+
+      // Impulse-based velocity exchange along the collision normal
+      const vAx = a.spd * Math.sin(a.hdg), vAz = a.spd * Math.cos(a.hdg);
+      const vBx = b.spd * Math.sin(b.hdg), vBz = b.spd * Math.cos(b.hdg);
+      const relVn = (vBx - vAx) * nx + (vBz - vAz) * nz;
+      if (relVn >= 0) continue; // already separating
+
+      const restitution = 0.35;
+      const impulse = -(1 + restitution) * relVn * 0.5;
+      const newVAx = vAx - impulse * nx, newVAz = vAz - impulse * nz;
+      const newVBx = vBx + impulse * nx, newVBz = vBz + impulse * nz;
+
+      const newSpdA = Math.sqrt(newVAx * newVAx + newVAz * newVAz);
+      const newSpdB = Math.sqrt(newVBx * newVBx + newVBz * newVBz);
+
+      // Apply new speeds; cap heading deflection to avoid wild spinning
+      if (newSpdA > 0.3) {
+        const newHdgA = Math.atan2(newVAx, newVAz);
+        const dHdgA = ((newHdgA - a.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+        a.hdg += Math.max(-0.35, Math.min(0.35, dHdgA));
+      }
+      if (newSpdB > 0.3) {
+        const newHdgB = Math.atan2(newVBx, newVBz);
+        const dHdgB = ((newHdgB - b.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+        b.hdg += Math.max(-0.35, Math.min(0.35, dHdgB));
+      }
+      a.spd = Math.min(a.data.maxSpd, newSpdA);
+      b.spd = Math.min(b.data.maxSpd, newSpdB);
+    }
+  }
 }
 
 export { Car };
