@@ -18,7 +18,7 @@ class Car {
     this.shiftWarnRpm = Math.round(this.redlineRpm * 0.78);
     this.rpm = this.gearbox.idleRpm;
     this.lap = 0; this.lastCP = 0; this.cpPassed = 0;
-    this.totalProg = 0; this.finished = false; this.finTime = 0; this.lapStart = 0;
+    this.totalProg = 0; this.progressMeters = 0; this.progressCm = 0; this.finished = false; this.finTime = 0; this.lapStart = 0;
     this.lapTimes = [];
     this.tl = []; this.wh = [];
     this.prevGear = 1; this.rpmDrop = 0; // for gear-shift RPM dip
@@ -264,48 +264,80 @@ class Car {
         }
       }
     }
+    if (state.trkPts && state.trkPts.length && state.trkDist && state.trkDist.length === state.trkPts.length) {
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      for (let index = 0; index < state.trkPts.length; index += 1) {
+        const point = state.trkPts[index];
+        const d = (this.pos.x - point.x) ** 2 + (this.pos.z - point.z) ** 2;
+        if (d < bestDistance) {
+          bestDistance = d;
+          bestIndex = index;
+        }
+      }
+      const lapDistance = state.trkDist[bestIndex] || 0;
+      this.progressMeters = this.lap * (state.trkLen || 0) + lapDistance;
+      this.progressCm = Math.max(0, Math.round(this.progressMeters * 100));
+      this.totalProg = this.progressMeters;
+      return;
+    }
     const ni = (this.lastCP + 1 + n) % n, nw = state.trkData.wp[ni];
     const dd = Math.sqrt((this.pos.x - nw[0]) ** 2 + (this.pos.z - nw[2]) ** 2);
     this.totalProg = this.lap * n + this.cpPassed + Math.max(0, 1 - dd / 35);
+    this.progressMeters = this.totalProg;
+    this.progressCm = Math.round(this.totalProg * 100);
   }
 }
 
-function buildRaceGrid(trackPoints){
+function buildRaceGrid(trackPoints, totalCars=5, stackedStart=false){
   const n=trackPoints.length;
-  if(!n)return Array(5).fill({pos:new THREE.Vector3(0,0,0),hdg:0});
+  if(!n)return Array.from({length:totalCars},()=>({pos:new THREE.Vector3(0,0,0),hdg:0}));
+  if (stackedStart) {
+    const idx=((n - 16) % n + n) % n;
+    const pt=trackPoints[idx];
+    const ptF=trackPoints[(idx+5)%n];
+    const hdg=Math.atan2(ptF.x-pt.x, ptF.z-pt.z);
+    return Array.from({length:totalCars},()=>({pos:pt.clone(),hdg}));
+  }
   const grid=[];
-  const rows=[1,1,2,2,3];
-  const cols=[-1,1,-1,1,0];
+  const carsPerRow=Math.max(2, Math.ceil(Math.sqrt(totalCars)));
   const rowStep=16;
   const sideOff=2.6;
-  for(let slot=0;slot<5;slot++){
-    const idx=((n - rows[slot]*rowStep) % n + n) % n;
+  for(let slot=0;slot<totalCars;slot++){
+    const row=1+Math.floor(slot/carsPerRow);
+    const lane=slot%carsPerRow;
+    const centered=lane-(carsPerRow-1)/2;
+    const idx=((n - row*rowStep) % n + n) % n;
     const pt=trackPoints[idx];
     const ptF=trackPoints[(idx+5)%n];
     const hdg=Math.atan2(ptF.x-pt.x, ptF.z-pt.z);
     const right=new THREE.Vector3(Math.cos(hdg),0,-Math.sin(hdg));
-    const pos=pt.clone().addScaledVector(right,cols[slot]*sideOff);
+    const pos=pt.clone().addScaledVector(right,centered*sideOff);
     grid.push({pos,hdg});
   }
   return grid;
 }
 
-export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene, createAIController, aiCount=4 }){
-  const grid=buildRaceGrid(trackPoints);
-  const playerCar=new Car(cars[selectedCarIndex],grid[0].pos,grid[0].hdg,true,scene);
+export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, aiCarIndex=selectedCarIndex, scene, createAIController, aiCount=4, playerControlled=true, stackedStart=false, uniformCarForAll=false }){
+  const totalCars=(playerControlled?1:0)+Math.max(0,Math.floor(aiCount)||0);
+  const grid=buildRaceGrid(trackPoints, Math.max(1,totalCars), stackedStart);
+  const playerTemplate=cars[selectedCarIndex]||cars[0];
+  const playerCar=playerControlled?new Car(playerTemplate,grid[0].pos,grid[0].hdg,true,scene):null;
 
   const aiCars=[];
   const aiControllers=[];
-  const count=Math.max(0,Math.min(4,Math.floor(aiCount)||0));
-  const aiIndexes=cars.map((_, index) => index).filter((index) => index !== selectedCarIndex);
+  const count=Math.max(0,Math.floor(aiCount)||0);
+  const aiIndexes=uniformCarForAll?[aiCarIndex]:cars.map((_, index) => index).filter((index) => index !== selectedCarIndex);
   for(let i=0;i<count;i++){
-    const aiCar=new Car(cars[aiIndexes[i % aiIndexes.length]],grid[i+1].pos,grid[i+1].hdg,false,scene);
+    const gridIndex=playerControlled?i+1:i;
+    const aiSourceIndex=uniformCarForAll?aiCarIndex:(aiIndexes.length?aiIndexes[i % aiIndexes.length]:selectedCarIndex);
+    const aiCar=new Car(cars[aiSourceIndex]||playerTemplate,grid[gridIndex].pos,grid[gridIndex].hdg,false,scene);
     aiCar.aiAgg=.86+i*.04;
     aiCars.push(aiCar);
     aiControllers.push(createAIController(aiCar,i));
   }
 
-  return { playerCar, aiCars, aiControllers, allCars:[playerCar,...aiCars] };
+  return { playerCar, aiCars, aiControllers, allCars:playerCar?[playerCar,...aiCars]:aiCars.slice() };
 }
 
 export { Car };
