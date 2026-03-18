@@ -6,10 +6,10 @@ import {
   getTouchSliderSteer,
 } from './touch-controls.js';
 import { updateAudio, aiSounds } from './audio.js';
-import { updateCamera, updateEditorPreviewCamera } from './camera.js';
+import { updateCamera, updateEditorPreviewCamera, updateTrainingFreeCamera } from './camera.js';
 import { updateHUD, drawDash, drawMinimap } from './hud.js';
 import { ghostVisuals, sampleGhostFrame, updateGhostReplay, shouldRenderGhostsForState } from './ghost.js';
-import { updateResultsUI } from './race.js';
+import { updateResultsUI, endRace } from './race.js';
 import { editorRebuildScene } from './editor.js';
 
 function isTouchDevice() {
@@ -96,6 +96,35 @@ function updateRacingState(dt) {
   updateGhostState();
 }
 
+
+function updateTrainingState(dt) {
+  const tickRate = Math.max(0.25, state.training.config?.tickRate || 1);
+  const totalDt = dt * tickRate;
+  const steps = Math.max(1, Math.ceil(tickRate));
+  const stepDt = totalDt / steps;
+  for (let step = 0; step < steps; step += 1) {
+    state.raceTime += stepDt;
+    updateAiControllers(stepDt);
+  }
+  updateAiAudio();
+  if (state.training.visible && state.pCar) {
+    updateAudio(0, 0, totalDt, state.pCar, keys);
+    updateTrainingFreeCamera(dt);
+    updateHUD();
+    drawMinimap();
+  }
+  const leadCar = state.aiCars.reduce((best, car) => (!best || (car.progressCm || 0) > (best.progressCm || 0) ? car : best), null);
+  state.training.progressCm = leadCar?.progressCm || 0;
+  const statusEl = document.getElementById('trainAiStatus');
+  if (statusEl) statusEl.textContent = `Generation ${state.training.generation || 1} · Episode ${state.training.episode + 1} · ${(state.training.progressCm || 0).toLocaleString('de-DE')} cm`;
+  if ((state.training.config?.maxSimulationTime || 45) <= state.raceTime) {
+    endRace();
+    return;
+  }
+  const unfinished = state.aiCars.some((car) => !car.finished);
+  if (!unfinished) endRace();
+}
+
 function updateCooldownState(dt) {
   state.raceTime += dt;
   state.pCar.update({ thr: 0, brk: 0.3, str: 0 }, dt);
@@ -140,6 +169,9 @@ export function updateGameFrame(dt) {
       break;
     case 'cooldown':
       updateCooldownState(dt);
+      break;
+    case 'training':
+      updateTrainingState(dt);
       break;
     case 'editorPreview':
     case 'editor':

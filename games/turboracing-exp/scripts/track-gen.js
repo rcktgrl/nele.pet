@@ -115,6 +115,16 @@ export function buildTrack(data){
       : data.wp.map(w=>new THREE.Vector3(w[0],w[1],w[2]));
   const curve=new THREE.CatmullRomCurve3(raw,true,'centripetal',.5);
   state.trkCurve=curve; state.trkPts=curve.getSpacedPoints(500);
+  state.trkDist=[0];
+  let trkLen=0;
+  for(let i=1;i<state.trkPts.length;i++){
+    trkLen+=state.trkPts[i].distanceTo(state.trkPts[i-1]);
+    state.trkDist.push(trkLen);
+  }
+  if(state.trkPts.length>1){
+    trkLen+=state.trkPts[0].distanceTo(state.trkPts[state.trkPts.length-1]);
+  }
+  state.trkLen=trkLen;
   state.trkWallLeft=[];
   state.trkWallRight=[];
   // Precompute per-point curvature (0=straight, 1=very tight) for AI adaptive lookahead
