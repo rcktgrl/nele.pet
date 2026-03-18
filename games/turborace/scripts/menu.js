@@ -1,5 +1,4 @@
 'use strict';
-import { TRACKS } from './data/tracks.js';
 import { CARS } from './data/cars.js';
 import { THREE } from './three.js';
 import { state, scene, dc } from './state.js';
@@ -221,7 +220,7 @@ export function drawTrackPreview(canvas,track,color){
 
 export async function showTrkSel(){
   loadEditorTracks();
-  void loadTracksFromFolder().catch(()=>{});
+  await loadTracksFromFolder().catch(()=>{});
   void syncEditorTracksFromCloud().catch(()=>{});
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrk').style.display='flex';
@@ -234,7 +233,7 @@ export async function showTrkSel(){
     const canvas=document.createElement('canvas'); canvas.width=280; canvas.height=230;
     canvas.style.borderRadius='6px';
     const h3=document.createElement('h3'); h3.textContent=t.name;
-    const p=document.createElement('p'); p.textContent=t.desc+' · '+t.rw+'m wide'+(TRACKS.some(bt=>String(bt.id)===String(t.id))?'':' · Custom');
+    const p=document.createElement('p'); p.textContent=t.desc+' · '+t.rw+'m wide'+(t.builtin?'':' · Custom');
     const best=document.createElement('p'); best.className='trackBest'; best.dataset.trackBest=normaliseTrackId(t.id,t.name); best.textContent='Best: loading...';
     const leaderboardBtn=document.createElement('button');
     leaderboardBtn.className='btn btn-s trackLbBtn';

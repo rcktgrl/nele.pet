@@ -1,5 +1,4 @@
 'use strict';
-import { TRACKS } from './data/tracks.js';
 import { THREE } from './three.js';
 import { state, scene, camEditor, editorMouse, editorCam } from './state.js';
 import { buildTrack, canPlaceDecorAsset, LATEST_TRACK_GENERATION_VERSION } from './track-gen.js';
@@ -16,8 +15,8 @@ import {
 // ═══════════════════════════════════════════════════════
 //  TRACK HELPERS
 // ═══════════════════════════════════════════════════════
-export function getAllTracks(){ return [...TRACKS, ...state.folderTracks, ...state.editorTracks]; }
-export function getTrackById(id){ return getAllTracks().find(t=>String(t.id)===String(id))||TRACKS[0]; }
+export function getAllTracks(){ return [...state.folderTracks, ...state.editorTracks]; }
+export function getTrackById(id){ return getAllTracks().find(t=>String(t.id)===String(id))||getAllTracks()[0]; }
 
 const CUSTOM_TRACKS_TABLE='turborace_custom_tracks';
 let customTrackSyncAvailable=true;
@@ -56,7 +55,7 @@ export function makeEditableTrackFromGameTrack(src){
     useBezier:src.useBezier!==false,timeOfDay:tod,groundColor:hexNumToCss(src.gnd||makeTimeOfDayPreset(tod).gnd),skyColor:hexNumToCss(src.sky||makeTimeOfDayPreset(tod).sky),
     streetGrid:src.type==='city',gridSize:src.gridSize||70,enableRunoff:src.enableRunoff!==false,
     trackGenerationVersion:Number.isFinite(src.trackGenerationVersion)?Math.max(1,Math.floor(src.trackGenerationVersion)):1,
-    nodes:pts,assets:deepClone(src.assets||[]),scenerySeed:Number.isFinite(src.scenerySeed)?(src.scenerySeed>>>0):null,source:src.id,builtin:TRACKS.some(t=>String(t.id)===String(src.id))||state.folderTracks.some(t=>String(t.id)===String(src.id))
+    nodes:pts,assets:deepClone(src.assets||[]),scenerySeed:Number.isFinite(src.scenerySeed)?(src.scenerySeed>>>0):null,source:src.id,builtin:!!src.builtin
   };
 }
 
@@ -115,7 +114,7 @@ export async function loadTracksFromFolder(){
         if(!r.ok) continue;
         const raw=await r.json();
         const track=normaliseStoredTrack(raw);
-        if(track){ track.__folder=true; loaded.push(track); }
+        if(track){ track.builtin=true; loaded.push(track); }
       }catch{ /* skip unreadable files */ }
     }
     state.folderTracks=loaded;
@@ -232,7 +231,7 @@ export async function uploadCustomTrack(track){
   return true;
 }
 
-export function ensureEditorBoot(){ loadEditorTracks(); if(!state.editorTrack) state.editorTrack=state.editorTracks[0]?deepClone(state.editorTracks[0]):makeEditableTrackFromGameTrack(TRACKS[0]); }
+export function ensureEditorBoot(){ loadEditorTracks(); if(!state.editorTrack){ const first=getAllTracks()[0]; if(first) state.editorTrack=makeEditableTrackFromGameTrack(first); } }
 export function uniqueTrackId(){ return 'custom-'+Date.now()+'-'+Math.floor(Math.random()*9999); }
 export function getEditorStartIndex(){ const idx=(state.editorTrack.nodes||[]).findIndex(n=>n.type==='start-finish'); return idx>=0?idx:0; }
 
@@ -365,8 +364,7 @@ export function renderEditorTrackList(){
   getAllTracks().forEach(src=>{
     const d=document.createElement('div');
     d.className='editorListItem'+(String(state.editorTrack.id)===String(src.id)?' sel':'');
-    const tag=TRACKS.some(t=>String(t.id)===String(src.id))?' · built-in':src.__folder?' · folder':'';
-    d.textContent=src.name+tag;
+    d.textContent=src.name+(src.builtin?' · built-in':'');
     d.onclick=()=>{
       state.editorTrack=makeEditableTrackFromGameTrack(src);
       state.editorSelectedNode=0;
@@ -711,7 +709,7 @@ export function deleteSelectedEditorAsset(){
 }
 
 export function resetEditorTrack(){
-  state.editorTrack=makeEditableTrackFromGameTrack(getTrackById(state.editorTrack.source||state.editorTrack.id)||TRACKS[0]);
+  state.editorTrack=makeEditableTrackFromGameTrack(getTrackById(state.editorTrack.source||state.editorTrack.id)||getAllTracks()[0]);
   state.editorSelectedNode=0;
   state.editorSelectedAsset=-1;
   populateEditorUI();
@@ -719,7 +717,7 @@ export function resetEditorTrack(){
 
 export async function saveEditorTrack(){
   const data=editorTrackToGameTrack();
-  data.id=(TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))||state.editorTrack.builtin)?uniqueTrackId():(state.editorTrack.id||uniqueTrackId());
+  data.id=state.editorTrack.builtin?uniqueTrackId():(state.editorTrack.id||uniqueTrackId());
   data.name=state.editorTrack.name||'Custom Track';
   data.updatedAt=new Date().toISOString();
   state.editorTrack.id=data.id;
@@ -737,14 +735,14 @@ export async function saveEditorTrack(){
 
 export function deleteEditorTrack(){
   if(!state.editorTrack) return;
-  if(TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))||state.editorTrack.builtin){
+  if(state.editorTrack.builtin){
     notify('BUILT-IN TRACKS CANNOT BE DELETED'); return;
   }
   const id=String(state.editorTrack.id);
   state.editorTracks=state.editorTracks.filter(t=>String(t.id)!==id);
   if(String(state.selTrk)===id) state.selTrk=null;
   persistEditorTracks();
-  const fallback=getAllTracks()[0]||TRACKS[0];
+  const fallback=getAllTracks()[0];
   state.editorTrack=makeEditableTrackFromGameTrack(fallback);
   state.editorSelectedNode=0;
   state.editorSelectedAsset=-1;
@@ -1004,9 +1002,9 @@ export function bindEditorCanvas(){
   }));
 }
 
-export function showTrackEditor(showMainFn){
+export async function showTrackEditor(showMainFn){
+  await loadTracksFromFolder().catch(()=>{});
   ensureEditorBoot();
-  void loadTracksFromFolder().catch(()=>{});
   void syncEditorTracksFromCloud().catch(()=>{});
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
   document.getElementById('sEditor').style.display='flex';
