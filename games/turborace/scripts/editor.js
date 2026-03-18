@@ -16,7 +16,7 @@ import {
 // ═══════════════════════════════════════════════════════
 //  TRACK HELPERS
 // ═══════════════════════════════════════════════════════
-export function getAllTracks(){ return [...TRACKS, ...state.editorTracks]; }
+export function getAllTracks(){ return [...TRACKS, ...state.folderTracks, ...state.editorTracks]; }
 export function getTrackById(id){ return getAllTracks().find(t=>String(t.id)===String(id))||TRACKS[0]; }
 
 const CUSTOM_TRACKS_TABLE='turborace_custom_tracks';
@@ -56,7 +56,7 @@ export function makeEditableTrackFromGameTrack(src){
     useBezier:src.useBezier!==false,timeOfDay:tod,groundColor:hexNumToCss(src.gnd||makeTimeOfDayPreset(tod).gnd),skyColor:hexNumToCss(src.sky||makeTimeOfDayPreset(tod).sky),
     streetGrid:src.type==='city',gridSize:src.gridSize||70,enableRunoff:src.enableRunoff!==false,
     trackGenerationVersion:Number.isFinite(src.trackGenerationVersion)?Math.max(1,Math.floor(src.trackGenerationVersion)):1,
-    nodes:pts,assets:deepClone(src.assets||[]),scenerySeed:Number.isFinite(src.scenerySeed)?(src.scenerySeed>>>0):null,source:src.id,builtin:TRACKS.some(t=>String(t.id)===String(src.id))
+    nodes:pts,assets:deepClone(src.assets||[]),scenerySeed:Number.isFinite(src.scenerySeed)?(src.scenerySeed>>>0):null,source:src.id,builtin:TRACKS.some(t=>String(t.id)===String(src.id))||state.folderTracks.some(t=>String(t.id)===String(src.id))
   };
 }
 
@@ -101,6 +101,42 @@ export function loadEditorTracks(){
 }
 
 export function persistEditorTracks(){ localStorage.setItem('turborace_custom_tracks',JSON.stringify(state.editorTracks)); }
+
+export async function loadTracksFromFolder(){
+  try{
+    const resp=await fetch('./tracks/index.json');
+    if(!resp.ok) return;
+    const filenames=await resp.json();
+    if(!Array.isArray(filenames)) return;
+    const loaded=[];
+    for(const filename of filenames){
+      try{
+        const r=await fetch('./tracks/'+filename);
+        if(!r.ok) continue;
+        const raw=await r.json();
+        const track=normaliseStoredTrack(raw);
+        if(track){ track.__folder=true; loaded.push(track); }
+      }catch{ /* skip unreadable files */ }
+    }
+    state.folderTracks=loaded;
+  }catch{
+    state.folderTracks=[];
+  }
+}
+
+export function exportTrackAsJSON(){
+  const data=editorTrackToGameTrack();
+  data.name=state.editorTrack.name||'Custom Track';
+  data.updatedAt=new Date().toISOString();
+  const json=JSON.stringify(data,null,2);
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=(data.name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function normaliseCloudTrack(raw){
   if(!raw||typeof raw!=='object') return null;
@@ -329,7 +365,8 @@ export function renderEditorTrackList(){
   getAllTracks().forEach(src=>{
     const d=document.createElement('div');
     d.className='editorListItem'+(String(state.editorTrack.id)===String(src.id)?' sel':'');
-    d.textContent=src.name+(TRACKS.some(t=>String(t.id)===String(src.id))?' · built-in':'');
+    const tag=TRACKS.some(t=>String(t.id)===String(src.id))?' · built-in':src.__folder?' · folder':'';
+    d.textContent=src.name+tag;
     d.onclick=()=>{
       state.editorTrack=makeEditableTrackFromGameTrack(src);
       state.editorSelectedNode=0;
@@ -682,7 +719,7 @@ export function resetEditorTrack(){
 
 export async function saveEditorTrack(){
   const data=editorTrackToGameTrack();
-  data.id=TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))?uniqueTrackId():(state.editorTrack.id||uniqueTrackId());
+  data.id=(TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))||state.editorTrack.builtin)?uniqueTrackId():(state.editorTrack.id||uniqueTrackId());
   data.name=state.editorTrack.name||'Custom Track';
   data.updatedAt=new Date().toISOString();
   state.editorTrack.id=data.id;
@@ -700,7 +737,7 @@ export async function saveEditorTrack(){
 
 export function deleteEditorTrack(){
   if(!state.editorTrack) return;
-  if(TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))){
+  if(TRACKS.some(t=>String(t.id)===String(state.editorTrack.id))||state.editorTrack.builtin){
     notify('BUILT-IN TRACKS CANNOT BE DELETED'); return;
   }
   const id=String(state.editorTrack.id);
@@ -969,6 +1006,7 @@ export function bindEditorCanvas(){
 
 export function showTrackEditor(showMainFn){
   ensureEditorBoot();
+  void loadTracksFromFolder().catch(()=>{});
   void syncEditorTracksFromCloud().catch(()=>{});
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
   document.getElementById('sEditor').style.display='flex';
