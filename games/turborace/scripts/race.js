@@ -22,7 +22,7 @@ import { notify } from './notify.js';
 import {
   onlineGhostEnabled, ghostVisuals, clearGhostVisual,
   setupGhostReplayFromTrack, startGhostRecording,
-  finalizeGhostRecording
+  finalizeGhostRecording, setOnlineGhostToggle
 } from './ghost.js';
 import { getTrackById } from './editor.js';
 
@@ -41,7 +41,9 @@ export async function initRace(){
 
   let corridors=state.cityCorridors;
 
-  const ghostModeEnabled=onlineGhostEnabled;
+  const ghostModeEnabled=state.opponentMode==='ghost';
+  // Keep the ghost module in sync so replay loading works correctly
+  if(ghostModeEnabled!==onlineGhostEnabled) setOnlineGhostToggle(ghostModeEnabled);
   const raceCars=instantiateRaceCars({
     trackPoints: state.trkPts,
     cars: CARS,

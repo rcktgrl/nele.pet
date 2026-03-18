@@ -167,6 +167,50 @@
   </div>
 </div>
 
+<!-- RACE SETUP: DIFFICULTY + OPPONENT MODE -->
+<div class="screen" id="sDiff" style="display:none">
+  <h2>Race Setup</h2>
+  <div class="setupSection">
+    <div class="setupLabel">Difficulty</div>
+    <div class="diffCards" id="diffCards">
+      <div class="diffCard" data-diff="easy">
+        <div class="diffIcon">🟢</div>
+        <div class="diffName">Easy</div>
+        <div class="diffDesc">Slower AI, gentler cornering</div>
+      </div>
+      <div class="diffCard sel" data-diff="medium">
+        <div class="diffIcon">🟡</div>
+        <div class="diffName">Medium</div>
+        <div class="diffDesc">Balanced challenge</div>
+      </div>
+      <div class="diffCard" data-diff="hard">
+        <div class="diffIcon">🔴</div>
+        <div class="diffName">Hard</div>
+        <div class="diffDesc">Aggressive, full speed</div>
+      </div>
+    </div>
+  </div>
+  <div class="setupSection">
+    <div class="setupLabel">Opponents</div>
+    <div class="diffCards" id="oppCards">
+      <div class="diffCard sel" data-opp="ai">
+        <div class="diffIcon">🤖</div>
+        <div class="diffName">AI Opponents</div>
+        <div class="diffDesc">Race 4 computer-controlled cars</div>
+      </div>
+      <div class="diffCard" data-opp="ghost">
+        <div class="diffIcon">👻</div>
+        <div class="diffName">Ghost Cars</div>
+        <div class="diffDesc">Race leaderboard ghost replays</div>
+      </div>
+    </div>
+  </div>
+  <div class="menuActions menuActions-inline">
+    <button id="diffBackBtn" class="btn btn-s">BACK</button>
+    <button id="diffNextBtn" class="btn btn-p">NEXT</button>
+  </div>
+</div>
+
 <!-- ONLINE TRACKS SELECT -->
 <div class="screen" id="sOnlineTrk" style="display:none">
   <h2>Online Tracks</h2>

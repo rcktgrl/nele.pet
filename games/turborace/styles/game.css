@@ -35,6 +35,8 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .screen .sub{font-size:13px;color:#333;letter-spacing:5px;text-transform:uppercase;margin-bottom:44px;}
 .screen h2{font-family:'Orbitron',monospace;font-size:24px;letter-spacing:6px;color:#556;text-transform:uppercase;margin-bottom:32px;}
 .menuVersion{position:absolute;right:20px;bottom:16px;font-family:'Orbitron',monospace;font-size:12px;letter-spacing:2px;color:#4f5978;text-transform:uppercase;}
+.menuActions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:100%;}
+.menuActions-inline{margin-top:2px;}
 .btn{padding:13px 36px;font-family:'Orbitron',monospace;font-size:13px;font-weight:700;border:none;border-radius:4px;cursor:pointer;text-transform:uppercase;letter-spacing:3px;transition:all .15s;margin:6px;}
 .btn-p{background:linear-gradient(135deg,#ff5500,#ff2200);color:#fff;box-shadow:0 0 20px #ff550066;}
 .btn-p:hover{transform:translateY(-2px);box-shadow:0 0 35px #ff5500aa;}
@@ -97,6 +99,15 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .tcard h3{font-family:'Orbitron',monospace;font-size:13px;color:#ffcc00;letter-spacing:2px;text-transform:uppercase;}
 .tcard p{font-size:11px;color:#445;letter-spacing:1px;}
 .trackLbBtn{margin-top:4px;padding:8px 12px;font-size:10px;letter-spacing:2px;}
+/* Race Setup Screen */
+.setupSection{width:min(700px,100%);margin-bottom:28px;}
+.setupLabel{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:4px;color:#445;text-transform:uppercase;margin-bottom:14px;text-align:center;}
+.diffCards{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;}
+.diffCard{display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px 28px;border-radius:10px;background:rgba(255,255,255,.03);border:2px solid rgba(255,255,255,.06);cursor:pointer;transition:all .15s;min-width:150px;text-align:center;}
+.diffCard:hover,.diffCard.sel{border-color:#ff5500;background:rgba(255,85,0,.07);transform:translateY(-3px);box-shadow:0 6px 24px rgba(255,85,0,.22);}
+.diffIcon{font-size:28px;line-height:1;}
+.diffName{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:#ffcc00;letter-spacing:2px;text-transform:uppercase;}
+.diffDesc{font-size:12px;color:#556;letter-spacing:.5px;line-height:1.4;}
 #leaderboardModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.78);z-index:450;padding:16px;}
 .leaderboardPanel{width:min(560px,100%);max-height:min(80vh,640px);display:flex;flex-direction:column;gap:12px;padding:18px;border-radius:12px;border:1px solid #2a3550;background:#0b101d;}
 .leaderboardPanel h3{font-family:'Orbitron',monospace;font-size:16px;letter-spacing:3px;color:#d4ddff;text-transform:uppercase;text-align:center;}

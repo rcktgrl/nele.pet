@@ -46,7 +46,7 @@ import {
 } from './editor.js';
 import {
   showMain, showIntro, showTrkSel, showCarSel,
-  showOnlineTrkSel, showSettings, closeSettings
+  showDiffSel, showOnlineTrkSel, showSettings, closeSettings
 } from './menu.js';
 import {
   closeTrackLeaderboardModal
@@ -157,13 +157,15 @@ document.getElementById('gameStartBtn').addEventListener('click',function(){tryS
 document.getElementById('trackEditorBtn').addEventListener('click',function(){tryStartMenuMusic();showTrackEditor();});
 document.getElementById('mainSettingsBtn').addEventListener('click',function(){tryStartMenuMusic();showSettings();});
 document.getElementById('backToSelectionBtn').addEventListener('click',()=>{ window.location.href='../index.html'; });
-document.getElementById('showTrkSelBtn').addEventListener('click',showTrkSel);
+document.getElementById('showTrkSelBtn').addEventListener('click',showDiffSel);
 document.getElementById('btnGo').addEventListener('click',startRace);
 document.getElementById('trkSelBackBtn').addEventListener('click',showMain);
 document.getElementById('loadOnlineTracksBtn').addEventListener('click',showOnlineTrkSel);
 document.getElementById('onlineTrkBackBtn').addEventListener('click',showTrkSel);
-document.getElementById('btnOnlineNxt').addEventListener('click',showCarSel);
-document.getElementById('btnNxt').addEventListener('click',showCarSel);
+document.getElementById('btnOnlineNxt').addEventListener('click',showDiffSel);
+document.getElementById('btnNxt').addEventListener('click',showDiffSel);
+document.getElementById('diffBackBtn').addEventListener('click',showTrkSel);
+document.getElementById('diffNextBtn').addEventListener('click',showCarSel);
 document.getElementById('closeEditorBtn').addEventListener('click',closeTrackEditor);
 document.getElementById('newTrackBtn').addEventListener('click',createNewEditorTrack);
 document.getElementById('dupeTrackBtn').addEventListener('click',duplicateEditorTrack);
