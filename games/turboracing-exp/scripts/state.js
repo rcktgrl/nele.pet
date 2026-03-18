@@ -71,6 +71,7 @@ export const state = {
       selectedCarIds: [],
       config: null,
       controller: null,
+      workerPool: null,
       bestGenome: null,
       status: ''
     }

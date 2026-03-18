@@ -105,10 +105,10 @@ function updateTrainingState(dt) {
   for (let step = 0; step < steps; step += 1) {
     state.raceTime += stepDt;
     updateAiControllers(stepDt);
+    if (state.raceTime >= (state.training.config?.maxSimulationTime || 45)) break;
   }
-  updateAiAudio();
+  state.training.workerPool?.schedule(state.aiControllers);
   if (state.training.visible && state.pCar) {
-    updateAudio(0, 0, totalDt, state.pCar, keys);
     updateTrainingFreeCamera(dt);
     updateHUD();
     drawMinimap();
@@ -117,7 +117,9 @@ function updateTrainingState(dt) {
   state.training.progressCm = leadCar?.progressCm || 0;
   const statusEl = document.getElementById('trainAiStatus');
   if (statusEl) statusEl.textContent = `Generation ${state.training.generation || 1} · Episode ${state.training.episode + 1} · ${(state.training.progressCm || 0).toLocaleString('de-DE')} cm`;
-  if ((state.training.config?.maxSimulationTime || 45) <= state.raceTime) {
+  const maxSimulationTime = state.training.config?.maxSimulationTime || 45;
+  if (state.raceTime >= maxSimulationTime) {
+    state.raceTime = maxSimulationTime;
     endRace();
     return;
   }

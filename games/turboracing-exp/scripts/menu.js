@@ -65,7 +65,7 @@ export function showMain(){
   clearGhostVisual();
   if(audioReady)startMusic();
   for(const c of state.allCars)scene.remove(c.mesh);
-  state.allCars=[]; state.aiCars=[]; state.pCar=null; state.training.running=false; state.raceMode='race';
+  state.allCars=[]; state.aiCars=[]; state.pCar=null; state.training.running=false; state.raceMode='race'; if(state.training.workerPool){ state.training.workerPool.dispose(); state.training.workerPool=null; }
 }
 
 // ═══════════════════════════════════════════════════════

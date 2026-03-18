@@ -25,7 +25,7 @@ import {
   finalizeGhostRecording
 } from './ghost.js';
 import { getTrackById, getAllTracks, loadTracksFromFolder, loadEditorTracks } from './editor.js';
-import { createTrainingManager, mergeConfig, parseTrainingJson } from './train-ai.js';
+import { createTrainingManager, createTrainingWorkerPool, mergeConfig, parseTrainingJson } from './train-ai.js';
 
 
 function formatProgressCm(progressCm = 0) {
@@ -78,6 +78,7 @@ function normaliseTrainingConfig(raw = {}) {
     mutationStrength: +raw.mutationStrength,
     eliteCount: +raw.eliteCount,
     tickRate: +raw.tickRate,
+    jokerCarrySimulations: +raw.jokerCarrySimulations,
     rewards: {
       progress: +raw.rewardProgress,
       speed: +raw.rewardSpeed,
@@ -205,6 +206,7 @@ export async function initRace(options = {}) {
   state.allCars = []; state.aiCars = []; state.aiControllers = []; state.pCar = null;
   clearAiSounds();
   clearGhostVisual();
+  if (trainingMode) { stopAudio(); stopMusic(); }
 
   if (trainingMode) {
     const track = chooseTrainingTrack();
@@ -222,6 +224,7 @@ export async function initRace(options = {}) {
   const aiCount = trainingMode ? trainingConfig.populationSize : 4;
   const playerControlled = !trainingMode;
   const manager = trainingMode ? ensureTrainingManager(trainingConfig) : null;
+  if (trainingMode && !state.training.workerPool) state.training.workerPool = createTrainingWorkerPool();
 
   const raceCars = instantiateRaceCars({
     trackPoints: state.trkPts,
@@ -246,6 +249,7 @@ export async function initRace(options = {}) {
   state.pCar = playerControlled ? raceCars.playerCar : raceCars.aiCars[0] || null;
   state.aiCars = trainingMode ? raceCars.aiCars : raceCars.aiCars;
   state.aiControllers = raceCars.aiControllers;
+  if (trainingMode && state.training.workerPool) state.training.workerPool.register(state.aiControllers);
   state.allCars = playerControlled ? raceCars.allCars : raceCars.aiCars;
   if (!trainingMode) await setupGhostReplayFromTrack(state.trkData && state.trkData.id);
 
@@ -431,6 +435,7 @@ export function stopTraining({ saveBest = true, exitToMenu = true } = {}) {
     if (ui.exportArea) ui.exportArea.value = manager.exportJSON();
   }
   state.training.running = false;
+  if (state.training.workerPool) { state.training.workerPool.dispose(); state.training.workerPool = null; }
   state.gState = 'menu';
   state.raceMode = 'race';
   updateTrainingStatus('Training per ESC beendet. Beste KI wurde behalten.');
