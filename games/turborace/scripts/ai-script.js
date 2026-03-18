@@ -1,3 +1,12 @@
+import { state } from './state.js';
+
+// Difficulty presets — applied on top of base AI behaviour
+const DIFF = {
+  easy:   { aggMult: 0.78, spdMult: 0.82, cornerSpeedFloor: 0.15 },
+  medium: { aggMult: 1.00, spdMult: 1.00, cornerSpeedFloor: 0.20 },
+  hard:   { aggMult: 1.10, spdMult: 1.08, cornerSpeedFloor: 0.25 },
+};
+
 export class AI {
   constructor(car,la,context){
     this.car=car;
@@ -46,7 +55,8 @@ export class AI {
       const look=Math.round(4+speedFrac*12);
       ti=(ci+look)%n;
     } else {
-      const maxLook=Math.round(3+speedFrac*25);
+      // Increased look-ahead: was 3+speedFrac*25, now 3+speedFrac*35
+      const maxLook=Math.round(3+speedFrac*35);
       ti=ci;
       for(let step=1;step<=maxLook;step++){
         const si=(ci+step)%n;
@@ -66,7 +76,8 @@ export class AI {
           const wallMin=Math.min(dL,dR,dB,dT);
           const margin=4.0;
           if(wallMin<margin){
-            const blend=Math.pow(1-wallMin/margin,2)*0.5;
+            // Increased wall blend: was *0.5, now *0.8 for stronger avoidance
+            const blend=Math.pow(1-wallMin/margin,2)*0.8;
             tgtX=tgtX*(1-blend)+cr.x*blend;
             tgtZ=tgtZ*(1-blend)+cr.z*blend;
           }
@@ -78,16 +89,21 @@ export class AI {
     const dx=tgtX-c.pos.x,dz=tgtZ-c.pos.z;
     const dh=Math.atan2(dx,dz);
     let he=((dh-c.hdg+Math.PI*3)%(Math.PI*2))-Math.PI;
-    let str=Math.max(-1,Math.min(1,he*2.5));
+    // Reduced steering multiplier: was 2.5, now 2.0 to reduce overcorrection
+    let str=Math.max(-1,Math.min(1,he*2.0));
     const ts=Math.abs(he);
 
-    const scanDist=Math.round(20+speedFrac*80);
+    // Increased scan distance: was 20+speedFrac*80, now 20+speedFrac*120 for earlier braking
+    const scanDist=Math.round(20+speedFrac*120);
     let worstCurv=0, worstDist=Infinity;
     for(let k=1;k<scanDist;k++){
       const ki=(ci+k)%n;
       if(navCurv[ki]>worstCurv){worstCurv=navCurv[ki]; worstDist=k;}
     }
-    const cornerSpeed=c.data.maxSpd*(0.25+0.75*(1-worstCurv));
+
+    const diff=DIFF[state.aiDifficulty]||DIFF.medium;
+    // Corner speed floor lowered for better cornering: was 0.25, now uses difficulty preset
+    const cornerSpeed=c.data.maxSpd*(diff.cornerSpeedFloor+0.75*(1-worstCurv));
     const speedOverTarget=c.spd-cornerSpeed;
     const ptSpacing=2;
     const distToCorner=worstDist*ptSpacing;
@@ -99,7 +115,8 @@ export class AI {
 
     let thr=ts<.30?1:Math.max(.45,1-ts*0.8);
     let brk=Math.max(ts>.70?(ts-.70)*1.5:0, reqBrake);
-    if(brk>0.2) thr=Math.min(thr,1-brk);
+    // Lowered brake threshold: was 0.2, now 0.15 to ease throttle sooner
+    if(brk>0.15) thr=Math.min(thr,1-brk);
 
     if(!cityCorridors&&trackData){
       const edgeDist=Math.sqrt(md);
@@ -113,7 +130,8 @@ export class AI {
       }
     }
 
-    thr*=c.data.aiSpd*c.aiAgg;
+    thr*=c.data.aiSpd*c.aiAgg*diff.aggMult*diff.spdMult;
+    thr=Math.min(1,thr);
     if(playerCar){const lead=c.totalProg-playerCar.totalProg;if(lead>8)thr*=.93;else if(lead<-8)thr=Math.min(1,thr*1.05);}
     c.update({thr,brk:Math.min(1,brk),str},dt);
   }

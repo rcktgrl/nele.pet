@@ -123,6 +123,7 @@ function startCarCardPreviews(){
 
 export function showCarSel(){
   if(state.selTrk==null){ showTrkSel(); return; }
+  if(state.aiDifficulty==null){ showDiffSel(); return; }
   const speedMinKph=100,speedMaxKph=300,accelMin=6,accelMax=12;
   const pctForRange=(value,min,max)=>Math.max(0,Math.min(100,((value-min)/(max-min))*100));
   disposeCarCardPreviews();
@@ -261,6 +262,33 @@ export async function showTrkSel(){
   document.getElementById('btnNxt').disabled=(state.selTrk==null);
   const tracks=state.folderTracks;
   await buildTrackCards(tracks,document.getElementById('trkCards'),'btnNxt');
+}
+
+export function showDiffSel(){
+  if(state.selTrk==null){ showTrkSel(); return; }
+  document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
+  document.getElementById('sDiff').style.display='flex';
+  state.gState='diffSel';
+
+  // Sync difficulty cards with state
+  document.querySelectorAll('#diffCards .diffCard').forEach(card=>{
+    card.classList.toggle('sel', card.dataset.diff===state.aiDifficulty);
+    card.onclick=()=>{
+      document.querySelectorAll('#diffCards .diffCard').forEach(c=>c.classList.remove('sel'));
+      card.classList.add('sel');
+      state.aiDifficulty=card.dataset.diff;
+    };
+  });
+
+  // Sync opponent mode cards with state
+  document.querySelectorAll('#oppCards .diffCard').forEach(card=>{
+    card.classList.toggle('sel', card.dataset.opp===state.opponentMode);
+    card.onclick=()=>{
+      document.querySelectorAll('#oppCards .diffCard').forEach(c=>c.classList.remove('sel'));
+      card.classList.add('sel');
+      state.opponentMode=card.dataset.opp;
+    };
+  });
 }
 
 export async function showOnlineTrkSel(){
