@@ -101,7 +101,7 @@ export class AI {
       const ki=(ci+k)%n;
       const curv=navCurv[ki];
       if(curv<0.03)continue; // lower threshold so gentle chicane turns aren't skipped
-      const cornerSpd=c.data.maxSpd*(0.18+0.77*(1-curv));
+      const cornerSpd=c.data.maxSpd*c.data.hdl*(0.18+0.77*(1-curv));
       // Shrink effective distance so AI treats the corner as closer → brakes earlier
       const dist=k*ptSpacing*0.42;
       const speedOver=c.spd-cornerSpd;
