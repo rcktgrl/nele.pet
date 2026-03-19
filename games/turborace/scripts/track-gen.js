@@ -1173,15 +1173,20 @@ function addCityScenery(curve,data){
         pts.push(new THREE.Vector3(curr[0]+dx*t, 0, curr[1]+dz*t));
       }
     }
-    // Compute curvature for city AI points
+    // Compute curvature for city AI points.
+    // Two scales: ±8 for wide curves, ±3 for tight chicanes. Take the max so chicanes
+    // (which average to ~0 curvature in the wide window) are not missed.
     const cn=pts.length;
     const cityAiCurv=[];
     for(let i=0;i<cn;i++){
-      const a=pts[(i-8+cn)%cn],b=pts[i],c=pts[(i+8)%cn];
-      const aax=b.x-a.x,aaz=b.z-a.z,bbx=c.x-b.x,bbz=c.z-b.z;
-      const la2=Math.sqrt(aax*aax+aaz*aaz)||1,lb2=Math.sqrt(bbx*bbx+bbz*bbz)||1;
-      const dot2=(aax*bbx+aaz*bbz)/(la2*lb2);
-      cityAiCurv[i]=Math.max(0,1-Math.min(1,(dot2+1)/2*1.2));
+      const calcC=(w)=>{
+        const a=pts[(i-w+cn)%cn],b=pts[i],cv=pts[(i+w)%cn];
+        const aax=b.x-a.x,aaz=b.z-a.z,bbx=cv.x-b.x,bbz=cv.z-b.z;
+        const la2=Math.sqrt(aax*aax+aaz*aaz)||1,lb2=Math.sqrt(bbx*bbx+bbz*bbz)||1;
+        const dot2=(aax*bbx+aaz*bbz)/(la2*lb2);
+        return Math.max(0,1-Math.min(1,(dot2+1)/2*1.2));
+      };
+      cityAiCurv[i]=Math.max(calcC(3),calcC(8));
     }
     state.cityAiPts={pts,curv:cityAiCurv};
   }
