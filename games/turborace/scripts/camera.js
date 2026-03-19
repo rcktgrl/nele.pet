@@ -27,7 +27,8 @@ export function updateCamera(){
     const orbitYaw=state.pCar.hdg+Math.PI+raceCamOrbit.yaw;
     const back=new THREE.Vector3(Math.sin(orbitYaw),0,Math.cos(orbitYaw));
     const camHeight=5.0+raceCamOrbit.pitch*3.5;
-    const tgt=state.pCar.pos.clone().addScaledVector(back,11).add(new THREE.Vector3(0,camHeight,0));
+    const dist=raceCamOrbit.distance||11;
+    const tgt=state.pCar.pos.clone().addScaledVector(back,dist).add(new THREE.Vector3(0,camHeight,0));
     camChase.position.lerp(tgt,.09);
     const look=state.pCar.pos.clone().addScaledVector(fwd,5).add(new THREE.Vector3(0,.8+raceCamOrbit.pitch*1.2,0));
     camChase.lookAt(look);
@@ -51,6 +52,25 @@ export function toggleCam(){
   document.getElementById('speedBox').style.display=state.camMode==='chase'?'block':'none';
   document.getElementById('gearBox').style.display=state.camMode==='chase'?'block':'none';
   document.getElementById('camLabel').textContent=state.camMode==='chase'?'[ C ] COCKPIT VIEW':'[ C ] CHASE CAM';
+}
+
+export function updateTrainSplitCameras(){
+  const cams=state.trainSplitCams;
+  if(!cams||!cams.length||!state.allCars.length)return;
+  // Sort by totalProg descending to pick top N cars
+  const sorted=[...state.allCars].sort((a,b)=>b.totalProg-a.totalProg);
+  for(let i=0;i<cams.length;i++){
+    const car=sorted[i];
+    if(!car)continue;
+    const cam=cams[i];
+    const backHdg=car.hdg+Math.PI;
+    const back=new THREE.Vector3(Math.sin(backHdg),0,Math.cos(backHdg));
+    const fwd=new THREE.Vector3(Math.sin(car.hdg),0,Math.cos(car.hdg));
+    const tgt=car.pos.clone().addScaledVector(back,11).add(new THREE.Vector3(0,5,0));
+    cam.position.lerp(tgt,0.12);
+    const look=car.pos.clone().addScaledVector(fwd,5).add(new THREE.Vector3(0,0.8,0));
+    cam.lookAt(look);
+  }
 }
 
 export function resetEditorCameraToTrack(){

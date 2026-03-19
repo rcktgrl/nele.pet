@@ -246,6 +246,15 @@ export async function initTraining(){
   state.allCars=trainingCars;
   state.pCar=null;
 
+  // Split-screen cameras — one chase cam per visible slot (up to 4)
+  const nSplit=Math.min(4,popSize);
+  state.trainSplitCams=Array.from({length:nSplit},()=>{
+    const cam=new THREE.PerspectiveCamera(72,1,0.1,2000);
+    // Start cam above track centre; updateTrainSplitCameras lerps it to first car quickly
+    cam.position.set(0,80,0);
+    return cam;
+  });
+
   // Top-down camera — compute track bounds and snap camEditor above the track
   {
     const pts=state.trkPts;
@@ -310,4 +319,5 @@ export function stopTraining(){
   document.getElementById('trainHud').style.display='none';
   state.trainer=null;
   state.trainGrid=[];
+  state.trainSplitCams=[];
 }

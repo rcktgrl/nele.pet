@@ -14,7 +14,7 @@ export const editorGroundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
 
 export const editorMouse = {mode:null,lastX:0,lastY:0};
 export const editorCam = {target:new THREE.Vector3(),yaw:0,pitch:1.16,distance:260};
-export const raceCamOrbit={yaw:0,pitch:0,lastInput:0};
+export const raceCamOrbit={yaw:0,pitch:0,lastInput:0,distance:11};
 
 export const keys = {};
 
@@ -64,4 +64,5 @@ export const state = {
     trainPopSize: 8,     // Population size (read by initTraining)
     trainFF: 1,          // Fast-forward multiplier (1–10 physics substeps per frame)
     trainBestCarPos: null, // {x,z} of the best car's peak position from previous generation
+    trainSplitCams: [],  // PerspectiveCamera array for split-screen training view
 };

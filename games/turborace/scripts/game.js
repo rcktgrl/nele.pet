@@ -23,7 +23,7 @@ import {
   updateAudio,
   startMusic, audioReady, aiSounds
 } from './audio.js';
-import { updateCamera, toggleCam, updateEditorPreviewCamera } from './camera.js';
+import { updateCamera, toggleCam, updateEditorPreviewCamera, updateTrainSplitCameras } from './camera.js';
 import { setupLights } from './lighting.js';
 import { updateHUD, drawDash, drawMinimap, resizeDC } from './hud.js';
 import {
@@ -89,6 +89,9 @@ document.addEventListener('wheel',e=>{
   if(state.gState==='training'){
     editorCam.distance=Math.max(50,Math.min(1200,editorCam.distance*(1+Math.sign(e.deltaY)*0.08)));
   }
+  if(state.gState==='racing'||state.gState==='cooldown'||state.gState==='countdown'||state.gState==='finished'){
+    raceCamOrbit.distance=Math.max(4,Math.min(40,raceCamOrbit.distance*(1+Math.sign(e.deltaY)*0.08)));
+  }
 },{passive:true});
 gc.addEventListener('contextmenu',e=>e.preventDefault());
 
@@ -146,6 +149,26 @@ function updateFrame(dt){
     for(let _s=0;_s<ffSteps;_s++){
       for(const ai of state.aiControllers)ai.update(subDt);
       resolveCarCollisions(state.allCars);
+      // Accumulate wall and gravel penalties for training fitness
+      for(const car of state.allCars){
+        if(car._offTrack)continue;
+        if(!car._fitPenalty)car._fitPenalty=0;
+        // Wall hit: stuckTimer increased this substep → car is against a wall
+        const prevStuck=car._trainPrevStuck||0;
+        if(car.stuckTimer>prevStuck) car._fitPenalty+=5*subDt;   // wall penalty
+        if(car.onGravel)             car._fitPenalty+=0.5*subDt; // gravel penalty
+        car._trainPrevStuck=car.stuckTimer;
+      }
+      // Off-track detection: car center more than half road width from nearest waypoint
+      if(state.trkData&&state.trkPts.length){
+        const halfW=state.trkData.rw*0.55;
+        for(const car of state.allCars){
+          if(car._offTrack)continue;
+          let md=Infinity;
+          for(const p of state.trkPts){const dx=car.pos.x-p.x,dz=car.pos.z-p.z;const d=dx*dx+dz*dz;if(d<md)md=d;}
+          if(Math.sqrt(md)>halfW){car._offTrack=true;car._fitPenalty=(car._fitPenalty||0)+200;}
+        }
+      }
       // Reset any car that somehow finishes (laps set to 999, but just in case)
       for(let i=0;i<state.allCars.length;i++){
         if(state.allCars[i].finished) resetCarForTraining(state.allCars[i],state.trainGrid[i].pos,state.trainGrid[i].hdg);
@@ -165,8 +188,12 @@ function updateFrame(dt){
         }
       }
     }
-    // Top-down camera (same as track editor, pannable with WASD)
-    updateEditorPreviewCamera(dt);
+    // Split-screen cameras follow the top N cars; fall back to top-down if no split cams
+    if(state.trainSplitCams&&state.trainSplitCams.length){
+      updateTrainSplitCameras();
+    }else{
+      updateEditorPreviewCamera(dt);
+    }
     updateTrainingHUD();
   }else if(state.gState==='countdown'||state.gState==='finished'||state.gState==='paused'){
     if(state.gState==='finished'){
@@ -329,8 +356,11 @@ document.getElementById('raceAgainBtn').addEventListener('click',restartRace);
 document.getElementById('trainAiBtn').addEventListener('click',()=>{ tryStartMenuMusic(); showTrainTrkSel(); });
 document.getElementById('btnTrainStart').addEventListener('click',()=>{ void initTraining(); });
 document.getElementById('trainSaveBtn').addEventListener('click',()=>{
-  if(state.trainer&&state.trainer.saveToLocalStorage()) document.getElementById('trainSaveBtn').textContent='SAVED ✓';
-  setTimeout(()=>{ const b=document.getElementById('trainSaveBtn'); if(b)b.textContent='SAVE BEST'; },2000);
+  if(!state.trainer)return;
+  const saved=state.trainer.saveToLocalStorage();
+  const exported=state.trainer.exportAsJSON('neural-driver');
+  if(saved||exported) document.getElementById('trainSaveBtn').textContent='EXPORTED ✓';
+  setTimeout(()=>{ const b=document.getElementById('trainSaveBtn'); if(b)b.textContent='SAVE & EXPORT'; },2000);
 });
 document.getElementById('trainStopBtn').addEventListener('click',()=>{ stopTraining(); showMain(); });
 document.getElementById('trainPopSlider').addEventListener('input',e=>{
@@ -363,7 +393,9 @@ const {renderer,start:startRenderLoop}=createRenderPipeline({
   cameras:[camChase,camCock,camEditor],
   resizeOverlays:resizeDC,
   frameUpdate:updateFrame,
-  getActiveCamera:()=>state.activeCam
+  getActiveCamera:()=>state.activeCam,
+  getTrainSplitCams:()=>state.trainSplitCams,
+  getGState:()=>state.gState,
 });
 state.renderer=renderer;
 setupLights(); startRenderLoop(); loadArcadeUser(); showIntro();

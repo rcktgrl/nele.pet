@@ -2,6 +2,23 @@
 import { state } from './state.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Repo model pre-fetch — loaded at module init, used as fallback in constructor
+// ─────────────────────────────────────────────────────────────────────────────
+let _repoGenome = null;
+(async () => {
+  try {
+    const idx = await fetch('./models/index.json').then(r => r.json());
+    const defaultId = idx.default;
+    if (defaultId) {
+      const model = await fetch(`./models/${defaultId}.json`).then(r => r.json());
+      if (Array.isArray(model.genome) && model.genome.length === 52) {
+        _repoGenome = model.genome;
+      }
+    }
+  } catch (_) { /* silently fall back to hand-designed defaults */ }
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Default hand-designed weights (module-level constants used as fallback)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -57,21 +74,30 @@ export class NeuralAI {
       const w = NeuralAI._unpack(genome);
       this.W1 = w.W1; this.b1 = w.b1; this.W2 = w.W2; this.b2 = w.b2;
     } else {
-      // Try to use saved trained weights; otherwise use hand-designed defaults
+      // Priority: localStorage → repo model → hand-designed defaults
       const saved = localStorage.getItem('turborace_nn_weights');
       if (saved) {
         try {
           const w = NeuralAI._unpack(JSON.parse(saved));
           this.W1 = w.W1; this.b1 = w.b1; this.W2 = w.W2; this.b2 = w.b2;
-        } catch (_) { this._useDefaults(); }
+        } catch (_) { this._useRepoOrDefaults(); }
       } else {
-        this._useDefaults();
+        this._useRepoOrDefaults();
       }
     }
   }
 
   _useDefaults() {
     this.W1 = _W1; this.b1 = _b1; this.W2 = _W2; this.b2 = _b2;
+  }
+
+  _useRepoOrDefaults() {
+    if (_repoGenome) {
+      const w = NeuralAI._unpack(_repoGenome);
+      this.W1 = w.W1; this.b1 = w.b1; this.W2 = w.W2; this.b2 = w.b2;
+    } else {
+      this._useDefaults();
+    }
   }
 
   // Replace weights mid-life (used by the genetic trainer between generations).
