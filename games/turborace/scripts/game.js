@@ -131,24 +131,27 @@ function updateFrame(dt){
     if(state.editorNeedsRebuild&&performance.now()-state.editorLastRebuild>45){ editorRebuildScene(false); }
     drawEditorCanvas();
   }else if(state.gState==='training'){
-    for(const ai of state.aiControllers)ai.update(dt);
-    resolveCarCollisions(state.allCars);
-    // Reset any car that finished (lap count is set to 999 but just in case)
-    for(let i=0;i<state.allCars.length;i++){
-      if(state.allCars[i].finished) resetCarForTraining(state.allCars[i],state.trainGrid[i].pos,state.trainGrid[i].hdg);
-    }
-    // Chase camera follows the current race leader
-    const lead=state.allCars.reduce((b,c)=>c.totalProg>b.totalProg?c:b,state.allCars[0]);
-    state.pCar=lead;
-    updateCamera();
-    // Tick the genetic algorithm; on generation boundary, respawn cars with new weights
-    if(state.trainer.tick(dt,state.allCars)){
+    // Fast-forward: run multiple physics substeps per rendered frame
+    const ffSteps=Math.max(1,state.trainFF||1);
+    const subDt=dt/ffSteps;
+    for(let _s=0;_s<ffSteps;_s++){
+      for(const ai of state.aiControllers)ai.update(subDt);
+      resolveCarCollisions(state.allCars);
+      // Reset any car that somehow finishes (laps set to 999, but just in case)
       for(let i=0;i<state.allCars.length;i++){
-        const g=state.trainGrid[i%state.trainGrid.length];
-        resetCarForTraining(state.allCars[i],g.pos,g.hdg);
-        state.aiControllers[i].setWeights(state.trainer.population[i].genome);
+        if(state.allCars[i].finished) resetCarForTraining(state.allCars[i],state.trainGrid[i].pos,state.trainGrid[i].hdg);
+      }
+      // Tick the GA; on generation boundary, respawn cars with evolved weights
+      if(state.trainer.tick(subDt,state.allCars)){
+        for(let i=0;i<state.allCars.length;i++){
+          const g=state.trainGrid[i%state.trainGrid.length];
+          resetCarForTraining(state.allCars[i],g.pos,g.hdg);
+          state.aiControllers[i].setWeights(state.trainer.population[i].genome);
+        }
       }
     }
+    // Top-down camera (same as track editor, pannable with WASD)
+    updateEditorPreviewCamera(dt);
     updateTrainingHUD();
   }else if(state.gState==='countdown'||state.gState==='finished'||state.gState==='paused'){
     if(state.gState==='finished'){
@@ -253,6 +256,14 @@ document.getElementById('trainSaveBtn').addEventListener('click',()=>{
   setTimeout(()=>{ const b=document.getElementById('trainSaveBtn'); if(b)b.textContent='SAVE BEST'; },2000);
 });
 document.getElementById('trainStopBtn').addEventListener('click',()=>{ stopTraining(); showMain(); });
+document.getElementById('trainPopSlider').addEventListener('input',e=>{
+  state.trainPopSize=parseInt(e.target.value);
+  document.getElementById('trainPopVal').textContent=e.target.value;
+});
+document.getElementById('trainFFSlider').addEventListener('input',e=>{
+  state.trainFF=parseInt(e.target.value);
+  document.getElementById('trainFFVal').textContent=e.target.value+'×';
+});
 
 // ═══════════════════════════════════════════════════════
 //  BOOT

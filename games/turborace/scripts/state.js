@@ -61,4 +61,6 @@ export const state = {
     renderer: null,
     trainer: null,       // GeneticTrainer instance, active only during training
     trainGrid: [],       // Array of {pos,hdg} start positions for training cars
+    trainPopSize: 20,    // Population size (read by initTraining)
+    trainFF: 1,          // Fast-forward multiplier (1–4 physics substeps per frame)
 };

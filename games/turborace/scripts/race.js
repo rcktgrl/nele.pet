@@ -1,6 +1,6 @@
 'use strict';
 import { CARS } from './data/cars.js';
-import { state, scene, dc } from './state.js';
+import { state, scene, dc, editorCam, camEditor } from './state.js';
 import { buildTrack } from './track-gen.js';
 import { instantiateRaceCars, Car } from './car.js';
 import { AI } from './ai-script.js';
@@ -213,17 +213,18 @@ export async function initTraining(){
   state.trkData.laps=999;
 
   // Trainer — seed from localStorage if available
+  const popSize=state.trainPopSize||20;
   const savedGenome=GeneticTrainer.loadFromLocalStorage();
-  state.trainer=new GeneticTrainer({popSize:20,genDuration:35});
+  state.trainer=new GeneticTrainer({popSize,genDuration:35});
   state.trainer.initPopulation(savedGenome);
 
   // Grid of starting positions
-  state.trainGrid=buildTrainingGrid(state.trkPts,state.trainer.popSize);
+  state.trainGrid=buildTrainingGrid(state.trkPts,popSize);
 
   // Create one NeuralAI car per genome
   const carData=CARS[state.selCar??0];
   const trainingCars=[], trainingControllers=[];
-  for(let i=0;i<state.trainer.popSize;i++){
+  for(let i=0;i<popSize;i++){
     const g=state.trainGrid[i];
     const car=new Car(carData,g.pos,g.hdg,false,scene);
     car.aiAgg=1.0;
@@ -242,7 +243,27 @@ export async function initTraining(){
   state.aiCars=trainingCars;
   state.aiControllers=trainingControllers;
   state.allCars=trainingCars;
-  state.pCar=trainingCars[0]; // camera anchor — updated each frame to lead car
+  state.pCar=null;
+
+  // Top-down camera — compute track bounds and snap camEditor above the track
+  {
+    const pts=state.trkPts;
+    let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+    for(const p of pts){
+      if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
+      if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z;
+    }
+    const cx=(minX+maxX)/2, cz=(minZ+maxZ)/2;
+    const span=Math.max(200,Math.max(maxX-minX,maxZ-minZ));
+    editorCam.target.set(cx,0,cz);
+    editorCam.yaw=0;
+    editorCam.pitch=1.42; // near top-down
+    editorCam.distance=span*0.72;
+    // Snap camera to position immediately so there's no lerp delay
+    const horiz=Math.cos(editorCam.pitch)*editorCam.distance;
+    camEditor.position.set(cx+Math.sin(0)*horiz, Math.sin(editorCam.pitch)*editorCam.distance, cz+Math.cos(0)*horiz);
+    camEditor.lookAt(cx,0,cz);
+  }
 
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
   document.getElementById('hud').style.display='none';

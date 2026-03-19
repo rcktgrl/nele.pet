@@ -33,8 +33,9 @@
   <div id="mm"><canvas id="mmc" width="150" height="150"></canvas></div>
 </div>
 <!-- TRAINING HUD -->
-<div id="trainHud" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:50;flex-direction:column;align-items:center;justify-content:flex-start;padding:18px 24px;gap:10px;font-family:Orbitron,monospace;">
-  <div style="display:flex;gap:24px;align-items:center;background:rgba(5,5,20,.82);border:1px solid #223;border-radius:10px;padding:12px 22px;pointer-events:auto;">
+<div id="trainHud" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:50;flex-direction:column;align-items:center;justify-content:flex-start;padding:18px 24px;gap:8px;font-family:Orbitron,monospace;">
+  <!-- Stats + action buttons -->
+  <div style="display:flex;gap:20px;align-items:center;background:rgba(5,5,20,.85);border:1px solid #223;border-radius:10px;padding:10px 20px;pointer-events:auto;flex-wrap:wrap;justify-content:center;">
     <span id="trainGenNum" style="color:#4af;font-size:1.1rem;font-weight:700;">GEN 1</span>
     <span id="trainCountdown" style="color:#aaa;font-size:1rem;">35s</span>
     <span id="trainBestFit" style="color:#4f4;font-size:1rem;">BEST —</span>
@@ -42,10 +43,20 @@
     <button id="trainSaveBtn" class="btn btn-p" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">SAVE BEST</button>
     <button id="trainStopBtn" class="btn btn-s" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">STOP</button>
   </div>
+  <!-- Generation progress bar -->
   <div style="width:340px;height:6px;background:#111;border-radius:3px;overflow:hidden;pointer-events:none;">
-    <div id="trainBar" style="height:100%;width:0%;background:linear-gradient(90deg,#4af,#4f4);border-radius:3px;transition:width .25s linear;"></div>
+    <div id="trainBar" style="height:100%;width:0%;background:linear-gradient(90deg,#4af,#4f4);border-radius:3px;transition:width .2s linear;"></div>
   </div>
-  <div style="color:#556;font-size:.7rem;pointer-events:none;">20 CARS · GENETIC ALGORITHM · NEURAL NETWORK</div>
+  <!-- Sliders -->
+  <div style="display:flex;gap:18px;align-items:center;background:rgba(5,5,20,.78);border:1px solid #1a2030;border-radius:8px;padding:8px 18px;pointer-events:auto;">
+    <label style="color:#889;font-size:.7rem;white-space:nowrap;">CARS&nbsp;<span id="trainPopVal" style="color:#4af;">20</span></label>
+    <input id="trainPopSlider" type="range" min="4" max="40" value="20" step="4" style="width:90px;accent-color:#4af;">
+    <span style="color:#334;font-size:.65rem;">next&nbsp;run</span>
+    <span style="color:#445;">│</span>
+    <label style="color:#889;font-size:.7rem;white-space:nowrap;">SPEED&nbsp;<span id="trainFFVal" style="color:#fa4;">1×</span></label>
+    <input id="trainFFSlider" type="range" min="1" max="4" value="1" step="1" style="width:90px;accent-color:#fa4;">
+  </div>
+  <div style="color:#445;font-size:.65rem;pointer-events:none;">WASD · PAN CAMERA</div>
 </div>
 
 <div id="notif"></div>
