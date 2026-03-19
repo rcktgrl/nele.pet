@@ -255,12 +255,21 @@ export async function initTraining(){
   state.trainer=state.trainGroups[0].trainer;
   state.trainGrid=state.trainGroups[0].grid;
 
-  // One split-screen camera per simulation (follows best car in each group)
-  state.trainSplitCams=Array.from({length:N_SIMS},()=>{
-    const cam=new THREE.PerspectiveCamera(72,1,0.1,2000);
-    cam.position.set(0,80,0);
-    return cam;
-  });
+  // Single top-down orthographic camera showing all simulations at once
+  {
+    const xs=state.trkPts.map(p=>p.x), zs=state.trkPts.map(p=>p.z);
+    const minX=xs.length?Math.min(...xs):-200, maxX=xs.length?Math.max(...xs):200;
+    const minZ=zs.length?Math.min(...zs):-200, maxZ=zs.length?Math.max(...zs):200;
+    const tcx=(minX+maxX)/2, tcz=(minZ+maxZ)/2;
+    const span=Math.max(maxX-minX,maxZ-minZ)*0.6+80;
+    const aspect=window.innerWidth/window.innerHeight;
+    const topDownCam=new THREE.OrthographicCamera(-span*aspect,span*aspect,span,-span,1,2000);
+    topDownCam._span=span;
+    topDownCam.up.set(0,0,-1);
+    topDownCam.position.set(tcx,800,tcz);
+    topDownCam.lookAt(tcx,0,tcz);
+    state.trainSplitCams=[topDownCam];
+  }
 
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
   document.getElementById('hud').style.display='none';
