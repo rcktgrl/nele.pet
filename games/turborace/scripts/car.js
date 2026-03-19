@@ -101,7 +101,7 @@ class Car {
       }
       this.rpm = Math.max(gb.idleRpm, Math.min(gb.redlineRpm, gearRpm + (thr > .1 ? thr * 180 : 0)));
       // Forces — drag tuned per car so full throttle reaches exactly maxSpd
-      const thrust = thr * this.data.accel;
+      const thrust = (brk > 0.05 ? 0 : thr) * this.data.accel;
       const rollCoeff = 0.08;
       const dragCoeff = (this.data.accel - this.data.maxSpd * rollCoeff) / (this.data.maxSpd * this.data.maxSpd);
       const drag = this.spd * this.spd * dragCoeff;
@@ -110,11 +110,11 @@ class Car {
       this.spd = Math.max(0, Math.min(this.data.maxSpd, this.spd + (thrust - drag - roll - bForce) * dt));
       // Gravel: gradually drag speed down to 80 km/h max (22.2 m/s)
       if (this.onGravel && this.spd > 22.2) this.spd = Math.max(22.2, this.spd - 18 * dt);
-      // Steering — speed-based limit: high-speed behaviour unchanged, more turning below 50 kph,
+      // Steering — speed-based limit: boosted below 50 kph and above 100 kph,
       // ramps to 0 at standstill so cars can't spin in place.
       const spdKph = this.spd * 3.6;
       const sfHigh = Math.max(.28, 1 - this.spd / this.data.maxSpd * .60); // existing high-speed curve
-      const boost = spdKph < 50 ? 1 + 0.5 * (1 - spdKph / 50) : 1.0;     // up to 1.5× below 50 kph
+      const boost = spdKph < 100 ? 1 + 0.5 * (1 - spdKph / 100) : 1.0;    // up to 1.5× below 100 kph
       const ramp  = Math.min(1, spdKph);                                    // 0 at 0 kph → 1 at 1 kph
       const sf = sfHigh * boost * ramp;
       const hdlMult = this.onGravel ? 0.5 : 1.0;
