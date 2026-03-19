@@ -24,7 +24,7 @@ export const state = {
     gState: 'menu',
     selCar: null,
     selTrk: null,
-    aiDifficulty: 'medium',  // 'easy' | 'medium' | 'hard'
+    aiDifficulty: 'medium',  // 'easy' | 'medium' | 'hard' | 'neural'
     opponentMode: 'ai',      // 'ai' | 'ghost'
     carCardPreviewScene: null,
     carCardPreviewCamera: null,
@@ -58,5 +58,9 @@ export const state = {
     cityCorridors: null, // For city tracks: array of {x,z,hw,hd} axis-aligned driveable rectangles
     cityAiPts: null,    // For city tracks: dense waypoints following grid roads exactly
     gravelProfile: null, // Runoff profile used for gravel physics detection
-    renderer: null
+    renderer: null,
+    trainer: null,       // GeneticTrainer instance, active only during training
+    trainGrid: [],       // Array of {pos,hdg} start positions for training cars
+    trainPopSize: 20,    // Population size (read by initTraining)
+    trainFF: 1,          // Fast-forward multiplier (1–4 physics substeps per frame)
 };
