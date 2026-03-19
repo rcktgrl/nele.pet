@@ -86,6 +86,8 @@ default: return this.buildSportsMesh();
     [-.58,.58].forEach(x=>{addB(g,.52,.07,.05,x,.38,2.01,Lm);});
     // LED strip headlight accent
     addB(g,1.4,.03,.05,0,.34,2.01,Lm);
+    // Dark housing so red tail lights are visible against the red body
+    [-.62,.62].forEach(x=>addB(g,.56,.13,.04,x,.38,-2.02,Dm));
     this.tl=[];
     [-.62,.62].forEach(x=>{const m=matE(0xff1100,0x330000);const t=addB(g,.5,.07,.05,x,.38,-2.01,m);this.tl.push(t);});
     // Wide LED strip tail

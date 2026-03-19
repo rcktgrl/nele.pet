@@ -120,7 +120,7 @@ export function buildTrack(data){
   state.trkCurv=[];
   const N=state.trkPts.length;
   for(let i=0;i<N;i++){
-    const a=state.trkPts[(i-2+N)%N],b=state.trkPts[i],c=state.trkPts[(i+2)%N];
+    const a=state.trkPts[(i-8+N)%N],b=state.trkPts[i],c=state.trkPts[(i+8)%N];
     const ax=b.x-a.x,az=b.z-a.z,bx=c.x-b.x,bz=c.z-b.z;
     const la=Math.sqrt(ax*ax+az*az)||1,lb=Math.sqrt(bx*bx+bz*bz)||1;
     const dot=(ax*bx+az*bz)/(la*lb);
@@ -1172,7 +1172,7 @@ function addCityScenery(curve,data){
     const cn=pts.length;
     const cityAiCurv=[];
     for(let i=0;i<cn;i++){
-      const a=pts[(i-2+cn)%cn],b=pts[i],c=pts[(i+2)%cn];
+      const a=pts[(i-8+cn)%cn],b=pts[i],c=pts[(i+8)%cn];
       const aax=b.x-a.x,aaz=b.z-a.z,bbx=c.x-b.x,bbz=c.z-b.z;
       const la2=Math.sqrt(aax*aax+aaz*aaz)||1,lb2=Math.sqrt(bbx*bbx+bbz*bbz)||1;
       const dot2=(aax*bbx+aaz*bbz)/(la2*lb2);
