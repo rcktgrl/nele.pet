@@ -95,22 +95,24 @@ export class AI {
     // Fixes high-speed crashes: previously only the single worst-curvature point was used,
     // meaning a close tight corner could be ignored if a gentler curve was farther away.
     const ptSpacing=2;
-    // Shorter scan range prevents detecting corners 200m away and coasting the whole way.
-    // Aggressive braking only kicks in when the corner is actually close.
-    const scanDist=Math.round(6+speedFrac*35);
+    // Scan far enough ahead for the worst-case braking scenario: a car with brake≈15 decelerating
+    // from max speed to a hairpin needs ~100m, so use up to 50 points (100m) at full speed.
+    const scanDist=Math.round(6+speedFrac*44);
     let reqBrake=0;
     for(let k=1;k<scanDist;k++){
       const ki=(ci+k)%n;
       const curv=navCurv[ki];
       if(curv<0.03)continue; // lower threshold so gentle chicane turns aren't skipped
       const cornerSpd=c.data.maxSpd*c.data.hdl*(0.18+0.77*(1-curv));
-      // Use realistic distance (0.65 factor) so braking starts at the right point,
-      // not hundreds of metres early. Higher multiplier ensures hard braking near corners.
-      const dist=k*ptSpacing*0.65;
+      // Use true point spacing without compression factor — ghost data shows AI was braking
+      // too late because the 0.65 factor shrunk effective lookahead from 82m to 53m, shorter
+      // than the ~68m needed to stop a Viper GT before a hairpin.
+      const dist=k*ptSpacing;
       const speedOver=c.spd-cornerSpd;
       if(speedOver>0&&dist>0){
         const decel=(c.spd*c.spd-cornerSpd*cornerSpd)/(2*dist);
-        const brake=Math.min(1,decel/c.data.brake*1.8);
+        // 1.2× safety margin (was 1.8× — over-compensation for the now-fixed distance bug)
+        const brake=Math.min(1,decel/c.data.brake*1.2);
         if(brake>reqBrake)reqBrake=brake;
       }
     }
