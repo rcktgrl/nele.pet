@@ -114,12 +114,16 @@ export class NeuralAI {
   }
 
   _forward(inputs) {
+    this.lastInputs = inputs;
     const h = this.W1.map((row, i) =>
       Math.tanh(row.reduce((s, w, j) => s + w * inputs[j], 0) + this.b1[i])
     );
-    return this.W2.map((row, i) =>
+    this.lastHidden = h;
+    const out = this.W2.map((row, i) =>
       Math.tanh(row.reduce((s, w, j) => s + w * h[j], 0) + this.b2[i])
     );
+    this.lastOutputs = out;
+    return out;
   }
 
   update(dt) {
@@ -134,7 +138,7 @@ export class NeuralAI {
     if (moved < 0.015 * dt * 60) this.slowTimer += dt;
     else { this.slowTimer = Math.max(0, this.slowTimer - dt * 3); this.stuckCount = 0; }
 
-    if (c.stuckTimer > 1.5 || this.slowTimer > 2.5) {
+    if ((c.stuckTimer > 1.5 || this.slowTimer > 2.5) && state.gState !== 'training') {
       c.stuckTimer = 0; this.slowTimer = 0; this.stuckCount++;
       const navP = cityAiPoints ? cityAiPoints.pts : trackPoints;
       let md2 = Infinity, ri2 = 0;

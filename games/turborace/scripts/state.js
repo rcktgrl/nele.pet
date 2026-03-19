@@ -62,5 +62,6 @@ export const state = {
     trainer: null,       // GeneticTrainer instance, active only during training
     trainGrid: [],       // Array of {pos,hdg} start positions for training cars
     trainPopSize: 20,    // Population size (read by initTraining)
-    trainFF: 1,          // Fast-forward multiplier (1–4 physics substeps per frame)
+    trainFF: 1,          // Fast-forward multiplier (1–10 physics substeps per frame)
+    trainBestCarPos: null, // {x,z} of the best car's peak position from previous generation
 };

@@ -35,7 +35,7 @@ import {
 import {
   pauseRace, resumeRace,
   startRace, restartRace, updateResultsUI,
-  initTraining, stopTraining
+  initTraining, stopTraining, placeBestCarMarker
 } from './race.js';
 import { resetCarForTraining } from './trainer.js';
 import {
@@ -80,7 +80,16 @@ document.addEventListener('pointermove',e=>{
     raceCamOrbit.pitch=Math.max(-0.55,Math.min(0.75,raceCamOrbit.pitch-e.movementY*0.003));
     raceCamOrbit.lastInput=performance.now();
   }
+  if(state.gState==='training'&&e.buttons===2){
+    editorCam.yaw-=e.movementX*0.006;
+    editorCam.pitch=Math.max(0.25,Math.min(1.55,editorCam.pitch-e.movementY*0.004));
+  }
 });
+document.addEventListener('wheel',e=>{
+  if(state.gState==='training'){
+    editorCam.distance=Math.max(50,Math.min(1200,editorCam.distance*(1+Math.sign(e.deltaY)*0.08)));
+  }
+},{passive:true});
 gc.addEventListener('contextmenu',e=>e.preventDefault());
 
 // ═══════════════════════════════════════════════════════
@@ -131,9 +140,9 @@ function updateFrame(dt){
     if(state.editorNeedsRebuild&&performance.now()-state.editorLastRebuild>45){ editorRebuildScene(false); }
     drawEditorCanvas();
   }else if(state.gState==='training'){
-    // Fast-forward: run multiple physics substeps per rendered frame
+    // Fast-forward: run multiple physics substeps per rendered frame at full dt each
     const ffSteps=Math.max(1,state.trainFF||1);
-    const subDt=dt/ffSteps;
+    const subDt=Math.min(dt,0.05); // cap substep to avoid instability
     for(let _s=0;_s<ffSteps;_s++){
       for(const ai of state.aiControllers)ai.update(subDt);
       resolveCarCollisions(state.allCars);
@@ -141,8 +150,14 @@ function updateFrame(dt){
       for(let i=0;i<state.allCars.length;i++){
         if(state.allCars[i].finished) resetCarForTraining(state.allCars[i],state.trainGrid[i].pos,state.trainGrid[i].hdg);
       }
+      // Track position of leading car this substep
+      let _bi=0;
+      for(let i=1;i<state.allCars.length;i++){if(state.allCars[i].totalProg>state.allCars[_bi].totalProg)_bi=i;}
+      const _bc=state.allCars[_bi];
+      state.trainBestCarPos={x:_bc.pos.x,y:_bc.pos.y,z:_bc.pos.z};
       // Tick the GA; on generation boundary, respawn cars with evolved weights
       if(state.trainer.tick(subDt,state.allCars)){
+        if(state.trainBestCarPos) placeBestCarMarker(state.trainBestCarPos.x,state.trainBestCarPos.y,state.trainBestCarPos.z);
         for(let i=0;i<state.allCars.length;i++){
           const g=state.trainGrid[i%state.trainGrid.length];
           resetCarForTraining(state.allCars[i],g.pos,g.hdg);
@@ -169,6 +184,7 @@ function updateFrame(dt){
 // ═══════════════════════════════════════════════════════
 //  TRAINING HUD
 // ═══════════════════════════════════════════════════════
+let _nnCanvas=null;
 function updateTrainingHUD(){
   const t=state.trainer;
   document.getElementById('trainGenNum').textContent=`GEN ${t.generation+1}`;
@@ -176,6 +192,67 @@ function updateTrainingHUD(){
   document.getElementById('trainAvgFit').textContent=`AVG ${t.avgFitness.toFixed(1)}`;
   document.getElementById('trainCountdown').textContent=Math.max(0,Math.ceil(t.genDuration-t.genTime))+'s';
   document.getElementById('trainBar').style.width=Math.min(100,(t.genTime/t.genDuration)*100)+'%';
+  _drawNNViz();
+}
+
+function _drawNNViz(){
+  if(!_nnCanvas) _nnCanvas=document.getElementById('trainNNCanvas');
+  const cv=_nnCanvas; if(!cv) return;
+  const cx=cv.getContext('2d'); if(!cx) return;
+  const W=cv.width, H=cv.height;
+  cx.clearRect(0,0,W,H);
+  // Find the best car's AI controller (highest totalProg)
+  let bi=0;
+  for(let i=1;i<state.allCars.length;i++) if(state.allCars[i].totalProg>state.allCars[bi].totalProg) bi=i;
+  const ai=state.aiControllers[bi];
+  if(!ai) return;
+  // Layer x positions and node counts
+  const LAYERS=[7,5,2];
+  const LABELS=[['s-60','s-30','s0','s+30','s+60','spd','wpt'],['H0','H1','H2','H3','H4'],['steer','thrtl']];
+  const xs=[28, W/2, W-28];
+  const nodeR=7;
+  const activations=[ai.lastInputs||[], ai.lastHidden||[], ai.lastOutputs||[]];
+  // Compute node y positions
+  const ys=LAYERS.map((n,l)=>Array.from({length:n},(_,i)=>(i+1)/(n+1)*H));
+  // Draw edges (W1: layer0→1, W2: layer1→2)
+  const weights=[ai.W1, ai.W2]; // W1[h][i], W2[o][h]
+  for(let l=0;l<2;l++){
+    const src=ys[l], dst=ys[l+1];
+    const W_=weights[l];
+    for(let d=0;d<W_.length;d++){
+      for(let s=0;s<W_[d].length;s++){
+        const w=W_[d][s];
+        const alpha=Math.min(0.85,Math.abs(w)/3);
+        const thick=Math.min(3,Math.abs(w)*0.7+0.3);
+        cx.strokeStyle=w>0?`rgba(80,220,120,${alpha})`:`rgba(220,80,80,${alpha})`;
+        cx.lineWidth=thick;
+        cx.beginPath();
+        cx.moveTo(xs[l],src[s]);
+        cx.lineTo(xs[l+1],dst[d]);
+        cx.stroke();
+      }
+    }
+  }
+  // Draw nodes
+  for(let l=0;l<3;l++){
+    for(let n=0;n<LAYERS[l];n++){
+      const x=xs[l], y=ys[l][n];
+      const act=activations[l][n]??0;
+      const t=(act+1)/2; // 0..1
+      const r=Math.round(40+t*200), g2=Math.round(80+t*120), b=Math.round(200-t*150);
+      cx.beginPath(); cx.arc(x,y,nodeR,0,Math.PI*2);
+      cx.fillStyle=`rgb(${r},${g2},${b})`; cx.fill();
+      cx.strokeStyle='#334'; cx.lineWidth=1; cx.stroke();
+      if(l===0||l===2){
+        cx.fillStyle='#aab'; cx.font='7px monospace';
+        cx.textAlign=l===0?'right':'left';
+        cx.fillText(LABELS[l][n],x+(l===0?-nodeR-2:nodeR+2),y+2.5);
+      }
+    }
+  }
+  // Title
+  cx.fillStyle='#556'; cx.font='8px monospace'; cx.textAlign='center';
+  cx.fillText('NEURAL NET · BEST CAR',W/2,10);
 }
 
 // ═══════════════════════════════════════════════════════
