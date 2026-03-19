@@ -27,6 +27,7 @@ import {
   finalizeGhostRecording, setOnlineGhostToggle
 } from './ghost.js';
 import { getTrackById } from './editor.js';
+import { THREE } from './three.js';
 
 // ═══════════════════════════════════════════════════════
 //  RACE LOGIC
@@ -221,11 +222,11 @@ export async function initTraining(){
   // Grid of starting positions
   state.trainGrid=buildTrainingGrid(state.trkPts,popSize);
 
-  // Create one NeuralAI car per genome
-  const carData=CARS[state.selCar??0];
+  // Create one NeuralAI car per genome — randomise car type per car
   const trainingCars=[], trainingControllers=[];
   for(let i=0;i<popSize;i++){
     const g=state.trainGrid[i];
+    const carData=CARS[Math.floor(Math.random()*CARS.length)];
     const car=new Car(carData,g.pos,g.hdg,false,scene);
     car.aiAgg=1.0;
     const genome=state.trainer.population[i].genome;
@@ -275,11 +276,37 @@ export async function initTraining(){
   state.gState='training';
 }
 
+// ─── Best-car position marker ───────────────────────────────────────────────
+let _bestMarker=null;
+
+export function placeBestCarMarker(x,y,z){
+  if(!_bestMarker){
+    const ring=new THREE.Mesh(
+      new THREE.TorusGeometry(3.5,0.35,8,32),
+      new THREE.MeshBasicMaterial({color:0xffcc00,transparent:true,opacity:0.9})
+    );
+    ring.rotation.x=Math.PI/2;
+    const beam=new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18,0.18,18,8),
+      new THREE.MeshBasicMaterial({color:0xffcc00,transparent:true,opacity:0.55})
+    );
+    beam.position.y=9;
+    const group=new THREE.Group();
+    group.add(ring);
+    group.add(beam);
+    scene.add(group);
+    _bestMarker=group;
+  }
+  _bestMarker.position.set(x,y+0.2,z);
+}
+
 export function stopTraining(){
   if(_trainLapsBackup!==null&&state.trkData){
     state.trkData.laps=_trainLapsBackup;
     _trainLapsBackup=null;
   }
+  if(_bestMarker){ scene.remove(_bestMarker); _bestMarker=null; }
+  state.trainBestCarPos=null;
   document.getElementById('trainHud').style.display='none';
   state.trainer=null;
   state.trainGrid=[];

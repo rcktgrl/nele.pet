@@ -49,14 +49,16 @@
   </div>
   <!-- Sliders -->
   <div style="display:flex;gap:18px;align-items:center;background:rgba(5,5,20,.78);border:1px solid #1a2030;border-radius:8px;padding:8px 18px;pointer-events:auto;">
-    <label style="color:#889;font-size:.7rem;white-space:nowrap;">CARS&nbsp;<span id="trainPopVal" style="color:#4af;">20</span></label>
-    <input id="trainPopSlider" type="range" min="4" max="40" value="20" step="4" style="width:90px;accent-color:#4af;">
+    <label style="color:#889;font-size:.7rem;white-space:nowrap;">CARS&nbsp;<span id="trainPopVal" style="color:#4af;">8</span></label>
+    <input id="trainPopSlider" type="range" min="1" max="8" value="8" step="1" style="width:90px;accent-color:#4af;">
     <span style="color:#334;font-size:.65rem;">next&nbsp;run</span>
     <span style="color:#445;">│</span>
     <label style="color:#889;font-size:.7rem;white-space:nowrap;">SPEED&nbsp;<span id="trainFFVal" style="color:#fa4;">1×</span></label>
-    <input id="trainFFSlider" type="range" min="1" max="4" value="1" step="1" style="width:90px;accent-color:#fa4;">
+    <input id="trainFFSlider" type="range" min="1" max="10" value="1" step="1" style="width:90px;accent-color:#fa4;">
   </div>
-  <div style="color:#445;font-size:.65rem;pointer-events:none;">WASD · PAN CAMERA</div>
+  <div style="color:#445;font-size:.65rem;pointer-events:none;">WASD · PAN &nbsp;|&nbsp; RIGHT-DRAG · ORBIT &nbsp;|&nbsp; SCROLL · ZOOM</div>
+  <!-- Neural network visualiser -->
+  <canvas id="trainNNCanvas" width="260" height="160" style="position:fixed;bottom:18px;right:18px;border:1px solid #1a2535;border-radius:8px;background:rgba(4,6,18,.88);pointer-events:none;"></canvas>
 </div>
 
 <div id="notif"></div>
