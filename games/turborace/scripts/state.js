@@ -24,7 +24,7 @@ export const state = {
     gState: 'menu',
     selCar: null,
     selTrk: null,
-    aiDifficulty: 'medium',  // 'easy' | 'medium' | 'hard'
+    aiDifficulty: 'medium',  // 'easy' | 'medium' | 'hard' | 'neural'
     opponentMode: 'ai',      // 'ai' | 'ghost'
     carCardPreviewScene: null,
     carCardPreviewCamera: null,

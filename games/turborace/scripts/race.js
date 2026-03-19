@@ -4,6 +4,7 @@ import { state, scene, dc } from './state.js';
 import { buildTrack } from './track-gen.js';
 import { instantiateRaceCars } from './car.js';
 import { AI } from './ai-script.js';
+import { NeuralAI } from './neural-ai.js';
 import { setupLights } from './lighting.js';
 import {
   initAudio, initAiSounds, clearAiSounds,
@@ -50,7 +51,7 @@ export async function initRace(){
     selectedCarIndex: state.selCar,
     aiCount: ghostModeEnabled?0:4,
     scene: scene,
-    createAIController: (aiCar,i)=>new AI(aiCar,.044+i*.010,()=>({
+    createAIController: (aiCar,i)=>new (state.aiDifficulty==='neural'?NeuralAI:AI)(aiCar,.044+i*.010,()=>({
       trackPoints: state.trkPts,
       trackCurvature: state.trkCurv,
       cityAiPoints: state.cityAiPts,
