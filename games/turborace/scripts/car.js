@@ -57,8 +57,8 @@ class Car {
     if (this.finished) return;
     const { thr, brk, str } = inp;
 
-    // ── Reverse gear: hold brake while stopped (player only) ──
-    if (this.isPlayer && this.spd < 0.3 && brk > 0.5 && thr < 0.1 && !this.isReversing) {
+    // ── Reverse gear: hold brake while stopped ──
+    if (this.spd < 0.3 && brk > 0.5 && thr < 0.1 && !this.isReversing) {
       this.reverseTimer = (this.reverseTimer || 0) + dt;
       if (this.reverseTimer > 0.3) this.isReversing = true;
     } else if (thr > 0.1) {
@@ -195,9 +195,10 @@ class Car {
       const toWallX = wallPt.x - this.pos.x;
       const toWallZ = wallPt.z - this.pos.z;
       const wallDist = Math.hypot(toWallX, toWallZ);
-      if (wallDist < 0.6) {
+      const WALL_STOP = 1.2; // extended from 0.6 to prevent high-speed clip-through
+      if (wallDist < WALL_STOP) {
         const pushLen = wallDist || 1;
-        const pushBack = 0.6 - wallDist;
+        const pushBack = WALL_STOP - wallDist;
         this.pos.x -= (toWallX / pushLen) * pushBack;
         this.pos.z -= (toWallZ / pushLen) * pushBack;
         // Wall deflects the car rather than stopping it: keep most of the speed

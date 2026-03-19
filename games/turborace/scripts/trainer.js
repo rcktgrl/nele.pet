@@ -55,6 +55,9 @@ export function resetCarForTraining(car, pos, hdg) {
   car.totalProg = 0; car.finished = false; car.finTime = 0; car.lapStart = 0;
   car.lapTimes = []; car.prevGear = 1; car.rpmDrop = 0; car.stuckTimer = 0;
   car.isReversing = false; car.revSpd = 0; car.reverseTimer = 0; car.onGravel = false;
+  car._offTrack = false;
+  car._fitPenalty = 0;
+  car._trainPrevStuck = 0;
   car.mesh.position.copy(car.pos); car.mesh.rotation.y = car.hdg;
 }
 
@@ -96,8 +99,13 @@ export class GeneticTrainer {
   tick(dt, cars) {
     this.genTime += dt;
     for (let i = 0; i < Math.min(this.population.length, cars.length); i++) {
-      const p = cars[i] ? cars[i].totalProg : 0;
-      if (p > this._peakProg[i]) this._peakProg[i] = p;
+      const car = cars[i];
+      // Off-track cars are disqualified — their fitness is frozen at current value
+      if (!car || car._offTrack) continue;
+      // Penalise wall hits (large) and gravel (small) by subtracting from progress
+      const penalty = car._fitPenalty || 0;
+      const adjusted = Math.max(0, car.totalProg - penalty);
+      if (adjusted > this._peakProg[i]) this._peakProg[i] = adjusted;
       this.population[i].fitness = this._peakProg[i];
     }
     if (this.genTime >= this.genDuration) {
@@ -119,8 +127,9 @@ export class GeneticTrainer {
     const eliteN = Math.max(2, Math.floor(this.popSize * 0.3));
     const elites = this.population.slice(0, eliteN);
 
-    // Champion survives unchanged; rest are crossover + mutation children
-    const next = [{ genome: [...elites[0].genome], fitness: 0 }];
+    // All-time best genome always survives as champion (never regresses)
+    const championGenome = this.bestGenome ? [...this.bestGenome] : [...elites[0].genome];
+    const next = [{ genome: championGenome, fitness: 0 }];
     while (next.length < this.popSize) {
       const p1 = elites[Math.floor(Math.random() * eliteN)].genome;
       const p2 = elites[Math.floor(Math.random() * eliteN)].genome;
@@ -143,6 +152,25 @@ export class GeneticTrainer {
   saveToLocalStorage() {
     if (!this.bestGenome) return false;
     localStorage.setItem(LS_KEY, JSON.stringify(this.bestGenome));
+    return true;
+  }
+
+  exportAsJSON(name = 'neural-driver') {
+    if (!this.bestGenome) return false;
+    const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const model = {
+      id,
+      name,
+      version: 1,
+      genome: this.bestGenome,
+      fitness: this.bestFitness,
+      generation: this.generation,
+    };
+    const blob = new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = id + '.json'; a.click();
+    URL.revokeObjectURL(url);
     return true;
   }
 

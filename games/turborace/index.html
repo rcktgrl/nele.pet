@@ -40,7 +40,7 @@
     <span id="trainCountdown" style="color:#aaa;font-size:1rem;">35s</span>
     <span id="trainBestFit" style="color:#4f4;font-size:1rem;">BEST —</span>
     <span id="trainAvgFit" style="color:#fa4;font-size:1rem;">AVG 0.0</span>
-    <button id="trainSaveBtn" class="btn btn-p" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">SAVE BEST</button>
+    <button id="trainSaveBtn" class="btn btn-p" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">SAVE & EXPORT</button>
     <button id="trainStopBtn" class="btn btn-s" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">STOP</button>
   </div>
   <!-- Generation progress bar -->
@@ -54,9 +54,9 @@
     <span style="color:#334;font-size:.65rem;">next&nbsp;run</span>
     <span style="color:#445;">│</span>
     <label style="color:#889;font-size:.7rem;white-space:nowrap;">SPEED&nbsp;<span id="trainFFVal" style="color:#fa4;">1×</span></label>
-    <input id="trainFFSlider" type="range" min="1" max="10" value="1" step="1" style="width:90px;accent-color:#fa4;">
+    <input id="trainFFSlider" type="range" min="1" max="100" value="1" step="1" style="width:90px;accent-color:#fa4;">
   </div>
-  <div style="color:#445;font-size:.65rem;pointer-events:none;">WASD · PAN &nbsp;|&nbsp; RIGHT-DRAG · ORBIT &nbsp;|&nbsp; SCROLL · ZOOM</div>
+  <div style="color:#445;font-size:.65rem;pointer-events:none;">8 INDEPENDENT SIMULATIONS · 8 CARS EACH · BEST CAR SHOWN PER VIEW</div>
   <!-- Neural network visualiser -->
   <canvas id="trainNNCanvas" width="260" height="160" style="position:fixed;bottom:18px;right:18px;border:1px solid #1a2535;border-radius:8px;background:rgba(4,6,18,.88);pointer-events:none;"></canvas>
 </div>
