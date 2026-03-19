@@ -255,6 +255,14 @@ export async function initTraining(){
   state.trainer=state.trainGroups[0].trainer;
   state.trainGrid=state.trainGroups[0].grid;
 
+  // Only show group 0's cars initially; rest run hidden
+  for(let s=0;s<state.trainGroups.length;s++)
+    for(const car of state.trainGroups[s].cars) car.mesh.visible=(s===0);
+  state._trainVisibleGroup=0;
+  // Global best genome shared across all simulations
+  state.trainGlobalBestGenome=null;
+  state.trainGlobalBestFitness=-Infinity;
+
   // Single top-down orthographic camera showing all simulations at once
   {
     const xs=state.trkPts.map(p=>p.x), zs=state.trkPts.map(p=>p.z);
@@ -312,6 +320,9 @@ export function stopTraining(){
   }
   if(_bestMarker){ scene.remove(_bestMarker); _bestMarker=null; }
   state.trainBestCarPos=null;
+  state._trainVisibleGroup=0;
+  state.trainGlobalBestGenome=null;
+  state.trainGlobalBestFitness=-Infinity;
   document.getElementById('trainHud').style.display='none';
   state.trainer=null;
   state.trainGrid=[];

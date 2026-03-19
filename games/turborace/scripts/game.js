@@ -184,12 +184,33 @@ function updateFrame(dt){
           const bc=cars[bi];
           state.trainBestCarPos={x:bc.pos.x,y:bc.pos.y,z:bc.pos.z};
           placeBestCarMarker(bc.pos.x,bc.pos.y,bc.pos.z);
+          // Share global best genome across all sims so best traits propagate everywhere
+          if(trainer.bestGenome&&trainer.bestFitness>(state.trainGlobalBestFitness||-Infinity)){
+            state.trainGlobalBestFitness=trainer.bestFitness;
+            state.trainGlobalBestGenome=[...trainer.bestGenome];
+          }
+          if(state.trainGlobalBestGenome){
+            // Inject global champion into slot 0 of this group's next generation
+            trainer.population[0].genome=[...state.trainGlobalBestGenome];
+            if(state.trainGlobalBestFitness>trainer.bestFitness){
+              trainer.bestFitness=state.trainGlobalBestFitness;
+              trainer.bestGenome=[...state.trainGlobalBestGenome];
+            }
+          }
           for(let i=0;i<cars.length;i++){
             resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
             controllers[i].setWeights(trainer.population[i].genome);
           }
         }
       }
+    }
+    // Show only the best-performing group's cars; hide the rest
+    const bestGrpIdx=state.trainGroups.reduce((bi,g,i)=>
+      g.trainer.bestFitness>state.trainGroups[bi].trainer.bestFitness?i:bi,0);
+    if(state._trainVisibleGroup!==bestGrpIdx){
+      for(const car of state.trainGroups[state._trainVisibleGroup].cars) car.mesh.visible=false;
+      for(const car of state.trainGroups[bestGrpIdx].cars) car.mesh.visible=true;
+      state._trainVisibleGroup=bestGrpIdx;
     }
     if(state.trainSplitCams&&state.trainSplitCams.length){
       updateTrainSplitCameras();
