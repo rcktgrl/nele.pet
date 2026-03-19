@@ -57,8 +57,8 @@ class Car {
     if (this.finished) return;
     const { thr, brk, str } = inp;
 
-    // ── Reverse gear: hold brake while stopped (player only) ──
-    if (this.isPlayer && this.spd < 0.3 && brk > 0.5 && thr < 0.1 && !this.isReversing) {
+    // ── Reverse gear: hold brake while stopped ──
+    if (this.spd < 0.3 && brk > 0.5 && thr < 0.1 && !this.isReversing) {
       this.reverseTimer = (this.reverseTimer || 0) + dt;
       if (this.reverseTimer > 0.3) this.isReversing = true;
     } else if (thr > 0.1) {

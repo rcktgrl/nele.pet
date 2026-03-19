@@ -69,6 +69,9 @@ export class NeuralAI {
     this.prevPos = null;
     this.stuckCount = 0;
     this.context = context;
+    this.revMode = 'none'; // 'none' | 'braking' | 'reversing'
+    this.revTimer = 0;
+    this.revSteer = 0;
 
     if (genome) {
       const w = NeuralAI._unpack(genome);
@@ -157,27 +160,49 @@ export class NeuralAI {
     if (!trackPoints.length || this.car.finished) return;
     const c = this.car;
 
-    // ── Stuck detection ──────────────────────────────────────────────────────
+    // ── Stuck detection + reverse recovery ───────────────────────────────────
     if (!this.prevPos) this.prevPos = { x: c.pos.x, z: c.pos.z };
     const moved = Math.sqrt((c.pos.x - this.prevPos.x) ** 2 + (c.pos.z - this.prevPos.z) ** 2);
     this.prevPos.x = c.pos.x; this.prevPos.z = c.pos.z;
     if (moved < 0.015 * dt * 60) this.slowTimer += dt;
-    else { this.slowTimer = Math.max(0, this.slowTimer - dt * 3); this.stuckCount = 0; }
+    else { this.slowTimer = Math.max(0, this.slowTimer - dt * 3); if (this.revMode === 'none') this.stuckCount = 0; }
 
-    if ((c.stuckTimer > 1.5 || this.slowTimer > 2.5) && state.gState !== 'training') {
-      c.stuckTimer = 0; this.slowTimer = 0; this.stuckCount++;
-      const navP = cityAiPoints ? cityAiPoints.pts : trackPoints;
-      let md2 = Infinity, ri2 = 0;
-      for (let i = 0; i < navP.length; i++) {
-        const d = (c.pos.x - navP[i].x) ** 2 + (c.pos.z - navP[i].z) ** 2;
-        if (d < md2) { md2 = d; ri2 = i; }
+    // Active reverse manoeuvre — overrides all other AI logic
+    if (this.revMode === 'braking') {
+      this.revTimer += dt;
+      c.update({ thr: 0, brk: 1, str: 0 }, dt);
+      if (c.spd < 0.15 || this.revTimer > 0.8) { this.revMode = 'reversing'; this.revTimer = 0; }
+      return;
+    }
+    if (this.revMode === 'reversing') {
+      this.revTimer += dt;
+      c.update({ thr: 0, brk: 0.9, str: this.revSteer }, dt);
+      if (this.revTimer > 1.8) {
+        this.revMode = 'none'; this.slowTimer = 0; this.stuckCount++;
+        // Teleport fallback after repeated failed reversals (non-training only)
+        if (state.gState !== 'training' && this.stuckCount > 2) {
+          const navP = cityAiPoints ? cityAiPoints.pts : trackPoints;
+          let md2 = Infinity, ri2 = 0;
+          for (let i = 0; i < navP.length; i++) {
+            const d = (c.pos.x - navP[i].x) ** 2 + (c.pos.z - navP[i].z) ** 2;
+            if (d < md2) { md2 = d; ri2 = i; }
+          }
+          const ahead = 5 + this.stuckCount * 3;
+          const tp = navP[(ri2 + ahead) % navP.length];
+          const nxt = navP[(ri2 + ahead + 3) % navP.length];
+          c.pos.x = tp.x; c.pos.z = tp.z;
+          c.hdg = Math.atan2(nxt.x - tp.x, nxt.z - tp.z);
+          c.spd = 3; c.isReversing = false; c.revSpd = 0; this.stuckCount = 0;
+        }
       }
-      const ahead = 5 + this.stuckCount * 5;
-      const tp = navP[(ri2 + ahead) % navP.length];
-      const nxt = navP[(ri2 + ahead + 3) % navP.length];
-      c.pos.x = tp.x; c.pos.z = tp.z;
-      c.hdg = Math.atan2(nxt.x - tp.x, nxt.z - tp.z);
-      c.spd = 3; c.isReversing = false; c.revSpd = 0;
+      return;
+    }
+
+    // Trigger reverse when stuck for >1.5 s
+    if (this.slowTimer > 1.5 && this.revMode === 'none') {
+      this.revMode = 'braking'; this.revTimer = 0;
+      this.revSteer = (Math.random() > 0.5 ? 1 : -1) * 0.9;
+      c.stuckTimer = 0;
       return;
     }
 

@@ -148,7 +148,7 @@ function updateFrame(dt){
     const subDt=Math.min(dt,0.05); // cap substep to avoid instability
     for(let _s=0;_s<ffSteps;_s++){
       for(const ai of state.aiControllers)ai.update(subDt);
-      resolveCarCollisions(state.allCars);
+      // No inter-car collisions in training — each car is an independent simulation
       // Accumulate wall and gravel penalties for training fitness
       for(const car of state.allCars){
         if(car._offTrack)continue;

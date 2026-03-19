@@ -38,8 +38,13 @@ export function createRenderPipeline({
       // Multi-viewport split-screen for training
       renderer.setScissorTest(true);
       const n = splitCams.length;
-      const cols = n > 2 ? 2 : n;
-      const rows = Math.ceil(n / cols);
+      // Pick a grid that fits the screen well (landscape-biased)
+      let cols, rows;
+      if      (n <= 1) { cols=1; rows=1; }
+      else if (n <= 2) { cols=2; rows=1; }
+      else if (n <= 4) { cols=2; rows=2; }
+      else if (n <= 6) { cols=3; rows=2; }
+      else             { cols=4; rows=Math.ceil(n/4); }
       const vw = Math.floor(_W / cols);
       const vh = Math.floor(_H / rows);
       for (let i = 0; i < n; i++) {

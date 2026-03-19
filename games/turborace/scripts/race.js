@@ -246,8 +246,8 @@ export async function initTraining(){
   state.allCars=trainingCars;
   state.pCar=null;
 
-  // Split-screen cameras — one chase cam per visible slot (up to 4)
-  const nSplit=Math.min(4,popSize);
+  // Split-screen cameras — one chase cam per car so all are visible simultaneously
+  const nSplit=popSize;
   state.trainSplitCams=Array.from({length:nSplit},()=>{
     const cam=new THREE.PerspectiveCamera(72,1,0.1,2000);
     // Start cam above track centre; updateTrainSplitCameras lerps it to first car quickly

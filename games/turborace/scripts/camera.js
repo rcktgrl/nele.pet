@@ -57,10 +57,9 @@ export function toggleCam(){
 export function updateTrainSplitCameras(){
   const cams=state.trainSplitCams;
   if(!cams||!cams.length||!state.allCars.length)return;
-  // Sort by totalProg descending to pick top N cars
-  const sorted=[...state.allCars].sort((a,b)=>b.totalProg-a.totalProg);
+  // Each camera follows its own car by index so all cars are visible simultaneously
   for(let i=0;i<cams.length;i++){
-    const car=sorted[i];
+    const car=state.allCars[i];
     if(!car)continue;
     const cam=cams[i];
     const backHdg=car.hdg+Math.PI;
