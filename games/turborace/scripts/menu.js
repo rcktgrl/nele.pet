@@ -245,6 +245,7 @@ function buildTrackCards(tracks, container, nextBtnId){
     card.onclick=()=>{
       container.querySelectorAll('.tcard').forEach(x=>x.classList.remove('sel'));
       card.classList.add('sel'); state.selTrk=t.id; document.getElementById(nextBtnId).disabled=false;
+      const trainBtn=document.getElementById('btnTrainStart'); if(trainBtn) trainBtn.disabled=false;
     };
     container.appendChild(card);
     drawTrackPreview(canvas,t,t.previewColor||COLORS[i%COLORS.length]);
@@ -260,8 +261,18 @@ export async function showTrkSel(){
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrk').style.display='flex';
   document.getElementById('btnNxt').disabled=(state.selTrk==null);
+  const trainBtn=document.getElementById('btnTrainStart'); if(trainBtn) trainBtn.disabled=(state.selTrk==null);
   const tracks=state.folderTracks;
   await buildTrackCards(tracks,document.getElementById('trkCards'),'btnNxt');
+}
+
+// Opens the track selection screen in "train" mode (TRAIN button is the CTA).
+// Reuses the same screen; btnTrainStart is always visible there.
+export async function showTrainTrkSel(){
+  await showTrkSel();
+  // Scroll the train button into view so it's obvious
+  const trainBtn=document.getElementById('btnTrainStart');
+  if(trainBtn) trainBtn.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
 export function showDiffSel(){

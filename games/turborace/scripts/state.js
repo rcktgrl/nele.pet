@@ -58,5 +58,7 @@ export const state = {
     cityCorridors: null, // For city tracks: array of {x,z,hw,hd} axis-aligned driveable rectangles
     cityAiPts: null,    // For city tracks: dense waypoints following grid roads exactly
     gravelProfile: null, // Runoff profile used for gravel physics detection
-    renderer: null
+    renderer: null,
+    trainer: null,       // GeneticTrainer instance, active only during training
+    trainGrid: [],       // Array of {pos,hdg} start positions for training cars
 };

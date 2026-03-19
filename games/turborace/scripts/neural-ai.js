@@ -2,28 +2,11 @@
 import { state } from './state.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Pre-designed neural network weights
-//
-//  Architecture: 7 inputs → 5 hidden (tanh) → 2 outputs (tanh)
-//
-//  Inputs  [0-4]: distance sensor rays at -60°,-30°,0°,+30°,+60° from heading
-//                 (normalized: 1.0 = clear, ~0 = wall right there)
-//  Input   [5]  : speed fraction (car.spd / car.data.maxSpd)
-//  Input   [6]  : heading error to waypoint, normalized to (-1, 1)
-//
-//  Outputs [0]  : steer correction  (-1 = left, +1 = right)
-//  Outputs [1]  : throttle modifier  (maps to 0.6–1.1 multiplier)
-//
-//  Hidden nodes:
-//   H0 – danger left  : activates when left-side sensors detect a nearby wall
-//   H1 – danger right : activates when right-side sensors detect a nearby wall
-//   H2 – danger ahead : activates when centre ray is blocked
-//   H3 – open track   : activates when all rays are clear at high speed
-//   H4 – waypoint err : tracks heading error to the next waypoint
+//  Default hand-designed weights (module-level constants used as fallback)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // W1[h][i] = weight from input i to hidden node h
-const W1 = [
+const _W1 = [
   //      s0    s1    s2    s3    s4   spd  wperr
   [-2.0, -3.0, -0.5,  0.5,  0.3,  0.0,  0.0], // H0 danger-left
   [ 0.3,  0.5, -0.5, -3.0, -2.0,  0.0,  0.0], // H1 danger-right
@@ -31,22 +14,20 @@ const W1 = [
   [ 0.8,  0.8,  1.5,  0.8,  0.8,  1.5,  0.0], // H3 open-track
   [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0], // H4 waypoint-err
 ];
-const b1 = [1.0, 1.0, 1.5, -4.0, 0.0];
-
-// W2[o][h] = weight from hidden node h to output o
-const W2 = [
-  //     H0    H1    H2    H3    H4
-  [ 1.2, -1.2,  0.0,  0.0,  1.5], // steer  : L-danger→right, R-danger→left, wp
-  [-0.3, -0.3, -1.5,  1.5,  0.0], // throttle: wall-ahead→slow, open→fast
+const _b1 = [1.0, 1.0, 1.5, -4.0, 0.0];
+const _W2 = [
+  [ 1.2, -1.2,  0.0,  0.0,  1.5], // steer
+  [-0.3, -0.3, -1.5,  1.5,  0.0], // throttle
 ];
-const b2 = [0.0, 0.5];
+const _b2 = [0.0, 0.5];
 
-// ─── Ray-segment intersection ──────────────────────────────────────────────
-// Returns t ≥ 0 (distance along ray) if the ray hits the segment, else -1.
+// ─────────────────────────────────────────────────────────────────────────────
+//  Ray-segment intersection
+// ─────────────────────────────────────────────────────────────────────────────
 function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
   const ex = bx - ax, ez = bz - az;
   const det = dx * ez - dz * ex;
-  if (Math.abs(det) < 1e-8) return -1; // parallel
+  if (Math.abs(det) < 1e-8) return -1;
   const fx = ax - ox, fz = az - oz;
   const t = (fx * ez - fz * ex) / det;
   const s = (dz * fx - dx * fz) / det;
@@ -55,34 +36,71 @@ function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
 }
 
 const RAY_ANGLES = [-Math.PI / 3, -Math.PI / 6, 0, Math.PI / 6, Math.PI / 3];
-const RAY_DIST = 35; // metres
+const RAY_DIST = 35;
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  NeuralAI
+// ─────────────────────────────────────────────────────────────────────────────
 export class NeuralAI {
-  constructor(car, la, context) {
+  // genome: optional flat Float64 array of 52 weights.
+  //   If omitted, checks localStorage for saved trained weights.
+  //   Falls back to hand-designed defaults.
+  constructor(car, la, context, genome = null) {
     this.car = car;
     this.la = la || 0.055;
     this.slowTimer = 0;
     this.prevPos = null;
     this.stuckCount = 0;
     this.context = context;
+
+    if (genome) {
+      const w = NeuralAI._unpack(genome);
+      this.W1 = w.W1; this.b1 = w.b1; this.W2 = w.W2; this.b2 = w.b2;
+    } else {
+      // Try to use saved trained weights; otherwise use hand-designed defaults
+      const saved = localStorage.getItem('turborace_nn_weights');
+      if (saved) {
+        try {
+          const w = NeuralAI._unpack(JSON.parse(saved));
+          this.W1 = w.W1; this.b1 = w.b1; this.W2 = w.W2; this.b2 = w.b2;
+        } catch (_) { this._useDefaults(); }
+      } else {
+        this._useDefaults();
+      }
+    }
   }
 
-  // Cast 5 rays and return normalised distances (1=clear, ~0=wall).
+  _useDefaults() {
+    this.W1 = _W1; this.b1 = _b1; this.W2 = _W2; this.b2 = _b2;
+  }
+
+  // Replace weights mid-life (used by the genetic trainer between generations).
+  setWeights(genome) {
+    const w = NeuralAI._unpack(genome);
+    this.W1 = w.W1; this.b1 = w.b1; this.W2 = w.W2; this.b2 = w.b2;
+  }
+
+  // Unpack a flat 52-element genome into {W1, b1, W2, b2}.
+  static _unpack(g) {
+    let i = 0;
+    const W1 = Array.from({ length: 5 }, () => Array.from({ length: 7 }, () => g[i++]));
+    const b1 = Array.from({ length: 5 }, () => g[i++]);
+    const W2 = Array.from({ length: 2 }, () => Array.from({ length: 5 }, () => g[i++]));
+    const b2 = Array.from({ length: 2 }, () => g[i++]);
+    return { W1, b1, W2, b2 };
+  }
+
   _castRays(wallLeft, wallRight) {
     const c = this.car;
     const ox = c.pos.x, oz = c.pos.z;
     const rr = RAY_DIST * RAY_DIST * 1.5;
-
-    // Prefilter to only segments close to the car.
     const near = [];
     for (const walls of [wallLeft, wallRight]) {
       for (const w of walls) {
-        const cx = (w.x0 + w.x1) * 0.5 - ox;
-        const cz = (w.z0 + w.z1) * 0.5 - oz;
+        const cx = (w.x0 + w.x1) * 0.5 - ox, cz = (w.z0 + w.z1) * 0.5 - oz;
         if (cx * cx + cz * cz < rr) near.push(w);
       }
     }
-
     return RAY_ANGLES.map(a => {
       const angle = c.hdg + a;
       const dx = Math.sin(angle), dz = Math.cos(angle);
@@ -91,17 +109,16 @@ export class NeuralAI {
         const t = raySegment(ox, oz, dx, dz, w.x0, w.z0, w.x1, w.z1);
         if (t > 0 && t < minT) minT = t;
       }
-      return minT / RAY_DIST; // 1 = no wall in range, 0 = wall at car
+      return minT / RAY_DIST;
     });
   }
 
-  // Forward pass through the two-layer network.
   _forward(inputs) {
-    const h = W1.map((row, i) =>
-      Math.tanh(row.reduce((s, w, j) => s + w * inputs[j], 0) + b1[i])
+    const h = this.W1.map((row, i) =>
+      Math.tanh(row.reduce((s, w, j) => s + w * inputs[j], 0) + this.b1[i])
     );
-    return W2.map((row, i) =>
-      Math.tanh(row.reduce((s, w, j) => s + w * h[j], 0) + b2[i])
+    return this.W2.map((row, i) =>
+      Math.tanh(row.reduce((s, w, j) => s + w * h[j], 0) + this.b2[i])
     );
   }
 
@@ -110,11 +127,9 @@ export class NeuralAI {
     if (!trackPoints.length || this.car.finished) return;
     const c = this.car;
 
-    // ── Stuck detection (identical to scripted AI) ──────────────────────────
+    // ── Stuck detection ──────────────────────────────────────────────────────
     if (!this.prevPos) this.prevPos = { x: c.pos.x, z: c.pos.z };
-    const moved = Math.sqrt(
-      (c.pos.x - this.prevPos.x) ** 2 + (c.pos.z - this.prevPos.z) ** 2
-    );
+    const moved = Math.sqrt((c.pos.x - this.prevPos.x) ** 2 + (c.pos.z - this.prevPos.z) ** 2);
     this.prevPos.x = c.pos.x; this.prevPos.z = c.pos.z;
     if (moved < 0.015 * dt * 60) this.slowTimer += dt;
     else { this.slowTimer = Math.max(0, this.slowTimer - dt * 3); this.stuckCount = 0; }
@@ -149,27 +164,21 @@ export class NeuralAI {
     const speedFrac = c.spd / c.data.maxSpd;
     const look = useCity ? Math.round(4 + speedFrac * 12) : Math.round(6 + speedFrac * 22);
     const ti = (ci + look) % n;
-    const tgtX = navPts[ti].x, tgtZ = navPts[ti].z;
-    const dh = Math.atan2(tgtX - c.pos.x, tgtZ - c.pos.z);
+    const dh = Math.atan2(navPts[ti].x - c.pos.x, navPts[ti].z - c.pos.z);
     const he = ((dh - c.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     const wpSteer = Math.max(-1, Math.min(1, he * 1.8));
 
-    // ── Neural network ──────────────────────────────────────────────────────
-    const wallLeft = state.trkWallLeft || [];
-    const wallRight = state.trkWallRight || [];
-    const sensors = this._castRays(wallLeft, wallRight);
-    // Normalise heading error to (−1, 1) for network input.
+    // ── Neural network ───────────────────────────────────────────────────────
+    const sensors = this._castRays(state.trkWallLeft || [], state.trkWallRight || []);
     const inputs = [...sensors, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];
     const [nnSteer, thrMod] = this._forward(inputs);
 
-    // Blend waypoint steering with sensor-driven correction.
-    // The closer a wall is dead-ahead, the more we trust the sensor network.
     const fwdDanger = 1 - Math.min(sensors[1], sensors[2], sensors[3]);
-    const nnBlend = 0.3 + fwdDanger * 0.5; // 0.3 (open) → 0.8 (wall close ahead)
+    const nnBlend = 0.3 + fwdDanger * 0.5;
     let str = wpSteer * (1 - nnBlend) + nnSteer * nnBlend;
     str = Math.max(-1, Math.min(1, str));
 
-    // Edge pull-back for open tracks (same as scripted AI).
+    // Edge pull-back for open tracks
     if (!useCity && trackData) {
       const edgeDist = Math.sqrt(md);
       const wallDist = trackData.rw * 0.5;
@@ -183,7 +192,7 @@ export class NeuralAI {
       }
     }
 
-    // ── Braking (lookahead physics, tighter 1.0× margin vs scripted 1.2×) ──
+    // ── Braking (tighter 1.0× margin vs scripted AI's 1.2×) ─────────────────
     const ptSpacing = 2;
     const scanDist = Math.round(6 + speedFrac * 44);
     let reqBrake = 0;
@@ -196,7 +205,7 @@ export class NeuralAI {
       const speedOver = c.spd - cornerSpd;
       if (speedOver > 0 && dist > 0) {
         const decel = (c.spd * c.spd - cornerSpd * cornerSpd) / (2 * dist);
-        const brake = Math.min(1, decel / c.data.brake * 1.0); // tighter than scripted AI
+        const brake = Math.min(1, decel / c.data.brake * 1.0);
         if (brake > reqBrake) reqBrake = brake;
       }
     }
@@ -205,13 +214,8 @@ export class NeuralAI {
     let thr = 1.0;
     let brk = reqBrake;
     if (brk > 0.05) thr = Math.min(thr, 1 - brk);
-
-    // Neural throttle modifier: maps thrMod ∈ (-1,1) → scale ∈ (0.6, 1.1)
     thr *= 0.85 + thrMod * 0.25;
-
     if (c.onGravel) thr = Math.min(thr, 0.7);
-
-    // Full aggression — no rubber-banding for the neural AI.
     thr *= c.data.aiSpd * c.aiAgg * 1.15;
     thr = Math.min(1, Math.max(0, thr));
 

@@ -34,8 +34,10 @@ import {
 } from './ghost.js';
 import {
   pauseRace, resumeRace,
-  startRace, restartRace, updateResultsUI
+  startRace, restartRace, updateResultsUI,
+  initTraining, stopTraining
 } from './race.js';
+import { resetCarForTraining } from './trainer.js';
 import {
   editorRebuildScene, drawEditorCanvas,
   setEditorNodeCount, setEditorBrushAsset, setEditorBrushEnabled, setEditorBrushSize, setEditorBrushSpacing,
@@ -47,7 +49,8 @@ import {
 } from './editor.js';
 import {
   showMain, showIntro, showTrkSel, showCarSel,
-  showDiffSel, showOnlineTrkSel, showSettings, closeSettings
+  showDiffSel, showOnlineTrkSel, showSettings, closeSettings,
+  showTrainTrkSel
 } from './menu.js';
 import {
   closeTrackLeaderboardModal
@@ -127,6 +130,26 @@ function updateFrame(dt){
     updateEditorPreviewCamera(dt);
     if(state.editorNeedsRebuild&&performance.now()-state.editorLastRebuild>45){ editorRebuildScene(false); }
     drawEditorCanvas();
+  }else if(state.gState==='training'){
+    for(const ai of state.aiControllers)ai.update(dt);
+    resolveCarCollisions(state.allCars);
+    // Reset any car that finished (lap count is set to 999 but just in case)
+    for(let i=0;i<state.allCars.length;i++){
+      if(state.allCars[i].finished) resetCarForTraining(state.allCars[i],state.trainGrid[i].pos,state.trainGrid[i].hdg);
+    }
+    // Chase camera follows the current race leader
+    const lead=state.allCars.reduce((b,c)=>c.totalProg>b.totalProg?c:b,state.allCars[0]);
+    state.pCar=lead;
+    updateCamera();
+    // Tick the genetic algorithm; on generation boundary, respawn cars with new weights
+    if(state.trainer.tick(dt,state.allCars)){
+      for(let i=0;i<state.allCars.length;i++){
+        const g=state.trainGrid[i%state.trainGrid.length];
+        resetCarForTraining(state.allCars[i],g.pos,g.hdg);
+        state.aiControllers[i].setWeights(state.trainer.population[i].genome);
+      }
+    }
+    updateTrainingHUD();
   }else if(state.gState==='countdown'||state.gState==='finished'||state.gState==='paused'){
     if(state.gState==='finished'){
       state.raceTime+=dt;
@@ -138,6 +161,18 @@ function updateFrame(dt){
     if(state.gState==='countdown'||state.gState==='finished')updateGhostReplay();
     else for(const visual of ghostVisuals){ if(visual.tagEl)visual.tagEl.style.display='none'; }
   }
+}
+
+// ═══════════════════════════════════════════════════════
+//  TRAINING HUD
+// ═══════════════════════════════════════════════════════
+function updateTrainingHUD(){
+  const t=state.trainer;
+  document.getElementById('trainGenNum').textContent=`GEN ${t.generation+1}`;
+  document.getElementById('trainBestFit').textContent=`BEST ${t.bestFitness>0?t.bestFitness.toFixed(1):'—'}`;
+  document.getElementById('trainAvgFit').textContent=`AVG ${t.avgFitness.toFixed(1)}`;
+  document.getElementById('trainCountdown').textContent=Math.max(0,Math.ceil(t.genDuration-t.genTime))+'s';
+  document.getElementById('trainBar').style.width=Math.min(100,(t.genTime/t.genDuration)*100)+'%';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -211,6 +246,13 @@ document.getElementById('closeLeaderboardModalBtn').addEventListener('click',clo
 document.getElementById('leaderboardModal').addEventListener('click',e=>{ if(e.target.id==='leaderboardModal') closeTrackLeaderboardModal(); });
 document.getElementById('menuBtn').addEventListener('click',showMain);
 document.getElementById('raceAgainBtn').addEventListener('click',restartRace);
+document.getElementById('trainAiBtn').addEventListener('click',()=>{ tryStartMenuMusic(); showTrainTrkSel(); });
+document.getElementById('btnTrainStart').addEventListener('click',()=>{ void initTraining(); });
+document.getElementById('trainSaveBtn').addEventListener('click',()=>{
+  if(state.trainer&&state.trainer.saveToLocalStorage()) document.getElementById('trainSaveBtn').textContent='SAVED ✓';
+  setTimeout(()=>{ const b=document.getElementById('trainSaveBtn'); if(b)b.textContent='SAVE BEST'; },2000);
+});
+document.getElementById('trainStopBtn').addEventListener('click',()=>{ stopTraining(); showMain(); });
 
 // ═══════════════════════════════════════════════════════
 //  BOOT

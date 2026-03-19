@@ -2,9 +2,10 @@
 import { CARS } from './data/cars.js';
 import { state, scene, dc } from './state.js';
 import { buildTrack } from './track-gen.js';
-import { instantiateRaceCars } from './car.js';
+import { instantiateRaceCars, Car } from './car.js';
 import { AI } from './ai-script.js';
 import { NeuralAI } from './neural-ai.js';
+import { GeneticTrainer, buildTrainingGrid, resetCarForTraining } from './trainer.js';
 import { setupLights } from './lighting.js';
 import {
   initAudio, initAiSounds, clearAiSounds,
@@ -189,4 +190,76 @@ export function restartRace(){
   releaseAllTouchControls();
   document.getElementById('results').style.display='none';
   void initRace();
+}
+
+// ═══════════════════════════════════════════════════════
+//  TRAINING MODE
+// ═══════════════════════════════════════════════════════
+let _trainLapsBackup = null;
+
+export async function initTraining(){
+  // Clean up any prior race
+  for(const c of state.allCars) scene.remove(c.mesh);
+  state.allCars=[]; state.aiCars=[]; state.aiControllers=[]; state.pCar=null;
+  clearAiSounds(); clearGhostVisual();
+
+  // Build track geometry
+  state.trkData=getTrackById(state.selTrk);
+  try{ buildTrack(state.trkData); }catch(e){ console.error('buildTrack error:',e); }
+  setupLights();
+
+  // Prevent cars from "finishing" during training so they keep driving
+  _trainLapsBackup=state.trkData.laps;
+  state.trkData.laps=999;
+
+  // Trainer — seed from localStorage if available
+  const savedGenome=GeneticTrainer.loadFromLocalStorage();
+  state.trainer=new GeneticTrainer({popSize:20,genDuration:35});
+  state.trainer.initPopulation(savedGenome);
+
+  // Grid of starting positions
+  state.trainGrid=buildTrainingGrid(state.trkPts,state.trainer.popSize);
+
+  // Create one NeuralAI car per genome
+  const carData=CARS[state.selCar??0];
+  const trainingCars=[], trainingControllers=[];
+  for(let i=0;i<state.trainer.popSize;i++){
+    const g=state.trainGrid[i];
+    const car=new Car(carData,g.pos,g.hdg,false,scene);
+    car.aiAgg=1.0;
+    const genome=state.trainer.population[i].genome;
+    const ai=new NeuralAI(car,0.044+i*0.001,()=>({
+      trackPoints:state.trkPts,
+      trackCurvature:state.trkCurv,
+      cityAiPoints:state.cityAiPts,
+      corridors:state.cityCorridors,
+      trackData:state.trkData,
+      playerCar:null,
+    }),genome);
+    trainingCars.push(car);
+    trainingControllers.push(ai);
+  }
+  state.aiCars=trainingCars;
+  state.aiControllers=trainingControllers;
+  state.allCars=trainingCars;
+  state.pCar=trainingCars[0]; // camera anchor — updated each frame to lead car
+
+  document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
+  document.getElementById('hud').style.display='none';
+  document.getElementById('hint').style.display='none';
+  document.getElementById('trainHud').style.display='flex';
+  updateTouchControlsVisibility('training');
+  dc.style.display='none';
+  stopAudio(); stopMusic();
+  state.gState='training';
+}
+
+export function stopTraining(){
+  if(_trainLapsBackup!==null&&state.trkData){
+    state.trkData.laps=_trainLapsBackup;
+    _trainLapsBackup=null;
+  }
+  document.getElementById('trainHud').style.display='none';
+  state.trainer=null;
+  state.trainGrid=[];
 }

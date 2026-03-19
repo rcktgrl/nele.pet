@@ -32,6 +32,22 @@
   <div id="camLabel" class="hudBottomDock">[ C ] COCKPIT VIEW</div>
   <div id="mm"><canvas id="mmc" width="150" height="150"></canvas></div>
 </div>
+<!-- TRAINING HUD -->
+<div id="trainHud" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:50;flex-direction:column;align-items:center;justify-content:flex-start;padding:18px 24px;gap:10px;font-family:Orbitron,monospace;">
+  <div style="display:flex;gap:24px;align-items:center;background:rgba(5,5,20,.82);border:1px solid #223;border-radius:10px;padding:12px 22px;pointer-events:auto;">
+    <span id="trainGenNum" style="color:#4af;font-size:1.1rem;font-weight:700;">GEN 1</span>
+    <span id="trainCountdown" style="color:#aaa;font-size:1rem;">35s</span>
+    <span id="trainBestFit" style="color:#4f4;font-size:1rem;">BEST —</span>
+    <span id="trainAvgFit" style="color:#fa4;font-size:1rem;">AVG 0.0</span>
+    <button id="trainSaveBtn" class="btn btn-p" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">SAVE BEST</button>
+    <button id="trainStopBtn" class="btn btn-s" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">STOP</button>
+  </div>
+  <div style="width:340px;height:6px;background:#111;border-radius:3px;overflow:hidden;pointer-events:none;">
+    <div id="trainBar" style="height:100%;width:0%;background:linear-gradient(90deg,#4af,#4f4);border-radius:3px;transition:width .25s linear;"></div>
+  </div>
+  <div style="color:#556;font-size:.7rem;pointer-events:none;">20 CARS · GENETIC ALGORITHM · NEURAL NETWORK</div>
+</div>
+
 <div id="notif"></div>
 <div id="cd"></div>
 <div id="hint" class="hudBottomDock">W/↑ THROTTLE · S/↓ BRAKE (HOLD WHILE STOPPED = REVERSE) · A/D STEER · C CAMERA · ESC PAUSE</div>
@@ -137,6 +153,7 @@
   <div class="sub">3D Racing · Multiple Circuits · Full Cockpit</div>
   <div class="menuActions">
     <button id="gameStartBtn" class="btn btn-p">START RACE</button>
+    <button id="trainAiBtn" class="btn btn-s">TRAIN AI 🧠</button>
     <button id="trackEditorBtn" class="btn btn-s">TRACK EDITOR</button>
 <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
     <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
@@ -163,6 +180,7 @@
   <div class="menuActions menuActions-inline">
     <button id="trkSelBackBtn" class="btn btn-s">BACK</button>
     <button id="loadOnlineTracksBtn" class="btn btn-s">LOAD ONLINE TRACKS</button>
+    <button id="btnTrainStart" class="btn btn-s" disabled>TRAIN 🧠</button>
     <button id="btnNxt" class="btn btn-p" disabled>NEXT</button>
   </div>
 </div>
