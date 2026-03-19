@@ -143,56 +143,56 @@ function updateFrame(dt){
     if(state.editorNeedsRebuild&&performance.now()-state.editorLastRebuild>45){ editorRebuildScene(false); }
     drawEditorCanvas();
   }else if(state.gState==='training'){
-    // Fast-forward: run multiple physics substeps per rendered frame at full dt each
+    // Fast-forward: run multiple physics substeps per rendered frame
     const ffSteps=Math.max(1,state.trainFF||1);
-    const subDt=Math.min(dt,0.05); // cap substep to avoid instability
+    const subDt=Math.min(dt,0.05);
+    const halfW=state.trkData?state.trkData.rw*0.55:999;
     for(let _s=0;_s<ffSteps;_s++){
-      for(const ai of state.aiControllers)ai.update(subDt);
-      // No inter-car collisions in training — each car is an independent simulation
-      // Accumulate wall and gravel penalties for training fitness
-      for(const car of state.allCars){
-        if(car._offTrack)continue;
-        if(!car._fitPenalty)car._fitPenalty=0;
-        // Wall hit: stuckTimer increased this substep → car is against a wall
-        const prevStuck=car._trainPrevStuck||0;
-        if(car.stuckTimer>prevStuck) car._fitPenalty+=5*subDt;   // wall penalty
-        if(car.onGravel)             car._fitPenalty+=0.5*subDt; // gravel penalty
-        car._trainPrevStuck=car.stuckTimer;
-      }
-      // Off-track detection: car center more than half road width from nearest waypoint
-      if(state.trkData&&state.trkPts.length){
-        const halfW=state.trkData.rw*0.55;
-        for(const car of state.allCars){
+      // Each simulation group runs independently
+      for(const grp of state.trainGroups){
+        const{cars,controllers,trainer,grid}=grp;
+        // Update AI (includes braking, steering, throttle)
+        for(const ai of controllers)ai.update(subDt);
+        // Collisions within this group (cars of the same sim push each other)
+        resolveCarCollisions(cars);
+        // Fitness penalties: wall hits and gravel
+        for(const car of cars){
           if(car._offTrack)continue;
-          let md=Infinity;
-          for(const p of state.trkPts){const dx=car.pos.x-p.x,dz=car.pos.z-p.z;const d=dx*dx+dz*dz;if(d<md)md=d;}
-          if(Math.sqrt(md)>halfW){car._offTrack=true;car._fitPenalty=(car._fitPenalty||0)+200;}
+          if(!car._fitPenalty)car._fitPenalty=0;
+          const prevStuck=car._trainPrevStuck||0;
+          if(car.stuckTimer>prevStuck) car._fitPenalty+=5*subDt;
+          if(car.onGravel)             car._fitPenalty+=0.5*subDt;
+          car._trainPrevStuck=car.stuckTimer;
         }
-      }
-      // Reset any car that somehow finishes (laps set to 999, but just in case)
-      for(let i=0;i<state.allCars.length;i++){
-        if(state.allCars[i].finished) resetCarForTraining(state.allCars[i],state.trainGrid[i].pos,state.trainGrid[i].hdg);
-      }
-      // Track position of leading car this substep
-      let _bi=0;
-      for(let i=1;i<state.allCars.length;i++){if(state.allCars[i].totalProg>state.allCars[_bi].totalProg)_bi=i;}
-      const _bc=state.allCars[_bi];
-      state.trainBestCarPos={x:_bc.pos.x,y:_bc.pos.y,z:_bc.pos.z};
-      // Tick the GA; on generation boundary, respawn cars with evolved weights
-      if(state.trainer.tick(subDt,state.allCars)){
-        if(state.trainBestCarPos) placeBestCarMarker(state.trainBestCarPos.x,state.trainBestCarPos.y,state.trainBestCarPos.z);
-        for(let i=0;i<state.allCars.length;i++){
-          const g=state.trainGrid[i%state.trainGrid.length];
-          resetCarForTraining(state.allCars[i],g.pos,g.hdg);
-          state.aiControllers[i].setWeights(state.trainer.population[i].genome);
+        // Off-track detection
+        if(state.trkPts.length){
+          for(const car of cars){
+            if(car._offTrack)continue;
+            let md=Infinity;
+            for(const p of state.trkPts){const dx=car.pos.x-p.x,dz=car.pos.z-p.z;const d=dx*dx+dz*dz;if(d<md)md=d;}
+            if(Math.sqrt(md)>halfW){car._offTrack=true;car._fitPenalty=(car._fitPenalty||0)+200;}
+          }
+        }
+        // Finished reset (laps=999 so rare, but guard)
+        for(let i=0;i<cars.length;i++){
+          if(cars[i].finished)resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
+        }
+        // Tick the GA for this group; evolve on generation boundary
+        if(trainer.tick(subDt,cars)){
+          let bi=0;
+          for(let i=1;i<cars.length;i++){if(cars[i].totalProg>cars[bi].totalProg)bi=i;}
+          const bc=cars[bi];
+          state.trainBestCarPos={x:bc.pos.x,y:bc.pos.y,z:bc.pos.z};
+          placeBestCarMarker(bc.pos.x,bc.pos.y,bc.pos.z);
+          for(let i=0;i<cars.length;i++){
+            resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
+            controllers[i].setWeights(trainer.population[i].genome);
+          }
         }
       }
     }
-    // Split-screen cameras follow the top N cars; fall back to top-down if no split cams
     if(state.trainSplitCams&&state.trainSplitCams.length){
       updateTrainSplitCameras();
-    }else{
-      updateEditorPreviewCamera(dt);
     }
     updateTrainingHUD();
   }else if(state.gState==='countdown'||state.gState==='finished'||state.gState==='paused'){
@@ -213,10 +213,16 @@ function updateFrame(dt){
 // ═══════════════════════════════════════════════════════
 let _nnCanvas=null;
 function updateTrainingHUD(){
-  const t=state.trainer;
-  document.getElementById('trainGenNum').textContent=`GEN ${t.generation+1}`;
+  const groups=state.trainGroups;
+  if(!groups||!groups.length)return;
+  // Show stats from the group with the best all-time fitness
+  const bestGrp=groups.reduce((b,g)=>g.trainer.bestFitness>b.trainer.bestFitness?g:b,groups[0]);
+  const t=bestGrp.trainer;
+  const avgGen=Math.round(groups.reduce((s,g)=>s+g.trainer.generation,0)/groups.length);
+  const avgFit=groups.reduce((s,g)=>s+g.trainer.avgFitness,0)/groups.length;
+  document.getElementById('trainGenNum').textContent=`GEN ${avgGen+1}`;
   document.getElementById('trainBestFit').textContent=`BEST ${t.bestFitness>0?t.bestFitness.toFixed(1):'—'}`;
-  document.getElementById('trainAvgFit').textContent=`AVG ${t.avgFitness.toFixed(1)}`;
+  document.getElementById('trainAvgFit').textContent=`AVG ${avgFit.toFixed(1)}`;
   document.getElementById('trainCountdown').textContent=Math.max(0,Math.ceil(t.genDuration-t.genTime))+'s';
   document.getElementById('trainBar').style.width=Math.min(100,(t.genTime/t.genDuration)*100)+'%';
   _drawNNViz();
@@ -228,10 +234,14 @@ function _drawNNViz(){
   const cx=cv.getContext('2d'); if(!cx) return;
   const W=cv.width, H=cv.height;
   cx.clearRect(0,0,W,H);
-  // Find the best car's AI controller (highest totalProg)
-  let bi=0;
-  for(let i=1;i<state.allCars.length;i++) if(state.allCars[i].totalProg>state.allCars[bi].totalProg) bi=i;
-  const ai=state.aiControllers[bi];
+  // Find the best car's AI controller across all simulation groups
+  let bestAI=null, bestProg=-1;
+  for(const grp of state.trainGroups){
+    for(let i=0;i<grp.cars.length;i++){
+      if(grp.cars[i].totalProg>bestProg){bestProg=grp.cars[i].totalProg;bestAI=grp.controllers[i];}
+    }
+  }
+  const ai=bestAI;
   if(!ai) return;
   // Layer x positions and node counts
   const LAYERS=[7,5,2];
@@ -356,9 +366,12 @@ document.getElementById('raceAgainBtn').addEventListener('click',restartRace);
 document.getElementById('trainAiBtn').addEventListener('click',()=>{ tryStartMenuMusic(); showTrainTrkSel(); });
 document.getElementById('btnTrainStart').addEventListener('click',()=>{ void initTraining(); });
 document.getElementById('trainSaveBtn').addEventListener('click',()=>{
-  if(!state.trainer)return;
-  const saved=state.trainer.saveToLocalStorage();
-  const exported=state.trainer.exportAsJSON('neural-driver');
+  const groups=state.trainGroups;
+  if(!groups||!groups.length)return;
+  // Save the best genome across all parallel simulations
+  const best=groups.reduce((b,g)=>g.trainer.bestFitness>b.trainer.bestFitness?g:b,groups[0]).trainer;
+  const saved=best.saveToLocalStorage();
+  const exported=best.exportAsJSON('neural-driver');
   if(saved||exported) document.getElementById('trainSaveBtn').textContent='EXPORTED ✓';
   setTimeout(()=>{ const b=document.getElementById('trainSaveBtn'); if(b)b.textContent='SAVE & EXPORT'; },2000);
 });

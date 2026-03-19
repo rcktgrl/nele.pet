@@ -65,4 +65,5 @@ export const state = {
     trainFF: 1,          // Fast-forward multiplier (1–10 physics substeps per frame)
     trainBestCarPos: null, // {x,z} of the best car's peak position from previous generation
     trainSplitCams: [],  // PerspectiveCamera array for split-screen training view
+    trainGroups: [],     // [{cars, controllers, trainer, grid}] — one per simulation
 };

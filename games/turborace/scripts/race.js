@@ -198,10 +198,13 @@ export function restartRace(){
 // ═══════════════════════════════════════════════════════
 let _trainLapsBackup = null;
 
+const N_SIMS = 8; // Number of independent parallel simulations per generation
+
 export async function initTraining(){
-  // Clean up any prior race
+  // Clean up any prior race / training
   for(const c of state.allCars) scene.remove(c.mesh);
   state.allCars=[]; state.aiCars=[]; state.aiControllers=[]; state.pCar=null;
+  state.trainGroups=[];
   clearAiSounds(); clearGhostVisual();
 
   // Build track geometry
@@ -209,71 +212,55 @@ export async function initTraining(){
   try{ buildTrack(state.trkData); }catch(e){ console.error('buildTrack error:',e); }
   setupLights();
 
-  // Prevent cars from "finishing" during training so they keep driving
+  // Prevent cars from "finishing" during training
   _trainLapsBackup=state.trkData.laps;
   state.trkData.laps=999;
 
-  // Trainer — seed from localStorage if available
-  const popSize=state.trainPopSize||20;
+  const carsPerSim=Math.max(1,state.trainPopSize||8);
   const savedGenome=GeneticTrainer.loadFromLocalStorage();
-  state.trainer=new GeneticTrainer({popSize,genDuration:35});
-  state.trainer.initPopulation(savedGenome);
 
-  // Grid of starting positions
-  state.trainGrid=buildTrainingGrid(state.trkPts,popSize);
+  // Shared context function (same track for all sims)
+  const contextFn=()=>({
+    trackPoints:state.trkPts,
+    trackCurvature:state.trkCurv,
+    cityAiPoints:state.cityAiPts,
+    corridors:state.cityCorridors,
+    trackData:state.trkData,
+    playerCar:null,
+  });
 
-  // Create one NeuralAI car per genome — randomise car type per car
-  const trainingCars=[], trainingControllers=[];
-  for(let i=0;i<popSize;i++){
-    const g=state.trainGrid[i];
-    const carData=CARS[Math.floor(Math.random()*CARS.length)];
-    const car=new Car(carData,g.pos,g.hdg,false,scene);
-    car.aiAgg=1.0;
-    const genome=state.trainer.population[i].genome;
-    const ai=new NeuralAI(car,0.044+i*0.001,()=>({
-      trackPoints:state.trkPts,
-      trackCurvature:state.trkCurv,
-      cityAiPoints:state.cityAiPts,
-      corridors:state.cityCorridors,
-      trackData:state.trkData,
-      playerCar:null,
-    }),genome);
-    trainingCars.push(car);
-    trainingControllers.push(ai);
+  // Create N_SIMS independent simulations, each with their own trainer and cars
+  for(let s=0;s<N_SIMS;s++){
+    const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:35});
+    trainer.initPopulation(savedGenome);
+    const grid=buildTrainingGrid(state.trkPts,carsPerSim);
+    const cars=[], controllers=[];
+    for(let i=0;i<carsPerSim;i++){
+      const g=grid[i];
+      const carData=CARS[Math.floor(Math.random()*CARS.length)];
+      const car=new Car(carData,g.pos,g.hdg,false,scene);
+      car.aiAgg=1.0;
+      const ai=new NeuralAI(car,0.044+i*0.001,contextFn,trainer.population[i].genome);
+      cars.push(car); controllers.push(ai);
+    }
+    state.trainGroups.push({cars,controllers,trainer,grid});
   }
-  state.aiCars=trainingCars;
-  state.aiControllers=trainingControllers;
-  state.allCars=trainingCars;
-  state.pCar=null;
 
-  // Split-screen cameras — one chase cam per car so all are visible simultaneously
-  const nSplit=popSize;
-  state.trainSplitCams=Array.from({length:nSplit},()=>{
+  // Flatten for legacy global state used by HUD viz etc.
+  state.allCars=state.trainGroups.flatMap(g=>g.cars);
+  state.aiCars=state.allCars;
+  state.aiControllers=state.trainGroups.flatMap(g=>g.controllers);
+  state.pCar=null;
+  // Keep state.trainer pointing to first group for any legacy code
+  state.trainer=state.trainGroups[0].trainer;
+  state.trainGrid=state.trainGroups[0].grid;
+
+  // One split-screen camera per simulation (follows best car in each group)
+  state.trainSplitCams=Array.from({length:N_SIMS},()=>{
     const cam=new THREE.PerspectiveCamera(72,1,0.1,2000);
-    // Start cam above track centre; updateTrainSplitCameras lerps it to first car quickly
     cam.position.set(0,80,0);
     return cam;
   });
-
-  // Top-down camera — compute track bounds and snap camEditor above the track
-  {
-    const pts=state.trkPts;
-    let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
-    for(const p of pts){
-      if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
-      if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z;
-    }
-    const cx=(minX+maxX)/2, cz=(minZ+maxZ)/2;
-    const span=Math.max(200,Math.max(maxX-minX,maxZ-minZ));
-    editorCam.target.set(cx,0,cz);
-    editorCam.yaw=0;
-    editorCam.pitch=1.42; // near top-down
-    editorCam.distance=span*0.72;
-    // Snap camera to position immediately so there's no lerp delay
-    const horiz=Math.cos(editorCam.pitch)*editorCam.distance;
-    camEditor.position.set(cx+Math.sin(0)*horiz, Math.sin(editorCam.pitch)*editorCam.distance, cz+Math.cos(0)*horiz);
-    camEditor.lookAt(cx,0,cz);
-  }
 
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
   document.getElementById('hud').style.display='none';
@@ -319,5 +306,6 @@ export function stopTraining(){
   document.getElementById('trainHud').style.display='none';
   state.trainer=null;
   state.trainGrid=[];
+  state.trainGroups=[];
   state.trainSplitCams=[];
 }
