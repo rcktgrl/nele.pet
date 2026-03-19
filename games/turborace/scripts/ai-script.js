@@ -99,13 +99,13 @@ export class AI {
       const ki=(ci+k)%n;
       const curv=navCurv[ki];
       if(curv<0.05)continue;
-      const cornerSpd=c.data.maxSpd*(diff.cornerSpeedFloor+0.75*(1-curv));
+      const cornerSpd=c.data.maxSpd*(diff.cornerSpeedFloor+0.55*(1-curv));
       // Shrink effective distance so AI treats the corner as closer → brakes earlier
-      const dist=k*ptSpacing*0.55;
+      const dist=k*ptSpacing*0.42;
       const speedOver=c.spd-cornerSpd;
       if(speedOver>0&&dist>0){
         const decel=(c.spd*c.spd-cornerSpd*cornerSpd)/(2*dist);
-        const brake=Math.min(1,decel/c.data.brake);
+        const brake=Math.min(1,decel/c.data.brake*1.25);
         if(brake>reqBrake)reqBrake=brake;
       }
     }
