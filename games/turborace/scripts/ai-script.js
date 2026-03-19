@@ -100,7 +100,8 @@ export class AI {
       const curv=navCurv[ki];
       if(curv<0.05)continue;
       const cornerSpd=c.data.maxSpd*(diff.cornerSpeedFloor+0.75*(1-curv));
-      const dist=k*ptSpacing;
+      // Shrink effective distance so AI treats the corner as closer → brakes earlier
+      const dist=k*ptSpacing*0.55;
       const speedOver=c.spd-cornerSpd;
       if(speedOver>0&&dist>0){
         const decel=(c.spd*c.spd-cornerSpd*cornerSpd)/(2*dist);
