@@ -730,11 +730,17 @@ async function loginOrRegister(mode) {
     return;
   }
 
-  const activeUser = data.user || data.session?.user;
+  // When email confirmation is required, signUp returns a user but no session.
+  // Block access until the user verifies their email and logs in properly.
+  if (mode === 'register' && !data.session) {
+    feedback.textContent = 'Account created. Check your email for the verification link, then log in.';
+    return;
+  }
+
+  const activeUser = data.session?.user;
 
   if (!activeUser) {
-    // Registration succeeded but email verification is required before login.
-    feedback.textContent = 'Account created. Check your email for the verification link, then log in.';
+    feedback.textContent = 'Something went wrong. Please try again.';
     return;
   }
 
