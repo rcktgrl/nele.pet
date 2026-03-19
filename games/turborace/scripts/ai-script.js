@@ -113,7 +113,7 @@ export class AI {
     // Steering-based penalties were the root cause of slowing to a crawl and stopping.
     let thr=1.0;
     let brk=reqBrake;
-    if(brk>0.05) thr=0;  // cut throttle fully when braking — partial throttle was fighting the brakes
+    if(brk>0.05) thr=Math.min(thr,1-brk);
 
     if(!cityCorridors&&trackData){
       const edgeDist=Math.sqrt(md);

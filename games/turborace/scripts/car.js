@@ -101,7 +101,7 @@ class Car {
       }
       this.rpm = Math.max(gb.idleRpm, Math.min(gb.redlineRpm, gearRpm + (thr > .1 ? thr * 180 : 0)));
       // Forces — drag tuned per car so full throttle reaches exactly maxSpd
-      const thrust = thr * this.data.accel;
+      const thrust = (brk > 0.05 ? 0 : thr) * this.data.accel;
       const rollCoeff = 0.08;
       const dragCoeff = (this.data.accel - this.data.maxSpd * rollCoeff) / (this.data.maxSpd * this.data.maxSpd);
       const drag = this.spd * this.spd * dragCoeff;
