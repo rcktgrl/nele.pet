@@ -1,10 +1,12 @@
 import { state } from './state.js';
 
-// Difficulty presets — applied on top of base AI behaviour
+// Difficulty presets — only aggMult varies; braking/cornering physics are the same for all.
+// Speed should not be artificially limited by difficulty — the AI drives at full pace and
+// difficulty is expressed through how aggressively it accelerates and overtakes.
 const DIFF = {
-  easy:   { aggMult: 0.78, spdMult: 0.82, cornerSpeedFloor: 0.38 },
-  medium: { aggMult: 1.00, spdMult: 1.00, cornerSpeedFloor: 0.46 },
-  hard:   { aggMult: 1.10, spdMult: 1.08, cornerSpeedFloor: 0.54 },
+  easy:   { aggMult: 0.72 },
+  medium: { aggMult: 1.00 },
+  hard:   { aggMult: 1.15 },
 };
 
 export class AI {
@@ -99,8 +101,7 @@ export class AI {
       const ki=(ci+k)%n;
       const curv=navCurv[ki];
       if(curv<0.03)continue; // lower threshold so gentle chicane turns aren't skipped
-      // Scale corner speed by spdMult so easy-mode targets aren't higher than the car's actual speed
-      const cornerSpd=c.data.maxSpd*diff.spdMult*(diff.cornerSpeedFloor+0.55*(1-curv));
+      const cornerSpd=c.data.maxSpd*(0.40+0.55*(1-curv));
       // Shrink effective distance so AI treats the corner as closer → brakes earlier
       const dist=k*ptSpacing*0.42;
       const speedOver=c.spd-cornerSpd;
@@ -135,7 +136,7 @@ export class AI {
       thr=Math.min(thr,0.7);
     }
 
-    thr*=c.data.aiSpd*c.aiAgg*diff.aggMult*diff.spdMult;
+    thr*=c.data.aiSpd*c.aiAgg*diff.aggMult;
     thr=Math.min(1,thr);
     if(playerCar){const lead=c.totalProg-playerCar.totalProg;if(lead>8)thr*=.93;else if(lead<-8)thr=Math.min(1,thr*1.05);}
     c.update({thr,brk:Math.min(1,brk),str},dt);
