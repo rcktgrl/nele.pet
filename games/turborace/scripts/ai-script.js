@@ -2,9 +2,9 @@ import { state } from './state.js';
 
 // Difficulty presets — applied on top of base AI behaviour
 const DIFF = {
-  easy:   { aggMult: 0.78, spdMult: 0.82, cornerSpeedFloor: 0.30 },
-  medium: { aggMult: 1.00, spdMult: 1.00, cornerSpeedFloor: 0.38 },
-  hard:   { aggMult: 1.10, spdMult: 1.08, cornerSpeedFloor: 0.46 },
+  easy:   { aggMult: 0.78, spdMult: 0.82, cornerSpeedFloor: 0.38 },
+  medium: { aggMult: 1.00, spdMult: 1.00, cornerSpeedFloor: 0.46 },
+  hard:   { aggMult: 1.10, spdMult: 1.08, cornerSpeedFloor: 0.54 },
 };
 
 export class AI {
@@ -93,12 +93,12 @@ export class AI {
     // Fixes high-speed crashes: previously only the single worst-curvature point was used,
     // meaning a close tight corner could be ignored if a gentler curve was farther away.
     const ptSpacing=2;
-    const scanDist=Math.round(24+speedFrac*120);  // look further ahead so AI brakes earlier
+    const scanDist=Math.round(16+speedFrac*90);
     let reqBrake=0;
     for(let k=1;k<scanDist;k++){
       const ki=(ci+k)%n;
       const curv=navCurv[ki];
-      if(curv<0.02)continue;  // catch gentler curves that also need braking
+      if(curv<0.05)continue;
       const cornerSpd=c.data.maxSpd*(diff.cornerSpeedFloor+0.75*(1-curv));
       const dist=k*ptSpacing;
       const speedOver=c.spd-cornerSpd;

@@ -114,8 +114,7 @@ class Car {
       // ramps to 0 at standstill so cars can't spin in place.
       const spdKph = this.spd * 3.6;
       const sfHigh = Math.max(.28, 1 - this.spd / this.data.maxSpd * .60); // existing high-speed curve
-      const boost = spdKph < 50  ? 1 + 0.5 * (1 - spdKph / 50) :          // up to 1.5× below 50 kph
-                    spdKph > 100 ? 1 + Math.min(0.5, (spdKph - 100) / 100 * 0.5) : 1.0; // up to 1.5× above 100 kph
+      const boost = spdKph < 100 ? 1 + 0.5 * (1 - spdKph / 100) : 1.0;    // up to 1.5× below 100 kph
       const ramp  = Math.min(1, spdKph);                                    // 0 at 0 kph → 1 at 1 kph
       const sf = sfHigh * boost * ramp;
       const hdlMult = this.onGravel ? 0.5 : 1.0;
