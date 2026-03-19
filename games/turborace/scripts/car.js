@@ -110,10 +110,15 @@ class Car {
       this.spd = Math.max(0, Math.min(this.data.maxSpd, this.spd + (thrust - drag - roll - bForce) * dt));
       // Gravel: gradually drag speed down to 80 km/h max (22.2 m/s)
       if (this.onGravel && this.spd > 22.2) this.spd = Math.max(22.2, this.spd - 18 * dt);
-      // Steering
-      const sf = Math.max(.28, 1 - this.spd / this.data.maxSpd * .60);
+      // Steering — speed-based limit: high-speed behaviour unchanged, more turning below 50 kph,
+      // ramps to 0 at standstill so cars can't spin in place.
+      const spdKph = this.spd * 3.6;
+      const sfHigh = Math.max(.28, 1 - this.spd / this.data.maxSpd * .60); // existing high-speed curve
+      const boost = spdKph < 50 ? 1 + 0.5 * (1 - spdKph / 50) : 1.0;     // up to 1.5× below 50 kph
+      const ramp  = Math.min(1, spdKph);                                    // 0 at 0 kph → 1 at 1 kph
+      const sf = sfHigh * boost * ramp;
       const hdlMult = this.onGravel ? 0.5 : 1.0;
-      if (this.spd > .5) this.hdg += str * this.data.hdl * hdlMult * 2.2 * sf * dt;
+      if (this.spd > 0) this.hdg += str * this.data.hdl * hdlMult * 2.2 * sf * dt;
       // Move forward
       const fwd = new THREE.Vector3(Math.sin(this.hdg), 0, Math.cos(this.hdg));
       this.pos.addScaledVector(fwd, this.spd * dt);
