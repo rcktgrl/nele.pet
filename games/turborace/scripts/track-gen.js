@@ -116,15 +116,20 @@ export function buildTrack(data){
   state.trkCurve=curve; state.trkPts=curve.getSpacedPoints(500);
   state.trkWallLeft=[];
   state.trkWallRight=[];
-  // Precompute per-point curvature (0=straight, 1=very tight) for AI adaptive lookahead
+  // Precompute per-point curvature (0=straight, 1=very tight) for AI adaptive lookahead.
+  // Two scales: ±8 for wide curves, ±3 for tight chicanes. Take the max so chicanes
+  // (which average to ~0 curvature in the wide window) are not missed.
   state.trkCurv=[];
   const N=state.trkPts.length;
   for(let i=0;i<N;i++){
-    const a=state.trkPts[(i-8+N)%N],b=state.trkPts[i],c=state.trkPts[(i+8)%N];
-    const ax=b.x-a.x,az=b.z-a.z,bx=c.x-b.x,bz=c.z-b.z;
-    const la=Math.sqrt(ax*ax+az*az)||1,lb=Math.sqrt(bx*bx+bz*bz)||1;
-    const dot=(ax*bx+az*bz)/(la*lb);
-    state.trkCurv[i]=Math.max(0,1-Math.min(1,(dot+1)/2*1.2)); // 0=straight 1=hairpin
+    const calcCurv=(w)=>{
+      const a=state.trkPts[(i-w+N)%N],p=state.trkPts[i],c=state.trkPts[(i+w)%N];
+      const ax=p.x-a.x,az=p.z-a.z,bx=c.x-p.x,bz=c.z-p.z;
+      const la=Math.sqrt(ax*ax+az*az)||1,lb=Math.sqrt(bx*bx+bz*bz)||1;
+      const dot=(ax*bx+az*bz)/(la*lb);
+      return Math.max(0,1-Math.min(1,(dot+1)/2*1.2));
+    };
+    state.trkCurv[i]=Math.max(calcCurv(3),calcCurv(8)); // 0=straight 1=hairpin
   }
 
   // ── Adaptive segment counts: more on curves, fewer on straights ──

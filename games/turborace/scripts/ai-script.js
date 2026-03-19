@@ -98,8 +98,9 @@ export class AI {
     for(let k=1;k<scanDist;k++){
       const ki=(ci+k)%n;
       const curv=navCurv[ki];
-      if(curv<0.05)continue;
-      const cornerSpd=c.data.maxSpd*(diff.cornerSpeedFloor+0.55*(1-curv));
+      if(curv<0.03)continue; // lower threshold so gentle chicane turns aren't skipped
+      // Scale corner speed by spdMult so easy-mode targets aren't higher than the car's actual speed
+      const cornerSpd=c.data.maxSpd*diff.spdMult*(diff.cornerSpeedFloor+0.55*(1-curv));
       // Shrink effective distance so AI treats the corner as closer → brakes earlier
       const dist=k*ptSpacing*0.42;
       const speedOver=c.spd-cornerSpd;
