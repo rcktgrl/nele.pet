@@ -584,6 +584,7 @@ document.getElementById('btnTrainStart').addEventListener('click',()=>{ showTrai
 document.getElementById('trainSetupBackBtn').addEventListener('click',()=>{ showTrainTrkSel(); });
 document.getElementById('trainSetupStartBtn').addEventListener('click', async ()=>{
   await initTraining({preservedGenome: getTrainSetupGenome()});
+  _syncTrainHudSliders();
   _populateTrainTrkSelect();
 });
 document.getElementById('trainSetupHiddenSlider').addEventListener('input',e=>{
@@ -702,6 +703,21 @@ _makeClickToType('trainHiddenVal',{min:1,max:null,stateKey:'trainHiddenLayers',s
 _makeClickToType('trainNodesVal',{min:1,max:null,stateKey:'trainHiddenSize',sliderId:'trainNodesSlider'});
 
 // Rewards & Penalties panel toggle
+function _syncTrainHudSliders(){
+  const sync=(id,valId,val,fmt)=>{
+    const el=document.getElementById(id); if(el)el.value=val;
+    const v=document.getElementById(valId); if(v)v.textContent=fmt(val);
+  };
+  sync('trainOnTrackRateSlider','trainOnTrackRateVal',state.trainOnTrackRewardRate,v=>v.toFixed(2));
+  sync('trainStuckPenaltySlider','trainStuckPenaltyVal',state.trainStuckPenaltyRate,v=>v.toFixed(1));
+  sync('trainGravelPenaltySlider','trainGravelPenaltyVal',state.trainGravelPenaltyBase,v=>v.toFixed(1));
+  sync('trainGravelGrowthSlider','trainGravelGrowthVal',state.trainGravelGrowth,v=>v.toFixed(2));
+  sync('trainOffTrackMultSlider','trainOffTrackMultVal',state.trainOffTrackMult,v=>parseInt(v)+'×');
+  sync('trainOffTrackDQTimeSlider','trainOffTrackDQTimeVal',state.trainOffTrackDQTime,v=>v.toFixed(1)+'s');
+  sync('trainDQPenaltySlider','trainDQPenaltyVal',state.trainDQPenalty,v=>parseInt(v));
+  sync('trainMutRateSlider','trainMutRateVal',state.trainMutRate,v=>v.toFixed(2));
+  sync('trainMutStrengthSlider','trainMutStrengthVal',state.trainMutStrength,v=>v.toFixed(2));
+}
 document.getElementById('trainRewardsPanelToggle').addEventListener('click',()=>{
   const panel=document.getElementById('trainRewardsPanel');
   const btn=document.getElementById('trainRewardsPanelToggle');
