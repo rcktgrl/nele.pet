@@ -345,11 +345,15 @@ function _drawNNViz(){
 
   const LAYERS=ai.layers;
   const nL=LAYERS.length;
-  const nodeR=Math.max(3,Math.min(7,Math.floor(H/(Math.max(...LAYERS)+1)/2)));
+  const maxNodes=Math.max(...LAYERS);
+  // Allow radius to shrink freely so nodes never overlap regardless of layer size
+  const nodeR=Math.max(1,Math.min(6,Math.floor(H/(maxNodes+2)/2)-1));
+  // Shrink side margins when many layers are present so they don't crowd
+  const margin=Math.max(18,Math.min(28,Math.floor(W/(nL+1))));
 
   // X positions: first and last columns pinned, middle ones evenly spaced
   const xs=Array.from({length:nL},(_,l)=>
-    l===0?28:l===nL-1?W-28:Math.round(28+(W-56)*l/(nL-1))
+    l===0?margin:l===nL-1?W-margin:Math.round(margin+(W-margin*2)*l/(nL-1))
   );
 
   // Build activation arrays: [inputs, ...hiddens, outputs]
@@ -363,6 +367,8 @@ function _drawNNViz(){
   const INPUT_LABELS=['s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','spd','wpt','edge','grav'];
   const OUTPUT_LABELS=['steer','thrtl','brake'];
 
+  // Threshold below which edges are too dim to bother drawing (also limits cost for large nets)
+  const edgeAlphaMin=0.06;
   // Draw edges for each layer transition
   for(let l=0;l<nL-1;l++){
     const src=ys[l], dst=ys[l+1];
@@ -371,7 +377,8 @@ function _drawNNViz(){
       for(let s=0;s<Wm[d].length;s++){
         const w=Wm[d][s];
         const alpha=Math.min(0.85,Math.abs(w)/3);
-        const thick=Math.min(3,Math.abs(w)*0.7+0.3);
+        if(alpha<edgeAlphaMin) continue;
+        const thick=Math.min(2,Math.abs(w)*0.7+0.3);
         cx.strokeStyle=w>0?`rgba(80,220,120,${alpha})`:`rgba(220,80,80,${alpha})`;
         cx.lineWidth=thick;
         cx.beginPath();
@@ -391,12 +398,18 @@ function _drawNNViz(){
       cx.beginPath(); cx.arc(x,y,nodeR,0,Math.PI*2);
       cx.fillStyle=`rgb(${r},${g2},${b})`; cx.fill();
       cx.strokeStyle='#334'; cx.lineWidth=1; cx.stroke();
-      if(l===0&&INPUT_LABELS[n]){
-        cx.fillStyle='#aab'; cx.font='6px monospace'; cx.textAlign='right';
-        cx.fillText(INPUT_LABELS[n],x-nodeR-2,y+2);
-      } else if(l===nL-1&&OUTPUT_LABELS[n]){
-        cx.fillStyle='#aab'; cx.font='6px monospace'; cx.textAlign='left';
-        cx.fillText(OUTPUT_LABELS[n],x+nodeR+2,y+2);
+      // Labels only when there's enough vertical room (≥8px spacing per node)
+      const spacing=H/(LAYERS[l]+1);
+      if(spacing>=8){
+        if(l===0&&INPUT_LABELS[n]){
+          const fs=Math.max(5,Math.min(7,Math.floor(spacing*0.55)));
+          cx.fillStyle='#aab'; cx.font=`${fs}px monospace`; cx.textAlign='right';
+          cx.fillText(INPUT_LABELS[n],x-nodeR-2,y+2);
+        } else if(l===nL-1&&OUTPUT_LABELS[n]){
+          const fs=Math.max(5,Math.min(7,Math.floor(spacing*0.55)));
+          cx.fillStyle='#aab'; cx.font=`${fs}px monospace`; cx.textAlign='left';
+          cx.fillText(OUTPUT_LABELS[n],x+nodeR+2,y+2);
+        }
       }
     }
   }
