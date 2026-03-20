@@ -155,6 +155,8 @@ function updateFrame(dt){
     if(state.editorNeedsRebuild&&performance.now()-state.editorLastRebuild>45){ editorRebuildScene(false); }
     drawEditorCanvas();
   }else if(state.gState==='training'){
+    // Remove fog during training for better visibility
+    if(scene.fog){scene.fog=null;}
     // Fast-forward: run multiple physics substeps per rendered frame
     const ffSteps=Math.max(1,state.trainFF||1);
     const subDt=Math.min(dt,0.05);
@@ -168,22 +170,35 @@ function updateFrame(dt){
         for(const ai of controllers)ai.update(subDt);
         // Collisions within this group (cars of the same sim push each other)
         resolveCarCollisions(cars);
-        // Fitness penalties: wall hits and gravel
+        // Fitness penalties: wall hits and progressive gravel
         for(const car of cars){
           if(car._offTrack)continue;
           if(!car._fitPenalty)car._fitPenalty=0;
           const prevStuck=car._trainPrevStuck||0;
           if(car.stuckTimer>prevStuck) car._fitPenalty+=5*subDt;
-          if(car.onGravel)             car._fitPenalty+=0.5*subDt;
           car._trainPrevStuck=car.stuckTimer;
+          // Progressive gravel: rate grows the longer a car stays on gravel
+          if(car.onGravel){
+            car._gravelTime=(car._gravelTime||0)+subDt;
+            car._fitPenalty+=0.5*(1+car._gravelTime*0.3)*subDt;
+            car._offTrackTime=0;
+          }else{
+            car._gravelTime=Math.max(0,(car._gravelTime||0)-subDt);
+          }
         }
-        // Off-track detection
+        // Off-track detection: neither on track nor gravel → 10× gravel rate (progressive)
         if(state.trkPts.length){
           for(const car of cars){
             if(car._offTrack)continue;
             let md=Infinity;
             for(const p of state.trkPts){const dx=car.pos.x-p.x,dz=car.pos.z-p.z;const d=dx*dx+dz*dz;if(d<md)md=d;}
-            if(Math.sqrt(md)>halfW){car._offTrack=true;car._fitPenalty=(car._fitPenalty||0)+200;}
+            if(Math.sqrt(md)>halfW&&!car.onGravel){
+              car._offTrackTime=(car._offTrackTime||0)+subDt;
+              car._fitPenalty+=0.5*(1+car._offTrackTime*0.3)*10*subDt;
+              if(car._offTrackTime>3){car._offTrack=true;car._fitPenalty=(car._fitPenalty||0)+200;}
+            }else{
+              car._offTrackTime=0;
+            }
           }
         }
         // Finished reset (laps=999 so rare, but guard)
@@ -293,8 +308,8 @@ function _drawNNViz(){
   const ys=LAYERS.map((n,l)=>Array.from({length:n},(_,i)=>(i+1)/(n+1)*H));
 
   // Labels (only first and last layer)
-  const INPUT_LABELS=['s-60','s-30','s0','s+30','s+60','spd','wpt','edge','grav'];
-  const OUTPUT_LABELS=['steer','thrtl'];
+  const INPUT_LABELS=['s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','spd','wpt','edge','grav'];
+  const OUTPUT_LABELS=['steer','thrtl','brake'];
 
   // Draw edges for each layer transition
   for(let l=0;l<nL-1;l++){

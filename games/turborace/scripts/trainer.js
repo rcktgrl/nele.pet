@@ -10,25 +10,27 @@ export function computeGenomeSize(layers) {
   return s;
 }
 
-/** Legacy: genome size for default [9,5,2] architecture. */
-export const GENOME_SIZE = computeGenomeSize([9, 5, 2]); // 62
+/** Genome size for default [13,5,3] architecture. */
+export const GENOME_SIZE = computeGenomeSize([13, 5, 3]); // 88
 
-// Hand-designed seed genome for [9,5,2]:
-//   5 wall sensors + speed + waypointErr + edgeProximity + gravelFlag → 5 hidden → 2 out
+// Hand-designed seed genome for [13,5,3]:
+//   9 wall sensors (-60,-30,-10,-5,0,+5,+10,+30,+60) + speed + waypointErr + edgeProximity + gravelFlag
+//   → 5 hidden → 3 out (steer, throttle, brake)
 export const DEFAULT_GENOME = [
-  // W1: 5 rows × 9 inputs  (s-60 s-30 s0 s+30 s+60 spd wpt edge grav)
-  -2.0, -3.0, -0.5,  0.5,  0.3,  0.0,  0.0,  0.8,  0.5,  // H0 danger-left
-   0.3,  0.5, -0.5, -3.0, -2.0,  0.0,  0.0,  0.8,  0.5,  // H1 danger-right
-   0.0, -0.5, -3.0, -0.5,  0.0,  0.0,  0.0,  0.5,  0.5,  // H2 danger-ahead
-   0.8,  0.8,  1.5,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0,  // H3 open-track
-   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  // H4 waypoint-err
+  // W1: 5 rows × 13 inputs  (s-60 s-30 s-10 s-5 s0 s+5 s+10 s+30 s+60 spd wpt edge grav)
+  -2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0,  0.0,  0.8,  0.5,  // H0 danger-left
+   0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0,  0.0,  0.0,  0.8,  0.5,  // H1 danger-right
+   0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0,  0.0,  0.5,  0.5,  // H2 danger-ahead
+   0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0,  // H3 open-track
+   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  // H4 waypoint-err
   // b1: 5
   1.0, 1.0, 1.5, -4.0, 0.0,
-  // W2: 2 rows × 5
+  // W2: 3 rows × 5
    1.2, -1.2,  0.0,  0.0,  1.5,  // steer
   -0.3, -0.3, -1.5,  1.5,  0.0,  // throttle
-  // b2: 2
-  0.0, 0.5,
+  -0.5, -0.5, -2.0, -0.5,  0.0,  // brake
+  // b2: 3
+  0.0, 0.5, -1.5,
 ];
 
 /**
@@ -37,21 +39,8 @@ export const DEFAULT_GENOME = [
  */
 export function buildDefaultGenome(layers) {
   const key = JSON.stringify(layers);
-  if (key === '[9,5,2]') return [...DEFAULT_GENOME];
-  if (key === '[7,5,2]') {
-    return [
-      -2.0,-3.0,-0.5, 0.5, 0.3, 0.0, 0.0,
-       0.3, 0.5,-0.5,-3.0,-2.0, 0.0, 0.0,
-       0.0,-0.5,-3.0,-0.5, 0.0, 0.0, 0.0,
-       0.8, 0.8, 1.5, 0.8, 0.8, 1.5, 0.0,
-       0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0,
-      1.0, 1.0, 1.5,-4.0, 0.0,
-       1.2,-1.2, 0.0, 0.0, 1.5,
-      -0.3,-0.3,-1.5, 1.5, 0.0,
-      0.0, 0.5,
-    ];
-  }
-  // Xavier random init for novel architectures
+  if (key === '[13,5,3]') return [...DEFAULT_GENOME];
+  // Xavier random init for other architectures
   const genome = [];
   for (let l = 0; l < layers.length - 1; l++) {
     const nIn = layers[l], nOut = layers[l + 1];
@@ -96,6 +85,8 @@ export function resetCarForTraining(car, pos, hdg) {
   car._offTrack = false;
   car._fitPenalty = 0;
   car._trainPrevStuck = 0;
+  car._gravelTime = 0;
+  car._offTrackTime = 0;
   car.mesh.position.copy(car.pos); car.mesh.rotation.y = car.hdg;
 }
 
@@ -105,7 +96,7 @@ export function resetCarForTraining(car, pos, hdg) {
 const LS_KEY = 'turborace_nn_weights';
 
 export class GeneticTrainer {
-  constructor({ popSize = 20, genDuration = 35, mutRate = 0.15, mutStrength = 0.35, layers = [9, 5, 2] } = {}) {
+  constructor({ popSize = 20, genDuration = 35, mutRate = 0.15, mutStrength = 0.35, layers = [13, 5, 3] } = {}) {
     this.popSize = popSize;
     this.genDuration = genDuration;
     this.mutRate = mutRate;

@@ -19,24 +19,26 @@ let _repoGenome = null;
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Default hand-designed weights for [9, 5, 2] architecture
-//  Inputs: 5 wall sensors, speed, waypointErr, edgeProximity, gravelFlag
+//  Default hand-designed weights for [13, 5, 3] architecture
+//  Inputs: 9 wall sensors (-60,-30,-10,-5,0,+5,+10,+30,+60), speed, waypointErr, edgeProximity, gravelFlag
+//  Outputs: steer, throttle, brake
 // ─────────────────────────────────────────────────────────────────────────────
-const _DEFAULT_LAYERS = [9, 5, 2];
-//                     s-60  s-30    s0  s+30  s+60   spd  wpt  edge  grav
+const _DEFAULT_LAYERS = [13, 5, 3];
+//                     s-60  s-30  s-10   s-5    s0   s+5  s+10  s+30  s+60   spd   wpt  edge  grav
 const _W1 = [
-  [-2.0, -3.0, -0.5,  0.5,  0.3,  0.0,  0.0,  0.8,  0.5], // H0 danger-left
-  [ 0.3,  0.5, -0.5, -3.0, -2.0,  0.0,  0.0,  0.8,  0.5], // H1 danger-right
-  [ 0.0, -0.5, -3.0, -0.5,  0.0,  0.0,  0.0,  0.5,  0.5], // H2 danger-ahead
-  [ 0.8,  0.8,  1.5,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0], // H3 open-track
-  [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0], // H4 waypoint-err
+  [-2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0,  0.0,  0.8,  0.5], // H0 danger-left
+  [ 0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0,  0.0,  0.0,  0.8,  0.5], // H1 danger-right
+  [ 0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0,  0.0,  0.5,  0.5], // H2 danger-ahead
+  [ 0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0], // H3 open-track
+  [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0], // H4 waypoint-err
 ];
 const _b1 = [1.0, 1.0, 1.5, -4.0, 0.0];
 const _W2 = [
   [ 1.2, -1.2,  0.0,  0.0,  1.5], // steer
   [-0.3, -0.3, -1.5,  1.5,  0.0], // throttle
+  [-0.5, -0.5, -2.0, -0.5,  0.0], // brake
 ];
-const _b2 = [0.0, 0.5];
+const _b2 = [0.0, 0.5, -1.5];
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Ray-segment intersection
@@ -52,7 +54,14 @@ function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
   return -1;
 }
 
-const RAY_ANGLES = [-Math.PI / 3, -Math.PI / 6, 0, Math.PI / 6, Math.PI / 3];
+// 9 rays: ±60°, ±30°, ±10°, ±5°, 0° (forward)
+const RAY_ANGLES = [
+  -Math.PI / 3, -Math.PI / 6,
+  -Math.PI / 18, -Math.PI / 36,
+  0,
+  Math.PI / 36, Math.PI / 18,
+  Math.PI / 6, Math.PI / 3,
+];
 const RAY_DIST = 35;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -108,11 +117,18 @@ export class NeuralAI {
     const s = genome.length;
     if (s === 52) return [7, 5, 2];
     if (s === 62) return [9, 5, 2];
+    if (s === 88) return [13, 5, 3];
+    // Try [nIn, 5, 3] variants (last layer [5→3] = 3*6 = 18)
+    const r3 = s - 18;
+    if (r3 > 0 && r3 % 5 === 0) {
+      const nIn = r3 / 5 - 1;
+      if (nIn >= 9 && nIn <= 24) return [nIn, 5, 3];
+    }
     // Try [nIn, 5, 2] variants
-    const r = s - 2 * 6; // subtract last layer [5→2] cost
+    const r = s - 2 * 6;
     if (r > 0 && r % 5 === 0) {
       const nIn = r / 5 - 1;
-      if (nIn >= 7 && nIn <= 20) return [nIn, 5, 2];
+      if (nIn >= 7 && nIn <= 24) return [nIn, 5, 2];
     }
     return null;
   }
@@ -135,29 +151,25 @@ export class NeuralAI {
   // ── Weight management ───────────────────────────────────────────────────────
 
   _useDefaults() {
-    if (JSON.stringify(this.layers) === '[9,5,2]') {
+    if (JSON.stringify(this.layers) === '[13,5,3]') {
       this.weights = [{ W: _W1.map(r => [...r]), b: [..._b1] }, { W: _W2.map(r => [...r]), b: [..._b2] }];
-    } else if (JSON.stringify(this.layers) === '[7,5,2]') {
-      // Legacy hand-designed for old 7-input arch
-      const W1 = _W1.map(r => r.slice(0, 7));
-      this.weights = [{ W: W1, b: [..._b1] }, { W: _W2.map(r => [...r]), b: [..._b2] }];
-    } else {
-      // Check localStorage or repo for compatible genome
-      const saved = localStorage.getItem('turborace_nn_weights');
-      if (saved) {
-        try {
-          const g = JSON.parse(saved);
-          if (g.length === NeuralAI.genomeSize(this.layers)) {
-            this.weights = NeuralAI._unpack(g, this.layers); return;
-          }
-        } catch (_) { /**/ }
-      }
-      if (_repoGenome && _repoGenome.length === NeuralAI.genomeSize(this.layers)) {
-        this.weights = NeuralAI._unpack(_repoGenome, this.layers); return;
-      }
-      // Xavier random init
-      this.weights = NeuralAI._xavierInit(this.layers);
+      return;
     }
+    // Check localStorage or repo for compatible genome
+    const saved = localStorage.getItem('turborace_nn_weights');
+    if (saved) {
+      try {
+        const g = JSON.parse(saved);
+        if (g.length === NeuralAI.genomeSize(this.layers)) {
+          this.weights = NeuralAI._unpack(g, this.layers); return;
+        }
+      } catch (_) { /**/ }
+    }
+    if (_repoGenome && _repoGenome.length === NeuralAI.genomeSize(this.layers)) {
+      this.weights = NeuralAI._unpack(_repoGenome, this.layers); return;
+    }
+    // Xavier random init
+    this.weights = NeuralAI._xavierInit(this.layers);
   }
 
   static _xavierInit(layers) {
@@ -302,12 +314,17 @@ export class NeuralAI {
     // Gravel flag: 1 if on gravel, 0 otherwise
     const gravelFlag = c.onGravel ? 1.0 : 0.0;
 
+    // baseInputs: 9 sensors + speed + waypoint = 11 items
     const baseInputs = [...sensors, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];
-    const inputs = this.layers[0] >= 9
-      ? [...baseInputs, edgeProx, gravelFlag]
+    const inputs = this.layers[0] >= 13
+      ? [...baseInputs, edgeProx, gravelFlag]  // 13 items
       : baseInputs;
 
-    const [nnSteer, thrMod] = this._forward(inputs);
+    const [nnSteer, thrMod, nnBrakeRaw] = this._forward(inputs);
+    // brake output: tanh [-1,1] → clamp to [0,1] (positive = brake)
+    const nnBrake = this.weights.length >= 2 && this.layers[this.layers.length - 1] >= 3
+      ? Math.max(0, nnBrakeRaw || 0)
+      : 0;
 
     const fwdDanger = 1 - Math.min(sensors[1], sensors[2], sensors[3]);
     const nnBlend = 0.3 + fwdDanger * 0.5;
@@ -346,9 +363,9 @@ export class NeuralAI {
       }
     }
 
-    // ── Throttle ─────────────────────────────────────────────────────────────
+    // ── Throttle & brake ──────────────────────────────────────────────────────
     let thr = 1.0;
-    let brk = reqBrake;
+    let brk = Math.max(reqBrake, nnBrake * 0.8);
     if (brk > 0.05) thr = Math.min(thr, 1 - brk);
     thr *= 0.85 + thrMod * 0.25;
     if (c.onGravel) thr = Math.min(thr, 0.7);
