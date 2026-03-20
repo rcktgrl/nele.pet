@@ -384,6 +384,55 @@ export function showDiffSel(){
   });
 }
 
+export async function showNeuralModelSel(){
+  document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
+  document.getElementById('sNeuralModel').style.display='flex';
+  state.gState='neuralModelSel';
+
+  const container=document.getElementById('neuralModelCards');
+  container.innerHTML='<div style="color:#556;font-size:.8rem;align-self:center;">Loading models…</div>';
+
+  const models=[];
+  try{
+    const idx=await fetch('./models/index.json').then(r=>r.json());
+    for(const id of (idx.models||[])){
+      try{
+        const filename=id.endsWith('.json')?id:`${id}.json`;
+        const m=await fetch(`./models/${filename}`).then(r=>r.json());
+        if(Array.isArray(m.genome)&&m.genome.length){
+          models.push({label:m.name||id,desc:`Built-in · gen ${m.generation||'?'}`,genome:m.genome,icon:'🧠'});
+        }
+      }catch(_){}
+    }
+  }catch(_){}
+  const saved=localStorage.getItem('turborace_nn_weights');
+  if(saved){
+    try{
+      const genome=JSON.parse(saved);
+      const savedName=localStorage.getItem('turborace_nn_name')||'Saved Model';
+      models.push({label:savedName,desc:'Saved in browser',genome,icon:'💾'});
+    }catch(_){}
+  }
+  models.push({label:'Default',desc:'Built-in hand-designed weights',genome:null,icon:'⚙️'});
+
+  // Pre-select first model (or keep current if still in list)
+  let initIdx=0;
+  state.neuralModelGenome=models[0].genome;
+
+  container.innerHTML='';
+  models.forEach((m,i)=>{
+    const card=document.createElement('div');
+    card.className='diffCard'+(i===initIdx?' sel':'');
+    card.innerHTML=`<div class="diffIcon">${m.icon}</div><div class="diffName">${m.label}</div><div class="diffDesc">${m.desc}</div>`;
+    card.onclick=()=>{
+      container.querySelectorAll('.diffCard').forEach(c=>c.classList.remove('sel'));
+      card.classList.add('sel');
+      state.neuralModelGenome=m.genome;
+    };
+    container.appendChild(card);
+  });
+}
+
 export async function showOnlineTrkSel(){
   loadEditorTracks();
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
