@@ -63,6 +63,7 @@ export const state = {
     trainGrid: [],       // Array of {pos,hdg} start positions for training cars
     trainPopSize: 8,     // Population size (read by initTraining)
     trainFF: 1,          // Fast-forward multiplier (1–10 physics substeps per frame)
+    trainGenDuration: 35,// Generation duration in seconds
     trainHiddenLayers: 1,// Number of hidden layers (takes effect next run)
     trainHiddenSize: 5,  // Nodes per hidden layer (takes effect next run)
     trainBestCarPos: null, // {x,z} of the best car's peak position from previous generation

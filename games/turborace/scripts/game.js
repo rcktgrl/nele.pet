@@ -454,6 +454,12 @@ document.getElementById('trainNodesSlider').addEventListener('input',e=>{
   state.trainHiddenSize=parseInt(e.target.value);
   document.getElementById('trainNodesVal').textContent=e.target.value;
 });
+document.getElementById('trainGenDurSlider').addEventListener('input',e=>{
+  const v=parseInt(e.target.value);
+  state.trainGenDuration=v;
+  document.getElementById('trainGenDurVal').textContent=v+'s';
+  for(const grp of state.trainGroups) grp.trainer.genDuration=v;
+});
 
 // ═══════════════════════════════════════════════════════
 //  BOOT
