@@ -272,6 +272,33 @@
   </div>
 </div>
 
+<!-- AI TRAINING SETUP -->
+<div class="screen" id="sTrainSetup" style="display:none">
+  <h2>Training Setup</h2>
+  <div class="setupSection">
+    <div class="setupLabel">Starting Model</div>
+    <div id="trainSetupModelCards" class="diffCards" style="flex-wrap:wrap;gap:14px;justify-content:center;min-height:80px;"></div>
+  </div>
+  <div class="setupSection">
+    <div class="setupLabel">Architecture</div>
+    <div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap;padding:8px 0;">
+      <label style="display:flex;align-items:center;gap:8px;color:#889;font-size:.85rem;">
+        HIDDEN LAYERS <strong id="trainSetupHiddenVal" style="color:#c8f;">1</strong>
+        <input id="trainSetupHiddenSlider" type="range" min="1" max="10" value="1" style="width:100px;accent-color:#c8f;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;color:#889;font-size:.85rem;">
+        NODES/LAYER <strong id="trainSetupNodesVal" style="color:#f84;">5</strong>
+        <input id="trainSetupNodesSlider" type="range" min="3" max="20" value="5" style="width:100px;accent-color:#f84;">
+      </label>
+    </div>
+    <div style="color:#446;font-size:.7rem;text-align:center;">Mismatched architecture ignores the selected model and starts fresh.</div>
+  </div>
+  <div class="menuActions menuActions-inline">
+    <button id="trainSetupBackBtn" class="btn btn-s">BACK</button>
+    <button id="trainSetupStartBtn" class="btn btn-p">START TRAINING 🧠</button>
+  </div>
+</div>
+
 <!-- RACE SETUP: DIFFICULTY + OPPONENT MODE -->
 <div class="screen" id="sDiff" style="display:none">
   <h2>Race Setup</h2>

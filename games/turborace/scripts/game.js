@@ -50,7 +50,7 @@ import {
 import {
   showMain, showIntro, showTrkSel, showCarSel,
   showDiffSel, showOnlineTrkSel, showSettings, closeSettings,
-  showTrainTrkSel
+  showTrainTrkSel, showTrainSetup, getTrainSetupGenome
 } from './menu.js';
 import {
   closeTrackLeaderboardModal
@@ -576,9 +576,21 @@ document.getElementById('leaderboardModal').addEventListener('click',e=>{ if(e.t
 document.getElementById('menuBtn').addEventListener('click',showMain);
 document.getElementById('raceAgainBtn').addEventListener('click',restartRace);
 document.getElementById('trainAiBtn').addEventListener('click',()=>{ tryStartMenuMusic(); showTrainTrkSel(); });
-document.getElementById('btnTrainStart').addEventListener('click', async ()=>{
-  await initTraining();
+document.getElementById('btnTrainStart').addEventListener('click',()=>{ showTrainSetup(); });
+document.getElementById('trainSetupBackBtn').addEventListener('click',()=>{ showTrainTrkSel(); });
+document.getElementById('trainSetupStartBtn').addEventListener('click', async ()=>{
+  await initTraining({preservedGenome: getTrainSetupGenome()});
   _populateTrainTrkSelect();
+});
+document.getElementById('trainSetupHiddenSlider').addEventListener('input',e=>{
+  state.trainHiddenLayers=parseInt(e.target.value);
+  document.getElementById('trainSetupHiddenVal').textContent=e.target.value;
+  const s=document.getElementById('trainHiddenSlider'); if(s){s.value=e.target.value;document.getElementById('trainHiddenVal').textContent=e.target.value;}
+});
+document.getElementById('trainSetupNodesSlider').addEventListener('input',e=>{
+  state.trainHiddenSize=parseInt(e.target.value);
+  document.getElementById('trainSetupNodesVal').textContent=e.target.value;
+  const s=document.getElementById('trainNodesSlider'); if(s){s.value=e.target.value;document.getElementById('trainNodesVal').textContent=e.target.value;}
 });
 function _getBestTrainer(){
   const groups=state.trainGroups;
