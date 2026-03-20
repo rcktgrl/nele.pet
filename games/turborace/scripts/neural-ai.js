@@ -19,18 +19,18 @@ let _repoGenome = null;
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Default hand-designed weights for [13, 5, 3] architecture
-//  Inputs: 9 wall sensors (-60,-30,-10,-5,0,+5,+10,+30,+60), speed, waypointErr, edgeProximity, gravelFlag
+//  Default hand-designed weights for [15, 5, 3] architecture
+//  Inputs: 11 wall sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90), speed, waypointErr, edgeProximity, gravelFlag
 //  Outputs: steer, throttle, brake
 // ─────────────────────────────────────────────────────────────────────────────
-const _DEFAULT_LAYERS = [13, 5, 3];
-//                     s-60  s-30  s-10   s-5    s0   s+5  s+10  s+30  s+60   spd   wpt  edge  grav
+const _DEFAULT_LAYERS = [15, 5, 3];
+//                     s-90  s-60  s-30  s-10   s-5    s0   s+5  s+10  s+30  s+60  s+90   spd   wpt  edge  grav
 const _W1 = [
-  [-2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0,  0.0,  0.8,  0.5], // H0 danger-left
-  [ 0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0,  0.0,  0.0,  0.8,  0.5], // H1 danger-right
-  [ 0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0,  0.0,  0.5,  0.5], // H2 danger-ahead
-  [ 0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0], // H3 open-track
-  [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0], // H4 waypoint-err
+  [-3.0, -2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0,  0.0,  0.0,  0.8,  0.5], // H0 danger-left
+  [ 0.0,  0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0, -3.0,  0.0,  0.0,  0.8,  0.5], // H1 danger-right
+  [ 0.0,  0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0,  0.0,  0.0,  0.5,  0.5], // H2 danger-ahead
+  [ 0.8,  0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0], // H3 open-track
+  [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0], // H4 waypoint-err
 ];
 const _b1 = [1.0, 1.0, 1.5, -4.0, 0.0];
 const _W2 = [
@@ -54,13 +54,13 @@ function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
   return -1;
 }
 
-// 9 rays: ±60°, ±30°, ±10°, ±5°, 0° (forward)
+// 11 rays: ±90°, ±60°, ±30°, ±10°, ±5°, 0° (forward)
 const RAY_ANGLES = [
-  -Math.PI / 3, -Math.PI / 6,
+  -Math.PI / 2, -Math.PI / 3, -Math.PI / 6,
   -Math.PI / 18, -Math.PI / 36,
   0,
   Math.PI / 36, Math.PI / 18,
-  Math.PI / 6, Math.PI / 3,
+  Math.PI / 6, Math.PI / 3, Math.PI / 2,
 ];
 const RAY_DIST = 35;
 
@@ -118,6 +118,7 @@ export class NeuralAI {
     if (s === 52) return [7, 5, 2];
     if (s === 62) return [9, 5, 2];
     if (s === 88) return [13, 5, 3];
+    if (s === 98) return [15, 5, 3];
     // Try [nIn, 5, 3] variants (last layer [5→3] = 3*6 = 18)
     const r3 = s - 18;
     if (r3 > 0 && r3 % 5 === 0) {
@@ -151,7 +152,7 @@ export class NeuralAI {
   // ── Weight management ───────────────────────────────────────────────────────
 
   _useDefaults() {
-    if (JSON.stringify(this.layers) === '[13,5,3]') {
+    if (JSON.stringify(this.layers) === '[15,5,3]' || JSON.stringify(this.layers) === '[13,5,3]') {
       this.weights = [{ W: _W1.map(r => [...r]), b: [..._b1] }, { W: _W2.map(r => [...r]), b: [..._b2] }];
       return;
     }
@@ -314,11 +315,15 @@ export class NeuralAI {
     // Gravel flag: 1 if on gravel, 0 otherwise
     const gravelFlag = c.onGravel ? 1.0 : 0.0;
 
-    // baseInputs: 9 sensors + speed + waypoint = 11 items
-    const baseInputs = [...sensors, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];
-    const inputs = this.layers[0] >= 13
-      ? [...baseInputs, edgeProx, gravelFlag]  // 13 items
-      : baseInputs;
+    // baseInputs: 11 sensors + speed + waypoint = 13 items
+    // For legacy 13-input models, use inner 9 sensors (indices 1..9, skipping ±90°)
+    const sensors9 = sensors.slice(1, 10);
+    const sensorsFull = sensors;
+    const inputs = this.layers[0] >= 15
+      ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]  // 15 items
+      : this.layers[0] >= 13
+        ? [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]   // 13 items (legacy)
+        : [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];                        // 11 items
 
     const [nnSteer, thrMod, nnBrakeRaw] = this._forward(inputs);
     // brake output: tanh [-1,1] → clamp to [0,1] (positive = brake)
@@ -326,7 +331,8 @@ export class NeuralAI {
       ? Math.max(0, nnBrakeRaw || 0)
       : 0;
 
-    const fwdDanger = 1 - Math.min(sensors[1], sensors[2], sensors[3]);
+    // sensors: -90°[0], -60°[1], -30°[2], -10°[3], -5°[4], 0°[5], +5°[6], +10°[7], +30°[8], +60°[9], +90°[10]
+    const fwdDanger = 1 - Math.min(sensors[2], sensors[3], sensors[4]);
     const nnBlend = 0.3 + fwdDanger * 0.5;
     let str = wpSteer * (1 - nnBlend) + nnSteer * nnBlend;
     str = Math.max(-1, Math.min(1, str));

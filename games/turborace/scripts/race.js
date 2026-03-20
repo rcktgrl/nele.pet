@@ -221,7 +221,7 @@ export async function initTraining({preserveGen=0, preservedGenome=null}={}){
   // Build network architecture from settings
   const hiddenLayers=Math.max(1,Math.min(4,state.trainHiddenLayers||1));
   const hiddenSize=Math.max(3,Math.min(8,state.trainHiddenSize||5));
-  const layers=[13,...Array(hiddenLayers).fill(hiddenSize),3];
+  const layers=[15,...Array(hiddenLayers).fill(hiddenSize),3];
 
   // Only use saved genome if it matches the current architecture; prefer preserved genome from track switch
   const rawSaved=preservedGenome||GeneticTrainer.loadFromLocalStorage();
@@ -341,6 +341,7 @@ export function stopTraining(){
   if(_bestMarker){ scene.remove(_bestMarker); _bestMarker=null; }
   state.trainBestCarPos=null;
   state._trainVisibleGroup=0;
+  state._trainFollowCar=null;
   state.trainGlobalBestGenome=null;
   state.trainGlobalBestFitness=-Infinity;
   document.getElementById('trainHud').style.display='none';
