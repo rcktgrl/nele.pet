@@ -27,6 +27,21 @@ export function updateHUD(){
   const all=[state.pCar,...state.aiCars].sort((a,b)=>b.totalProg-a.totalProg);
   const p=all.indexOf(state.pCar)+1;
   document.getElementById('posNum').innerHTML=`${p}<sup style="font-size:18px">${getOrd(p)}</sup>`;
+  const standingsEl=document.getElementById('standings');
+  if(standingsEl){
+    standingsEl.innerHTML=all.map((car,i)=>{
+      const isPlayer=car===state.pCar;
+      const spd=Math.round((car.isReversing?car.revSpd:car.spd)*3.6);
+      const col=isPlayer?'#ffd700':'#'+car.data.col.toString(16).padStart(6,'0');
+      const name=isPlayer?'YOU':car.data.name;
+      return `<div class="std-row${isPlayer?' std-row-you':''}">`+
+        `<span class="std-pos">${i+1}</span>`+
+        `<span class="std-dot" style="background:${col};box-shadow:0 0 6px ${col}"></span>`+
+        `<span class="std-name">${name}</span>`+
+        `<span class="std-spd">${spd}</span>`+
+        `</div>`;
+    }).join('');
+  }
 }
 
 // ═══════════════════════════════════════════════════════
