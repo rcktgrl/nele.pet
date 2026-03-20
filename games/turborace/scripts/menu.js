@@ -291,6 +291,16 @@ export async function showTrainSetup(){
 
   _trainSetupGenome=null;
 
+  // Sync training mode cards with current state
+  document.querySelectorAll('#trainModeCards .diffCard').forEach(card=>{
+    card.classList.toggle('sel', card.dataset.trainmode===(state.trainMode||'timed'));
+    card.onclick=()=>{
+      document.querySelectorAll('#trainModeCards .diffCard').forEach(c=>c.classList.remove('sel'));
+      card.classList.add('sel');
+      state.trainMode=card.dataset.trainmode;
+    };
+  });
+
   // Sync arch sliders with current state
   const h=state.trainHiddenLayers||1, n=state.trainHiddenSize||5;
   document.getElementById('trainSetupHiddenSlider').value=h;

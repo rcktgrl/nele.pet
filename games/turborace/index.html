@@ -37,6 +37,7 @@
   <!-- Stats + action buttons -->
   <div style="display:flex;gap:20px;align-items:center;background:rgba(5,5,20,.85);border:1px solid #223;border-radius:10px;padding:10px 20px;pointer-events:auto;flex-wrap:wrap;justify-content:center;">
     <span id="trainGenNum" style="color:#4af;font-size:1.1rem;font-weight:700;">GEN 1</span>
+    <span id="trainModeLabel" style="color:#fa4;font-size:.7rem;font-weight:700;letter-spacing:1px;border:1px solid #443;border-radius:4px;padding:2px 6px;">TIMED</span>
     <span id="trainCountdown" style="color:#aaa;font-size:1rem;">35s</span>
     <span id="trainBestFit" style="color:#4f4;font-size:1rem;">BEST —</span>
     <span id="trainAvgFit" style="color:#fa4;font-size:1rem;">AVG 0.0</span>
@@ -65,7 +66,7 @@
     <label style="color:#889;font-size:.7rem;white-space:nowrap;">SPEED&nbsp;<span id="trainFFVal" style="color:#fa4;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">1×</span></label>
     <input id="trainFFSlider" type="range" min="1" max="100" value="1" step="1" style="width:80px;accent-color:#fa4;">
     <span style="color:#445;">│</span>
-    <label style="color:#889;font-size:.7rem;white-space:nowrap;">SIM TIME&nbsp;<span id="trainGenDurVal" style="color:#4fa;">35s</span></label>
+    <label style="color:#889;font-size:.7rem;white-space:nowrap;" id="trainGenDurLabel">SIM TIME&nbsp;<span id="trainGenDurVal" style="color:#4fa;">35s</span></label>
     <input id="trainGenDurSlider" type="range" min="5" max="120" value="35" step="5" style="width:80px;accent-color:#4fa;">
   </div>
   <!-- Sliders row 2: hidden layers -->
@@ -275,6 +276,21 @@
 <!-- AI TRAINING SETUP -->
 <div class="screen" id="sTrainSetup" style="display:none">
   <h2>Training Setup</h2>
+  <div class="setupSection">
+    <div class="setupLabel">Training Mode</div>
+    <div class="diffCards" id="trainModeCards" style="gap:14px;justify-content:center;">
+      <div class="diffCard sel" data-trainmode="timed">
+        <div class="diffIcon">⏱️</div>
+        <div class="diffName">Timed</div>
+        <div class="diffDesc">Run for a set duration — maximize track progress</div>
+      </div>
+      <div class="diffCard" data-trainmode="lap">
+        <div class="diffIcon">🏁</div>
+        <div class="diffName">Lap Race</div>
+        <div class="diffDesc">Finish one lap — faster lap time = more fitness points</div>
+      </div>
+    </div>
+  </div>
   <div class="setupSection">
     <div class="setupLabel">Starting Model</div>
     <div id="trainSetupModelCards" class="diffCards" style="flex-wrap:wrap;gap:14px;justify-content:center;min-height:80px;"></div>

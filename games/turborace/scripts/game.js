@@ -217,6 +217,15 @@ function updateFrame(dt){
         for(let i=0;i<cars.length;i++){
           if(cars[i].finished)resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
         }
+        // Lap mode: detect when a car completes its first lap and record the time
+        if(state.trainMode==='lap'){
+          for(const car of cars){
+            if(!car._lapCompleted&&car.lap>=1){
+              car._lapCompleted=true;
+              car._lapTime=trainer.genTime; // seconds elapsed in this generation
+            }
+          }
+        }
         // Tick the GA for this group; evolve on generation boundary
         if(trainer.tick(subDt,cars)){
           let bi=0;
@@ -385,8 +394,22 @@ function updateTrainingHUD(){
   document.getElementById('trainGenNum').textContent=`GEN ${avgGen+1}`;
   document.getElementById('trainBestFit').textContent=`BEST ${t.bestFitness>0?t.bestFitness.toFixed(1):'—'}`;
   document.getElementById('trainAvgFit').textContent=`AVG ${avgFit.toFixed(1)}`;
-  document.getElementById('trainCountdown').textContent=Math.max(0,Math.ceil(t.genDuration-t.genTime))+'s';
-  document.getElementById('trainBar').style.width=Math.min(100,(t.genTime/t.genDuration)*100)+'%';
+  const modeLabelEl=document.getElementById('trainModeLabel');
+  if(modeLabelEl)modeLabelEl.textContent=state.trainMode==='lap'?'LAP RACE':'TIMED';
+  const durLabelEl=document.getElementById('trainGenDurLabel');
+  if(durLabelEl){const firstText=durLabelEl.firstChild;if(firstText&&firstText.nodeType===3)firstText.nodeValue=(state.trainMode==='lap'?'TIMEOUT':'SIM TIME')+'\u00a0';}
+  if(state.trainMode==='lap'){
+    // In lap mode: show how many cars have finished and time elapsed
+    const allCarsInGroups=groups.flatMap(g=>g.cars);
+    const finished=allCarsInGroups.filter(c=>c._lapCompleted).length;
+    const total=allCarsInGroups.length;
+    const timeLeft=Math.max(0,Math.ceil(t.genDuration-t.genTime));
+    document.getElementById('trainCountdown').textContent=`${finished}/${total} ✓ · ${timeLeft}s`;
+    document.getElementById('trainBar').style.width=Math.min(100,(t.genTime/t.genDuration)*100)+'%';
+  }else{
+    document.getElementById('trainCountdown').textContent=Math.max(0,Math.ceil(t.genDuration-t.genTime))+'s';
+    document.getElementById('trainBar').style.width=Math.min(100,(t.genTime/t.genDuration)*100)+'%';
+  }
   _drawNNViz();
   _updateTrainLeaderboard();
 }
@@ -398,18 +421,41 @@ function _updateTrainLeaderboard(){
   if(!_lbRows||!state.trainGroups||!state.trainGroups.length)return;
   // Collect scored entries from all simulation groups
   const entries=[];
+  const lapMode=state.trainMode==='lap';
   for(const grp of state.trainGroups){
     for(let i=0;i<grp.cars.length;i++){
       const car=grp.cars[i];
       const ctrl=grp.controllers[i];
-      const score=Math.max(0,car.totalProg-(car._fitPenalty||0));
+      let score,lapLabel;
+      if(lapMode){
+        if(car._lapCompleted&&car._lapTime>0){
+          score=car._lapTime; // lower is better for display
+          lapLabel=car._lapTime.toFixed(1)+'s';
+        }else{
+          score=Infinity; // unfinished cars sort to bottom
+          lapLabel=null;
+        }
+      }else{
+        score=Math.max(0,car.totalProg-(car._fitPenalty||0));
+        lapLabel=null;
+      }
       // Brake indicator: check neural output index 2 (brake), or car reversing
       const brakeOut=ctrl&&ctrl.lastOutputs?ctrl.lastOutputs[2]:0;
       const braking=brakeOut>0.1||car.isReversing;
-      entries.push({score,spd:car.spd,braking,offTrack:!!car._offTrack,onGravel:car.onGravel,color:car.data&&car.data.hex?car.data.hex:'#889',car});
+      entries.push({score,lapLabel,lapMode,spd:car.spd,braking,offTrack:!!car._offTrack,onGravel:car.onGravel,color:car.data&&car.data.hex?car.data.hex:'#889',car});
     }
   }
-  entries.sort((a,b)=>b.score-a.score);
+  // In lap mode: finished cars (lower lapTime=better) first, then unfinished by progress
+  if(lapMode){
+    entries.sort((a,b)=>{
+      const aFin=a.lapLabel!=null, bFin=b.lapLabel!=null;
+      if(aFin&&bFin)return a.score-b.score; // faster lap first
+      if(aFin)return -1; if(bFin)return 1;
+      return (b.car.totalProg||0)-(a.car.totalProg||0);
+    });
+  }else{
+    entries.sort((a,b)=>b.score-a.score);
+  }
   _lbTopEntries=entries.slice(0,8);
   const RANK_COLORS=['#ffd700','#c0c0c0','#cd7f32','#778','#778','#778','#778','#778'];
   const ROW_COUNT=8;
@@ -419,14 +465,15 @@ function _updateTrainLeaderboard(){
     if(e){
       const spdKph=Math.round(e.spd*3.6);
       const rc=RANK_COLORS[i]||'#778';
-      const scoreColor=e.offTrack?'#445':'#4f4';
+      const scoreColor=e.offTrack?'#445':(e.lapLabel?'#4df':'#4f4');
       const brakeHtml=e.braking
         ?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f33;box-shadow:0 0 5px #f33;"></span>'
         :'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a1a2a;border:1px solid #223;"></span>';
+      const scoreText=e.offTrack?'X':(e.lapLabel||e.score.toFixed(1));
       html+=`<div data-lbidx="${i}" style="display:grid;grid-template-columns:18px 10px 1fr 48px 14px;gap:2px 6px;align-items:center;padding:1px 0;cursor:pointer;pointer-events:auto;border-radius:3px;" onmouseenter="this.style.background='rgba(80,160,255,.08)'" onmouseleave="this.style.background=''">`
         +`<span style="color:${rc};font-size:.6rem;text-align:right;">${i+1}</span>`
         +`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${e.color};box-shadow:0 0 4px ${e.color};"></span>`
-        +`<span style="color:${scoreColor};font-size:.65rem;">${e.offTrack?'X':e.score.toFixed(1)}</span>`
+        +`<span style="color:${scoreColor};font-size:.65rem;">${scoreText}</span>`
         +`<span style="color:#889;font-size:.6rem;text-align:right;">${spdKph}&nbsp;km/h</span>`
         +`<span style="text-align:center;">${brakeHtml}</span>`
         +`</div>`;
