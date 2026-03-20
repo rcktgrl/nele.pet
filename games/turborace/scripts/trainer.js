@@ -11,19 +11,19 @@ export function computeGenomeSize(layers) {
   return s;
 }
 
-/** Genome size for default [15,5,3] architecture. */
-export const GENOME_SIZE = computeGenomeSize([15, 5, 3]); // 98
+/** Genome size for default [17,5,3] architecture. */
+export const GENOME_SIZE = computeGenomeSize([17, 5, 3]); // 108
 
-// Hand-designed seed genome for [15,5,3]:
-//   11 wall sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90) + speed + waypointErr + edgeProximity + gravelFlag
+// Hand-designed seed genome for [17,5,3]:
+//   11 wall sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90) + speed + waypointErr + edgeProximity + gravelFlag + grip + accel
 //   → 5 hidden → 3 out (steer, throttle, brake)
 export const DEFAULT_GENOME = [
-  // W1: 5 rows × 15 inputs  (s-90 s-60 s-30 s-10 s-5 s0 s+5 s+10 s+30 s+60 s+90 spd wpt edge grav)
-  -3.0, -2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0,  0.0,  0.0,  0.8,  0.5,  // H0 danger-left
-   0.0,  0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0, -3.0,  0.0,  0.0,  0.8,  0.5,  // H1 danger-right
-   0.0,  0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0,  0.0,  0.0,  0.5,  0.5,  // H2 danger-ahead
-   0.8,  0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0,  // H3 open-track
-   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  // H4 waypoint-err
+  // W1: 5 rows × 17 inputs  (s-90 s-60 s-30 s-10 s-5 s0 s+5 s+10 s+30 s+60 s+90 spd wpt edge grav grip acl)
+  -3.0, -2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0,  // H0 danger-left
+   0.0,  0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0, -3.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0,  // H1 danger-right
+   0.0,  0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0,  0.0,  0.0,  0.5,  0.5,  0.0,  0.0,  // H2 danger-ahead
+   0.8,  0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0,  0.0,  0.0,  // H3 open-track
+   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  0.0,  0.0,  // H4 waypoint-err
   // b1: 5
   1.0, 1.0, 1.5, -4.0, 0.0,
   // W2: 3 rows × 5
@@ -40,7 +40,7 @@ export const DEFAULT_GENOME = [
  */
 export function buildDefaultGenome(layers) {
   const key = JSON.stringify(layers);
-  if (key === '[15,5,3]') return [...DEFAULT_GENOME];
+  if (key === '[17,5,3]') return [...DEFAULT_GENOME];
   // Xavier random init for other architectures
   const genome = [];
   for (let l = 0; l < layers.length - 1; l++) {
