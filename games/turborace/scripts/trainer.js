@@ -89,6 +89,8 @@ export function resetCarForTraining(car, pos, hdg) {
   car._gravelTime = 0;
   car._offTrackTime = 0;
   car._onTrackTime = 0;
+  car._lapCompleted = false;
+  car._lapTime = 0;
   car.mesh.position.copy(car.pos); car.mesh.rotation.y = car.hdg;
 }
 
@@ -139,21 +141,37 @@ export class GeneticTrainer {
       if (Number.isFinite(state.trainMutRate)) this.mutRate = state.trainMutRate;
       if (Number.isFinite(state.trainMutStrength)) this.mutStrength = state.trainMutStrength;
     }
+    const lapMode = typeof state !== 'undefined' && state && state.trainMode === 'lap';
+    const lapBonus = (typeof state !== 'undefined' && Number.isFinite(state.trainLapBonus)) ? state.trainLapBonus : 1000;
     for (let i = 0; i < Math.min(this.population.length, cars.length); i++) {
       const car = cars[i];
       // Off-track cars are disqualified — their fitness is frozen at current value
       if (!car || car._offTrack) continue;
-      // Penalise wall hits (large) and gravel (small) by subtracting from progress
-      const penalty = car._fitPenalty || 0;
-      // On-track time reward: longer streak on track = bonus multiplier
-      const onTrackRate = (typeof state !== 'undefined' && Number.isFinite(state.trainOnTrackRewardRate))
-        ? state.trainOnTrackRewardRate : 0.10;
-      const onTrackBonus = (car._onTrackTime || 0) * onTrackRate;
-      const adjusted = Math.max(0, car.totalProg * (1 + onTrackBonus) - penalty);
-      if (adjusted > this._peakProg[i]) this._peakProg[i] = adjusted;
-      this.population[i].fitness = this._peakProg[i];
+      if (lapMode) {
+        if (car._lapCompleted && car._lapTime > 0) {
+          // Lap completed: fitness = bonus / lapTime (faster = more points), frozen once set
+          const lapFit = lapBonus / car._lapTime;
+          if (lapFit > this._peakProg[i]) this._peakProg[i] = lapFit;
+        } else {
+          // Not yet finished: small partial progress to distinguish attempts
+          const partialFit = Math.max(0, car.totalProg * 0.05 - (car._fitPenalty || 0) * 0.05);
+          if (partialFit > this._peakProg[i]) this._peakProg[i] = partialFit;
+        }
+        this.population[i].fitness = this._peakProg[i];
+      } else {
+        // Timed mode: penalise wall hits and gravel by subtracting from progress
+        const penalty = car._fitPenalty || 0;
+        const onTrackRate = (typeof state !== 'undefined' && Number.isFinite(state.trainOnTrackRewardRate))
+          ? state.trainOnTrackRewardRate : 0.10;
+        const onTrackBonus = (car._onTrackTime || 0) * onTrackRate;
+        const adjusted = Math.max(0, car.totalProg * (1 + onTrackBonus) - penalty);
+        if (adjusted > this._peakProg[i]) this._peakProg[i] = adjusted;
+        this.population[i].fitness = this._peakProg[i];
+      }
     }
-    if (this.genTime >= this.genDuration) {
+    // In lap mode, also end generation early if all cars have finished or been disqualified
+    const allDone = lapMode && cars.length > 0 && cars.every(c => c._lapCompleted || c._offTrack);
+    if (allDone || this.genTime >= this.genDuration) {
       const eliteClone = typeof state !== 'undefined' && state && state.trainEliteCloneMode;
       if (eliteClone) {
         // Signal readiness; game.js coordinates all groups before evolving

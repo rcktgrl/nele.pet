@@ -82,4 +82,6 @@ export const state = {
     trainSplitCams: [],  // PerspectiveCamera array for split-screen training view
     trainGroups: [],     // [{cars, controllers, trainer, grid}] — one per simulation
     trainEliteCloneMode: false, // when true: all sims run full duration, then best car is cloned with mutations
+    trainMode: 'timed',         // 'timed' | 'lap' — training objective mode
+    trainLapBonus: 1000,        // Max fitness points awarded for a perfect (instant) lap in lap mode
 };
