@@ -5,7 +5,7 @@ import { buildTrack } from './track-gen.js';
 import { instantiateRaceCars, Car } from './car.js';
 import { AI } from './ai-script.js';
 import { NeuralAI } from './neural-ai.js';
-import { GeneticTrainer, buildTrainingGrid, resetCarForTraining } from './trainer.js';
+import { GeneticTrainer, buildTrainingGrid, resetCarForTraining, computeGenomeSize } from './trainer.js';
 import { setupLights } from './lighting.js';
 import {
   initAudio, initAiSounds, clearAiSounds,
@@ -217,7 +217,15 @@ export async function initTraining(){
   state.trkData.laps=999;
 
   const carsPerSim=Math.max(1,state.trainPopSize||8);
-  const savedGenome=GeneticTrainer.loadFromLocalStorage();
+
+  // Build network architecture from settings
+  const hiddenLayers=Math.max(1,Math.min(4,state.trainHiddenLayers||1));
+  const hiddenSize=Math.max(3,Math.min(8,state.trainHiddenSize||5));
+  const layers=[9,...Array(hiddenLayers).fill(hiddenSize),2];
+
+  // Only use saved genome if it matches the current architecture
+  const rawSaved=GeneticTrainer.loadFromLocalStorage();
+  const savedGenome=(rawSaved&&rawSaved.length===computeGenomeSize(layers))?rawSaved:null;
 
   // Shared context function (same track for all sims)
   const contextFn=()=>({
@@ -231,7 +239,7 @@ export async function initTraining(){
 
   // Create N_SIMS independent simulations, each with their own trainer and cars
   for(let s=0;s<N_SIMS;s++){
-    const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:35});
+    const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:35,layers});
     trainer.initPopulation(savedGenome);
     const grid=buildTrainingGrid(state.trkPts,carsPerSim);
     const cars=[], controllers=[];
@@ -240,7 +248,7 @@ export async function initTraining(){
       const carData=CARS[Math.floor(Math.random()*CARS.length)];
       const car=new Car(carData,g.pos,g.hdg,false,scene);
       car.aiAgg=1.0;
-      const ai=new NeuralAI(car,0.044+i*0.001,contextFn,trainer.population[i].genome);
+      const ai=new NeuralAI(car,0.044+i*0.001,contextFn,trainer.population[i].genome,layers);
       cars.push(car); controllers.push(ai);
     }
     state.trainGroups.push({cars,controllers,trainer,grid});

@@ -11,7 +11,7 @@ let _repoGenome = null;
     const defaultId = idx.default;
     if (defaultId) {
       const model = await fetch(`./models/${defaultId}.json`).then(r => r.json());
-      if (Array.isArray(model.genome) && model.genome.length === 52) {
+      if (Array.isArray(model.genome) && model.genome.length > 0) {
         _repoGenome = model.genome;
       }
     }
@@ -19,17 +19,17 @@ let _repoGenome = null;
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Default hand-designed weights (module-level constants used as fallback)
+//  Default hand-designed weights for [9, 5, 2] architecture
+//  Inputs: 5 wall sensors, speed, waypointErr, edgeProximity, gravelFlag
 // ─────────────────────────────────────────────────────────────────────────────
-
-// W1[h][i] = weight from input i to hidden node h
+const _DEFAULT_LAYERS = [9, 5, 2];
+//                     s-60  s-30    s0  s+30  s+60   spd  wpt  edge  grav
 const _W1 = [
-  //      s0    s1    s2    s3    s4   spd  wperr
-  [-2.0, -3.0, -0.5,  0.5,  0.3,  0.0,  0.0], // H0 danger-left
-  [ 0.3,  0.5, -0.5, -3.0, -2.0,  0.0,  0.0], // H1 danger-right
-  [ 0.0, -0.5, -3.0, -0.5,  0.0,  0.0,  0.0], // H2 danger-ahead
-  [ 0.8,  0.8,  1.5,  0.8,  0.8,  1.5,  0.0], // H3 open-track
-  [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0], // H4 waypoint-err
+  [-2.0, -3.0, -0.5,  0.5,  0.3,  0.0,  0.0,  0.8,  0.5], // H0 danger-left
+  [ 0.3,  0.5, -0.5, -3.0, -2.0,  0.0,  0.0,  0.8,  0.5], // H1 danger-right
+  [ 0.0, -0.5, -3.0, -0.5,  0.0,  0.0,  0.0,  0.5,  0.5], // H2 danger-ahead
+  [ 0.8,  0.8,  1.5,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0], // H3 open-track
+  [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0], // H4 waypoint-err
 ];
 const _b1 = [1.0, 1.0, 1.5, -4.0, 0.0];
 const _W2 = [
@@ -56,68 +56,132 @@ const RAY_ANGLES = [-Math.PI / 3, -Math.PI / 6, 0, Math.PI / 6, Math.PI / 3];
 const RAY_DIST = 35;
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  NeuralAI
+//  NeuralAI — configurable-depth network
+//   layers: e.g. [9, 5, 2] or [9, 6, 6, 2]
 // ─────────────────────────────────────────────────────────────────────────────
 export class NeuralAI {
-  // genome: optional flat Float64 array of 52 weights.
-  //   If omitted, checks localStorage for saved trained weights.
-  //   Falls back to hand-designed defaults.
-  constructor(car, la, context, genome = null) {
+  /**
+   * @param {object}   car      - Car instance
+   * @param {number}   la       - Look-ahead multiplier
+   * @param {function} context  - Returns context object each frame
+   * @param {number[]|null} genome  - Flat weight array (length must match layers)
+   * @param {number[]|null} layers  - e.g. [9,5,2]; inferred from genome if omitted
+   */
+  constructor(car, la, context, genome = null, layers = null) {
     this.car = car;
     this.la = la || 0.055;
     this.slowTimer = 0;
     this.prevPos = null;
     this.stuckCount = 0;
     this.context = context;
-    this.revMode = 'none'; // 'none' | 'braking' | 'reversing'
+    this.revMode = 'none';
     this.revTimer = 0;
     this.revSteer = 0;
 
-    if (genome) {
-      const w = NeuralAI._unpack(genome);
-      this.W1 = w.W1; this.b1 = w.b1; this.W2 = w.W2; this.b2 = w.b2;
+    // Determine architecture
+    if (layers) {
+      this.layers = layers;
+    } else if (genome) {
+      this.layers = NeuralAI._inferLayers(genome) || _DEFAULT_LAYERS;
     } else {
-      // Priority: localStorage → repo model → hand-designed defaults
-      const saved = localStorage.getItem('turborace_nn_weights');
-      if (saved) {
-        try {
-          const w = NeuralAI._unpack(JSON.parse(saved));
-          this.W1 = w.W1; this.b1 = w.b1; this.W2 = w.W2; this.b2 = w.b2;
-        } catch (_) { this._useRepoOrDefaults(); }
-      } else {
-        this._useRepoOrDefaults();
-      }
+      this.layers = _DEFAULT_LAYERS;
     }
-  }
 
-  _useDefaults() {
-    this.W1 = _W1; this.b1 = _b1; this.W2 = _W2; this.b2 = _b2;
-  }
-
-  _useRepoOrDefaults() {
-    if (_repoGenome) {
-      const w = NeuralAI._unpack(_repoGenome);
-      this.W1 = w.W1; this.b1 = w.b1; this.W2 = w.W2; this.b2 = w.b2;
+    if (genome && genome.length === NeuralAI.genomeSize(this.layers)) {
+      this.weights = NeuralAI._unpack(genome, this.layers);
     } else {
       this._useDefaults();
     }
   }
 
-  // Replace weights mid-life (used by the genetic trainer between generations).
-  setWeights(genome) {
-    const w = NeuralAI._unpack(genome);
-    this.W1 = w.W1; this.b1 = w.b1; this.W2 = w.W2; this.b2 = w.b2;
+  // ── Static helpers ──────────────────────────────────────────────────────────
+
+  /** Total number of scalar parameters for a given layer spec. */
+  static genomeSize(layers) {
+    let s = 0;
+    for (let i = 0; i < layers.length - 1; i++) s += layers[i + 1] * (layers[i] + 1);
+    return s;
   }
 
-  // Unpack a flat 52-element genome into {W1, b1, W2, b2}.
-  static _unpack(g) {
-    let i = 0;
-    const W1 = Array.from({ length: 5 }, () => Array.from({ length: 7 }, () => g[i++]));
-    const b1 = Array.from({ length: 5 }, () => g[i++]);
-    const W2 = Array.from({ length: 2 }, () => Array.from({ length: 5 }, () => g[i++]));
-    const b2 = Array.from({ length: 2 }, () => g[i++]);
-    return { W1, b1, W2, b2 };
+  /** Try to infer layer spec from genome length. Returns null if ambiguous. */
+  static _inferLayers(genome) {
+    const s = genome.length;
+    if (s === 52) return [7, 5, 2];
+    if (s === 62) return [9, 5, 2];
+    // Try [nIn, 5, 2] variants
+    const r = s - 2 * 6; // subtract last layer [5→2] cost
+    if (r > 0 && r % 5 === 0) {
+      const nIn = r / 5 - 1;
+      if (nIn >= 7 && nIn <= 20) return [nIn, 5, 2];
+    }
+    return null;
   }
+
+  /** Unpack flat genome into [{W, b}, ...] weight list. */
+  static _unpack(g, layers) {
+    const weights = [];
+    let idx = 0;
+    for (let l = 0; l < layers.length - 1; l++) {
+      const rows = layers[l + 1], cols = layers[l];
+      const W = Array.from({ length: rows }, () =>
+        Array.from({ length: cols }, () => g[idx++])
+      );
+      const b = Array.from({ length: rows }, () => g[idx++]);
+      weights.push({ W, b });
+    }
+    return weights;
+  }
+
+  // ── Weight management ───────────────────────────────────────────────────────
+
+  _useDefaults() {
+    if (JSON.stringify(this.layers) === '[9,5,2]') {
+      this.weights = [{ W: _W1.map(r => [...r]), b: [..._b1] }, { W: _W2.map(r => [...r]), b: [..._b2] }];
+    } else if (JSON.stringify(this.layers) === '[7,5,2]') {
+      // Legacy hand-designed for old 7-input arch
+      const W1 = _W1.map(r => r.slice(0, 7));
+      this.weights = [{ W: W1, b: [..._b1] }, { W: _W2.map(r => [...r]), b: [..._b2] }];
+    } else {
+      // Check localStorage or repo for compatible genome
+      const saved = localStorage.getItem('turborace_nn_weights');
+      if (saved) {
+        try {
+          const g = JSON.parse(saved);
+          if (g.length === NeuralAI.genomeSize(this.layers)) {
+            this.weights = NeuralAI._unpack(g, this.layers); return;
+          }
+        } catch (_) { /**/ }
+      }
+      if (_repoGenome && _repoGenome.length === NeuralAI.genomeSize(this.layers)) {
+        this.weights = NeuralAI._unpack(_repoGenome, this.layers); return;
+      }
+      // Xavier random init
+      this.weights = NeuralAI._xavierInit(this.layers);
+    }
+  }
+
+  static _xavierInit(layers) {
+    const weights = [];
+    for (let l = 0; l < layers.length - 1; l++) {
+      const nIn = layers[l], nOut = layers[l + 1];
+      const std = Math.sqrt(2 / (nIn + nOut));
+      const W = Array.from({ length: nOut }, () =>
+        Array.from({ length: nIn }, () => (Math.random() * 2 - 1) * std)
+      );
+      const b = Array.from({ length: nOut }, () => 0);
+      weights.push({ W, b });
+    }
+    return weights;
+  }
+
+  /** Replace weights mid-life (called by genetic trainer between generations). */
+  setWeights(genome) {
+    if (genome.length === NeuralAI.genomeSize(this.layers)) {
+      this.weights = NeuralAI._unpack(genome, this.layers);
+    }
+  }
+
+  // ── Sensors ─────────────────────────────────────────────────────────────────
 
   _castRays(wallLeft, wallRight) {
     const c = this.car;
@@ -142,18 +206,25 @@ export class NeuralAI {
     });
   }
 
+  // ── Forward pass ─────────────────────────────────────────────────────────────
+
   _forward(inputs) {
     this.lastInputs = inputs;
-    const h = this.W1.map((row, i) =>
-      Math.tanh(row.reduce((s, w, j) => s + w * inputs[j], 0) + this.b1[i])
-    );
-    this.lastHidden = h;
-    const out = this.W2.map((row, i) =>
-      Math.tanh(row.reduce((s, w, j) => s + w * h[j], 0) + this.b2[i])
-    );
+    this.lastHiddens = [];
+    let x = inputs;
+    for (let l = 0; l < this.weights.length - 1; l++) {
+      const { W, b } = this.weights[l];
+      x = W.map((row, i) => Math.tanh(row.reduce((s, w, j) => s + w * x[j], 0) + b[i]));
+      this.lastHiddens.push([...x]);
+    }
+    this.lastHidden = this.lastHiddens[0] || []; // backward compat
+    const last = this.weights[this.weights.length - 1];
+    const out = last.W.map((row, i) => Math.tanh(row.reduce((s, w, j) => s + w * x[j], 0) + last.b[i]));
     this.lastOutputs = out;
     return out;
   }
+
+  // ── Main update (called every physics tick) ─────────────────────────────────
 
   update(dt) {
     const { trackPoints, trackCurvature, cityAiPoints, trackData } = this.context();
@@ -179,7 +250,6 @@ export class NeuralAI {
       c.update({ thr: 0, brk: 0.9, str: this.revSteer }, dt);
       if (this.revTimer > 1.8) {
         this.revMode = 'none'; this.slowTimer = 0; this.stuckCount++;
-        // Teleport fallback after repeated failed reversals (non-training only)
         if (state.gState !== 'training' && this.stuckCount > 2) {
           const navP = cityAiPoints ? cityAiPoints.pts : trackPoints;
           let md2 = Infinity, ri2 = 0;
@@ -225,7 +295,18 @@ export class NeuralAI {
 
     // ── Neural network ───────────────────────────────────────────────────────
     const sensors = this._castRays(state.trkWallLeft || [], state.trkWallRight || []);
-    const inputs = [...sensors, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];
+
+    // Edge proximity: 0 = at track center, 1 = at/beyond edge
+    const halfW = trackData ? trackData.rw * 0.5 : 999;
+    const edgeProx = Math.min(1, Math.sqrt(md) / Math.max(1, halfW));
+    // Gravel flag: 1 if on gravel, 0 otherwise
+    const gravelFlag = c.onGravel ? 1.0 : 0.0;
+
+    const baseInputs = [...sensors, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];
+    const inputs = this.layers[0] >= 9
+      ? [...baseInputs, edgeProx, gravelFlag]
+      : baseInputs;
+
     const [nnSteer, thrMod] = this._forward(inputs);
 
     const fwdDanger = 1 - Math.min(sensors[1], sensors[2], sensors[3]);
@@ -233,7 +314,7 @@ export class NeuralAI {
     let str = wpSteer * (1 - nnBlend) + nnSteer * nnBlend;
     str = Math.max(-1, Math.min(1, str));
 
-    // Edge pull-back for open tracks
+    // Edge pull-back: steer toward track center when drifting wide
     if (!useCity && trackData) {
       const edgeDist = Math.sqrt(md);
       const wallDist = trackData.rw * 0.5;
@@ -247,7 +328,7 @@ export class NeuralAI {
       }
     }
 
-    // ── Braking (tighter 1.0× margin vs scripted AI's 1.2×) ─────────────────
+    // ── Braking ──────────────────────────────────────────────────────────────
     const ptSpacing = 2;
     const scanDist = Math.round(6 + speedFrac * 44);
     let reqBrake = 0;

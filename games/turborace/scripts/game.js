@@ -80,14 +80,26 @@ document.addEventListener('pointermove',e=>{
     raceCamOrbit.pitch=Math.max(-0.55,Math.min(0.75,raceCamOrbit.pitch-e.movementY*0.003));
     raceCamOrbit.lastInput=performance.now();
   }
-  if(state.gState==='training'&&e.buttons===2){
-    editorCam.yaw-=e.movementX*0.006;
-    editorCam.pitch=Math.max(0.25,Math.min(1.55,editorCam.pitch-e.movementY*0.004));
+  if(state.gState==='training'){
+    const cam=state.trainSplitCams&&state.trainSplitCams[0];
+    if(cam&&cam.isOrthographicCamera&&e.buttons){
+      // Pan: drag to scroll (any button)
+      const s=(cam._span*2)/window.innerHeight;
+      cam.position.x-=e.movementX*s;
+      cam.position.z-=e.movementY*s;
+    }
   }
 });
 document.addEventListener('wheel',e=>{
   if(state.gState==='training'){
-    editorCam.distance=Math.max(50,Math.min(1200,editorCam.distance*(1+Math.sign(e.deltaY)*0.08)));
+    const cam=state.trainSplitCams&&state.trainSplitCams[0];
+    if(cam&&cam.isOrthographicCamera&&cam._span!==undefined){
+      cam._span=Math.max(30,Math.min(2000,cam._span*(1+Math.sign(e.deltaY)*0.1)));
+      const a=window.innerWidth/window.innerHeight;
+      cam.left=-cam._span*a; cam.right=cam._span*a;
+      cam.top=cam._span; cam.bottom=-cam._span;
+      cam.updateProjectionMatrix();
+    }
   }
   if(state.gState==='racing'||state.gState==='cooldown'||state.gState==='countdown'||state.gState==='finished'){
     raceCamOrbit.distance=Math.max(4,Math.min(40,raceCamOrbit.distance*(1+Math.sign(e.deltaY)*0.08)));
@@ -149,7 +161,8 @@ function updateFrame(dt){
     const halfW=state.trkData?state.trkData.rw*0.55:999;
     for(let _s=0;_s<ffSteps;_s++){
       // Each simulation group runs independently
-      for(const grp of state.trainGroups){
+      for(let gi=0;gi<state.trainGroups.length;gi++){
+        const grp=state.trainGroups[gi];
         const{cars,controllers,trainer,grid}=grp;
         // Update AI (includes braking, steering, throttle)
         for(const ai of controllers)ai.update(subDt);
@@ -190,7 +203,6 @@ function updateFrame(dt){
             state.trainGlobalBestGenome=[...trainer.bestGenome];
           }
           if(state.trainGlobalBestGenome){
-            // Inject global champion into slot 0 of this group's next generation
             trainer.population[0].genome=[...state.trainGlobalBestGenome];
             if(state.trainGlobalBestFitness>trainer.bestFitness){
               trainer.bestFitness=state.trainGlobalBestFitness;
@@ -201,16 +213,15 @@ function updateFrame(dt){
             resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
             controllers[i].setWeights(trainer.population[i].genome);
           }
+          // Swap visible group only at generation boundary, when this sim becomes best
+          const curBestFit=state.trainGroups[state._trainVisibleGroup].trainer.bestFitness;
+          if(gi!==state._trainVisibleGroup&&trainer.bestFitness>curBestFit){
+            for(const car of state.trainGroups[state._trainVisibleGroup].cars) car.mesh.visible=false;
+            for(const car of grp.cars) car.mesh.visible=true;
+            state._trainVisibleGroup=gi;
+          }
         }
       }
-    }
-    // Show only the best-performing group's cars; hide the rest
-    const bestGrpIdx=state.trainGroups.reduce((bi,g,i)=>
-      g.trainer.bestFitness>state.trainGroups[bi].trainer.bestFitness?i:bi,0);
-    if(state._trainVisibleGroup!==bestGrpIdx){
-      for(const car of state.trainGroups[state._trainVisibleGroup].cars) car.mesh.visible=false;
-      for(const car of state.trainGroups[bestGrpIdx].cars) car.mesh.visible=true;
-      state._trainVisibleGroup=bestGrpIdx;
     }
     if(state.trainSplitCams&&state.trainSplitCams.length){
       updateTrainSplitCameras();
@@ -263,23 +274,35 @@ function _drawNNViz(){
     }
   }
   const ai=bestAI;
-  if(!ai) return;
-  // Layer x positions and node counts
-  const LAYERS=[7,5,2];
-  const LABELS=[['s-60','s-30','s0','s+30','s+60','spd','wpt'],['H0','H1','H2','H3','H4'],['steer','thrtl']];
-  const xs=[28, W/2, W-28];
-  const nodeR=7;
-  const activations=[ai.lastInputs||[], ai.lastHidden||[], ai.lastOutputs||[]];
-  // Compute node y positions
+  if(!ai||!ai.layers||!ai.weights) return;
+
+  const LAYERS=ai.layers;
+  const nL=LAYERS.length;
+  const nodeR=Math.max(3,Math.min(7,Math.floor(H/(Math.max(...LAYERS)+1)/2)));
+
+  // X positions: first and last columns pinned, middle ones evenly spaced
+  const xs=Array.from({length:nL},(_,l)=>
+    l===0?28:l===nL-1?W-28:Math.round(28+(W-56)*l/(nL-1))
+  );
+
+  // Build activation arrays: [inputs, ...hiddens, outputs]
+  const hiddens=ai.lastHiddens||[];
+  const activations=[ai.lastInputs||[],...hiddens,ai.lastOutputs||[]];
+
+  // Node y positions
   const ys=LAYERS.map((n,l)=>Array.from({length:n},(_,i)=>(i+1)/(n+1)*H));
-  // Draw edges (W1: layer0→1, W2: layer1→2)
-  const weights=[ai.W1, ai.W2]; // W1[h][i], W2[o][h]
-  for(let l=0;l<2;l++){
+
+  // Labels (only first and last layer)
+  const INPUT_LABELS=['s-60','s-30','s0','s+30','s+60','spd','wpt','edge','grav'];
+  const OUTPUT_LABELS=['steer','thrtl'];
+
+  // Draw edges for each layer transition
+  for(let l=0;l<nL-1;l++){
     const src=ys[l], dst=ys[l+1];
-    const W_=weights[l];
-    for(let d=0;d<W_.length;d++){
-      for(let s=0;s<W_[d].length;s++){
-        const w=W_[d][s];
+    const Wm=ai.weights[l].W;
+    for(let d=0;d<Wm.length;d++){
+      for(let s=0;s<Wm[d].length;s++){
+        const w=Wm[d][s];
         const alpha=Math.min(0.85,Math.abs(w)/3);
         const thick=Math.min(3,Math.abs(w)*0.7+0.3);
         cx.strokeStyle=w>0?`rgba(80,220,120,${alpha})`:`rgba(220,80,80,${alpha})`;
@@ -292,25 +315,28 @@ function _drawNNViz(){
     }
   }
   // Draw nodes
-  for(let l=0;l<3;l++){
+  for(let l=0;l<nL;l++){
     for(let n=0;n<LAYERS[l];n++){
       const x=xs[l], y=ys[l][n];
-      const act=activations[l][n]??0;
-      const t=(act+1)/2; // 0..1
+      const act=activations[l]?.[n]??0;
+      const t=(act+1)/2;
       const r=Math.round(40+t*200), g2=Math.round(80+t*120), b=Math.round(200-t*150);
       cx.beginPath(); cx.arc(x,y,nodeR,0,Math.PI*2);
       cx.fillStyle=`rgb(${r},${g2},${b})`; cx.fill();
       cx.strokeStyle='#334'; cx.lineWidth=1; cx.stroke();
-      if(l===0||l===2){
-        cx.fillStyle='#aab'; cx.font='7px monospace';
-        cx.textAlign=l===0?'right':'left';
-        cx.fillText(LABELS[l][n],x+(l===0?-nodeR-2:nodeR+2),y+2.5);
+      if(l===0&&INPUT_LABELS[n]){
+        cx.fillStyle='#aab'; cx.font='6px monospace'; cx.textAlign='right';
+        cx.fillText(INPUT_LABELS[n],x-nodeR-2,y+2);
+      } else if(l===nL-1&&OUTPUT_LABELS[n]){
+        cx.fillStyle='#aab'; cx.font='6px monospace'; cx.textAlign='left';
+        cx.fillText(OUTPUT_LABELS[n],x+nodeR+2,y+2);
       }
     }
   }
   // Title
-  cx.fillStyle='#556'; cx.font='8px monospace'; cx.textAlign='center';
-  cx.fillText('NEURAL NET · BEST CAR',W/2,10);
+  const archStr=LAYERS.join('→');
+  cx.fillStyle='#556'; cx.font='7px monospace'; cx.textAlign='center';
+  cx.fillText(`NET [${archStr}] · BEST CAR`,W/2,10);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -404,6 +430,14 @@ document.getElementById('trainPopSlider').addEventListener('input',e=>{
 document.getElementById('trainFFSlider').addEventListener('input',e=>{
   state.trainFF=parseInt(e.target.value);
   document.getElementById('trainFFVal').textContent=e.target.value+'×';
+});
+document.getElementById('trainHiddenSlider').addEventListener('input',e=>{
+  state.trainHiddenLayers=parseInt(e.target.value);
+  document.getElementById('trainHiddenVal').textContent=e.target.value;
+});
+document.getElementById('trainNodesSlider').addEventListener('input',e=>{
+  state.trainHiddenSize=parseInt(e.target.value);
+  document.getElementById('trainNodesVal').textContent=e.target.value;
 });
 
 // ═══════════════════════════════════════════════════════
