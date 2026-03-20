@@ -259,15 +259,18 @@ export class GeneticTrainer {
 
     for (let i = 0; i < Math.min(this.population.length, cars.length); i++) {
       const car = cars[i];
-      if (!car || car._offTrack) continue;
+      if (!car) continue;
 
-      // Track peak of raw progress (progress + onTrackBonus, NO penalty)
-      // This prevents fitness from dropping when a car merely slows down,
-      // but penalties are always subtracted fresh so they always reduce fitness.
-      const rawProg = car.totalProg * (1 + (car._onTrackTime || 0) * onTrackRate);
-      if (rawProg > this._peakRawProg[i]) this._peakRawProg[i] = rawProg;
+      // Track peak of raw progress only while the car is still on track.
+      // Once DQ'd, rawProg is frozen (car._offTrack = true means no further movement).
+      // Penalties (including the 200-pt DQ penalty) are still subtracted so that
+      // disqualified cars are not unfairly favoured during parent selection.
+      if (!car._offTrack) {
+        const rawProg = car.totalProg * (1 + (car._onTrackTime || 0) * onTrackRate);
+        if (rawProg > this._peakRawProg[i]) this._peakRawProg[i] = rawProg;
+      }
 
-      // Compute fitness via single source of truth
+      // Compute fitness via single source of truth (always, even for DQ'd cars)
       const fit = computeFitness(car, {
         onTrackRewardRate: onTrackRate,
         lapMode,
@@ -300,7 +303,15 @@ export class GeneticTrainer {
     this.population.sort((a, b) => b.fitness - a.fitness);
     const best = this.population[0];
 
-    // Update all-time best tracking
+    // Update all-time best tracking.
+    // Also detect a fitness-regime change (e.g. penalties were raised mid-session):
+    // if the previous best was positive but every car in the current generation
+    // is negative, the old "champion" was trained under different conditions and
+    // will corrupt the gene pool indefinitely.  Retire it and start fresh from
+    // the current best so evolution can adapt to the new penalty landscape.
+    if (this.bestFitness > 0 && best.fitness < 0) {
+      this.bestFitness = -Infinity; // force update below
+    }
     if (best.fitness > this.bestFitness) {
       this.bestFitness = best.fitness;
       this.bestGenome = [...best.genome];
@@ -334,17 +345,34 @@ export class GeneticTrainer {
       { genome: genWinnerGenome, fitness: 0 },
     ];
 
+    // When all elites have negative fitness the population is stuck in a local
+    // minimum (e.g. penalties were raised mid-session).  Inject a few fresh
+    // Xavier genomes to give evolution a way to explore completely different
+    // behaviours (e.g. driving more cautiously rather than just fast).
+    const nRandom = elites[0].fitness < 0
+      ? Math.max(1, Math.floor(this.popSize * 0.15))
+      : 0;
+
     // Remaining slots: crossover + mutation from elite parents
-    while (next.length < this.popSize) {
+    while (next.length < this.popSize - nRandom) {
       const p1 = pickParent();
       const p2 = pickParent();
-      // Crossover ratio: better parent contributes more genes
+      // Crossover ratio: better parent contributes more genes.
+      // Minimum of 0.7 prevents near-50/50 splits when both parents have
+      // similar (bad) fitness — uniform 50/50 crossover breaks the co-evolved
+      // weight dependencies inside a neural network and produces cars that
+      // cannot steer at all.
       const w1 = Math.max(0, p1.fitness - minFit) + 1;
       const w2 = Math.max(0, p2.fitness - minFit) + 1;
-      const p1ratio = w1 / (w1 + w2);
+      const p1ratio = Math.max(0.7, w1 / (w1 + w2));
       const child = p1.genome.map((g, i) => Math.random() < p1ratio ? g : p2.genome[i]);
       this._mutate(child, this.mutRate, this.mutStrength);
       next.push({ genome: child, fitness: 0 });
+    }
+
+    // Fill remaining slots with fresh random genomes (diversity injection)
+    while (next.length < this.popSize) {
+      next.push({ genome: _xavierGenome(this.layers), fitness: 0 });
     }
 
     this.population = next;
