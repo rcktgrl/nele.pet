@@ -239,7 +239,7 @@ export async function initTraining(){
 
   // Create N_SIMS independent simulations, each with their own trainer and cars
   for(let s=0;s<N_SIMS;s++){
-    const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:35,layers});
+    const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:state.trainGenDuration||35,layers});
     trainer.initPopulation(savedGenome);
     const grid=buildTrainingGrid(state.trkPts,carsPerSim);
     const cars=[], controllers=[];
