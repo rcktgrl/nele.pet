@@ -67,11 +67,11 @@
   <!-- Sliders row 2: hidden layers -->
   <div style="display:flex;gap:18px;align-items:center;background:rgba(5,5,20,.78);border:1px solid #1a2030;border-radius:8px;padding:8px 18px;pointer-events:auto;">
     <label style="color:#889;font-size:.7rem;white-space:nowrap;">HIDDEN&nbsp;<span id="trainHiddenVal" style="color:#c8f;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">1</span></label>
-    <input id="trainHiddenSlider" type="range" min="1" max="4" value="1" step="1" style="width:80px;accent-color:#c8f;">
+    <input id="trainHiddenSlider" type="range" min="1" max="100" value="1" step="1" style="width:80px;accent-color:#c8f;">
     <span style="color:#334;font-size:.65rem;">next&nbsp;run</span>
     <span style="color:#445;">│</span>
     <label style="color:#889;font-size:.7rem;white-space:nowrap;">NODES&nbsp;<span id="trainNodesVal" style="color:#f84;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">5</span></label>
-    <input id="trainNodesSlider" type="range" min="3" max="8" value="5" step="1" style="width:80px;accent-color:#f84;">
+    <input id="trainNodesSlider" type="range" min="3" max="100" value="5" step="1" style="width:80px;accent-color:#f84;">
   </div>
   <!-- Rewards / Penalties panel (collapsible) -->
   <div style="pointer-events:auto;">
@@ -107,6 +107,11 @@
       <span style="color:#445;">│</span>
       <label style="color:#889;font-size:.65rem;white-space:nowrap;">MUT STRENGTH&nbsp;<span id="trainMutStrengthVal" style="color:#c8f;">0.35</span></label>
       <input id="trainMutStrengthSlider" type="range" min="0" max="2" value="0.35" step="0.05" style="width:80px;accent-color:#c8f;">
+    </div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
+      <span style="color:#889;font-size:.65rem;white-space:nowrap;">MUTATION STRATEGY</span>
+      <button id="trainEliteCloneBtn" style="background:#0a0f1c;border:1px solid #445;border-radius:5px;color:#889;font-size:.65rem;font-family:Orbitron,monospace;padding:4px 10px;cursor:pointer;letter-spacing:1px;">ELITE CLONE: OFF</button>
+      <span style="color:#445;font-size:.6rem;max-width:260px;">When ON: all sims run full duration, then best car is cloned with mutations into the next generation.</span>
     </div>
   </div>
   <div style="color:#445;font-size:.65rem;pointer-events:none;">8 SIMS · SCROLL=ZOOM · DRAG=PAN · BEST SIM SHOWN · SWAPS AT GENERATION END</div>

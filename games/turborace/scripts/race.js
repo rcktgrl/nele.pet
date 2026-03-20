@@ -219,8 +219,8 @@ export async function initTraining({preserveGen=0, preservedGenome=null}={}){
   const carsPerSim=Math.max(1,state.trainPopSize||8);
 
   // Build network architecture from settings
-  const hiddenLayers=Math.max(1,Math.min(4,state.trainHiddenLayers||1));
-  const hiddenSize=Math.max(3,Math.min(8,state.trainHiddenSize||5));
+  const hiddenLayers=Math.max(1,Math.min(100,state.trainHiddenLayers||1));
+  const hiddenSize=Math.max(3,Math.min(100,state.trainHiddenSize||5));
   const layers=[15,...Array(hiddenLayers).fill(hiddenSize),3];
 
   // Only use saved genome if it matches the current architecture; prefer preserved genome from track switch
