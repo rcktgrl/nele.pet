@@ -256,7 +256,8 @@ class Car {
     const lat = (this.pos.x - p.x) * nx + (this.pos.z - p.z) * nz;
     const latAbs = Math.abs(lat);
     const inner = rw / 2 + 1.75;
-    const gravelW = lat >= 0 ? (rightRunoff[ni] || 0) : (leftRunoff[ni] || 0);
+    const runoffIdx = Math.min(ni, rightRunoff.length - 1);
+    const gravelW = lat >= 0 ? (rightRunoff[runoffIdx] || 0) : (leftRunoff[runoffIdx] || 0);
     this.onGravel = latAbs > inner && latAbs < inner + gravelW;
   }
 

@@ -133,7 +133,7 @@ let _trainCurrentBest=null;
  * from fitness by computeFitness() (single source of truth).
  */
 function _applyTrainingPenalties(cars,subDt){
-  const halfW=state.trkData?state.trkData.rw*0.55:999;
+  const halfW=state.trkData?state.trkData.rw/2+1.75:999;
   // Read configurable penalty values from state
   const stuckPenRate=Number.isFinite(state.trainStuckPenaltyRate)?state.trainStuckPenaltyRate:5;
   const gravelBase=Number.isFinite(state.trainGravelPenaltyBase)?state.trainGravelPenaltyBase:0.5;
@@ -203,6 +203,8 @@ function _tickTrainingGroup(grp,gi,subDt){
 
   // ── Resolve collisions within this group ──
   resolveCarCollisions(cars);
+  // Refresh gravel flag after collision moves — positions may have changed
+  for(const car of cars) car.checkGravel();
 
   // ── Accumulate penalties (single source of truth via car._fitPenalty) ──
   _applyTrainingPenalties(cars,subDt);
@@ -357,6 +359,7 @@ function updateFrame(dt){
     sampleGhostFrame();
     for(const ai of state.aiControllers)ai.update(dt);
     resolveCarCollisions(state.allCars);
+    for(const car of state.allCars) car.checkGravel();
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&state.aiCars[i])aiSounds[i].update(state.aiCars[i],state.pCar);}
     updateAudio(thr,brk,dt,state.pCar,keys); updateCamera(); updateHUD(); drawDash(); drawMinimap();
     updateGhostReplay();
@@ -365,6 +368,7 @@ function updateFrame(dt){
     state.pCar.update({thr:0,brk:0.3,str:0},dt);
     for(const ai of state.aiControllers){if(!ai.car.finished)ai.update(dt);}
     resolveCarCollisions(state.allCars);
+    for(const car of state.allCars) car.checkGravel();
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&state.aiCars[i])aiSounds[i].update(state.aiCars[i],state.pCar);}
     updateAudio(0,0,dt,state.pCar,keys); updateCamera();
     updateGhostReplay();
@@ -409,6 +413,7 @@ function updateFrame(dt){
       state.raceTime+=dt;
       for(const ai of state.aiControllers){if(!ai.car.finished)ai.update(dt);}
       resolveCarCollisions(state.allCars);
+      for(const car of state.allCars) car.checkGravel();
       updateHUD(); drawMinimap();
     }
     updateCamera();
