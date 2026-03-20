@@ -116,6 +116,8 @@ export function buildTrack(data){
   state.trkCurve=curve; state.trkPts=curve.getSpacedPoints(500);
   state.trkWallLeft=[];
   state.trkWallRight=[];
+  state.trkEdgeLeft=[];
+  state.trkEdgeRight=[];
   // Precompute per-point curvature (0=straight, 1=very tight) for AI adaptive lookahead.
   // Two scales: ±8 for wide curves, ±3 for tight chicanes. Take the max so chicanes
   // (which average to ~0 curvature in the wide window) are not missed.
@@ -150,6 +152,9 @@ export function buildTrack(data){
     if(runoffProfile){ addGravelRunoff(runoffProfile); state.gravelProfile=runoffProfile; }
     addCheckpointFlags(data, runoffProfile);
   }
+  // Precompute track-edge segments (at rw/2 from centerline) for AI edge-distance sensors.
+  // These represent where the drivable pavement ends (gravel/grass begins).
+  computeTrackEdgeSegments(state.trkPts, data.rw);
   // Ground plane
   const gndCol=isCity?data.gnd:0x1a3018;
   const gnd=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),new THREE.MeshLambertMaterial({color:gndCol}));
@@ -348,6 +353,32 @@ function addBarriersAdaptive(pts,rw,runoffProfile){
 
   state.trkWallLeft=leftWalls;
   state.trkWallRight=rightWalls;
+}
+
+function computeTrackEdgeSegments(pts, rw) {
+  const n = pts.length;
+  const norms = [];
+  for (let i = 0; i < n; i++) {
+    const p = pts[(i - 1 + n) % n], q = pts[(i + 1) % n];
+    const tx = q.x - p.x, tz = q.z - p.z, l = Math.sqrt(tx * tx + tz * tz) || 1;
+    norms.push({ x: -tz / l, z: tx / l });
+  }
+  const halfW = rw / 2;
+  const left = [], right = [];
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[i], p1 = pts[i + 1];
+    const r0 = norms[i], r1 = norms[i + 1];
+    left.push({
+      x0: p0.x - r0.x * halfW, z0: p0.z - r0.z * halfW,
+      x1: p1.x - r1.x * halfW, z1: p1.z - r1.z * halfW
+    });
+    right.push({
+      x0: p0.x + r0.x * halfW, z0: p0.z + r0.z * halfW,
+      x1: p1.x + r1.x * halfW, z1: p1.z + r1.z * halfW
+    });
+  }
+  state.trkEdgeLeft = left;
+  state.trkEdgeRight = right;
 }
 
 function addGantry(curve,rw){

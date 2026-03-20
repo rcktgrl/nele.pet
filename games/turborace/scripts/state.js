@@ -55,6 +55,8 @@ export const state = {
     trkCurv: [],
     trkWallLeft: [],
     trkWallRight: [],
+    trkEdgeLeft: [],
+    trkEdgeRight: [],
     sceneryExclusionZones: [],
     aiControllers: [],
     cityCorridors: null, // For city tracks: array of {x,z,hw,hd} axis-aligned driveable rectangles
