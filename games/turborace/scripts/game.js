@@ -167,6 +167,8 @@ function updateFrame(dt){
       for(let gi=0;gi<state.trainGroups.length;gi++){
         const grp=state.trainGroups[gi];
         const{cars,controllers,trainer,grid}=grp;
+        // Skip groups that have finished their generation (elite clone mode)
+        if(trainer.pendingEvolve) continue;
         // Update AI (includes braking, steering, throttle)
         for(const ai of controllers)ai.update(subDt);
         // Collisions within this group (cars of the same sim push each other)
@@ -229,7 +231,7 @@ function updateFrame(dt){
         // Tick the GA for this group; evolve on generation boundary
         if(trainer.tick(subDt,cars)){
           let bi=0;
-          for(let i=1;i<cars.length;i++){if(cars[i].totalProg>cars[bi].totalProg)bi=i;}
+          for(let i=1;i<trainer.population.length;i++){if(trainer.population[i].fitness>trainer.population[bi].fitness)bi=i;}
           const bc=cars[bi];
           state.trainBestCarPos={x:bc.pos.x,y:bc.pos.y,z:bc.pos.z};
           placeBestCarMarker(bc.pos.x,bc.pos.y,bc.pos.z);
@@ -267,9 +269,9 @@ function updateFrame(dt){
         for(const grp of state.trainGroups){
           // Check peak from current generation's sorted population
           const sorted=[...grp.trainer.population].sort((a,b)=>b.fitness-a.fitness);
-          if(sorted[0]&&sorted[0].fitness>globalBestFit){globalBestFit=sorted[0].fitness;globalBestGenome=sorted[0].genome;}
+          if(sorted[0]&&sorted[0].fitness>globalBestFit){globalBestFit=sorted[0].fitness;globalBestGenome=[...sorted[0].genome];}
           // Also consider the trainer's all-time best
-          if(grp.trainer.bestFitness>globalBestFit){globalBestFit=grp.trainer.bestFitness;globalBestGenome=grp.trainer.bestGenome;}
+          if(grp.trainer.bestFitness>globalBestFit){globalBestFit=grp.trainer.bestFitness;globalBestGenome=[...grp.trainer.bestGenome];}
         }
         if(!globalBestGenome&&state.trainGroups.length){
           globalBestGenome=state.trainGroups[0].trainer.population[0].genome;
@@ -557,7 +559,7 @@ function _drawNNViz(){
 
   const hiddens=ai.lastHiddens||[];
   const activations=[ai.lastInputs||[],...hiddens,ai.lastOutputs||[]];
-  const INPUT_LABELS=['s-90','s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','s+90','spd','wpt','edge','grav','grip','acl'];
+  const INPUT_LABELS=['s-90','s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','s+90','e-10','e0','e+10','spd','wpt','edge','grav','grip','acl'];
   const OUTPUT_LABELS=['steer','thrtl','brake'];
 
   // Draw edges — skip transitions where either side has >40 nodes (too dense to be useful)

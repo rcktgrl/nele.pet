@@ -23,14 +23,14 @@ let _repoGenome = null;
 //  Inputs: 11 wall sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90), speed, waypointErr, edgeProximity, gravelFlag, grip, accel
 //  Outputs: steer, throttle, brake
 // ─────────────────────────────────────────────────────────────────────────────
-const _DEFAULT_LAYERS = [17, 5, 3];
-//                     s-90  s-60  s-30  s-10   s-5    s0   s+5  s+10  s+30  s+60  s+90   spd   wpt  edge  grav grip  acl
+const _DEFAULT_LAYERS = [20, 5, 3];
+//                     s-90  s-60  s-30  s-10   s-5    s0   s+5  s+10  s+30  s+60  s+90  e-10    e0  e+10   spd   wpt  edge  grav grip  acl
 const _W1 = [
-  [-3.0, -2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0], // H0 danger-left
-  [ 0.0,  0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0, -3.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0], // H1 danger-right
-  [ 0.0,  0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0,  0.0,  0.0,  0.5,  0.5,  0.0,  0.0], // H2 danger-ahead
-  [ 0.8,  0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0,  0.0,  0.0], // H3 open-track
-  [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  0.0,  0.0], // H4 waypoint-err
+  [-3.0, -2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0, -0.5, -0.3,  0.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0], // H0 danger-left
+  [ 0.0,  0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0, -3.0,  0.0, -0.3, -0.5,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0], // H1 danger-right
+  [ 0.0,  0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0, -1.0, -1.5, -1.0,  0.0,  0.0,  0.5,  0.5,  0.0,  0.0], // H2 danger-ahead
+  [ 0.8,  0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  0.8,  0.5,  0.8,  0.5,  1.5,  0.0, -1.5, -1.0,  0.0,  0.0], // H3 open-track
+  [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  0.0,  0.0], // H4 waypoint-err
 ];
 const _b1 = [1.0, 1.0, 1.5, -4.0, 0.0];
 const _W2 = [
@@ -64,6 +64,10 @@ const RAY_ANGLES = [
 ];
 const RAY_DIST = 35;
 
+// 3 edge-distance rays: -10°, 0°, +10° — cast against track-edge segments
+const EDGE_RAY_ANGLES = [-Math.PI / 18, 0, Math.PI / 18];
+const EDGE_RAY_DIST = 35;
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  NeuralAI — configurable-depth network
 //   layers: e.g. [9, 5, 2] or [9, 6, 6, 2]
@@ -86,6 +90,7 @@ export class NeuralAI {
     this.revMode = 'none';
     this.revTimer = 0;
     this.revSteer = 0;
+    this._graceTimer = 0; // grace period before stuck detection activates
 
     // Determine architecture
     if (layers) {
@@ -119,6 +124,8 @@ export class NeuralAI {
     if (s === 62) return [9, 5, 2];
     if (s === 88) return [13, 5, 3];
     if (s === 98) return [15, 5, 3];
+    if (s === 108) return [17, 5, 3];
+    if (s === 123) return [20, 5, 3];
     // Try [nIn, 5, 3] variants (last layer [5→3] = 3*6 = 18)
     const r3 = s - 18;
     if (r3 > 0 && r3 % 5 === 0) {
@@ -152,7 +159,7 @@ export class NeuralAI {
   // ── Weight management ───────────────────────────────────────────────────────
 
   _useDefaults() {
-    if (JSON.stringify(this.layers) === '[17,5,3]') {
+    if (JSON.stringify(this.layers) === '[20,5,3]') {
       this.weights = [{ W: _W1.map(r => [...r]), b: [..._b1] }, { W: _W2.map(r => [...r]), b: [..._b2] }];
       return;
     }
@@ -198,6 +205,7 @@ export class NeuralAI {
       this.stuckCount = 0;
       this.revMode = 'none';
       this.revTimer = 0;
+      this._graceTimer = 0;
     }
   }
 
@@ -223,6 +231,29 @@ export class NeuralAI {
         if (t > 0 && t < minT) minT = t;
       }
       return minT / RAY_DIST;
+    });
+  }
+
+  _castEdgeRays(edgeLeft, edgeRight) {
+    const c = this.car;
+    const ox = c.pos.x, oz = c.pos.z;
+    const rr = EDGE_RAY_DIST * EDGE_RAY_DIST * 1.5;
+    const near = [];
+    for (const edges of [edgeLeft, edgeRight]) {
+      for (const e of edges) {
+        const cx = (e.x0 + e.x1) * 0.5 - ox, cz = (e.z0 + e.z1) * 0.5 - oz;
+        if (cx * cx + cz * cz < rr) near.push(e);
+      }
+    }
+    return EDGE_RAY_ANGLES.map(a => {
+      const angle = c.hdg + a;
+      const dx = Math.sin(angle), dz = Math.cos(angle);
+      let minT = EDGE_RAY_DIST;
+      for (const e of near) {
+        const t = raySegment(ox, oz, dx, dz, e.x0, e.z0, e.x1, e.z1);
+        if (t > 0 && t < minT) minT = t;
+      }
+      return minT / EDGE_RAY_DIST;
     });
   }
 
@@ -252,10 +283,13 @@ export class NeuralAI {
     const c = this.car;
 
     // ── Stuck detection + reverse recovery ───────────────────────────────────
+    // Grace period: don't trigger stuck detection for the first 3 seconds
+    // after spawn/reset so cars have time to accelerate from standstill.
+    this._graceTimer += dt;
     if (!this.prevPos) this.prevPos = { x: c.pos.x, z: c.pos.z };
     const moved = Math.sqrt((c.pos.x - this.prevPos.x) ** 2 + (c.pos.z - this.prevPos.z) ** 2);
     this.prevPos.x = c.pos.x; this.prevPos.z = c.pos.z;
-    if (moved < 0.015 * dt * 60) this.slowTimer += dt;
+    if (this._graceTimer > 3 && moved < 0.015 * dt * 60) this.slowTimer += dt;
     else { this.slowTimer = Math.max(0, this.slowTimer - dt * 3); if (this.revMode === 'none') this.stuckCount = 0; }
 
     // Active reverse manoeuvre — overrides all other AI logic
@@ -315,6 +349,7 @@ export class NeuralAI {
 
     // ── Neural network ───────────────────────────────────────────────────────
     const sensors = this._castRays(state.trkWallLeft || [], state.trkWallRight || []);
+    const edgeSensors = this._castEdgeRays(state.trkEdgeLeft || [], state.trkEdgeRight || []);
 
     // Edge proximity: 0 = at track center, 1 = at/beyond edge
     const halfW = trackData ? trackData.rw * 0.5 : 999;
@@ -322,17 +357,19 @@ export class NeuralAI {
     // Gravel flag: 1 if on gravel, 0 otherwise
     const gravelFlag = c.onGravel ? 1.0 : 0.0;
 
-    // baseInputs: 11 sensors + speed + waypoint = 13 items
-    // For legacy 13-input models, use inner 9 sensors (indices 1..9, skipping ±90°)
+    // baseInputs: 11 wall sensors + 3 edge sensors + speed + waypoint = 20 items (new default)
+    // For legacy models, use inner 9 sensors (indices 1..9, skipping ±90°)
     const sensors9 = sensors.slice(1, 10);
     const sensorsFull = sensors;
-    const inputs = this.layers[0] >= 17
-      ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag, c.data.hdl, Math.min(1, c.data.accel / 12)]  // 17 items
-      : this.layers[0] >= 15
-        ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]  // 15 items
-        : this.layers[0] >= 13
-          ? [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]   // 13 items (legacy)
-          : [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];                        // 11 items
+    const inputs = this.layers[0] >= 20
+      ? [...sensorsFull, ...edgeSensors, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag, c.data.hdl, Math.min(1, c.data.accel / 12)]  // 20 items
+      : this.layers[0] >= 17
+        ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag, c.data.hdl, Math.min(1, c.data.accel / 12)]  // 17 items
+        : this.layers[0] >= 15
+          ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]  // 15 items
+          : this.layers[0] >= 13
+            ? [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]   // 13 items (legacy)
+            : [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];                        // 11 items
 
     const [nnSteer, thrMod, nnBrakeRaw] = this._forward(inputs);
     // brake output: tanh [-1,1] → clamp to [0,1] (positive = brake)
