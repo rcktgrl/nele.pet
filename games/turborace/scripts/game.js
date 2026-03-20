@@ -49,7 +49,7 @@ import {
 } from './editor.js';
 import {
   showMain, showIntro, showTrkSel, showCarSel,
-  showDiffSel, showOnlineTrkSel, showSettings, closeSettings,
+  showDiffSel, showNeuralModelSel, showOnlineTrkSel, showSettings, closeSettings,
   showTrainTrkSel, showTrainSetup, getTrainSetupGenome
 } from './menu.js';
 import {
@@ -533,7 +533,11 @@ document.getElementById('onlineTrkBackBtn').addEventListener('click',showTrkSel)
 document.getElementById('btnOnlineNxt').addEventListener('click',showDiffSel);
 document.getElementById('btnNxt').addEventListener('click',showDiffSel);
 document.getElementById('diffBackBtn').addEventListener('click',showTrkSel);
-document.getElementById('diffNextBtn').addEventListener('click',showCarSel);
+document.getElementById('diffNextBtn').addEventListener('click',()=>{
+  if(state.aiDifficulty==='neural') showNeuralModelSel(); else showCarSel();
+});
+document.getElementById('neuralModelBackBtn').addEventListener('click',showDiffSel);
+document.getElementById('neuralModelNextBtn').addEventListener('click',showCarSel);
 document.getElementById('closeEditorBtn').addEventListener('click',closeTrackEditor);
 document.getElementById('newTrackBtn').addEventListener('click',createNewEditorTrack);
 document.getElementById('dupeTrackBtn').addEventListener('click',duplicateEditorTrack);

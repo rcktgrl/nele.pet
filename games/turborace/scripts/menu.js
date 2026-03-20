@@ -357,18 +357,11 @@ export async function showTrainSetup(){
 
 export function getTrainSetupGenome(){ return _trainSetupGenome; }
 
-export async function showDiffSel(){
+export function showDiffSel(){
   if(state.selTrk==null){ showTrkSel(); return; }
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sDiff').style.display='flex';
   state.gState='diffSel';
-
-  const neuralSection=document.getElementById('neuralModelSection');
-  const modelContainer=document.getElementById('neuralModelCards');
-
-  function syncNeuralSection(){
-    neuralSection.style.display=state.aiDifficulty==='neural'?'':'none';
-  }
 
   // Sync difficulty cards with state
   document.querySelectorAll('#diffCards .diffCard').forEach(card=>{
@@ -377,11 +370,8 @@ export async function showDiffSel(){
       document.querySelectorAll('#diffCards .diffCard').forEach(c=>c.classList.remove('sel'));
       card.classList.add('sel');
       state.aiDifficulty=card.dataset.diff;
-      syncNeuralSection();
     };
   });
-
-  syncNeuralSection();
 
   // Sync opponent mode cards with state
   document.querySelectorAll('#oppCards .diffCard').forEach(card=>{
@@ -392,9 +382,16 @@ export async function showDiffSel(){
       state.opponentMode=card.dataset.opp;
     };
   });
+}
 
-  // Load neural models
-  modelContainer.innerHTML='<div style="color:#556;font-size:.8rem;align-self:center;">Loading models…</div>';
+export async function showNeuralModelSel(){
+  document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
+  document.getElementById('sNeuralModel').style.display='flex';
+  state.gState='neuralModelSel';
+
+  const container=document.getElementById('neuralModelCards');
+  container.innerHTML='<div style="color:#556;font-size:.8rem;align-self:center;">Loading models…</div>';
+
   const models=[];
   try{
     const idx=await fetch('./models/index.json').then(r=>r.json());
@@ -418,25 +415,21 @@ export async function showDiffSel(){
   }
   models.push({label:'Default',desc:'Built-in hand-designed weights',genome:null,icon:'⚙️'});
 
-  // Pre-select: keep current genome selection if it still matches, else pick first
+  // Pre-select first model (or keep current if still in list)
   let initIdx=0;
-  if(state.neuralModelGenome!==null){
-    const match=models.findIndex(m=>m.genome===state.neuralModelGenome);
-    if(match>=0) initIdx=match;
-  }
-  state.neuralModelGenome=models[initIdx].genome;
+  state.neuralModelGenome=models[0].genome;
 
-  modelContainer.innerHTML='';
+  container.innerHTML='';
   models.forEach((m,i)=>{
     const card=document.createElement('div');
     card.className='diffCard'+(i===initIdx?' sel':'');
     card.innerHTML=`<div class="diffIcon">${m.icon}</div><div class="diffName">${m.label}</div><div class="diffDesc">${m.desc}</div>`;
     card.onclick=()=>{
-      modelContainer.querySelectorAll('.diffCard').forEach(c=>c.classList.remove('sel'));
+      container.querySelectorAll('.diffCard').forEach(c=>c.classList.remove('sel'));
       card.classList.add('sel');
       state.neuralModelGenome=m.genome;
     };
-    modelContainer.appendChild(card);
+    container.appendChild(card);
   });
 }
 
