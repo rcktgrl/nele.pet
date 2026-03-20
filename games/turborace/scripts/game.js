@@ -290,27 +290,39 @@ function _updateTrainLeaderboard(){
       // Brake indicator: check neural output index 2 (brake), or car reversing
       const brakeOut=ctrl&&ctrl.lastOutputs?ctrl.lastOutputs[2]:0;
       const braking=brakeOut>0.1||car.isReversing;
-      entries.push({score,spd:car.spd,braking,offTrack:!!car._offTrack,onGravel:car.onGravel});
+      entries.push({score,spd:car.spd,braking,offTrack:!!car._offTrack,onGravel:car.onGravel,color:car.data&&car.data.hex?car.data.hex:'#889'});
     }
   }
   entries.sort((a,b)=>b.score-a.score);
   const top=entries.slice(0,8);
   const RANK_COLORS=['#ffd700','#c0c0c0','#cd7f32','#778','#778','#778','#778','#778'];
+  const ROW_COUNT=8;
   let html='';
-  for(let i=0;i<top.length;i++){
+  for(let i=0;i<ROW_COUNT;i++){
     const e=top[i];
-    const spdKph=Math.round(e.spd*3.6);
-    const rc=RANK_COLORS[i]||'#778';
-    const scoreColor=e.offTrack?'#445':'#4f4';
-    const brakeHtml=e.braking
-      ?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f33;box-shadow:0 0 5px #f33;"></span>'
-      :'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a1a2a;border:1px solid #223;"></span>';
-    html+=`<div style="display:grid;grid-template-columns:18px 1fr 48px 14px;gap:2px 6px;align-items:center;padding:1px 0;">`
-      +`<span style="color:${rc};font-size:.6rem;text-align:right;">${i+1}</span>`
-      +`<span style="color:${scoreColor};font-size:.65rem;">${e.offTrack?'X':e.score.toFixed(1)}</span>`
-      +`<span style="color:#889;font-size:.6rem;text-align:right;">${spdKph}&nbsp;km/h</span>`
-      +`<span style="text-align:center;">${brakeHtml}</span>`
-      +`</div>`;
+    if(e){
+      const spdKph=Math.round(e.spd*3.6);
+      const rc=RANK_COLORS[i]||'#778';
+      const scoreColor=e.offTrack?'#445':'#4f4';
+      const brakeHtml=e.braking
+        ?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f33;box-shadow:0 0 5px #f33;"></span>'
+        :'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a1a2a;border:1px solid #223;"></span>';
+      html+=`<div style="display:grid;grid-template-columns:18px 10px 1fr 48px 14px;gap:2px 6px;align-items:center;padding:1px 0;">`
+        +`<span style="color:${rc};font-size:.6rem;text-align:right;">${i+1}</span>`
+        +`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${e.color};box-shadow:0 0 4px ${e.color};"></span>`
+        +`<span style="color:${scoreColor};font-size:.65rem;">${e.offTrack?'X':e.score.toFixed(1)}</span>`
+        +`<span style="color:#889;font-size:.6rem;text-align:right;">${spdKph}&nbsp;km/h</span>`
+        +`<span style="text-align:center;">${brakeHtml}</span>`
+        +`</div>`;
+    }else{
+      html+=`<div style="display:grid;grid-template-columns:18px 10px 1fr 48px 14px;gap:2px 6px;align-items:center;padding:1px 0;">`
+        +`<span style="color:#334;font-size:.6rem;text-align:right;">${i+1}</span>`
+        +`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a1a2a;border:1px solid #223;"></span>`
+        +`<span style="color:#334;font-size:.65rem;">—</span>`
+        +`<span style="color:#334;font-size:.6rem;text-align:right;">—</span>`
+        +`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a1a2a;border:1px solid #223;margin:auto;"></span>`
+        +`</div>`;
+    }
   }
   _lbRows.innerHTML=html;
 }
@@ -500,6 +512,44 @@ document.getElementById('trainGenDurSlider').addEventListener('input',e=>{
   document.getElementById('trainGenDurVal').textContent=v+'s';
   for(const grp of state.trainGroups) grp.trainer.genDuration=v;
 });
+
+// Click-to-type for SPEED, HIDDEN, NODES value spans
+function _makeClickToType(spanId,{suffix='',min=1,max=null,stateKey,sliderId,formatter}){
+  const span=document.getElementById(spanId);
+  if(!span)return;
+  span.addEventListener('click',()=>{
+    const cur=state[stateKey]||parseInt(span.textContent)||min;
+    const inp=document.createElement('input');
+    inp.type='number';
+    inp.value=cur;
+    inp.min=min;
+    if(max!==null)inp.max=max;
+    inp.step=1;
+    inp.style.cssText='width:3.5em;font-size:.7rem;background:#0a0f1c;color:inherit;border:1px solid #4af;border-radius:3px;padding:1px 3px;font-family:inherit;';
+    span.replaceWith(inp);
+    inp.focus(); inp.select();
+    const commit=()=>{
+      let v=parseInt(inp.value);
+      if(isNaN(v))v=cur;
+      v=Math.max(min,max!==null?Math.min(max,v):v);
+      state[stateKey]=v;
+      const slider=document.getElementById(sliderId);
+      if(slider){slider.value=Math.min(parseInt(slider.max),v);}
+      const newSpan=document.createElement('span');
+      newSpan.id=spanId;
+      newSpan.style.cssText=span.style.cssText;
+      newSpan.setAttribute('title','Click to type value');
+      newSpan.textContent=formatter?formatter(v):v;
+      inp.replaceWith(newSpan);
+      _makeClickToType(spanId,{suffix,min,max,stateKey,sliderId,formatter});
+    };
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter')commit();if(e.key==='Escape'){inp.replaceWith(span);}});
+    inp.addEventListener('blur',commit);
+  });
+}
+_makeClickToType('trainFFVal',{min:1,max:null,stateKey:'trainFF',sliderId:'trainFFSlider',formatter:v=>v+'×'});
+_makeClickToType('trainHiddenVal',{min:1,max:null,stateKey:'trainHiddenLayers',sliderId:'trainHiddenSlider'});
+_makeClickToType('trainNodesVal',{min:1,max:null,stateKey:'trainHiddenSize',sliderId:'trainNodesSlider'});
 
 // ═══════════════════════════════════════════════════════
 //  BOOT

@@ -160,13 +160,31 @@ export class GeneticTrainer {
     const eliteN = Math.max(2, Math.floor(this.popSize * 0.3));
     const elites = this.population.slice(0, eliteN);
 
+    // Build fitness weights for elites so higher-scoring individuals
+    // are more likely to be selected as parents and contribute more genes
+    const minFit = elites[elites.length - 1].fitness;
+    const eliteWeights = elites.map(p => Math.max(0, p.fitness - minFit) + 1);
+    const totalWeight = eliteWeights.reduce((s, w) => s + w, 0);
+    const cumWeights = [];
+    let cum = 0;
+    for (const w of eliteWeights) { cum += w; cumWeights.push(cum); }
+    const weightedPickElite = () => {
+      const r = Math.random() * totalWeight;
+      for (let i = 0; i < cumWeights.length; i++) if (r <= cumWeights[i]) return elites[i];
+      return elites[elites.length - 1];
+    };
+
     // All-time best genome always survives as champion (never regresses)
     const championGenome = this.bestGenome ? [...this.bestGenome] : [...elites[0].genome];
     const next = [{ genome: championGenome, fitness: 0 }];
     while (next.length < this.popSize) {
-      const p1 = elites[Math.floor(Math.random() * eliteN)].genome;
-      const p2 = elites[Math.floor(Math.random() * eliteN)].genome;
-      const child = p1.map((w, i) => Math.random() < 0.5 ? w : p2[i]);
+      const parent1 = weightedPickElite();
+      const parent2 = weightedPickElite();
+      // Crossover ratio proportional to fitness: better parent contributes more genes
+      const w1 = Math.max(0, parent1.fitness - minFit) + 1;
+      const w2 = Math.max(0, parent2.fitness - minFit) + 1;
+      const p1ratio = w1 / (w1 + w2);
+      const child = parent1.genome.map((g, i) => Math.random() < p1ratio ? g : parent2.genome[i]);
       this._mutate(child, this.mutRate, this.mutStrength);
       next.push({ genome: child, fitness: 0 });
     }
