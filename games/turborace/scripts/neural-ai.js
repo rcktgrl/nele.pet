@@ -19,18 +19,18 @@ let _repoGenome = null;
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Default hand-designed weights for [15, 5, 3] architecture
-//  Inputs: 11 wall sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90), speed, waypointErr, edgeProximity, gravelFlag
+//  Default hand-designed weights for [17, 5, 3] architecture
+//  Inputs: 11 wall sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90), speed, waypointErr, edgeProximity, gravelFlag, grip, acceleration
 //  Outputs: steer, throttle, brake
 // ─────────────────────────────────────────────────────────────────────────────
-const _DEFAULT_LAYERS = [15, 5, 3];
-//                     s-90  s-60  s-30  s-10   s-5    s0   s+5  s+10  s+30  s+60  s+90   spd   wpt  edge  grav
+const _DEFAULT_LAYERS = [17, 5, 3];
+//                     s-90  s-60  s-30  s-10   s-5    s0   s+5  s+10  s+30  s+60  s+90   spd   wpt  edge  grav grip   acl
 const _W1 = [
-  [-3.0, -2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0,  0.0,  0.0,  0.8,  0.5], // H0 danger-left
-  [ 0.0,  0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0, -3.0,  0.0,  0.0,  0.8,  0.5], // H1 danger-right
-  [ 0.0,  0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0,  0.0,  0.0,  0.5,  0.5], // H2 danger-ahead
-  [ 0.8,  0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0], // H3 open-track
-  [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0], // H4 waypoint-err
+  [-3.0, -2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0], // H0 danger-left
+  [ 0.0,  0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0, -3.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0], // H1 danger-right
+  [ 0.0,  0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0,  0.0,  0.0,  0.5,  0.5, -0.8,  0.0], // H2 danger-ahead
+  [ 0.8,  0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0,  0.5,  0.3], // H3 open-track
+  [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  0.0,  0.0], // H4 waypoint-err
 ];
 const _b1 = [1.0, 1.0, 1.5, -4.0, 0.0];
 const _W2 = [
@@ -81,6 +81,7 @@ export class NeuralAI {
     this.la = la || 0.055;
     this.slowTimer = 0;
     this.prevPos = null;
+    this.prevSpd = 0;
     this.stuckCount = 0;
     this.context = context;
     this.revMode = 'none';
@@ -119,6 +120,7 @@ export class NeuralAI {
     if (s === 62) return [9, 5, 2];
     if (s === 88) return [13, 5, 3];
     if (s === 98) return [15, 5, 3];
+    if (s === 108) return [17, 5, 3];
     // Try [nIn, 5, 3] variants (last layer [5→3] = 3*6 = 18)
     const r3 = s - 18;
     if (r3 > 0 && r3 % 5 === 0) {
@@ -152,7 +154,7 @@ export class NeuralAI {
   // ── Weight management ───────────────────────────────────────────────────────
 
   _useDefaults() {
-    if (JSON.stringify(this.layers) === '[15,5,3]' || JSON.stringify(this.layers) === '[13,5,3]') {
+    if (JSON.stringify(this.layers) === '[17,5,3]') {
       this.weights = [{ W: _W1.map(r => [...r]), b: [..._b1] }, { W: _W2.map(r => [...r]), b: [..._b2] }];
       return;
     }
@@ -244,6 +246,10 @@ export class NeuralAI {
     if (!trackPoints.length || this.car.finished) return;
     const c = this.car;
 
+    // ── Acceleration sensor: track speed change ───────────────────────────────
+    const accelSensor = Math.max(-1, Math.min(1, (c.spd - this.prevSpd) / Math.max(dt * c.data.accel, 0.001)));
+    this.prevSpd = c.spd;
+
     // ── Stuck detection + reverse recovery ───────────────────────────────────
     if (!this.prevPos) this.prevPos = { x: c.pos.x, z: c.pos.z };
     const moved = Math.sqrt((c.pos.x - this.prevPos.x) ** 2 + (c.pos.z - this.prevPos.z) ** 2);
@@ -314,16 +320,20 @@ export class NeuralAI {
     const edgeProx = Math.min(1, Math.sqrt(md) / Math.max(1, halfW));
     // Gravel flag: 1 if on gravel, 0 otherwise
     const gravelFlag = c.onGravel ? 1.0 : 0.0;
+    // Grip sensor: 1.0 on track, 0.5 on gravel (reflects actual handling/braking multiplier)
+    const gripSensor = c.onGravel ? 0.5 : 1.0;
 
     // baseInputs: 11 sensors + speed + waypoint = 13 items
     // For legacy 13-input models, use inner 9 sensors (indices 1..9, skipping ±90°)
     const sensors9 = sensors.slice(1, 10);
     const sensorsFull = sensors;
-    const inputs = this.layers[0] >= 15
-      ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]  // 15 items
-      : this.layers[0] >= 13
-        ? [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]   // 13 items (legacy)
-        : [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];                        // 11 items
+    const inputs = this.layers[0] >= 17
+      ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag, gripSensor, accelSensor]  // 17 items
+      : this.layers[0] >= 15
+        ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]  // 15 items
+        : this.layers[0] >= 13
+          ? [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]   // 13 items (legacy)
+          : [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];                        // 11 items
 
     const [nnSteer, thrMod, nnBrakeRaw] = this._forward(inputs);
     // brake output: tanh [-1,1] → clamp to [0,1] (positive = brake)

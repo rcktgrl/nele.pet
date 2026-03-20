@@ -37,7 +37,7 @@ import {
   startRace, restartRace, updateResultsUI,
   initTraining, stopTraining, placeBestCarMarker, switchTrainingTrack
 } from './race.js';
-import { resetCarForTraining } from './trainer.js';
+import { resetCarForTraining, buildRandomGenome, GeneticTrainer } from './trainer.js';
 import {
   editorRebuildScene, drawEditorCanvas,
   setEditorNodeCount, setEditorBrushAsset, setEditorBrushEnabled, setEditorBrushSize, setEditorBrushSpacing,
@@ -557,7 +557,7 @@ function _drawNNViz(){
 
   const hiddens=ai.lastHiddens||[];
   const activations=[ai.lastInputs||[],...hiddens,ai.lastOutputs||[]];
-  const INPUT_LABELS=['s-90','s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','s+90','spd','wpt','edge','grav'];
+  const INPUT_LABELS=['s-90','s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','s+90','spd','wpt','edge','grav','grip','acl'];
   const OUTPUT_LABELS=['steer','thrtl','brake'];
 
   // Draw edges — skip transitions where either side has >40 nodes (too dense to be useful)
@@ -734,6 +734,20 @@ document.getElementById('trainExportBtn').addEventListener('click',()=>{
     btn.textContent='EXPORTED ✓';
     setTimeout(()=>{ btn.textContent='EXPORT'; },2000);
   }
+});
+document.getElementById('trainResetAiBtn').addEventListener('click', async ()=>{
+  // Clear any saved genome so it won't be reloaded
+  GeneticTrainer.clearSaved();
+  // Build a fresh random genome for the current architecture
+  const hiddenLayers=Math.max(1,Math.min(100,state.trainHiddenLayers||1));
+  const hiddenSize=Math.max(3,Math.min(100,state.trainHiddenSize||5));
+  const layers=[17,...Array(hiddenLayers).fill(hiddenSize),3];
+  const randomGenome=buildRandomGenome(layers);
+  await initTraining({preservedGenome:randomGenome});
+  _populateTrainTrkSelect();
+  const btn=document.getElementById('trainResetAiBtn');
+  btn.textContent='RESET ✓';
+  setTimeout(()=>{ btn.textContent='RESET AI'; },2000);
 });
 document.getElementById('trainStopBtn').addEventListener('click',()=>{ stopTraining(); showMain(); });
 document.getElementById('trainTrkSelect').addEventListener('change', async e=>{
