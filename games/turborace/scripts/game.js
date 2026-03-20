@@ -83,10 +83,11 @@ document.addEventListener('pointermove',e=>{
   if(state.gState==='training'){
     const cam=state.trainSplitCams&&state.trainSplitCams[0];
     if(cam&&cam.isOrthographicCamera&&e.buttons){
-      // Pan: drag to scroll (any button)
+      // Pan: drag to scroll (any button); clears car-follow mode
       const s=(cam._span*2)/window.innerHeight;
       cam.position.x-=e.movementX*s;
       cam.position.z-=e.movementY*s;
+      state._trainFollowCar=null;
     }
   }
 });
@@ -242,6 +243,11 @@ function updateFrame(dt){
       updateTrainSplitCameras();
     }
     updateTrainingHUD();
+    // Follow selected leaderboard car until camera is manually moved
+    if(state._trainFollowCar&&state._trainFollowCar.pos){
+      const cam=state.trainSplitCams&&state.trainSplitCams[0];
+      if(cam){cam.position.x=state._trainFollowCar.pos.x;cam.position.z=state._trainFollowCar.pos.z;}
+    }
   }else if(state.gState==='countdown'||state.gState==='finished'||state.gState==='paused'){
     if(state.gState==='finished'){
       state.raceTime+=dt;
@@ -328,7 +334,7 @@ function _updateTrainLeaderboard(){
   _lbRows.innerHTML=html;
 }
 
-// Center the training top-down camera on a leaderboard car when its row is clicked
+// Center the training top-down camera on a leaderboard car when its row is clicked, and follow it
 document.getElementById('trainLbRows').addEventListener('click',e=>{
   const row=e.target.closest('[data-lbidx]');
   if(!row)return;
@@ -339,6 +345,7 @@ document.getElementById('trainLbRows').addEventListener('click',e=>{
   if(!cam||!entry.car.pos)return;
   cam.position.x=entry.car.pos.x;
   cam.position.z=entry.car.pos.z;
+  state._trainFollowCar=entry.car;
 });
 
 function _drawNNViz(){
@@ -378,7 +385,7 @@ function _drawNNViz(){
   const ys=LAYERS.map((n,l)=>Array.from({length:n},(_,i)=>(i+1)/(n+1)*H));
 
   // Labels (only first and last layer)
-  const INPUT_LABELS=['s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','spd','wpt','edge','grav'];
+  const INPUT_LABELS=['s-90','s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','s+90','spd','wpt','edge','grav'];
   const OUTPUT_LABELS=['steer','thrtl','brake'];
 
   // Threshold below which edges are too dim to bother drawing (also limits cost for large nets)
