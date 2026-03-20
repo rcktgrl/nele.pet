@@ -148,14 +148,18 @@ export class GeneticTrainer {
       // Off-track cars are disqualified — their fitness is frozen at current value
       if (!car || car._offTrack) continue;
       if (lapMode) {
+        const onTrackRate = (typeof state !== 'undefined' && Number.isFinite(state.trainOnTrackRewardRate))
+          ? state.trainOnTrackRewardRate : 0.10;
+        const onTrackBonus = (car._onTrackTime || 0) * onTrackRate;
+        const penalty = car._fitPenalty || 0;
+        const baseFit = Math.max(0, car.totalProg * (1 + onTrackBonus) - penalty);
         if (car._lapCompleted && car._lapTime > 0) {
-          // Lap completed: fitness = bonus / lapTime (faster = more points), frozen once set
-          const lapFit = lapBonus / car._lapTime;
+          // Lap completed: checkpoint progress fitness + lap speed bonus (faster = more points)
+          const lapFit = baseFit + lapBonus / car._lapTime;
           if (lapFit > this._peakProg[i]) this._peakProg[i] = lapFit;
         } else {
-          // Not yet finished: small partial progress to distinguish attempts
-          const partialFit = Math.max(0, car.totalProg * 0.05 - (car._fitPenalty || 0) * 0.05);
-          if (partialFit > this._peakProg[i]) this._peakProg[i] = partialFit;
+          // Not yet finished: same checkpoint rewards as timed mode so cars drive in the right direction
+          if (baseFit > this._peakProg[i]) this._peakProg[i] = baseFit;
         }
         this.population[i].fitness = this._peakProg[i];
       } else {
