@@ -433,7 +433,7 @@ document.getElementById('trainSaveBtn').addEventListener('click',()=>{
   // Save the best genome across all parallel simulations
   const best=groups.reduce((b,g)=>g.trainer.bestFitness>b.trainer.bestFitness?g:b,groups[0]).trainer;
   const saved=best.saveToLocalStorage();
-  const exported=best.exportAsJSON('neural-driver');
+  const exported=best.exportAsJSON(`gen${best.generation}-${best.layers.join('x')}`);
   if(saved||exported) document.getElementById('trainSaveBtn').textContent='EXPORTED ✓';
   setTimeout(()=>{ const b=document.getElementById('trainSaveBtn'); if(b)b.textContent='SAVE & EXPORT'; },2000);
 });
