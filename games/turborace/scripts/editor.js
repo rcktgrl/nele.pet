@@ -858,26 +858,29 @@ export function drawEditorCanvas(){
       ctx.stroke();
     }
   });
-  state.editorTrack.nodes.forEach((n,i)=>{
-    const p=editorWorldToOverlay(new THREE.Vector3(n.x,1,n.z),canvas);
-    if(!p) return;
-    ctx.beginPath();
-    ctx.fillStyle=n.type==='start-finish'?'#ffffff':(i===state.editorSelectedNode?'#ffd166':'#7cc7ff');
-    ctx.arc(p.x,p.y,n.type==='start-finish'?10:8,0,Math.PI*2);
-    ctx.fill();
-    ctx.lineWidth=2;
-    ctx.strokeStyle='#091018';
-    ctx.stroke();
-    if(n.type==='start-finish'){
-      ctx.strokeStyle='#111';
-      ctx.setLineDash([5,3]);
+  const hideNodes=document.getElementById('editorHideNodes')?.checked;
+  if(!hideNodes){
+    state.editorTrack.nodes.forEach((n,i)=>{
+      const p=editorWorldToOverlay(new THREE.Vector3(n.x,1,n.z),canvas);
+      if(!p) return;
       ctx.beginPath();
-      ctx.moveTo(p.x-14,p.y);
-      ctx.lineTo(p.x+14,p.y);
+      ctx.fillStyle=n.type==='start-finish'?'#ffffff':(i===state.editorSelectedNode?'#ffd166':'#7cc7ff');
+      ctx.arc(p.x,p.y,n.type==='start-finish'?10:8,0,Math.PI*2);
+      ctx.fill();
+      ctx.lineWidth=2;
+      ctx.strokeStyle='#091018';
       ctx.stroke();
-      ctx.setLineDash([]);
-    }
-  });
+      if(n.type==='start-finish'){
+        ctx.strokeStyle='#111';
+        ctx.setLineDash([5,3]);
+        ctx.beginPath();
+        ctx.moveTo(p.x-14,p.y);
+        ctx.lineTo(p.x+14,p.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    });
+  }
 }
 
 export function bindEditorAssetPalette(){
