@@ -279,7 +279,7 @@
     <div class="setupLabel">Starting Model</div>
     <div id="trainSetupModelCards" class="diffCards" style="flex-wrap:wrap;gap:14px;justify-content:center;min-height:80px;"></div>
   </div>
-  <div class="setupSection">
+  <div class="setupSection" id="trainSetupArchSection">
     <div class="setupLabel">Architecture</div>
     <div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap;padding:8px 0;">
       <label style="display:flex;align-items:center;gap:8px;color:#889;font-size:.85rem;">
@@ -291,7 +291,6 @@
         <input id="trainSetupNodesSlider" type="range" min="3" max="20" value="5" style="width:100px;accent-color:#f84;">
       </label>
     </div>
-    <div style="color:#446;font-size:.7rem;text-align:center;">Mismatched architecture ignores the selected model and starts fresh.</div>
   </div>
   <div class="menuActions menuActions-inline">
     <button id="trainSetupBackBtn" class="btn btn-s">BACK</button>

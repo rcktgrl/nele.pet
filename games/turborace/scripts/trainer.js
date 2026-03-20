@@ -253,6 +253,7 @@ export class GeneticTrainer {
   saveToLocalStorage() {
     if (!this.bestGenome) return false;
     localStorage.setItem(LS_KEY, JSON.stringify(this.bestGenome));
+    localStorage.setItem('turborace_nn_layers', JSON.stringify(this.layers));
     return true;
   }
 
@@ -263,6 +264,7 @@ export class GeneticTrainer {
       id,
       name,
       version: 1,
+      layers: this.layers,
       genome: this.bestGenome,
       fitness: this.bestFitness,
       generation: this.generation,

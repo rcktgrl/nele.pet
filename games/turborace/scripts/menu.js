@@ -262,7 +262,7 @@ export async function showTrkSel(){
   document.getElementById('sTrk').style.display='flex';
   document.getElementById('btnNxt').style.display='';
   document.getElementById('btnNxt').disabled=(state.selTrk==null);
-  const trainBtn=document.getElementById('btnTrainStart'); if(trainBtn) trainBtn.disabled=(state.selTrk==null);
+  const trainBtn=document.getElementById('btnTrainStart'); if(trainBtn){ trainBtn.style.display='none'; trainBtn.disabled=true; }
   const tracks=state.folderTracks;
   await buildTrackCards(tracks,document.getElementById('trkCards'),'btnNxt');
 }
@@ -273,7 +273,11 @@ export async function showTrainTrkSel(){
   await showTrkSel();
   document.getElementById('btnNxt').style.display='none';
   const trainBtn=document.getElementById('btnTrainStart');
-  if(trainBtn) trainBtn.scrollIntoView({behavior:'smooth',block:'nearest'});
+  if(trainBtn){
+    trainBtn.style.display='';
+    trainBtn.disabled=(state.selTrk==null);
+    trainBtn.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -304,9 +308,10 @@ export async function showTrainSetup(){
     const idx=await fetch('./models/index.json').then(r=>r.json());
     for(const id of (idx.models||[])){
       try{
-        const m=await fetch(`./models/${id}.json`).then(r=>r.json());
+        const filename=id.endsWith('.json')?id:`${id}.json`;
+        const m=await fetch(`./models/${filename}`).then(r=>r.json());
         if(Array.isArray(m.genome)&&m.genome.length){
-          models.push({label:m.name||id,desc:`Built-in · gen ${m.generation||'?'}`,genome:m.genome,icon:'🧠',arch:[15,5,3]});
+          models.push({label:m.name||id,desc:`Built-in · gen ${m.generation||'?'}`,genome:m.genome,icon:'🧠',layers:m.layers||null});
         }
       }catch(_){}
     }
@@ -318,16 +323,41 @@ export async function showTrainSetup(){
     try{
       const genome=JSON.parse(saved);
       const savedName=localStorage.getItem('turborace_nn_name')||'Saved Model';
-      models.push({label:savedName,desc:'Saved in browser',genome,icon:'💾',arch:null});
+      const savedLayers=localStorage.getItem('turborace_nn_layers');
+      const layers=savedLayers?JSON.parse(savedLayers):null;
+      models.push({label:savedName,desc:'Saved in browser',genome,icon:'💾',layers});
     }catch(_){}
   }
 
   // Fresh random start
-  models.push({label:'Fresh Start',desc:'Random initialisation',genome:null,icon:'✨',arch:null});
+  models.push({label:'Fresh Start',desc:'Random initialisation',genome:null,icon:'✨',layers:null});
 
   // Default select: first model
   _trainSetupGenome=models[0].genome;
   let selectedIdx=0;
+
+  function _applyModelSelection(m){
+    _trainSetupGenome=m.genome;
+    const archSection=document.getElementById('trainSetupArchSection');
+    // Only hide sliders for models compatible with the training format (15 inputs, 3 outputs)
+    const compatible=m.layers&&m.layers.length>=3&&m.layers[0]===15&&m.layers[m.layers.length-1]===3;
+    if(compatible){
+      // Model has known architecture — use it, hide sliders
+      const hl=m.layers.length-2, nl=m.layers[1]||5;
+      document.getElementById('trainSetupHiddenSlider').value=hl;
+      document.getElementById('trainSetupHiddenVal').textContent=hl;
+      document.getElementById('trainSetupNodesSlider').value=nl;
+      document.getElementById('trainSetupNodesVal').textContent=nl;
+      state.trainHiddenLayers=hl; state.trainHiddenSize=nl;
+      if(archSection) archSection.style.display='none';
+    } else {
+      // Fresh start or incompatible model — show sliders
+      if(archSection) archSection.style.display='';
+    }
+  }
+
+  // Apply initial selection
+  _applyModelSelection(models[0]);
 
   container.innerHTML='';
   models.forEach((m,i)=>{
@@ -338,18 +368,7 @@ export async function showTrainSetup(){
       container.querySelectorAll('.diffCard').forEach(c=>c.classList.remove('sel'));
       card.classList.add('sel');
       selectedIdx=i;
-      _trainSetupGenome=m.genome;
-      // Auto-set arch sliders when a repo model with known arch is chosen
-      if(m.arch&&m.arch.length>=3){
-        const hl=m.arch.length-2, nl=m.arch[1]||5;
-        document.getElementById('trainSetupHiddenSlider').value=hl;
-        document.getElementById('trainSetupHiddenVal').textContent=hl;
-        document.getElementById('trainSetupNodesSlider').value=nl;
-        document.getElementById('trainSetupNodesVal').textContent=nl;
-        state.trainHiddenLayers=hl; state.trainHiddenSize=nl;
-        const hs=document.getElementById('trainHiddenSlider'); if(hs){hs.value=hl;document.getElementById('trainHiddenVal').textContent=hl;}
-        const ns=document.getElementById('trainNodesSlider'); if(ns){ns.value=nl;document.getElementById('trainNodesVal').textContent=nl;}
-      }
+      _applyModelSelection(m);
     };
     container.appendChild(card);
   });
@@ -400,7 +419,7 @@ export async function showNeuralModelSel(){
         const filename=id.endsWith('.json')?id:`${id}.json`;
         const m=await fetch(`./models/${filename}`).then(r=>r.json());
         if(Array.isArray(m.genome)&&m.genome.length){
-          models.push({label:m.name||id,desc:`Built-in · gen ${m.generation||'?'}`,genome:m.genome,icon:'🧠'});
+          models.push({label:m.name||id,desc:`Built-in · gen ${m.generation||'?'}`,genome:m.genome,layers:m.layers||null,icon:'🧠'});
         }
       }catch(_){}
     }
@@ -418,6 +437,7 @@ export async function showNeuralModelSel(){
   // Pre-select first model (or keep current if still in list)
   let initIdx=0;
   state.neuralModelGenome=models[0].genome;
+  state.neuralModelLayers=models[0].layers||null;
 
   container.innerHTML='';
   models.forEach((m,i)=>{
@@ -428,6 +448,7 @@ export async function showNeuralModelSel(){
       container.querySelectorAll('.diffCard').forEach(c=>c.classList.remove('sel'));
       card.classList.add('sel');
       state.neuralModelGenome=m.genome;
+      state.neuralModelLayers=m.layers||null;
     };
     container.appendChild(card);
   });

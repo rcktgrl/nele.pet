@@ -26,6 +26,7 @@ export const state = {
     selTrk: null,
     aiDifficulty: 'medium',  // 'easy' | 'medium' | 'hard' | 'neural'
     neuralModelGenome: null, // genome array for neural AI race (null = use default)
+    neuralModelLayers: null, // layer spec for neural AI race (null = infer from genome)
     opponentMode: 'ai',      // 'ai' | 'ghost'
     carCardPreviewScene: null,
     carCardPreviewCamera: null,
