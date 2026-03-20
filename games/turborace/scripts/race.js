@@ -200,7 +200,7 @@ let _trainLapsBackup = null;
 
 const N_SIMS = 8; // Number of independent parallel simulations per generation
 
-export async function initTraining({preserveGen=0, preservedGenome=null}={}){
+export async function initTraining({preserveGen=0, preservedGenome=null, skipSaved=false}={}){
   // Clean up any prior race / training
   for(const c of state.allCars) scene.remove(c.mesh);
   state.allCars=[]; state.aiCars=[]; state.aiControllers=[]; state.pCar=null;
@@ -224,7 +224,7 @@ export async function initTraining({preserveGen=0, preservedGenome=null}={}){
   const layers=[15,...Array(hiddenLayers).fill(hiddenSize),3];
 
   // Only use saved genome if it matches the current architecture; prefer preserved genome from track switch
-  const rawSaved=preservedGenome||GeneticTrainer.loadFromLocalStorage();
+  const rawSaved=skipSaved?null:(preservedGenome||GeneticTrainer.loadFromLocalStorage());
   const savedGenome=(rawSaved&&rawSaved.length===computeGenomeSize(layers))?rawSaved:null;
 
   // Shared context function (same track for all sims)

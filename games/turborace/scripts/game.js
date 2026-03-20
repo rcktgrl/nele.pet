@@ -606,6 +606,10 @@ document.getElementById('trainExportBtn').addEventListener('click',()=>{
     setTimeout(()=>{ btn.textContent='EXPORT'; },2000);
   }
 });
+document.getElementById('trainDeleteAiBtn').addEventListener('click', async ()=>{
+  await initTraining({skipSaved:true});
+  _populateTrainTrkSelect();
+});
 document.getElementById('trainStopBtn').addEventListener('click',()=>{ stopTraining(); showMain(); });
 document.getElementById('trainTrkSelect').addEventListener('change', async e=>{
   const newId=e.target.value;
