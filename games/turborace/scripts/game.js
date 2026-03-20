@@ -329,6 +329,51 @@ function updateFrame(dt){
 //  TRAINING HUD
 // ═══════════════════════════════════════════════════════
 let _nnCanvas=null;
+let _nnPan={x:0,y:0};
+let _nnZoom=1;
+let _nnDrag=null;      // {sx,sy,px,py} — drag start
+let _nnLastArch='';   // detect arch change to reset view
+
+function _initNNInteraction(){
+  const cv=document.getElementById('trainNNCanvas');
+  if(!cv||cv._nnInit) return;
+  cv._nnInit=true;
+  cv.addEventListener('mousedown',e=>{
+    _nnDrag={sx:e.clientX,sy:e.clientY,px:_nnPan.x,py:_nnPan.y};
+    cv.style.cursor='grabbing'; e.preventDefault();
+  });
+  window.addEventListener('mousemove',e=>{
+    if(!_nnDrag) return;
+    _nnPan.x=_nnDrag.px+(e.clientX-_nnDrag.sx);
+    _nnPan.y=_nnDrag.py+(e.clientY-_nnDrag.sy);
+  });
+  window.addEventListener('mouseup',()=>{
+    if(_nnDrag){_nnDrag=null; cv.style.cursor='grab';}
+  });
+  cv.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const f=e.deltaY<0?1.15:1/1.15;
+    const rect=cv.getBoundingClientRect();
+    const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+    _nnPan.x=mx+(_nnPan.x-mx)*f;
+    _nnPan.y=my+(_nnPan.y-my)*f;
+    _nnZoom=Math.max(0.04,Math.min(20,_nnZoom*f));
+  },{passive:false});
+  // Touch pan
+  let _t0=null;
+  cv.addEventListener('touchstart',e=>{
+    if(e.touches.length===1) _t0={x:e.touches[0].clientX,y:e.touches[0].clientY,px:_nnPan.x,py:_nnPan.y};
+    e.preventDefault();
+  },{passive:false});
+  cv.addEventListener('touchmove',e=>{
+    if(e.touches.length===1&&_t0){
+      _nnPan.x=_t0.px+(e.touches[0].clientX-_t0.x);
+      _nnPan.y=_t0.py+(e.touches[0].clientY-_t0.y);
+    }
+    e.preventDefault();
+  },{passive:false});
+  cv.addEventListener('touchend',()=>{ _t0=null; });
+}
 function updateTrainingHUD(){
   const groups=state.trainGroups;
   if(!groups||!groups.length)return;
@@ -415,110 +460,113 @@ document.getElementById('trainLbRows').addEventListener('click',e=>{
 function _drawNNViz(){
   if(!_nnCanvas) _nnCanvas=document.getElementById('trainNNCanvas');
   const cv=_nnCanvas; if(!cv) return;
+  _initNNInteraction();
   const cx=cv.getContext('2d'); if(!cx) return;
   const W=cv.width, H=cv.height;
   cx.clearRect(0,0,W,H);
-  // Find the best car's AI controller across all simulation groups
+
+  // Find best car's AI across all simulation groups
   let bestAI=null, bestProg=-1;
-  for(const grp of state.trainGroups){
-    for(let i=0;i<grp.cars.length;i++){
+  for(const grp of state.trainGroups)
+    for(let i=0;i<grp.cars.length;i++)
       if(grp.cars[i].totalProg>bestProg){bestProg=grp.cars[i].totalProg;bestAI=grp.controllers[i];}
-    }
-  }
   const ai=bestAI;
   if(!ai||!ai.layers||!ai.weights) return;
 
   const LAYERS=ai.layers;
   const nL=LAYERS.length;
+  const maxNodes=Math.max(...LAYERS);
 
-  // Cap displayed nodes per layer — input layer (15) always fits fully.
-  // For larger layers show first half + gap marker (null) + last half.
-  const MAX_DISP=15;
-  const shown=LAYERS.map(n=>{
-    if(n<=MAX_DISP) return Array.from({length:n},(_,i)=>i);
-    const half=Math.floor(MAX_DISP/2);
-    return [...Array.from({length:half},(_,i)=>i), null,
-            ...Array.from({length:half},(_,i)=>n-half+i)];
+  // Natural (unscaled) layout — full node count, no capping
+  const NODE_R=5, V_STEP=16, H_STEP=80, PAD_X=46, PAD_Y=22;
+  const vW=PAD_X+(nL-1)*H_STEP+PAD_X;
+  const vH=PAD_Y+maxNodes*V_STEP+PAD_Y;
+
+  // Auto-fit when architecture changes (reset pan/zoom)
+  const archKey=LAYERS.join(',');
+  if(archKey!==_nnLastArch){
+    _nnLastArch=archKey;
+    const fitZ=Math.min(0.98, W/vW, H/vH)*0.92;
+    _nnZoom=fitZ;
+    _nnPan.x=(W-vW*fitZ)/2;
+    _nnPan.y=(H-vH*fitZ)/2;
+  }
+
+  cx.save();
+  cx.translate(_nnPan.x,_nnPan.y);
+  cx.scale(_nnZoom,_nnZoom);
+
+  // Visible virtual rect for culling
+  const vx0=-_nnPan.x/_nnZoom, vy0=-_nnPan.y/_nnZoom;
+  const vx1=vx0+W/_nnZoom,     vy1=vy0+H/_nnZoom;
+
+  // Layer X positions
+  const xs=Array.from({length:nL},(_,l)=>PAD_X+l*H_STEP);
+  // Node Y positions — each layer vertically centred in the virtual canvas
+  const ys=LAYERS.map(n=>{
+    const top=PAD_Y+(maxNodes-n)*V_STEP/2;
+    return Array.from({length:n},(_,i)=>top+i*V_STEP);
   });
-  const maxSlots=Math.max(...shown.map(s=>s.length));
 
-  const nodeR=Math.max(2,Math.min(6,Math.floor(H/(maxSlots+2)/2)-1));
-  const margin=Math.max(18,Math.min(28,Math.floor(W/(nL+1))));
-
-  // X positions: first and last columns pinned, middle ones evenly spaced
-  const xs=Array.from({length:nL},(_,l)=>
-    l===0?margin:l===nL-1?W-margin:Math.round(margin+(W-margin*2)*l/(nL-1))
-  );
-
-  // Y positions based on display slots (including gap slot)
-  const ys=shown.map(slots=>slots.map((_,slot)=>(slot+1)/(slots.length+1)*H));
-
-  // Build activation arrays: [inputs, ...hiddens, outputs]
   const hiddens=ai.lastHiddens||[];
   const activations=[ai.lastInputs||[],...hiddens,ai.lastOutputs||[]];
-
   const INPUT_LABELS=['s-90','s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','s+90','spd','wpt','edge','grav'];
   const OUTPUT_LABELS=['steer','thrtl','brake'];
 
-  // Draw edges between displayed nodes only (weight lookup uses actual node indices)
-  const edgeAlphaMin=0.06;
+  // Draw edges — skip transitions where either side has >40 nodes (too dense to be useful)
+  const edgeAlphaMin=0.05;
   for(let l=0;l<nL-1;l++){
+    if(LAYERS[l]>40||LAYERS[l+1]>40) continue;
+    // Skip layer column if entirely off-screen
+    if(xs[l]>vx1+H_STEP||xs[l+1]<vx0-H_STEP) continue;
     const Wm=ai.weights[l].W;
-    for(let di=0;di<shown[l+1].length;di++){
-      const d=shown[l+1][di]; if(d===null) continue;
-      for(let si=0;si<shown[l].length;si++){
-        const s=shown[l][si]; if(s===null) continue;
-        const w=Wm[d]?.[s]; if(w===undefined) continue;
+    for(let d=0;d<Wm.length;d++){
+      if(ys[l+1][d]<vy0-V_STEP||ys[l+1][d]>vy1+V_STEP) continue;
+      for(let s=0;s<Wm[d].length;s++){
+        const w=Wm[d][s];
         const alpha=Math.min(0.85,Math.abs(w)/3);
         if(alpha<edgeAlphaMin) continue;
         cx.strokeStyle=w>0?`rgba(80,220,120,${alpha})`:`rgba(220,80,80,${alpha})`;
-        cx.lineWidth=Math.min(2,Math.abs(w)*0.7+0.3);
-        cx.beginPath(); cx.moveTo(xs[l],ys[l][si]); cx.lineTo(xs[l+1],ys[l+1][di]); cx.stroke();
+        cx.lineWidth=Math.min(1.5,Math.abs(w)*0.6+0.2);
+        cx.beginPath(); cx.moveTo(xs[l],ys[l][s]); cx.lineTo(xs[l+1],ys[l+1][d]); cx.stroke();
       }
     }
   }
 
-  // Draw nodes and gap markers
+  // Draw nodes (with viewport culling for large layers)
   for(let l=0;l<nL;l++){
-    const spacing=H/(shown[l].length+1);
-    for(let slot=0;slot<shown[l].length;slot++){
-      const idx=shown[l][slot];
-      const x=xs[l], y=ys[l][slot];
-      if(idx===null){
-        // Gap indicator
-        cx.fillStyle='#556'; cx.font='9px monospace'; cx.textAlign='center';
-        cx.fillText('⋮',x,y+3);
-        continue;
-      }
-      const act=activations[l]?.[idx]??0;
+    if(xs[l]<vx0-H_STEP||xs[l]>vx1+H_STEP) continue;
+    for(let n=0;n<LAYERS[l];n++){
+      const y=ys[l][n];
+      if(y<vy0-V_STEP||y>vy1+V_STEP) continue;
+      const x=xs[l];
+      const act=activations[l]?.[n]??0;
       const t=(act+1)/2;
-      const r=Math.round(40+t*200), g2=Math.round(80+t*120), b=Math.round(200-t*150);
-      cx.beginPath(); cx.arc(x,y,nodeR,0,Math.PI*2);
+      const r=Math.round(40+t*200),g2=Math.round(80+t*120),b=Math.round(200-t*150);
+      cx.beginPath(); cx.arc(x,y,NODE_R,0,Math.PI*2);
       cx.fillStyle=`rgb(${r},${g2},${b})`; cx.fill();
-      cx.strokeStyle='#334'; cx.lineWidth=1; cx.stroke();
-      if(spacing>=8){
-        if(l===0&&INPUT_LABELS[idx]){
-          const fs=Math.max(5,Math.min(7,Math.floor(spacing*0.55)));
-          cx.fillStyle='#aab'; cx.font=`${fs}px monospace`; cx.textAlign='right';
-          cx.fillText(INPUT_LABELS[idx],x-nodeR-2,y+2);
-        } else if(l===nL-1&&OUTPUT_LABELS[idx]){
-          const fs=Math.max(5,Math.min(7,Math.floor(spacing*0.55)));
-          cx.fillStyle='#aab'; cx.font=`${fs}px monospace`; cx.textAlign='left';
-          cx.fillText(OUTPUT_LABELS[idx],x+nodeR+2,y+2);
-        }
+      cx.strokeStyle='#334'; cx.lineWidth=0.8; cx.stroke();
+      if(l===0&&INPUT_LABELS[n]){
+        cx.fillStyle='#889'; cx.font='6px monospace'; cx.textAlign='right';
+        cx.fillText(INPUT_LABELS[n],x-NODE_R-2,y+2);
+      } else if(l===nL-1&&OUTPUT_LABELS[n]){
+        cx.fillStyle='#889'; cx.font='6px monospace'; cx.textAlign='left';
+        cx.fillText(OUTPUT_LABELS[n],x+NODE_R+2,y+2);
       }
     }
-    // Show actual count below truncated layers
-    if(LAYERS[l]>MAX_DISP){
-      cx.fillStyle='#667'; cx.font='6px monospace'; cx.textAlign='center';
-      cx.fillText(`×${LAYERS[l]}`,xs[l],H-2);
-    }
+    // Node count label below each column
+    cx.fillStyle='#445'; cx.font='6px monospace'; cx.textAlign='center';
+    cx.fillText(LAYERS[l],xs[l],vH-4);
   }
 
-  // Title showing full architecture
+  cx.restore();
+
+  // Title and hint in screen space (unaffected by pan/zoom)
   const archStr=LAYERS.join('→');
   cx.fillStyle='#556'; cx.font='7px monospace'; cx.textAlign='center';
-  cx.fillText(`NET [${archStr}] · BEST CAR`,W/2,10);
+  cx.fillText(`NET [${archStr}] · BEST CAR`,W/2,11);
+  cx.fillStyle='#2a3550'; cx.font='6px monospace'; cx.textAlign='right';
+  cx.fillText('scroll=zoom  drag=pan',W-5,H-4);
 }
 
 // ═══════════════════════════════════════════════════════
