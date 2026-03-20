@@ -198,7 +198,7 @@ export function restartRace(){
 // ═══════════════════════════════════════════════════════
 let _trainLapsBackup = null;
 
-const N_SIMS = 8; // Number of independent parallel simulations per generation
+// Number of independent parallel simulations per generation (configurable via trainNumSims)
 
 export async function initTraining({preserveGen=0, preservedGenome=null}={}){
   // Clean up any prior race / training
@@ -237,8 +237,9 @@ export async function initTraining({preserveGen=0, preservedGenome=null}={}){
     playerCar:null,
   });
 
-  // Create N_SIMS independent simulations, each with their own trainer and cars
-  for(let s=0;s<N_SIMS;s++){
+  const nSims=Math.max(1,state.trainNumSims||8);
+  // Create nSims independent simulations, each with their own trainer and cars
+  for(let s=0;s<nSims;s++){
     const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:state.trainGenDuration||35,layers});
     trainer.initPopulation(savedGenome);
     if(preserveGen>0) trainer.generation=preserveGen;

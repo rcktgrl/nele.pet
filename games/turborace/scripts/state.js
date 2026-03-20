@@ -61,6 +61,7 @@ export const state = {
     renderer: null,
     trainer: null,       // GeneticTrainer instance, active only during training
     trainGrid: [],       // Array of {pos,hdg} start positions for training cars
+    trainNumSims: 8,     // Number of parallel independent simulations (read by initTraining)
     trainPopSize: 8,     // Population size (read by initTraining)
     trainFF: 1,          // Fast-forward multiplier (1–10 physics substeps per frame)
     trainGenDuration: 35,// Generation duration in seconds
