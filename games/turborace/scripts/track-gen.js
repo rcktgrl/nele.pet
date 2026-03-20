@@ -853,12 +853,12 @@ function addCityScenery(curve,data){
     const p=state.trkPts[i];
     const nearX=Math.round(p.x/gs)*gs, nearZ=Math.round(p.z/gs)*gs;
     // On a vertical road? (X near gridline, Z in mid-segment)
-    if(Math.abs(p.x-nearX)<roadW*0.7){
+    if(Math.abs(p.x-nearX)<corridorW/2){
       const segZ=Math.floor(p.z/gs)*gs;
       if(p.z>segZ+intZone && p.z<segZ+gs-intZone) trackV.add(nearX+','+segZ);
     }
     // On a horizontal road?
-    if(Math.abs(p.z-nearZ)<roadW*0.7){
+    if(Math.abs(p.z-nearZ)<corridorW/2){
       const segX=Math.floor(p.x/gs)*gs;
       if(p.x>segX+intZone && p.x<segX+gs-intZone) trackH.add(segX+','+nearZ);
     }
@@ -969,7 +969,7 @@ function addCityScenery(curve,data){
   });
   const ban=new THREE.Mesh(new THREE.BoxGeometry(corridorW+2,.4,.18),gR);
   ban.position.copy(sp); ban.position.y=5.6; ban.rotation.y=ang; ban.userData.trk=true; scene.add(ban);
-  const sfLine=new THREE.Mesh(new THREE.BoxGeometry(roadW,.07,1.3),mat(0xffffff));
+  const sfLine=new THREE.Mesh(new THREE.BoxGeometry(corridorW,.07,1.3),mat(0xffffff));
   sfLine.position.copy(sp); sfLine.position.y=.07; sfLine.rotation.y=ang; sfLine.userData.trk=true; scene.add(sfLine);
 
   // ── 4. BUILDINGS ──
@@ -1043,7 +1043,6 @@ function addCityScenery(curve,data){
     const w=wps[i];
     // Skip if near start/finish
     if(Math.hypot(w[0]-sfPt.x,w[2]-sfPt.z)<sfExclude)continue;
-    if(pointInNoAutoZone(data,w[0],w[2],6))continue;
     const prev=wps[(i-1+nwp)%nwp],next=wps[(i+1)%nwp];
     const tx=next[0]-prev[0],tz=next[2]-prev[2];
     const tl=Math.sqrt(tx*tx+tz*tz)||1;
