@@ -273,6 +273,46 @@ function updateTrainingHUD(){
   document.getElementById('trainCountdown').textContent=Math.max(0,Math.ceil(t.genDuration-t.genTime))+'s';
   document.getElementById('trainBar').style.width=Math.min(100,(t.genTime/t.genDuration)*100)+'%';
   _drawNNViz();
+  _updateTrainLeaderboard();
+}
+
+let _lbRows=null;
+function _updateTrainLeaderboard(){
+  if(!_lbRows)_lbRows=document.getElementById('trainLbRows');
+  if(!_lbRows||!state.trainGroups||!state.trainGroups.length)return;
+  // Collect scored entries from all simulation groups
+  const entries=[];
+  for(const grp of state.trainGroups){
+    for(let i=0;i<grp.cars.length;i++){
+      const car=grp.cars[i];
+      const ctrl=grp.controllers[i];
+      const score=Math.max(0,car.totalProg-(car._fitPenalty||0));
+      // Brake indicator: check neural output index 2 (brake), or car reversing
+      const brakeOut=ctrl&&ctrl.lastOutputs?ctrl.lastOutputs[2]:0;
+      const braking=brakeOut>0.1||car.isReversing;
+      entries.push({score,spd:car.spd,braking,offTrack:!!car._offTrack,onGravel:car.onGravel});
+    }
+  }
+  entries.sort((a,b)=>b.score-a.score);
+  const top=entries.slice(0,8);
+  const RANK_COLORS=['#ffd700','#c0c0c0','#cd7f32','#778','#778','#778','#778','#778'];
+  let html='';
+  for(let i=0;i<top.length;i++){
+    const e=top[i];
+    const spdKph=Math.round(e.spd*3.6);
+    const rc=RANK_COLORS[i]||'#778';
+    const scoreColor=e.offTrack?'#445':'#4f4';
+    const brakeHtml=e.braking
+      ?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f33;box-shadow:0 0 5px #f33;"></span>'
+      :'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a1a2a;border:1px solid #223;"></span>';
+    html+=`<div style="display:grid;grid-template-columns:18px 1fr 48px 14px;gap:2px 6px;align-items:center;padding:1px 0;">`
+      +`<span style="color:${rc};font-size:.6rem;text-align:right;">${i+1}</span>`
+      +`<span style="color:${scoreColor};font-size:.65rem;">${e.offTrack?'X':e.score.toFixed(1)}</span>`
+      +`<span style="color:#889;font-size:.6rem;text-align:right;">${spdKph}&nbsp;km/h</span>`
+      +`<span style="text-align:center;">${brakeHtml}</span>`
+      +`</div>`;
+  }
+  _lbRows.innerHTML=html;
 }
 
 function _drawNNViz(){
