@@ -81,7 +81,6 @@ export class NeuralAI {
     this.la = la || 0.055;
     this.slowTimer = 0;
     this.prevPos = null;
-    this.prevSpd = 0;
     this.stuckCount = 0;
     this.context = context;
     this.revMode = 'none';
@@ -246,10 +245,6 @@ export class NeuralAI {
     if (!trackPoints.length || this.car.finished) return;
     const c = this.car;
 
-    // ── Acceleration sensor: track speed change ───────────────────────────────
-    const accelSensor = Math.max(-1, Math.min(1, (c.spd - this.prevSpd) / Math.max(dt * c.data.accel, 0.001)));
-    this.prevSpd = c.spd;
-
     // ── Stuck detection + reverse recovery ───────────────────────────────────
     if (!this.prevPos) this.prevPos = { x: c.pos.x, z: c.pos.z };
     const moved = Math.sqrt((c.pos.x - this.prevPos.x) ** 2 + (c.pos.z - this.prevPos.z) ** 2);
@@ -320,8 +315,10 @@ export class NeuralAI {
     const edgeProx = Math.min(1, Math.sqrt(md) / Math.max(1, halfW));
     // Gravel flag: 1 if on gravel, 0 otherwise
     const gravelFlag = c.onGravel ? 1.0 : 0.0;
-    // Grip sensor: 1.0 on track, 0.5 on gravel (reflects actual handling/braking multiplier)
-    const gripSensor = c.onGravel ? 0.5 : 1.0;
+    // Grip sensor: car's handling stat (e.g. 0.60–0.90)
+    const gripSensor = c.data.hdl;
+    // Acceleration sensor: car's acceleration stat (e.g. 8.5–11.0)
+    const accelSensor = c.data.accel;
 
     // baseInputs: 11 sensors + speed + waypoint = 13 items
     // For legacy 13-input models, use inner 9 sensors (indices 1..9, skipping ±90°)
