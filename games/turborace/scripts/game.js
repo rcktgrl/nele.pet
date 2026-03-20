@@ -557,7 +557,7 @@ function _drawNNViz(){
 
   const hiddens=ai.lastHiddens||[];
   const activations=[ai.lastInputs||[],...hiddens,ai.lastOutputs||[]];
-  const INPUT_LABELS=['s-90','s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','s+90','spd','wpt','edge','grav'];
+  const INPUT_LABELS=['s-90','s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','s+90','spd','wpt','edge','grav','grip','acl'];
   const OUTPUT_LABELS=['steer','thrtl','brake'];
 
   // Draw edges — skip transitions where either side has >40 nodes (too dense to be useful)
@@ -736,6 +736,22 @@ document.getElementById('trainExportBtn').addEventListener('click',()=>{
   }
 });
 document.getElementById('trainStopBtn').addEventListener('click',()=>{ stopTraining(); showMain(); });
+document.getElementById('trainResetBtn').addEventListener('click', async ()=>{
+  if(!confirm('Delete all current cars and restart the AI from scratch? All learned genomes will be lost.'))return;
+  // Clear saved genomes
+  localStorage.removeItem('turborace_nn_weights');
+  localStorage.removeItem('turborace_nn_layers');
+  localStorage.removeItem('turborace_nn_name');
+  // Reset global best tracking so evolution starts fresh
+  state.trainGlobalBestGenome=null;
+  state.trainGlobalBestFitness=-Infinity;
+  // Re-initialize training with no preserved genome (fresh random start)
+  await initTraining({preservedGenome:null});
+  _populateTrainTrkSelect();
+  const btn=document.getElementById('trainResetBtn');
+  btn.textContent='RESET ✓';
+  setTimeout(()=>{ btn.textContent='RESET AI'; },2000);
+});
 document.getElementById('trainTrkSelect').addEventListener('change', async e=>{
   const newId=e.target.value;
   if(!newId||newId===String(state.selTrk))return;

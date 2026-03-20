@@ -320,7 +320,7 @@ export class NeuralAI {
     const sensors9 = sensors.slice(1, 10);
     const sensorsFull = sensors;
     const inputs = this.layers[0] >= 17
-      ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag, c.data.hdl, c.data.accel]  // 17 items
+      ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag, c.data.hdl, Math.min(1, c.data.accel / 12)]  // 17 items
       : this.layers[0] >= 15
         ? [...sensorsFull, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]  // 15 items
         : this.layers[0] >= 13
