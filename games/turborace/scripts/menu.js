@@ -260,6 +260,7 @@ export async function showTrkSel(){
   await loadTracksFromFolder().catch(()=>{});
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrk').style.display='flex';
+  document.getElementById('btnNxt').style.display='';
   document.getElementById('btnNxt').disabled=(state.selTrk==null);
   const trainBtn=document.getElementById('btnTrainStart'); if(trainBtn) trainBtn.disabled=(state.selTrk==null);
   const tracks=state.folderTracks;
@@ -267,13 +268,94 @@ export async function showTrkSel(){
 }
 
 // Opens the track selection screen in "train" mode (TRAIN button is the CTA).
-// Reuses the same screen; btnTrainStart is always visible there.
+// Reuses the same screen; btnTrainStart is the only CTA (Next is hidden).
 export async function showTrainTrkSel(){
   await showTrkSel();
-  // Scroll the train button into view so it's obvious
+  document.getElementById('btnNxt').style.display='none';
   const trainBtn=document.getElementById('btnTrainStart');
   if(trainBtn) trainBtn.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
+
+// ═══════════════════════════════════════════════════════
+//  AI TRAINING SETUP
+// ═══════════════════════════════════════════════════════
+let _trainSetupGenome=null;
+
+export async function showTrainSetup(){
+  document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
+  document.getElementById('sTrainSetup').style.display='flex';
+
+  _trainSetupGenome=null;
+
+  // Sync arch sliders with current state
+  const h=state.trainHiddenLayers||1, n=state.trainHiddenSize||5;
+  document.getElementById('trainSetupHiddenSlider').value=h;
+  document.getElementById('trainSetupHiddenVal').textContent=h;
+  document.getElementById('trainSetupNodesSlider').value=n;
+  document.getElementById('trainSetupNodesVal').textContent=n;
+
+  const container=document.getElementById('trainSetupModelCards');
+  container.innerHTML='<div style="color:#556;font-size:.8rem;align-self:center;">Loading models…</div>';
+
+  const models=[];
+
+  // Load repo models from /models/index.json
+  try{
+    const idx=await fetch('./models/index.json').then(r=>r.json());
+    for(const id of (idx.models||[])){
+      try{
+        const m=await fetch(`./models/${id}.json`).then(r=>r.json());
+        if(Array.isArray(m.genome)&&m.genome.length){
+          models.push({label:m.name||id,desc:`Built-in · gen ${m.generation||'?'}`,genome:m.genome,icon:'🧠',arch:[15,5,3]});
+        }
+      }catch(_){}
+    }
+  }catch(_){}
+
+  // Check localStorage for a saved model
+  const saved=localStorage.getItem('turborace_nn_weights');
+  if(saved){
+    try{
+      const genome=JSON.parse(saved);
+      const savedName=localStorage.getItem('turborace_nn_name')||'Saved Model';
+      models.push({label:savedName,desc:'Saved in browser',genome,icon:'💾',arch:null});
+    }catch(_){}
+  }
+
+  // Fresh random start
+  models.push({label:'Fresh Start',desc:'Random initialisation',genome:null,icon:'✨',arch:null});
+
+  // Default select: first model
+  _trainSetupGenome=models[0].genome;
+  let selectedIdx=0;
+
+  container.innerHTML='';
+  models.forEach((m,i)=>{
+    const card=document.createElement('div');
+    card.className='diffCard'+(i===0?' sel':'');
+    card.innerHTML=`<div class="diffIcon">${m.icon}</div><div class="diffName">${m.label}</div><div class="diffDesc">${m.desc}</div>`;
+    card.onclick=()=>{
+      container.querySelectorAll('.diffCard').forEach(c=>c.classList.remove('sel'));
+      card.classList.add('sel');
+      selectedIdx=i;
+      _trainSetupGenome=m.genome;
+      // Auto-set arch sliders when a repo model with known arch is chosen
+      if(m.arch&&m.arch.length>=3){
+        const hl=m.arch.length-2, nl=m.arch[1]||5;
+        document.getElementById('trainSetupHiddenSlider').value=hl;
+        document.getElementById('trainSetupHiddenVal').textContent=hl;
+        document.getElementById('trainSetupNodesSlider').value=nl;
+        document.getElementById('trainSetupNodesVal').textContent=nl;
+        state.trainHiddenLayers=hl; state.trainHiddenSize=nl;
+        const hs=document.getElementById('trainHiddenSlider'); if(hs){hs.value=hl;document.getElementById('trainHiddenVal').textContent=hl;}
+        const ns=document.getElementById('trainNodesSlider'); if(ns){ns.value=nl;document.getElementById('trainNodesVal').textContent=nl;}
+      }
+    };
+    container.appendChild(card);
+  });
+}
+
+export function getTrainSetupGenome(){ return _trainSetupGenome; }
 
 export function showDiffSel(){
   if(state.selTrk==null){ showTrkSel(); return; }
