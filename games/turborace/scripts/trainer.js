@@ -297,6 +297,11 @@ export class GeneticTrainer {
   }
 
   // ── Standard genetic evolution ────────────────────────────────────────────
+  //
+  // Clonal selection: only the single best car from the generation survives.
+  // Slot 0 carries it forward unchanged; every other slot is an independent
+  // mutated copy of that same champion.  No crossover — crossover mixes
+  // co-evolved neural-network weights in ways that destroy learned behaviour.
 
   _evolve() {
     // Sort by fitness (best first)
@@ -304,13 +309,12 @@ export class GeneticTrainer {
     const best = this.population[0];
 
     // Update all-time best tracking.
-    // Also detect a fitness-regime change (e.g. penalties were raised mid-session):
-    // if the previous best was positive but every car in the current generation
-    // is negative, the old "champion" was trained under different conditions and
-    // will corrupt the gene pool indefinitely.  Retire it and start fresh from
-    // the current best so evolution can adapt to the new penalty landscape.
+    // Detect fitness-regime change (e.g. penalties raised mid-session):
+    // if the old best was positive but the whole current generation is negative
+    // the old champion was trained under different conditions — retire it so
+    // the population can adapt to the new landscape.
     if (this.bestFitness > 0 && best.fitness < 0) {
-      this.bestFitness = -Infinity; // force update below
+      this.bestFitness = -Infinity;
     }
     if (best.fitness > this.bestFitness) {
       this.bestFitness = best.fitness;
@@ -318,61 +322,16 @@ export class GeneticTrainer {
     }
     this.avgFitness = this.population.reduce((s, p) => s + p.fitness, 0) / this.population.length;
 
-    // ── Selection: keep top 30% as elite parents ──
-    const eliteN = Math.max(2, Math.floor(this.popSize * 0.3));
-    const elites = this.population.slice(0, eliteN);
-
-    // Fitness-weighted parent selection (higher fitness → more likely chosen)
-    const minFit = elites[elites.length - 1].fitness;
-    const eliteWeights = elites.map(p => Math.max(0, p.fitness - minFit) + 1);
-    const totalWeight = eliteWeights.reduce((s, w) => s + w, 0);
-    const cumWeights = [];
-    let cum = 0;
-    for (const w of eliteWeights) { cum += w; cumWeights.push(cum); }
-    const pickParent = () => {
-      const r = Math.random() * totalWeight;
-      for (let i = 0; i < cumWeights.length; i++) if (r <= cumWeights[i]) return elites[i];
-      return elites[elites.length - 1];
-    };
-
     // ── Build next generation ──
-    // Slot 0: all-time champion (unchanged, never regresses)
-    // Slot 1: this generation's winner (unchanged, for direct competition)
-    const championGenome = this.bestGenome ? [...this.bestGenome] : [...elites[0].genome];
-    const genWinnerGenome = [...elites[0].genome];
-    const next = [
-      { genome: championGenome, fitness: 0 },
-      { genome: genWinnerGenome, fitness: 0 },
-    ];
+    // Slot 0: exact copy of this generation's champion (no mutation)
+    // All other slots: independent mutated copies of the champion
+    const champion = best.genome;
+    const next = [{ genome: [...champion], fitness: 0 }];
 
-    // When all elites have negative fitness the population is stuck in a local
-    // minimum (e.g. penalties were raised mid-session).  Inject a few fresh
-    // Xavier genomes to give evolution a way to explore completely different
-    // behaviours (e.g. driving more cautiously rather than just fast).
-    const nRandom = elites[0].fitness < 0
-      ? Math.max(1, Math.floor(this.popSize * 0.15))
-      : 0;
-
-    // Remaining slots: crossover + mutation from elite parents
-    while (next.length < this.popSize - nRandom) {
-      const p1 = pickParent();
-      const p2 = pickParent();
-      // Crossover ratio: better parent contributes more genes.
-      // Minimum of 0.7 prevents near-50/50 splits when both parents have
-      // similar (bad) fitness — uniform 50/50 crossover breaks the co-evolved
-      // weight dependencies inside a neural network and produces cars that
-      // cannot steer at all.
-      const w1 = Math.max(0, p1.fitness - minFit) + 1;
-      const w2 = Math.max(0, p2.fitness - minFit) + 1;
-      const p1ratio = Math.max(0.7, w1 / (w1 + w2));
-      const child = p1.genome.map((g, i) => Math.random() < p1ratio ? g : p2.genome[i]);
+    while (next.length < this.popSize) {
+      const child = [...champion];
       this._mutate(child, this.mutRate, this.mutStrength);
       next.push({ genome: child, fitness: 0 });
-    }
-
-    // Fill remaining slots with fresh random genomes (diversity injection)
-    while (next.length < this.popSize) {
-      next.push({ genome: _xavierGenome(this.layers), fitness: 0 });
     }
 
     this.population = next;
