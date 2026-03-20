@@ -171,23 +171,31 @@ function updateFrame(dt){
         for(const ai of controllers)ai.update(subDt);
         // Collisions within this group (cars of the same sim push each other)
         resolveCarCollisions(cars);
+        // Configurable penalty/reward values
+        const stuckPenRate=Number.isFinite(state.trainStuckPenaltyRate)?state.trainStuckPenaltyRate:5;
+        const gravelBase=Number.isFinite(state.trainGravelPenaltyBase)?state.trainGravelPenaltyBase:0.5;
+        const gravelGrowth=Number.isFinite(state.trainGravelGrowth)?state.trainGravelGrowth:0.3;
+        const offTrackMult=Number.isFinite(state.trainOffTrackMult)?state.trainOffTrackMult:10;
+        const offTrackDQTime=Number.isFinite(state.trainOffTrackDQTime)?state.trainOffTrackDQTime:3;
+        const dqPenalty=Number.isFinite(state.trainDQPenalty)?state.trainDQPenalty:200;
         // Fitness penalties: wall hits and progressive gravel
         for(const car of cars){
           if(car._offTrack)continue;
           if(!car._fitPenalty)car._fitPenalty=0;
           const prevStuck=car._trainPrevStuck||0;
-          if(car.stuckTimer>prevStuck) car._fitPenalty+=5*subDt;
+          if(car.stuckTimer>prevStuck) car._fitPenalty+=stuckPenRate*subDt;
           car._trainPrevStuck=car.stuckTimer;
           // Progressive gravel: rate grows the longer a car stays on gravel
           if(car.onGravel){
             car._gravelTime=(car._gravelTime||0)+subDt;
-            car._fitPenalty+=0.5*(1+car._gravelTime*0.3)*subDt;
+            car._fitPenalty+=gravelBase*(1+car._gravelTime*gravelGrowth)*subDt;
             car._offTrackTime=0;
+            car._onTrackTime=0; // reset streak when on gravel
           }else{
             car._gravelTime=Math.max(0,(car._gravelTime||0)-subDt);
           }
         }
-        // Off-track detection: neither on track nor gravel → 10× gravel rate (progressive)
+        // Off-track detection: neither on track nor gravel → offTrackMult× gravel rate (progressive)
         if(state.trkPts.length){
           for(const car of cars){
             if(car._offTrack)continue;
@@ -195,10 +203,13 @@ function updateFrame(dt){
             for(const p of state.trkPts){const dx=car.pos.x-p.x,dz=car.pos.z-p.z;const d=dx*dx+dz*dz;if(d<md)md=d;}
             if(Math.sqrt(md)>halfW&&!car.onGravel){
               car._offTrackTime=(car._offTrackTime||0)+subDt;
-              car._fitPenalty+=0.5*(1+car._offTrackTime*0.3)*10*subDt;
-              if(car._offTrackTime>3){car._offTrack=true;car._fitPenalty=(car._fitPenalty||0)+200;}
+              car._fitPenalty+=gravelBase*(1+car._offTrackTime*gravelGrowth)*offTrackMult*subDt;
+              car._onTrackTime=0; // reset streak when off track
+              if(car._offTrackTime>offTrackDQTime){car._offTrack=true;car._fitPenalty=(car._fitPenalty||0)+dqPenalty;}
             }else{
               car._offTrackTime=0;
+              // Accumulate on-track streak (not on gravel, not off track)
+              if(!car.onGravel) car._onTrackTime=(car._onTrackTime||0)+subDt;
             }
           }
         }
@@ -615,6 +626,95 @@ function _makeClickToType(spanId,{suffix='',min=1,max=null,stateKey,sliderId,for
 _makeClickToType('trainFFVal',{min:1,max:null,stateKey:'trainFF',sliderId:'trainFFSlider',formatter:v=>v+'×'});
 _makeClickToType('trainHiddenVal',{min:1,max:null,stateKey:'trainHiddenLayers',sliderId:'trainHiddenSlider'});
 _makeClickToType('trainNodesVal',{min:1,max:null,stateKey:'trainHiddenSize',sliderId:'trainNodesSlider'});
+
+// Rewards & Penalties panel toggle
+document.getElementById('trainRewardsPanelToggle').addEventListener('click',()=>{
+  const panel=document.getElementById('trainRewardsPanel');
+  const btn=document.getElementById('trainRewardsPanelToggle');
+  if(panel.style.display==='none'){panel.style.display='block';btn.textContent='▼ REWARDS & PENALTIES';}
+  else{panel.style.display='none';btn.textContent='▶ REWARDS & PENALTIES';}
+});
+// Rewards & Penalties sliders
+document.getElementById('trainOnTrackRateSlider').addEventListener('input',e=>{
+  state.trainOnTrackRewardRate=parseFloat(e.target.value);
+  document.getElementById('trainOnTrackRateVal').textContent=parseFloat(e.target.value).toFixed(2);
+});
+document.getElementById('trainStuckPenaltySlider').addEventListener('input',e=>{
+  state.trainStuckPenaltyRate=parseFloat(e.target.value);
+  document.getElementById('trainStuckPenaltyVal').textContent=parseFloat(e.target.value).toFixed(1);
+});
+document.getElementById('trainGravelPenaltySlider').addEventListener('input',e=>{
+  state.trainGravelPenaltyBase=parseFloat(e.target.value);
+  document.getElementById('trainGravelPenaltyVal').textContent=parseFloat(e.target.value).toFixed(1);
+});
+document.getElementById('trainGravelGrowthSlider').addEventListener('input',e=>{
+  state.trainGravelGrowth=parseFloat(e.target.value);
+  document.getElementById('trainGravelGrowthVal').textContent=parseFloat(e.target.value).toFixed(2);
+});
+document.getElementById('trainOffTrackMultSlider').addEventListener('input',e=>{
+  state.trainOffTrackMult=parseFloat(e.target.value);
+  document.getElementById('trainOffTrackMultVal').textContent=parseInt(e.target.value)+'×';
+});
+document.getElementById('trainOffTrackDQTimeSlider').addEventListener('input',e=>{
+  state.trainOffTrackDQTime=parseFloat(e.target.value);
+  document.getElementById('trainOffTrackDQTimeVal').textContent=parseFloat(e.target.value).toFixed(1)+'s';
+});
+document.getElementById('trainDQPenaltySlider').addEventListener('input',e=>{
+  state.trainDQPenalty=parseFloat(e.target.value);
+  document.getElementById('trainDQPenaltyVal').textContent=parseInt(e.target.value);
+});
+document.getElementById('trainMutRateSlider').addEventListener('input',e=>{
+  state.trainMutRate=parseFloat(e.target.value);
+  document.getElementById('trainMutRateVal').textContent=parseFloat(e.target.value).toFixed(2);
+});
+document.getElementById('trainMutStrengthSlider').addEventListener('input',e=>{
+  state.trainMutStrength=parseFloat(e.target.value);
+  document.getElementById('trainMutStrengthVal').textContent=parseFloat(e.target.value).toFixed(2);
+});
+
+// Load AI from localStorage
+document.getElementById('trainLoadBtn').addEventListener('click', async ()=>{
+  const saved=localStorage.getItem('turborace_nn_weights');
+  if(!saved){alert('No saved AI found in local storage. Train and SAVE one first.');return;}
+  try{
+    const genome=JSON.parse(saved);
+    const name=localStorage.getItem('turborace_nn_name')||'saved';
+    const best=_getBestTrainer();
+    if(best&&genome.length!==best.genomeSize){
+      alert(`Genome size mismatch: saved=${genome.length}, current=${best.genomeSize}. Architecture must match.`);
+      return;
+    }
+    await initTraining({preservedGenome:genome});
+    _populateTrainTrkSelect();
+    const btn=document.getElementById('trainLoadBtn');
+    btn.textContent='LOADED ✓';
+    setTimeout(()=>{btn.textContent='LOAD';},2000);
+  }catch(err){alert('Failed to load AI: '+err.message);}
+});
+
+// Import AI from JSON file
+document.getElementById('trainImportBtn').addEventListener('click',()=>{
+  document.getElementById('trainImportFile').click();
+});
+document.getElementById('trainImportFile').addEventListener('change', async e=>{
+  const file=e.target.files[0];
+  if(!file)return;
+  try{
+    const text=await file.text();
+    const model=JSON.parse(text);
+    const genome=Array.isArray(model.genome)?model.genome:model;
+    if(!Array.isArray(genome)||!genome.length){alert('Invalid model file: no genome array found.');return;}
+    // Save to localStorage so initTraining picks it up
+    localStorage.setItem('turborace_nn_weights',JSON.stringify(genome));
+    if(model.name)localStorage.setItem('turborace_nn_name',model.name);
+    await initTraining({preservedGenome:genome});
+    _populateTrainTrkSelect();
+    const btn=document.getElementById('trainImportBtn');
+    btn.textContent='IMPORTED ✓';
+    setTimeout(()=>{btn.textContent='IMPORT JSON';},2000);
+  }catch(err){alert('Failed to import model: '+err.message);}
+  e.target.value='';
+});
 
 // ═══════════════════════════════════════════════════════
 //  BOOT

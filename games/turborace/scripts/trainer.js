@@ -1,4 +1,5 @@
 'use strict';
+import { state } from './state.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Shared genome constants
@@ -87,6 +88,7 @@ export function resetCarForTraining(car, pos, hdg) {
   car._trainPrevStuck = 0;
   car._gravelTime = 0;
   car._offTrackTime = 0;
+  car._onTrackTime = 0;
   car.mesh.position.copy(car.pos); car.mesh.rotation.y = car.hdg;
 }
 
@@ -131,13 +133,22 @@ export class GeneticTrainer {
   // Call every frame. Returns true when a new generation has just been evolved.
   tick(dt, cars) {
     this.genTime += dt;
+    // Read configurable mutation params from state if available
+    if (typeof state !== 'undefined' && state) {
+      if (Number.isFinite(state.trainMutRate)) this.mutRate = state.trainMutRate;
+      if (Number.isFinite(state.trainMutStrength)) this.mutStrength = state.trainMutStrength;
+    }
     for (let i = 0; i < Math.min(this.population.length, cars.length); i++) {
       const car = cars[i];
       // Off-track cars are disqualified — their fitness is frozen at current value
       if (!car || car._offTrack) continue;
       // Penalise wall hits (large) and gravel (small) by subtracting from progress
       const penalty = car._fitPenalty || 0;
-      const adjusted = Math.max(0, car.totalProg - penalty);
+      // On-track time reward: longer streak on track = bonus multiplier
+      const onTrackRate = (typeof state !== 'undefined' && Number.isFinite(state.trainOnTrackRewardRate))
+        ? state.trainOnTrackRewardRate : 0.10;
+      const onTrackBonus = (car._onTrackTime || 0) * onTrackRate;
+      const adjusted = Math.max(0, car.totalProg * (1 + onTrackBonus) - penalty);
       if (adjusted > this._peakProg[i]) this._peakProg[i] = adjusted;
       this.population[i].fitness = this._peakProg[i];
     }
