@@ -53,14 +53,19 @@ export async function initRace(){
     selectedCarIndex: state.selCar,
     aiCount: ghostModeEnabled?0:4,
     scene: scene,
-    createAIController: (aiCar,i)=>new (state.aiDifficulty==='neural'?NeuralAI:AI)(aiCar,.044+i*.010,()=>({
-      trackPoints: state.trkPts,
-      trackCurvature: state.trkCurv,
-      cityAiPoints: state.cityAiPts,
-      corridors,
-      trackData: state.trkData,
-      playerCar: state.pCar
-    }))
+    createAIController: (aiCar,i)=>{
+      const ctx=()=>({
+        trackPoints: state.trkPts,
+        trackCurvature: state.trkCurv,
+        cityAiPoints: state.cityAiPts,
+        corridors,
+        trackData: state.trkData,
+        playerCar: state.pCar
+      });
+      if(state.aiDifficulty==='neural')
+        return new NeuralAI(aiCar,.044+i*.010,ctx,state.neuralModelGenome||null);
+      return new AI(aiCar,.044+i*.010,ctx);
+    }
   });
   state.pCar=raceCars.playerCar;
   state.aiCars=raceCars.aiCars;

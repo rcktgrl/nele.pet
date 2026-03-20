@@ -357,11 +357,18 @@ export async function showTrainSetup(){
 
 export function getTrainSetupGenome(){ return _trainSetupGenome; }
 
-export function showDiffSel(){
+export async function showDiffSel(){
   if(state.selTrk==null){ showTrkSel(); return; }
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sDiff').style.display='flex';
   state.gState='diffSel';
+
+  const neuralSection=document.getElementById('neuralModelSection');
+  const modelContainer=document.getElementById('neuralModelCards');
+
+  function syncNeuralSection(){
+    neuralSection.style.display=state.aiDifficulty==='neural'?'':'none';
+  }
 
   // Sync difficulty cards with state
   document.querySelectorAll('#diffCards .diffCard').forEach(card=>{
@@ -370,8 +377,11 @@ export function showDiffSel(){
       document.querySelectorAll('#diffCards .diffCard').forEach(c=>c.classList.remove('sel'));
       card.classList.add('sel');
       state.aiDifficulty=card.dataset.diff;
+      syncNeuralSection();
     };
   });
+
+  syncNeuralSection();
 
   // Sync opponent mode cards with state
   document.querySelectorAll('#oppCards .diffCard').forEach(card=>{
@@ -381,6 +391,52 @@ export function showDiffSel(){
       card.classList.add('sel');
       state.opponentMode=card.dataset.opp;
     };
+  });
+
+  // Load neural models
+  modelContainer.innerHTML='<div style="color:#556;font-size:.8rem;align-self:center;">Loading models…</div>';
+  const models=[];
+  try{
+    const idx=await fetch('./models/index.json').then(r=>r.json());
+    for(const id of (idx.models||[])){
+      try{
+        const filename=id.endsWith('.json')?id:`${id}.json`;
+        const m=await fetch(`./models/${filename}`).then(r=>r.json());
+        if(Array.isArray(m.genome)&&m.genome.length){
+          models.push({label:m.name||id,desc:`Built-in · gen ${m.generation||'?'}`,genome:m.genome,icon:'🧠'});
+        }
+      }catch(_){}
+    }
+  }catch(_){}
+  const saved=localStorage.getItem('turborace_nn_weights');
+  if(saved){
+    try{
+      const genome=JSON.parse(saved);
+      const savedName=localStorage.getItem('turborace_nn_name')||'Saved Model';
+      models.push({label:savedName,desc:'Saved in browser',genome,icon:'💾'});
+    }catch(_){}
+  }
+  models.push({label:'Default',desc:'Built-in hand-designed weights',genome:null,icon:'⚙️'});
+
+  // Pre-select: keep current genome selection if it still matches, else pick first
+  let initIdx=0;
+  if(state.neuralModelGenome!==null){
+    const match=models.findIndex(m=>m.genome===state.neuralModelGenome);
+    if(match>=0) initIdx=match;
+  }
+  state.neuralModelGenome=models[initIdx].genome;
+
+  modelContainer.innerHTML='';
+  models.forEach((m,i)=>{
+    const card=document.createElement('div');
+    card.className='diffCard'+(i===initIdx?' sel':'');
+    card.innerHTML=`<div class="diffIcon">${m.icon}</div><div class="diffName">${m.label}</div><div class="diffDesc">${m.desc}</div>`;
+    card.onclick=()=>{
+      modelContainer.querySelectorAll('.diffCard').forEach(c=>c.classList.remove('sel'));
+      card.classList.add('sel');
+      state.neuralModelGenome=m.genome;
+    };
+    modelContainer.appendChild(card);
   });
 }
 
