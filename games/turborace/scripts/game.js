@@ -749,8 +749,8 @@ document.getElementById('trainResetBtn').addEventListener('click', async ()=>{
   clearBestCarMarker();
   // Clear leaderboard data
   _lbTopEntries=[];
-  // Re-initialize training with no preserved genome (fresh random start)
-  await initTraining({preservedGenome:null});
+  // Re-initialize training with no preserved genome and truly random weights
+  await initTraining({preservedGenome:null, forceRandom:true});
   _populateTrainTrkSelect();
   const btn=document.getElementById('trainResetBtn');
   btn.textContent='RESET ✓';
