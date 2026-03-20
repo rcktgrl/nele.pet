@@ -35,7 +35,7 @@ import {
 import {
   pauseRace, resumeRace,
   startRace, restartRace, updateResultsUI,
-  initTraining, stopTraining, placeBestCarMarker, switchTrainingTrack
+  initTraining, stopTraining, placeBestCarMarker, clearBestCarMarker, switchTrainingTrack
 } from './race.js';
 import { resetCarForTraining } from './trainer.js';
 import {
@@ -436,7 +436,7 @@ function _updateTrainLeaderboard(){
           lapLabel=null;
         }
       }else{
-        score=Math.max(0,car.totalProg-(car._fitPenalty||0));
+        score=car.totalProg-(car._fitPenalty||0);
         lapLabel=null;
       }
       // Brake indicator: check neural output index 2 (brake), or car reversing
@@ -745,6 +745,10 @@ document.getElementById('trainResetBtn').addEventListener('click', async ()=>{
   // Reset global best tracking so evolution starts fresh
   state.trainGlobalBestGenome=null;
   state.trainGlobalBestFitness=-Infinity;
+  // Clear best-car marker and follow reference
+  clearBestCarMarker();
+  // Clear leaderboard data
+  _lbTopEntries=[];
   // Re-initialize training with no preserved genome (fresh random start)
   await initTraining({preservedGenome:null});
   _populateTrainTrkSelect();
@@ -907,6 +911,19 @@ document.getElementById('trainEliteCloneBtn').addEventListener('click',()=>{
         grp.trainer.genTime=0; // restart their generation timer
       }
     }
+  }
+});
+document.getElementById('trainSingleCarBtn').addEventListener('click',()=>{
+  state.trainSingleCarModel=!state.trainSingleCarModel;
+  const btn=document.getElementById('trainSingleCarBtn');
+  if(state.trainSingleCarModel){
+    btn.textContent='SAME CAR: ON';
+    btn.style.color='#4af';
+    btn.style.borderColor='#4af';
+  }else{
+    btn.textContent='SAME CAR: OFF';
+    btn.style.color='#889';
+    btn.style.borderColor='#445';
   }
 });
 

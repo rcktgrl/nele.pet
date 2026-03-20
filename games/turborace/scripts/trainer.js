@@ -152,7 +152,7 @@ export class GeneticTrainer {
           ? state.trainOnTrackRewardRate : 0.10;
         const onTrackBonus = (car._onTrackTime || 0) * onTrackRate;
         const penalty = car._fitPenalty || 0;
-        const baseFit = Math.max(0, car.totalProg * (1 + onTrackBonus) - penalty);
+        const baseFit = car.totalProg * (1 + onTrackBonus) - penalty;
         if (car._lapCompleted && car._lapTime > 0) {
           // Lap completed: checkpoint progress fitness + lap speed bonus (faster = more points)
           const lapFit = baseFit + lapBonus / car._lapTime;
@@ -168,7 +168,7 @@ export class GeneticTrainer {
         const onTrackRate = (typeof state !== 'undefined' && Number.isFinite(state.trainOnTrackRewardRate))
           ? state.trainOnTrackRewardRate : 0.10;
         const onTrackBonus = (car._onTrackTime || 0) * onTrackRate;
-        const adjusted = Math.max(0, car.totalProg * (1 + onTrackBonus) - penalty);
+        const adjusted = car.totalProg * (1 + onTrackBonus) - penalty;
         if (adjusted > this._peakProg[i]) this._peakProg[i] = adjusted;
         this.population[i].fitness = this._peakProg[i];
       }
