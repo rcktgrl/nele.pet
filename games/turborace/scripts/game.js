@@ -430,10 +430,19 @@ function _drawNNViz(){
 
   const LAYERS=ai.layers;
   const nL=LAYERS.length;
-  const maxNodes=Math.max(...LAYERS);
-  // Allow radius to shrink freely so nodes never overlap regardless of layer size
-  const nodeR=Math.max(1,Math.min(6,Math.floor(H/(maxNodes+2)/2)-1));
-  // Shrink side margins when many layers are present so they don't crowd
+
+  // Cap displayed nodes per layer — input layer (15) always fits fully.
+  // For larger layers show first half + gap marker (null) + last half.
+  const MAX_DISP=15;
+  const shown=LAYERS.map(n=>{
+    if(n<=MAX_DISP) return Array.from({length:n},(_,i)=>i);
+    const half=Math.floor(MAX_DISP/2);
+    return [...Array.from({length:half},(_,i)=>i), null,
+            ...Array.from({length:half},(_,i)=>n-half+i)];
+  });
+  const maxSlots=Math.max(...shown.map(s=>s.length));
+
+  const nodeR=Math.max(2,Math.min(6,Math.floor(H/(maxSlots+2)/2)-1));
   const margin=Math.max(18,Math.min(28,Math.floor(W/(nL+1))));
 
   // X positions: first and last columns pinned, middle ones evenly spaced
@@ -441,64 +450,72 @@ function _drawNNViz(){
     l===0?margin:l===nL-1?W-margin:Math.round(margin+(W-margin*2)*l/(nL-1))
   );
 
+  // Y positions based on display slots (including gap slot)
+  const ys=shown.map(slots=>slots.map((_,slot)=>(slot+1)/(slots.length+1)*H));
+
   // Build activation arrays: [inputs, ...hiddens, outputs]
   const hiddens=ai.lastHiddens||[];
   const activations=[ai.lastInputs||[],...hiddens,ai.lastOutputs||[]];
 
-  // Node y positions
-  const ys=LAYERS.map((n,l)=>Array.from({length:n},(_,i)=>(i+1)/(n+1)*H));
-
-  // Labels (only first and last layer)
   const INPUT_LABELS=['s-90','s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','s+90','spd','wpt','edge','grav'];
   const OUTPUT_LABELS=['steer','thrtl','brake'];
 
-  // Threshold below which edges are too dim to bother drawing (also limits cost for large nets)
+  // Draw edges between displayed nodes only (weight lookup uses actual node indices)
   const edgeAlphaMin=0.06;
-  // Draw edges for each layer transition
   for(let l=0;l<nL-1;l++){
-    const src=ys[l], dst=ys[l+1];
     const Wm=ai.weights[l].W;
-    for(let d=0;d<Wm.length;d++){
-      for(let s=0;s<Wm[d].length;s++){
-        const w=Wm[d][s];
+    for(let di=0;di<shown[l+1].length;di++){
+      const d=shown[l+1][di]; if(d===null) continue;
+      for(let si=0;si<shown[l].length;si++){
+        const s=shown[l][si]; if(s===null) continue;
+        const w=Wm[d]?.[s]; if(w===undefined) continue;
         const alpha=Math.min(0.85,Math.abs(w)/3);
         if(alpha<edgeAlphaMin) continue;
-        const thick=Math.min(2,Math.abs(w)*0.7+0.3);
         cx.strokeStyle=w>0?`rgba(80,220,120,${alpha})`:`rgba(220,80,80,${alpha})`;
-        cx.lineWidth=thick;
-        cx.beginPath();
-        cx.moveTo(xs[l],src[s]);
-        cx.lineTo(xs[l+1],dst[d]);
-        cx.stroke();
+        cx.lineWidth=Math.min(2,Math.abs(w)*0.7+0.3);
+        cx.beginPath(); cx.moveTo(xs[l],ys[l][si]); cx.lineTo(xs[l+1],ys[l+1][di]); cx.stroke();
       }
     }
   }
-  // Draw nodes
+
+  // Draw nodes and gap markers
   for(let l=0;l<nL;l++){
-    for(let n=0;n<LAYERS[l];n++){
-      const x=xs[l], y=ys[l][n];
-      const act=activations[l]?.[n]??0;
+    const spacing=H/(shown[l].length+1);
+    for(let slot=0;slot<shown[l].length;slot++){
+      const idx=shown[l][slot];
+      const x=xs[l], y=ys[l][slot];
+      if(idx===null){
+        // Gap indicator
+        cx.fillStyle='#556'; cx.font='9px monospace'; cx.textAlign='center';
+        cx.fillText('⋮',x,y+3);
+        continue;
+      }
+      const act=activations[l]?.[idx]??0;
       const t=(act+1)/2;
       const r=Math.round(40+t*200), g2=Math.round(80+t*120), b=Math.round(200-t*150);
       cx.beginPath(); cx.arc(x,y,nodeR,0,Math.PI*2);
       cx.fillStyle=`rgb(${r},${g2},${b})`; cx.fill();
       cx.strokeStyle='#334'; cx.lineWidth=1; cx.stroke();
-      // Labels only when there's enough vertical room (≥8px spacing per node)
-      const spacing=H/(LAYERS[l]+1);
       if(spacing>=8){
-        if(l===0&&INPUT_LABELS[n]){
+        if(l===0&&INPUT_LABELS[idx]){
           const fs=Math.max(5,Math.min(7,Math.floor(spacing*0.55)));
           cx.fillStyle='#aab'; cx.font=`${fs}px monospace`; cx.textAlign='right';
-          cx.fillText(INPUT_LABELS[n],x-nodeR-2,y+2);
-        } else if(l===nL-1&&OUTPUT_LABELS[n]){
+          cx.fillText(INPUT_LABELS[idx],x-nodeR-2,y+2);
+        } else if(l===nL-1&&OUTPUT_LABELS[idx]){
           const fs=Math.max(5,Math.min(7,Math.floor(spacing*0.55)));
           cx.fillStyle='#aab'; cx.font=`${fs}px monospace`; cx.textAlign='left';
-          cx.fillText(OUTPUT_LABELS[n],x+nodeR+2,y+2);
+          cx.fillText(OUTPUT_LABELS[idx],x+nodeR+2,y+2);
         }
       }
     }
+    // Show actual count below truncated layers
+    if(LAYERS[l]>MAX_DISP){
+      cx.fillStyle='#667'; cx.font='6px monospace'; cx.textAlign='center';
+      cx.fillText(`×${LAYERS[l]}`,xs[l],H-2);
+    }
   }
-  // Title
+
+  // Title showing full architecture
   const archStr=LAYERS.join('→');
   cx.fillStyle='#556'; cx.font='7px monospace'; cx.textAlign='center';
   cx.fillText(`NET [${archStr}] · BEST CAR`,W/2,10);
