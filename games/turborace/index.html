@@ -120,7 +120,7 @@
   </div>
   <div style="color:#445;font-size:.65rem;pointer-events:none;"><span id="trainSimsHint">8</span> SIMS · SCROLL=ZOOM · DRAG=PAN · BEST SIM SHOWN · SWAPS AT GENERATION END</div>
   <!-- Neural network visualiser -->
-  <canvas id="trainNNCanvas" width="400" height="240" style="position:fixed;bottom:18px;right:18px;border:1px solid #1a2535;border-radius:8px;background:rgba(4,6,18,.88);pointer-events:none;"></canvas>
+  <canvas id="trainNNCanvas" width="420" height="280" style="position:fixed;bottom:18px;right:18px;border:1px solid #1a2535;border-radius:8px;background:rgba(4,6,18,.88);cursor:grab;"></canvas>
   <!-- Training Leaderboard -->
   <div id="trainLeaderboard" style="position:fixed;bottom:18px;left:18px;background:rgba(4,6,18,.88);border:1px solid #1a2535;border-radius:8px;padding:10px 14px;pointer-events:none;min-width:220px;font-family:Orbitron,monospace;">
     <div style="color:#4af;font-size:.65rem;font-weight:700;margin-bottom:6px;letter-spacing:1px;text-align:center;">AI LEADERBOARD</div>
@@ -279,7 +279,7 @@
     <div class="setupLabel">Starting Model</div>
     <div id="trainSetupModelCards" class="diffCards" style="flex-wrap:wrap;gap:14px;justify-content:center;min-height:80px;"></div>
   </div>
-  <div class="setupSection">
+  <div class="setupSection" id="trainSetupArchSection">
     <div class="setupLabel">Architecture</div>
     <div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap;padding:8px 0;">
       <label style="display:flex;align-items:center;gap:8px;color:#889;font-size:.85rem;">
@@ -288,10 +288,9 @@
       </label>
       <label style="display:flex;align-items:center;gap:8px;color:#889;font-size:.85rem;">
         NODES/LAYER <strong id="trainSetupNodesVal" style="color:#f84;">5</strong>
-        <input id="trainSetupNodesSlider" type="range" min="3" max="20" value="5" style="width:100px;accent-color:#f84;">
+        <input id="trainSetupNodesSlider" type="range" min="3" max="100" value="5" style="width:100px;accent-color:#f84;">
       </label>
     </div>
-    <div style="color:#446;font-size:.7rem;text-align:center;">Mismatched architecture ignores the selected model and starts fresh.</div>
   </div>
   <div class="menuActions menuActions-inline">
     <button id="trainSetupBackBtn" class="btn btn-s">BACK</button>

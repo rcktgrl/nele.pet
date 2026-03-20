@@ -63,7 +63,7 @@ export async function initRace(){
         playerCar: state.pCar
       });
       if(state.aiDifficulty==='neural')
-        return new NeuralAI(aiCar,.044+i*.010,ctx,state.neuralModelGenome||null);
+        return new NeuralAI(aiCar,.044+i*.010,ctx,state.neuralModelGenome||null,state.neuralModelLayers||null);
       return new AI(aiCar,.044+i*.010,ctx);
     }
   });

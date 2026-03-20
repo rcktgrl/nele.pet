@@ -26,6 +26,7 @@ export const state = {
     selTrk: null,
     aiDifficulty: 'medium',  // 'easy' | 'medium' | 'hard' | 'neural'
     neuralModelGenome: null, // genome array for neural AI race (null = use default)
+    neuralModelLayers: null, // layer spec for neural AI race (null = infer from genome)
     opponentMode: 'ai',      // 'ai' | 'ghost'
     carCardPreviewScene: null,
     carCardPreviewCamera: null,
@@ -68,6 +69,15 @@ export const state = {
     trainGenDuration: 35,// Generation duration in seconds
     trainHiddenLayers: 1,// Number of hidden layers (takes effect next run)
     trainHiddenSize: 5,  // Nodes per hidden layer (takes effect next run)
+    trainOnTrackRewardRate: 0.10,
+    trainStuckPenaltyRate: 5,
+    trainGravelPenaltyBase: 0.5,
+    trainGravelGrowth: 0.30,
+    trainOffTrackMult: 10,
+    trainOffTrackDQTime: 3,
+    trainDQPenalty: 200,
+    trainMutRate: 0.15,
+    trainMutStrength: 0.35,
     trainBestCarPos: null, // {x,z} of the best car's peak position from previous generation
     trainSplitCams: [],  // PerspectiveCamera array for split-screen training view
     trainGroups: [],     // [{cars, controllers, trainer, grid}] — one per simulation
