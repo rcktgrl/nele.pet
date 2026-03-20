@@ -71,6 +71,17 @@
   <div style="color:#445;font-size:.65rem;pointer-events:none;">8 SIMS · SCROLL=ZOOM · DRAG=PAN · BEST SIM SHOWN · SWAPS AT GENERATION END</div>
   <!-- Neural network visualiser -->
   <canvas id="trainNNCanvas" width="400" height="240" style="position:fixed;bottom:18px;right:18px;border:1px solid #1a2535;border-radius:8px;background:rgba(4,6,18,.88);pointer-events:none;"></canvas>
+  <!-- Training Leaderboard -->
+  <div id="trainLeaderboard" style="position:fixed;bottom:18px;left:18px;background:rgba(4,6,18,.88);border:1px solid #1a2535;border-radius:8px;padding:10px 14px;pointer-events:none;min-width:220px;font-family:Orbitron,monospace;">
+    <div style="color:#4af;font-size:.65rem;font-weight:700;margin-bottom:6px;letter-spacing:1px;text-align:center;">AI LEADERBOARD</div>
+    <div style="display:grid;grid-template-columns:18px 1fr 48px 14px;gap:2px 6px;align-items:center;margin-bottom:3px;padding-bottom:3px;border-bottom:1px solid #1a2535;">
+      <span style="color:#334;font-size:.55rem;">#</span>
+      <span style="color:#334;font-size:.55rem;">SCORE</span>
+      <span style="color:#334;font-size:.55rem;text-align:right;">SPEED</span>
+      <span style="color:#334;font-size:.55rem;text-align:center;">BRK</span>
+    </div>
+    <div id="trainLbRows"></div>
+  </div>
 </div>
 
 <div id="notif"></div>
