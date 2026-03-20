@@ -69,4 +69,5 @@ export const state = {
     trainBestCarPos: null, // {x,z} of the best car's peak position from previous generation
     trainSplitCams: [],  // PerspectiveCamera array for split-screen training view
     trainGroups: [],     // [{cars, controllers, trainer, grid}] — one per simulation
+    trainEliteCloneMode: false, // when true: all sims run full duration, then best car is cloned with mutations
 };

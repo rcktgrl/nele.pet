@@ -249,6 +249,59 @@ function updateFrame(dt){
           }
         }
       }
+      // Elite clone mode: wait until ALL simulation groups have finished their generation,
+      // then pick the single best genome across all groups and clone it with mutations.
+      if(state.trainEliteCloneMode&&state.trainGroups.length&&state.trainGroups.every(g=>g.trainer.pendingEvolve)){
+        // Find the global best genome across all active groups
+        let globalBestGenome=state.trainGlobalBestGenome;
+        let globalBestFit=state.trainGlobalBestFitness||-Infinity;
+        for(const grp of state.trainGroups){
+          // Check peak from current generation's sorted population
+          const sorted=[...grp.trainer.population].sort((a,b)=>b.fitness-a.fitness);
+          if(sorted[0]&&sorted[0].fitness>globalBestFit){globalBestFit=sorted[0].fitness;globalBestGenome=sorted[0].genome;}
+          // Also consider the trainer's all-time best
+          if(grp.trainer.bestFitness>globalBestFit){globalBestFit=grp.trainer.bestFitness;globalBestGenome=grp.trainer.bestGenome;}
+        }
+        if(!globalBestGenome&&state.trainGroups.length){
+          globalBestGenome=state.trainGroups[0].trainer.population[0].genome;
+        }
+        // Update global best tracking
+        if(globalBestFit>(state.trainGlobalBestFitness||-Infinity)){
+          state.trainGlobalBestFitness=globalBestFit;
+          state.trainGlobalBestGenome=[...globalBestGenome];
+        }
+        // Evolve all groups using elite clone strategy
+        for(let gi2=0;gi2<state.trainGroups.length;gi2++){
+          const grp2=state.trainGroups[gi2];
+          grp2.trainer.evolveEliteClone(globalBestGenome);
+          const{cars:c2,controllers:ct2,grid:gd2}=grp2;
+          for(let i=0;i<c2.length;i++){
+            resetCarForTraining(c2[i],gd2[i%gd2.length].pos,gd2[i%gd2.length].hdg);
+            ct2[i].setWeights(grp2.trainer.population[i].genome);
+          }
+        }
+        // Update global best after internal tracking in evolveEliteClone
+        for(const grp of state.trainGroups){
+          if(grp.trainer.bestFitness>(state.trainGlobalBestFitness||-Infinity)){
+            state.trainGlobalBestFitness=grp.trainer.bestFitness;
+            state.trainGlobalBestGenome=[...grp.trainer.bestGenome];
+          }
+        }
+        // Switch visible group to the best-performing simulation
+        let bestVisGi=state._trainVisibleGroup;
+        let bestVisFit=state.trainGroups[state._trainVisibleGroup].trainer.bestFitness;
+        for(let gi2=0;gi2<state.trainGroups.length;gi2++){
+          if(state.trainGroups[gi2].trainer.bestFitness>bestVisFit){
+            bestVisFit=state.trainGroups[gi2].trainer.bestFitness;
+            bestVisGi=gi2;
+          }
+        }
+        if(bestVisGi!==state._trainVisibleGroup){
+          for(const c of state.trainGroups[state._trainVisibleGroup].cars) c.mesh.visible=false;
+          for(const c of state.trainGroups[bestVisGi].cars) c.mesh.visible=true;
+          state._trainVisibleGroup=bestVisGi;
+        }
+      }
     }
     if(state.trainSplitCams&&state.trainSplitCams.length){
       updateTrainSplitCameras();
@@ -670,6 +723,26 @@ document.getElementById('trainMutRateSlider').addEventListener('input',e=>{
 document.getElementById('trainMutStrengthSlider').addEventListener('input',e=>{
   state.trainMutStrength=parseFloat(e.target.value);
   document.getElementById('trainMutStrengthVal').textContent=parseFloat(e.target.value).toFixed(2);
+});
+document.getElementById('trainEliteCloneBtn').addEventListener('click',()=>{
+  state.trainEliteCloneMode=!state.trainEliteCloneMode;
+  const btn=document.getElementById('trainEliteCloneBtn');
+  if(state.trainEliteCloneMode){
+    btn.textContent='ELITE CLONE: ON';
+    btn.style.color='#4af';
+    btn.style.borderColor='#4af';
+  }else{
+    btn.textContent='ELITE CLONE: OFF';
+    btn.style.color='#889';
+    btn.style.borderColor='#445';
+    // If switching off while any trainer is waiting, resume their timers by clearing pendingEvolve
+    for(const grp of state.trainGroups){
+      if(grp.trainer.pendingEvolve){
+        grp.trainer.pendingEvolve=false;
+        grp.trainer.genTime=0; // restart their generation timer
+      }
+    }
+  }
 });
 
 // Load AI from localStorage
