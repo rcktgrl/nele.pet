@@ -4,6 +4,7 @@ import { state } from './state.js';
 // ─────────────────────────────────────────────────────────────────────────────
 //  Shared genome constants
 // ─────────────────────────────────────────────────────────────────────────────
+
 /** Total scalar parameters for a given layer spec (e.g. [9,5,2]). */
 export function computeGenomeSize(layers) {
   let s = 0;
@@ -15,7 +16,9 @@ export function computeGenomeSize(layers) {
 export const GENOME_SIZE = computeGenomeSize([20, 5, 3]); // 123
 
 // Hand-designed seed genome for [20,5,3]:
-//   11 wall sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90) + 3 edge sensors (e-10,e0,e+10) + speed + waypointErr + edgeProximity + gravelFlag + grip + accel
+//   11 wall sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90)
+//   + 3 edge sensors (e-10,e0,e+10) + speed + waypointErr
+//   + edgeProximity + gravelFlag + grip + accel
 //   → 5 hidden → 3 out (steer, throttle, brake)
 export const DEFAULT_GENOME = [
   // W1: 5 rows × 20 inputs  (s-90 s-60 s-30 s-10 s-5 s0 s+5 s+10 s+30 s+60 s+90 e-10 e0 e+10 spd wpt edge grav grip acl)
@@ -36,12 +39,16 @@ export const DEFAULT_GENOME = [
 
 /**
  * Build a seed genome for the given architecture.
- * Uses hand-designed weights for known architectures; Xavier random otherwise.
+ * Uses hand-designed weights for [20,5,3]; Xavier random otherwise.
  */
 export function buildDefaultGenome(layers) {
   const key = JSON.stringify(layers);
   if (key === '[20,5,3]') return [...DEFAULT_GENOME];
-  // Xavier random init for other architectures
+  return _xavierGenome(layers);
+}
+
+/** Generate a fully random Xavier-initialised genome for any architecture. */
+function _xavierGenome(layers) {
   const genome = [];
   for (let l = 0; l < layers.length - 1; l++) {
     const nIn = layers[l], nOut = layers[l + 1];
@@ -53,8 +60,47 @@ export function buildDefaultGenome(layers) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Single source of truth: fitness calculation
+//  Every consumer (trainer tick, leaderboard, NN viz, best-car selection)
+//  MUST use this function — never compute fitness inline elsewhere.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Compute the live fitness for a single car.
+ *   rawProgress  = peak of (totalProg * onTrackBonus) — rewards never decrease
+ *   penalty      = car._fitPenalty — always subtracted, always hurts
+ *   fitness      = rawProgress - penalty  (+ lap bonus if applicable)
+ *
+ * @param {object} car     - Car instance with _fitPenalty, _onTrackTime, totalProg, etc.
+ * @param {object} config  - { onTrackRewardRate, lapMode, lapBonus, peakRawProg }
+ * @returns {number} fitness value
+ */
+export function computeFitness(car, config = {}) {
+  const onTrackRate = config.onTrackRewardRate ?? 0.10;
+  const penalty = car._fitPenalty || 0;
+  // Raw progress includes on-track bonus but NOT penalties
+  const rawProg = car.totalProg * (1 + (car._onTrackTime || 0) * onTrackRate);
+
+  // Use peak raw progress if tracked (prevents fitness dropping when car slows down)
+  // but always subtract the CURRENT cumulative penalty (penalties always bite)
+  const effectiveRaw = config.peakRawProg !== undefined
+    ? Math.max(config.peakRawProg, rawProg)
+    : rawProg;
+
+  let fit = effectiveRaw - penalty;
+
+  // Lap mode: bonus for completing a lap (faster = more points)
+  if (config.lapMode && car._lapCompleted && car._lapTime > 0) {
+    const lapBonus = config.lapBonus ?? 1000;
+    fit += lapBonus / car._lapTime;
+  }
+  return fit;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Grid builder — places N cars in rows of 4 behind the track start line
 // ─────────────────────────────────────────────────────────────────────────────
+
 export function buildTrainingGrid(trackPoints, count) {
   const n = trackPoints.length;
   if (!n) return Array(count).fill({ pos: { x: 0, y: 0, z: 0 }, hdg: 0 });
@@ -75,14 +121,35 @@ export function buildTrainingGrid(trackPoints, count) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Car reset — called at the start of every generation
 // ─────────────────────────────────────────────────────────────────────────────
+
 export function resetCarForTraining(car, pos, hdg) {
+  // Physics state
   car.pos.set(pos.x, pos.y, pos.z);
-  car.hdg = hdg; car.spd = 0; car.gear = 1;
+  car.hdg = hdg;
+  car.spd = 0;
+  car.gear = 1;
   car.rpm = car.gearbox.idleRpm;
-  car.lap = 0; car.lastCP = 0; car.cpPassed = 0;
-  car.totalProg = 0; car.finished = false; car.finTime = 0; car.lapStart = 0;
-  car.lapTimes = []; car.prevGear = 1; car.rpmDrop = 0; car.stuckTimer = 0;
-  car.isReversing = false; car.revSpd = 0; car.reverseTimer = 0; car.onGravel = false;
+
+  // Race progress
+  car.lap = 0;
+  car.lastCP = 0;
+  car.cpPassed = 0;
+  car.totalProg = 0;
+  car.finished = false;
+  car.finTime = 0;
+  car.lapStart = 0;
+  car.lapTimes = [];
+
+  // Driving state
+  car.prevGear = 1;
+  car.rpmDrop = 0;
+  car.stuckTimer = 0;
+  car.isReversing = false;
+  car.revSpd = 0;
+  car.reverseTimer = 0;
+  car.onGravel = false;
+
+  // Training-specific fitness tracking (single source of truth)
   car._offTrack = false;
   car._fitPenalty = 0;
   car._trainPrevStuck = 0;
@@ -91,12 +158,17 @@ export function resetCarForTraining(car, pos, hdg) {
   car._onTrackTime = 0;
   car._lapCompleted = false;
   car._lapTime = 0;
-  car.mesh.position.copy(car.pos); car.mesh.rotation.y = car.hdg;
+  car._fitness = 0; // live fitness — always computed via computeFitness()
+
+  // Sync mesh
+  car.mesh.position.copy(car.pos);
+  car.mesh.rotation.y = car.hdg;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Genetic Trainer
 // ─────────────────────────────────────────────────────────────────────────────
+
 const LS_KEY = 'turborace_nn_weights';
 
 export class GeneticTrainer {
@@ -113,93 +185,104 @@ export class GeneticTrainer {
     this.bestGenome = null;
     this.bestFitness = -Infinity;
     this.avgFitness = 0;
-    this._peakProg = [];
-    this.pendingEvolve = false; // set to true in elite-clone mode when timer expires
+    // Peak of raw progress (progress * onTrackBonus, WITHOUT penalty).
+    // Penalties are always subtracted fresh so they always bite.
+    this._peakRawProg = [];
+    this.pendingEvolve = false;
   }
 
-  // Seed from saved genome or hand-designed defaults.
-  // Generation 0 has mild perturbations from the seed to explore nearby space.
-  // Pass forceRandom=true (e.g. from the Reset button) to skip the hand-designed
-  // seed and start from fully random Xavier weights instead.
+  // ── Population initialisation ─────────────────────────────────────────────
+
+  /**
+   * Seed from saved genome or hand-designed defaults.
+   * Generation 0 has mild perturbations from the seed to explore nearby space.
+   * Pass forceRandom=true (e.g. from the Reset button) to skip the hand-designed
+   * seed and start from fully random Xavier weights instead.
+   */
   initPopulation(seedGenome = null, forceRandom = false) {
+    // When force-resetting, wipe ALL learned state so we start truly fresh
+    if (forceRandom) {
+      this.bestGenome = null;
+      this.bestFitness = -Infinity;
+      this.avgFitness = 0;
+    }
+
+    // Determine seed genome
     let seed;
     if (!forceRandom && seedGenome && seedGenome.length === this.genomeSize) {
       seed = seedGenome;
     } else if (!forceRandom) {
       seed = buildDefaultGenome(this.layers);
     } else {
-      seed = null; // forces per-car random init below
+      seed = null; // fully random Xavier init per car
     }
+
     this.population = Array.from({ length: this.popSize }, (_, i) => {
       let genome;
       if (seed) {
         genome = [...seed];
-        if (i > 0) this._mutate(genome, 0.4, 0.8); // wider spread for diversity
+        // Wider perturbation for gen-0 diversity (skip slot 0: keep an exact seed copy)
+        if (i > 0) this._mutate(genome, 0.4, 0.8);
       } else {
-        // True random Xavier init — used when forceRandom=true
-        genome = [];
-        for (let l = 0; l < this.layers.length - 1; l++) {
-          const nIn = this.layers[l], nOut = this.layers[l + 1];
-          const std = Math.sqrt(2 / (nIn + nOut));
-          for (let j = 0; j < nOut * nIn; j++) genome.push((Math.random() * 2 - 1) * std);
-          for (let j = 0; j < nOut; j++) genome.push(0);
-        }
+        // Fully random Xavier init — each car gets an independent random network
+        genome = _xavierGenome(this.layers);
       }
       return { genome, fitness: 0 };
     });
-    this._peakProg = new Array(this.popSize).fill(0);
+    this._peakRawProg = new Array(this.popSize).fill(0);
     this.generation = 0;
     this.genTime = 0;
   }
 
-  // Call every frame. Returns true when a new generation has just been evolved.
+  // ── Per-frame tick ────────────────────────────────────────────────────────
+
+  /**
+   * Call every physics frame. Updates fitness for all cars in this group.
+   * Returns true when a new generation has just been evolved.
+   */
   tick(dt, cars) {
-    // In elite clone mode, stop updating once this group's generation has ended.
-    // Prevents fitness from accumulating beyond genDuration while waiting for other groups.
+    // In elite clone mode, stop updating once this group's generation has ended
     if (this.pendingEvolve) return false;
     this.genTime += dt;
-    // Read configurable mutation params from state if available
-    if (typeof state !== 'undefined' && state) {
+
+    // Read live mutation params from UI sliders
+    if (state) {
       if (Number.isFinite(state.trainMutRate)) this.mutRate = state.trainMutRate;
       if (Number.isFinite(state.trainMutStrength)) this.mutStrength = state.trainMutStrength;
     }
-    const lapMode = typeof state !== 'undefined' && state && state.trainMode === 'lap';
-    const lapBonus = (typeof state !== 'undefined' && Number.isFinite(state.trainLapBonus)) ? state.trainLapBonus : 1000;
+
+    // ── Update fitness for every car using single source of truth ──
+    const lapMode = state && state.trainMode === 'lap';
+    const lapBonus = (state && Number.isFinite(state.trainLapBonus)) ? state.trainLapBonus : 1000;
+    const onTrackRate = (state && Number.isFinite(state.trainOnTrackRewardRate))
+      ? state.trainOnTrackRewardRate : 0.10;
+
     for (let i = 0; i < Math.min(this.population.length, cars.length); i++) {
       const car = cars[i];
-      // Off-track cars are disqualified — their fitness is frozen at current value
       if (!car || car._offTrack) continue;
-      if (lapMode) {
-        const onTrackRate = (typeof state !== 'undefined' && Number.isFinite(state.trainOnTrackRewardRate))
-          ? state.trainOnTrackRewardRate : 0.10;
-        const onTrackBonus = (car._onTrackTime || 0) * onTrackRate;
-        const penalty = car._fitPenalty || 0;
-        const baseFit = car.totalProg * (1 + onTrackBonus) - penalty;
-        if (car._lapCompleted && car._lapTime > 0) {
-          // Lap completed: checkpoint progress fitness + lap speed bonus (faster = more points)
-          const lapFit = baseFit + lapBonus / car._lapTime;
-          if (lapFit > this._peakProg[i]) this._peakProg[i] = lapFit;
-        } else {
-          // Not yet finished: same checkpoint rewards as timed mode so cars drive in the right direction
-          if (baseFit > this._peakProg[i]) this._peakProg[i] = baseFit;
-        }
-        this.population[i].fitness = this._peakProg[i];
-      } else {
-        // Timed mode: penalise wall hits and gravel by subtracting from progress
-        const penalty = car._fitPenalty || 0;
-        const onTrackRate = (typeof state !== 'undefined' && Number.isFinite(state.trainOnTrackRewardRate))
-          ? state.trainOnTrackRewardRate : 0.10;
-        const onTrackBonus = (car._onTrackTime || 0) * onTrackRate;
-        const adjusted = car.totalProg * (1 + onTrackBonus) - penalty;
-        if (adjusted > this._peakProg[i]) this._peakProg[i] = adjusted;
-        this.population[i].fitness = this._peakProg[i];
-      }
+
+      // Track peak of raw progress (progress + onTrackBonus, NO penalty)
+      // This prevents fitness from dropping when a car merely slows down,
+      // but penalties are always subtracted fresh so they always reduce fitness.
+      const rawProg = car.totalProg * (1 + (car._onTrackTime || 0) * onTrackRate);
+      if (rawProg > this._peakRawProg[i]) this._peakRawProg[i] = rawProg;
+
+      // Compute fitness via single source of truth
+      const fit = computeFitness(car, {
+        onTrackRewardRate: onTrackRate,
+        lapMode,
+        lapBonus,
+        peakRawProg: this._peakRawProg[i],
+      });
+
+      car._fitness = fit;
+      this.population[i].fitness = fit;
     }
-    // In lap mode, also end generation early if all cars have finished or been disqualified
+
+    // ── Check generation end ──
     const allDone = lapMode && cars.length > 0 && cars.every(c => c._lapCompleted || c._offTrack);
     if (allDone || this.genTime >= this.genDuration) {
-      const eliteClone = typeof state !== 'undefined' && state && state.trainEliteCloneMode;
-      if (eliteClone) {
+      if (state && state.trainEliteCloneMode) {
         // Signal readiness; game.js coordinates all groups before evolving
         this.pendingEvolve = true;
         return false;
@@ -210,60 +293,77 @@ export class GeneticTrainer {
     return false;
   }
 
+  // ── Standard genetic evolution ────────────────────────────────────────────
+
   _evolve() {
+    // Sort by fitness (best first)
     this.population.sort((a, b) => b.fitness - a.fitness);
     const best = this.population[0];
+
+    // Update all-time best tracking
     if (best.fitness > this.bestFitness) {
       this.bestFitness = best.fitness;
       this.bestGenome = [...best.genome];
     }
     this.avgFitness = this.population.reduce((s, p) => s + p.fitness, 0) / this.population.length;
 
+    // ── Selection: keep top 30% as elite parents ──
     const eliteN = Math.max(2, Math.floor(this.popSize * 0.3));
     const elites = this.population.slice(0, eliteN);
 
-    // Build fitness weights for elites so higher-scoring individuals
-    // are more likely to be selected as parents and contribute more genes
+    // Fitness-weighted parent selection (higher fitness → more likely chosen)
     const minFit = elites[elites.length - 1].fitness;
     const eliteWeights = elites.map(p => Math.max(0, p.fitness - minFit) + 1);
     const totalWeight = eliteWeights.reduce((s, w) => s + w, 0);
     const cumWeights = [];
     let cum = 0;
     for (const w of eliteWeights) { cum += w; cumWeights.push(cum); }
-    const weightedPickElite = () => {
+    const pickParent = () => {
       const r = Math.random() * totalWeight;
       for (let i = 0; i < cumWeights.length; i++) if (r <= cumWeights[i]) return elites[i];
       return elites[elites.length - 1];
     };
 
-    // All-time best genome always survives as champion (never regresses)
+    // ── Build next generation ──
+    // Slot 0: all-time champion (unchanged, never regresses)
+    // Slot 1: this generation's winner (unchanged, for direct competition)
     const championGenome = this.bestGenome ? [...this.bestGenome] : [...elites[0].genome];
-    // Current generation's winner also survives unchanged for direct competition
     const genWinnerGenome = [...elites[0].genome];
     const next = [
       { genome: championGenome, fitness: 0 },
       { genome: genWinnerGenome, fitness: 0 },
     ];
+
+    // Remaining slots: crossover + mutation from elite parents
     while (next.length < this.popSize) {
-      const parent1 = weightedPickElite();
-      const parent2 = weightedPickElite();
-      // Crossover ratio proportional to fitness: better parent contributes more genes
-      const w1 = Math.max(0, parent1.fitness - minFit) + 1;
-      const w2 = Math.max(0, parent2.fitness - minFit) + 1;
+      const p1 = pickParent();
+      const p2 = pickParent();
+      // Crossover ratio: better parent contributes more genes
+      const w1 = Math.max(0, p1.fitness - minFit) + 1;
+      const w2 = Math.max(0, p2.fitness - minFit) + 1;
       const p1ratio = w1 / (w1 + w2);
-      const child = parent1.genome.map((g, i) => Math.random() < p1ratio ? g : parent2.genome[i]);
+      const child = p1.genome.map((g, i) => Math.random() < p1ratio ? g : p2.genome[i]);
       this._mutate(child, this.mutRate, this.mutStrength);
       next.push({ genome: child, fitness: 0 });
     }
+
     this.population = next;
-    this._peakProg = new Array(this.popSize).fill(0);
+    this._peakRawProg = new Array(this.popSize).fill(0);
     this.generation++;
     this.genTime = 0;
   }
 
-  // Elite clone evolution: fill population with mutated copies of a single best genome.
-  // Called by game.js after all simulation groups have signalled pendingEvolve.
-  evolveEliteClone(bestGenome) {
+  // ── Elite clone evolution (multi-sim synchronised) ────────────────────────
+  //
+  // Called by game.js after ALL simulation groups have signalled pendingEvolve.
+  // Each group receives the global-best genome and creates mutated variants.
+  //
+  // groupIndex/totalGroups create an exploitation→exploration gradient:
+  //   Group 0: low mutation   (fine-tuning near the best)
+  //   Last group: high mutation (exploring distant variants + random genomes)
+  // This prevents all groups from driving identically.
+
+  evolveEliteClone(bestGenome, groupIndex = 0, totalGroups = 1) {
     // Update fitness tracking for this group's population
     this.population.sort((a, b) => b.fitness - a.fitness);
     const best = this.population[0];
@@ -273,26 +373,45 @@ export class GeneticTrainer {
     }
     this.avgFitness = this.population.reduce((s, p) => s + p.fitness, 0) / this.population.length;
 
-    // First slot: exact copy of global best (preserved champion, no mutation)
+    // ── Per-group mutation gradient (exploitation → exploration) ──
+    const t = totalGroups > 1 ? groupIndex / (totalGroups - 1) : 0.5;
+    const groupMutRate     = this.mutRate     * (0.5 + t * 1.5);   // 0.5× to 2.0× base rate
+    const groupMutStrength = this.mutStrength * (0.3 + t * 2.0);   // 0.3× to 2.3× base strength
+
+    // Slot 0: exact copy of global best (champion, no mutation)
     const next = [{ genome: [...bestGenome], fitness: 0 }];
-    // All remaining slots: copies of global best with mutations
-    while (next.length < this.popSize) {
+
+    // Determine how many slots get random Xavier init (exploration groups only)
+    const nRandom = t > 0.8 ? Math.max(1, Math.floor(this.popSize * 0.25)) : 0;
+
+    // Fill mutated clones
+    while (next.length < this.popSize - nRandom) {
       const child = [...bestGenome];
-      this._mutate(child, this.mutRate, this.mutStrength);
+      this._mutate(child, groupMutRate, groupMutStrength);
       next.push({ genome: child, fitness: 0 });
     }
+
+    // Fill random Xavier genomes for high-exploration groups (fresh genetic material)
+    while (next.length < this.popSize) {
+      next.push({ genome: _xavierGenome(this.layers), fitness: 0 });
+    }
+
     this.population = next;
-    this._peakProg = new Array(this.popSize).fill(0);
+    this._peakRawProg = new Array(this.popSize).fill(0);
     this.generation++;
     this.genTime = 0;
     this.pendingEvolve = false;
   }
+
+  // ── Mutation ──────────────────────────────────────────────────────────────
 
   _mutate(genome, rate, strength) {
     for (let i = 0; i < genome.length; i++) {
       if (Math.random() < rate) genome[i] += (Math.random() * 2 - 1) * strength;
     }
   }
+
+  // ── Persistence ───────────────────────────────────────────────────────────
 
   saveToLocalStorage() {
     if (!this.bestGenome) return false;

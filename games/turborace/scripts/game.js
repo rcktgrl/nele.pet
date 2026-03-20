@@ -37,7 +37,7 @@ import {
   startRace, restartRace, updateResultsUI,
   initTraining, stopTraining, placeBestCarMarker, clearBestCarMarker, switchTrainingTrack
 } from './race.js';
-import { resetCarForTraining } from './trainer.js';
+import { resetCarForTraining, computeFitness } from './trainer.js';
 import {
   editorRebuildScene, drawEditorCanvas,
   setEditorNodeCount, setEditorBrushAsset, setEditorBrushEnabled, setEditorBrushSize, setEditorBrushSpacing,
@@ -83,11 +83,12 @@ document.addEventListener('pointermove',e=>{
   if(state.gState==='training'){
     const cam=state.trainSplitCams&&state.trainSplitCams[0];
     if(cam&&cam.isOrthographicCamera&&e.buttons){
-      // Pan: drag to scroll (any button); clears car-follow mode
+      // Pan: drag to scroll (any button); disables auto-follow
       const s=(cam._span*2)/window.innerHeight;
       cam.position.x-=e.movementX*s;
       cam.position.z-=e.movementY*s;
       state._trainFollowCar=null;
+      state._trainAutoFollow=false;
     }
   }
 });
@@ -114,6 +115,225 @@ gc.addEventListener('contextmenu',e=>e.preventDefault());
 function closeTrackEditor(){
   document.getElementById('editorPreviewBanner').style.display='none';
   showMain();
+}
+
+// ═══════════════════════════════════════════════════════
+//  TRAINING HELPERS — extracted for readability
+//  Each group runs its own population of AI cars with
+//  independent evolution.  Penalties, fitness, and
+//  generation boundaries are handled here.
+// ═══════════════════════════════════════════════════════
+
+// Current best car across all groups (updated every frame)
+let _trainCurrentBest=null;
+
+/**
+ * Apply training penalties to all cars in a group for one substep.
+ * Penalties accumulate on car._fitPenalty which is always subtracted
+ * from fitness by computeFitness() (single source of truth).
+ */
+function _applyTrainingPenalties(cars,subDt){
+  const halfW=state.trkData?state.trkData.rw*0.55:999;
+  // Read configurable penalty values from state
+  const stuckPenRate=Number.isFinite(state.trainStuckPenaltyRate)?state.trainStuckPenaltyRate:5;
+  const gravelBase=Number.isFinite(state.trainGravelPenaltyBase)?state.trainGravelPenaltyBase:0.5;
+  const gravelGrowth=Number.isFinite(state.trainGravelGrowth)?state.trainGravelGrowth:0.3;
+  const offTrackMult=Number.isFinite(state.trainOffTrackMult)?state.trainOffTrackMult:10;
+  const offTrackDQTime=Number.isFinite(state.trainOffTrackDQTime)?state.trainOffTrackDQTime:3;
+  const dqPenalty=Number.isFinite(state.trainDQPenalty)?state.trainDQPenalty:200;
+
+  for(const car of cars){
+    if(car._offTrack) continue;
+
+    // ── Stuck penalty: penalise time spent against walls ──
+    const prevStuck=car._trainPrevStuck||0;
+    if(car.stuckTimer>prevStuck) car._fitPenalty+=stuckPenRate*subDt;
+    car._trainPrevStuck=car.stuckTimer;
+
+    // ── Gravel penalty: progressive (grows the longer a car stays on gravel) ──
+    if(car.onGravel){
+      car._gravelTime=(car._gravelTime||0)+subDt;
+      car._fitPenalty+=gravelBase*(1+car._gravelTime*gravelGrowth)*subDt;
+      car._offTrackTime=0;
+      car._onTrackTime=0; // reset on-track streak
+    }else{
+      car._gravelTime=Math.max(0,(car._gravelTime||0)-subDt);
+    }
+  }
+
+  // ── Off-track detection: way beyond track edge → harsh progressive penalty ──
+  if(state.trkPts.length){
+    for(const car of cars){
+      if(car._offTrack) continue;
+      let md=Infinity;
+      for(const p of state.trkPts){
+        const dx=car.pos.x-p.x,dz=car.pos.z-p.z;
+        const d=dx*dx+dz*dz;
+        if(d<md) md=d;
+      }
+      if(Math.sqrt(md)>halfW&&!car.onGravel){
+        car._offTrackTime=(car._offTrackTime||0)+subDt;
+        car._fitPenalty+=gravelBase*(1+car._offTrackTime*gravelGrowth)*offTrackMult*subDt;
+        car._onTrackTime=0;
+        // Disqualify after sustained off-track
+        if(car._offTrackTime>offTrackDQTime){
+          car._offTrack=true;
+          car._fitPenalty+=dqPenalty;
+        }
+      }else{
+        car._offTrackTime=0;
+        // Accumulate on-track streak (not on gravel, not off track)
+        if(!car.onGravel) car._onTrackTime=(car._onTrackTime||0)+subDt;
+      }
+    }
+  }
+}
+
+/**
+ * Tick one simulation group: run AI, apply penalties, tick GA.
+ * When a generation ends, reset cars and assign new genomes.
+ */
+function _tickTrainingGroup(grp,gi,subDt){
+  const{cars,controllers,trainer,grid}=grp;
+  // Skip groups waiting for elite clone synchronisation
+  if(trainer.pendingEvolve) return;
+
+  // ── Run AI controllers (steering, throttle, braking) ──
+  for(const ai of controllers) ai.update(subDt);
+
+  // ── Resolve collisions within this group ──
+  resolveCarCollisions(cars);
+
+  // ── Accumulate penalties (single source of truth via car._fitPenalty) ──
+  _applyTrainingPenalties(cars,subDt);
+
+  // ── Guard: reset any car that somehow "finished" (laps=999 so rare) ──
+  for(let i=0;i<cars.length;i++){
+    if(cars[i].finished) resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
+  }
+
+  // ── Lap mode: detect first lap completion ──
+  if(state.trainMode==='lap'){
+    for(const car of cars){
+      if(!car._lapCompleted&&car.lap>=1){
+        car._lapCompleted=true;
+        car._lapTime=trainer.genTime;
+      }
+    }
+  }
+
+  // ── Tick the GA; evolve when generation timer expires ──
+  if(trainer.tick(subDt,cars)){
+    // Update global best tracking (for display/export only — NOT injected back)
+    if(trainer.bestGenome&&trainer.bestFitness>(state.trainGlobalBestFitness||-Infinity)){
+      state.trainGlobalBestFitness=trainer.bestFitness;
+      state.trainGlobalBestGenome=[...trainer.bestGenome];
+    }
+    // Reset all cars and assign new genomes for next generation
+    for(let i=0;i<cars.length;i++){
+      resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
+      controllers[i].setWeights(trainer.population[i].genome);
+    }
+    // Reset auto-follow so camera snaps to the new best car
+    state._trainAutoFollow=true;
+    state._trainFollowCar=null;
+  }
+}
+
+/**
+ * Elite clone mode: wait until ALL groups have finished their generation,
+ * then pick the single best genome across all groups and clone it into
+ * every group with per-group mutation diversity.
+ */
+function _coordinateEliteCloneEvolution(){
+  if(!state.trainEliteCloneMode) return;
+  if(!state.trainGroups.length) return;
+  if(!state.trainGroups.every(g=>g.trainer.pendingEvolve)) return;
+
+  // ── Find the global best genome across all groups ──
+  let globalBestGenome=state.trainGlobalBestGenome;
+  let globalBestFit=state.trainGlobalBestFitness||-Infinity;
+  for(const grp of state.trainGroups){
+    // Check current generation's best
+    const sorted=[...grp.trainer.population].sort((a,b)=>b.fitness-a.fitness);
+    if(sorted[0]&&sorted[0].fitness>globalBestFit){
+      globalBestFit=sorted[0].fitness;
+      globalBestGenome=[...sorted[0].genome];
+    }
+    // Also consider trainer's all-time best
+    if(grp.trainer.bestFitness>globalBestFit){
+      globalBestFit=grp.trainer.bestFitness;
+      globalBestGenome=[...grp.trainer.bestGenome];
+    }
+  }
+  if(!globalBestGenome){
+    globalBestGenome=state.trainGroups[0].trainer.population[0].genome;
+  }
+  // Update global best tracking
+  if(globalBestFit>(state.trainGlobalBestFitness||-Infinity)){
+    state.trainGlobalBestFitness=globalBestFit;
+    state.trainGlobalBestGenome=[...globalBestGenome];
+  }
+
+  // ── Evolve all groups with per-group mutation diversity ──
+  const nGroups=state.trainGroups.length;
+  for(let gi=0;gi<nGroups;gi++){
+    const grp=state.trainGroups[gi];
+    // Pass groupIndex and totalGroups for exploitation→exploration gradient
+    grp.trainer.evolveEliteClone(globalBestGenome,gi,nGroups);
+    const{cars,controllers,grid}=grp;
+    for(let i=0;i<cars.length;i++){
+      resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
+      controllers[i].setWeights(grp.trainer.population[i].genome);
+    }
+  }
+
+  // Sync global best from any internal tracking updates
+  for(const grp of state.trainGroups){
+    if(grp.trainer.bestFitness>(state.trainGlobalBestFitness||-Infinity)){
+      state.trainGlobalBestFitness=grp.trainer.bestFitness;
+      state.trainGlobalBestGenome=[...grp.trainer.bestGenome];
+    }
+  }
+
+  // Reset auto-follow for the new generation
+  state._trainAutoFollow=true;
+  state._trainFollowCar=null;
+}
+
+/**
+ * Find the best car across all groups (by live _fitness) and ensure
+ * its group is the visible one.  Also update the best-car marker.
+ */
+function _updateBestCarTracking(){
+  let bestCar=null;
+  let bestFit=-Infinity;
+  let bestGi=state._trainVisibleGroup;
+
+  for(let gi=0;gi<state.trainGroups.length;gi++){
+    for(const car of state.trainGroups[gi].cars){
+      const f=car._fitness??-Infinity;
+      if(f>bestFit&&!car._offTrack){
+        bestFit=f;
+        bestCar=car;
+        bestGi=gi;
+      }
+    }
+  }
+  _trainCurrentBest=bestCar;
+
+  // Switch visible group to whichever contains the best car
+  if(bestGi!==state._trainVisibleGroup){
+    for(const c of state.trainGroups[state._trainVisibleGroup].cars) c.mesh.visible=false;
+    for(const c of state.trainGroups[bestGi].cars) c.mesh.visible=true;
+    state._trainVisibleGroup=bestGi;
+  }
+
+  // Update best-car marker continuously
+  if(bestCar){
+    state.trainBestCarPos={x:bestCar.pos.x,y:bestCar.pos.y,z:bestCar.pos.z};
+    placeBestCarMarker(bestCar.pos.x,bestCar.pos.y,bestCar.pos.z);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -157,171 +377,32 @@ function updateFrame(dt){
     drawEditorCanvas();
   }else if(state.gState==='training'){
     // Remove fog during training for better visibility
-    if(scene.fog){scene.fog=null;}
+    if(scene.fog) scene.fog=null;
     // Fast-forward: run multiple physics substeps per rendered frame
     const ffSteps=Math.max(1,state.trainFF||1);
     const subDt=Math.min(dt,0.05);
-    const halfW=state.trkData?state.trkData.rw*0.55:999;
+
     for(let _s=0;_s<ffSteps;_s++){
-      // Each simulation group runs independently
+      // ── Tick each simulation group independently ──
       for(let gi=0;gi<state.trainGroups.length;gi++){
-        const grp=state.trainGroups[gi];
-        const{cars,controllers,trainer,grid}=grp;
-        // Skip groups that have finished their generation (elite clone mode)
-        if(trainer.pendingEvolve) continue;
-        // Update AI (includes braking, steering, throttle)
-        for(const ai of controllers)ai.update(subDt);
-        // Collisions within this group (cars of the same sim push each other)
-        resolveCarCollisions(cars);
-        // Configurable penalty/reward values
-        const stuckPenRate=Number.isFinite(state.trainStuckPenaltyRate)?state.trainStuckPenaltyRate:5;
-        const gravelBase=Number.isFinite(state.trainGravelPenaltyBase)?state.trainGravelPenaltyBase:0.5;
-        const gravelGrowth=Number.isFinite(state.trainGravelGrowth)?state.trainGravelGrowth:0.3;
-        const offTrackMult=Number.isFinite(state.trainOffTrackMult)?state.trainOffTrackMult:10;
-        const offTrackDQTime=Number.isFinite(state.trainOffTrackDQTime)?state.trainOffTrackDQTime:3;
-        const dqPenalty=Number.isFinite(state.trainDQPenalty)?state.trainDQPenalty:200;
-        // Fitness penalties: wall hits and progressive gravel
-        for(const car of cars){
-          if(car._offTrack)continue;
-          if(!car._fitPenalty)car._fitPenalty=0;
-          const prevStuck=car._trainPrevStuck||0;
-          if(car.stuckTimer>prevStuck) car._fitPenalty+=stuckPenRate*subDt;
-          car._trainPrevStuck=car.stuckTimer;
-          // Progressive gravel: rate grows the longer a car stays on gravel
-          if(car.onGravel){
-            car._gravelTime=(car._gravelTime||0)+subDt;
-            car._fitPenalty+=gravelBase*(1+car._gravelTime*gravelGrowth)*subDt;
-            car._offTrackTime=0;
-            car._onTrackTime=0; // reset streak when on gravel
-          }else{
-            car._gravelTime=Math.max(0,(car._gravelTime||0)-subDt);
-          }
-        }
-        // Off-track detection: neither on track nor gravel → offTrackMult× gravel rate (progressive)
-        if(state.trkPts.length){
-          for(const car of cars){
-            if(car._offTrack)continue;
-            let md=Infinity;
-            for(const p of state.trkPts){const dx=car.pos.x-p.x,dz=car.pos.z-p.z;const d=dx*dx+dz*dz;if(d<md)md=d;}
-            if(Math.sqrt(md)>halfW&&!car.onGravel){
-              car._offTrackTime=(car._offTrackTime||0)+subDt;
-              car._fitPenalty+=gravelBase*(1+car._offTrackTime*gravelGrowth)*offTrackMult*subDt;
-              car._onTrackTime=0; // reset streak when off track
-              if(car._offTrackTime>offTrackDQTime){car._offTrack=true;car._fitPenalty=(car._fitPenalty||0)+dqPenalty;}
-            }else{
-              car._offTrackTime=0;
-              // Accumulate on-track streak (not on gravel, not off track)
-              if(!car.onGravel) car._onTrackTime=(car._onTrackTime||0)+subDt;
-            }
-          }
-        }
-        // Finished reset (laps=999 so rare, but guard)
-        for(let i=0;i<cars.length;i++){
-          if(cars[i].finished)resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
-        }
-        // Lap mode: detect when a car completes its first lap and record the time
-        if(state.trainMode==='lap'){
-          for(const car of cars){
-            if(!car._lapCompleted&&car.lap>=1){
-              car._lapCompleted=true;
-              car._lapTime=trainer.genTime; // seconds elapsed in this generation
-            }
-          }
-        }
-        // Tick the GA for this group; evolve on generation boundary
-        if(trainer.tick(subDt,cars)){
-          let bi=0;
-          for(let i=1;i<trainer.population.length;i++){if(trainer.population[i].fitness>trainer.population[bi].fitness)bi=i;}
-          const bc=cars[bi];
-          state.trainBestCarPos={x:bc.pos.x,y:bc.pos.y,z:bc.pos.z};
-          placeBestCarMarker(bc.pos.x,bc.pos.y,bc.pos.z);
-          // Share global best genome across all sims so best traits propagate everywhere
-          if(trainer.bestGenome&&trainer.bestFitness>(state.trainGlobalBestFitness||-Infinity)){
-            state.trainGlobalBestFitness=trainer.bestFitness;
-            state.trainGlobalBestGenome=[...trainer.bestGenome];
-          }
-          if(state.trainGlobalBestGenome){
-            trainer.population[0].genome=[...state.trainGlobalBestGenome];
-            if(state.trainGlobalBestFitness>trainer.bestFitness){
-              trainer.bestFitness=state.trainGlobalBestFitness;
-              trainer.bestGenome=[...state.trainGlobalBestGenome];
-            }
-          }
-          for(let i=0;i<cars.length;i++){
-            resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
-            controllers[i].setWeights(trainer.population[i].genome);
-          }
-          // Swap visible group only at generation boundary, when this sim becomes best
-          const curBestFit=state.trainGroups[state._trainVisibleGroup].trainer.bestFitness;
-          if(gi!==state._trainVisibleGroup&&trainer.bestFitness>curBestFit){
-            for(const car of state.trainGroups[state._trainVisibleGroup].cars) car.mesh.visible=false;
-            for(const car of grp.cars) car.mesh.visible=true;
-            state._trainVisibleGroup=gi;
-          }
-        }
+        _tickTrainingGroup(state.trainGroups[gi],gi,subDt);
       }
-      // Elite clone mode: wait until ALL simulation groups have finished their generation,
-      // then pick the single best genome across all groups and clone it with mutations.
-      if(state.trainEliteCloneMode&&state.trainGroups.length&&state.trainGroups.every(g=>g.trainer.pendingEvolve)){
-        // Find the global best genome across all active groups
-        let globalBestGenome=state.trainGlobalBestGenome;
-        let globalBestFit=state.trainGlobalBestFitness||-Infinity;
-        for(const grp of state.trainGroups){
-          // Check peak from current generation's sorted population
-          const sorted=[...grp.trainer.population].sort((a,b)=>b.fitness-a.fitness);
-          if(sorted[0]&&sorted[0].fitness>globalBestFit){globalBestFit=sorted[0].fitness;globalBestGenome=[...sorted[0].genome];}
-          // Also consider the trainer's all-time best
-          if(grp.trainer.bestFitness>globalBestFit){globalBestFit=grp.trainer.bestFitness;globalBestGenome=[...grp.trainer.bestGenome];}
-        }
-        if(!globalBestGenome&&state.trainGroups.length){
-          globalBestGenome=state.trainGroups[0].trainer.population[0].genome;
-        }
-        // Update global best tracking
-        if(globalBestFit>(state.trainGlobalBestFitness||-Infinity)){
-          state.trainGlobalBestFitness=globalBestFit;
-          state.trainGlobalBestGenome=[...globalBestGenome];
-        }
-        // Evolve all groups using elite clone strategy
-        for(let gi2=0;gi2<state.trainGroups.length;gi2++){
-          const grp2=state.trainGroups[gi2];
-          grp2.trainer.evolveEliteClone(globalBestGenome);
-          const{cars:c2,controllers:ct2,grid:gd2}=grp2;
-          for(let i=0;i<c2.length;i++){
-            resetCarForTraining(c2[i],gd2[i%gd2.length].pos,gd2[i%gd2.length].hdg);
-            ct2[i].setWeights(grp2.trainer.population[i].genome);
-          }
-        }
-        // Update global best after internal tracking in evolveEliteClone
-        for(const grp of state.trainGroups){
-          if(grp.trainer.bestFitness>(state.trainGlobalBestFitness||-Infinity)){
-            state.trainGlobalBestFitness=grp.trainer.bestFitness;
-            state.trainGlobalBestGenome=[...grp.trainer.bestGenome];
-          }
-        }
-        // Switch visible group to the best-performing simulation
-        let bestVisGi=state._trainVisibleGroup;
-        let bestVisFit=state.trainGroups[state._trainVisibleGroup].trainer.bestFitness;
-        for(let gi2=0;gi2<state.trainGroups.length;gi2++){
-          if(state.trainGroups[gi2].trainer.bestFitness>bestVisFit){
-            bestVisFit=state.trainGroups[gi2].trainer.bestFitness;
-            bestVisGi=gi2;
-          }
-        }
-        if(bestVisGi!==state._trainVisibleGroup){
-          for(const c of state.trainGroups[state._trainVisibleGroup].cars) c.mesh.visible=false;
-          for(const c of state.trainGroups[bestVisGi].cars) c.mesh.visible=true;
-          state._trainVisibleGroup=bestVisGi;
-        }
-      }
+      // ── Elite clone synchronisation (if enabled) ──
+      _coordinateEliteCloneEvolution();
     }
-    if(state.trainSplitCams&&state.trainSplitCams.length){
-      updateTrainSplitCameras();
-    }
+
+    // ── Best car tracking: always show & follow the best car across all groups ──
+    _updateBestCarTracking();
+
+    if(state.trainSplitCams&&state.trainSplitCams.length) updateTrainSplitCameras();
     updateTrainingHUD();
-    // Follow selected leaderboard car until camera is manually moved
-    if(state._trainFollowCar&&state._trainFollowCar.pos){
+
+    // ── Camera follow ──
+    // Auto-follow best car unless user has manually panned
+    const followCar=state._trainFollowCar||(state._trainAutoFollow!==false?_trainCurrentBest:null);
+    if(followCar&&followCar.pos){
       const cam=state.trainSplitCams&&state.trainSplitCams[0];
-      if(cam){cam.position.x=state._trainFollowCar.pos.x;cam.position.z=state._trainFollowCar.pos.z;}
+      if(cam){cam.position.x=followCar.pos.x;cam.position.z=followCar.pos.z;}
     }
   }else if(state.gState==='countdown'||state.gState==='finished'||state.gState==='paused'){
     if(state.gState==='finished'){
@@ -438,7 +519,8 @@ function _updateTrainLeaderboard(){
           lapLabel=null;
         }
       }else{
-        score=car.totalProg-(car._fitPenalty||0);
+        // Use live fitness (single source of truth — includes penalties & on-track bonus)
+        score=car._fitness??0;
         lapLabel=null;
       }
       // Brake indicator: check neural output index 2 (brake), or car reversing
@@ -504,6 +586,7 @@ document.getElementById('trainLbRows').addEventListener('click',e=>{
   cam.position.x=entry.car.pos.x;
   cam.position.z=entry.car.pos.z;
   state._trainFollowCar=entry.car;
+  state._trainAutoFollow=true; // re-enable follow after leaderboard click
 });
 
 function _drawNNViz(){
@@ -514,11 +597,13 @@ function _drawNNViz(){
   const W=cv.width, H=cv.height;
   cx.clearRect(0,0,W,H);
 
-  // Find best car's AI across all simulation groups
-  let bestAI=null, bestProg=-1;
+  // Find best car's AI across all simulation groups (by live fitness, not raw progress)
+  let bestAI=null, bestFitNN=-Infinity;
   for(const grp of state.trainGroups)
-    for(let i=0;i<grp.cars.length;i++)
-      if(grp.cars[i].totalProg>bestProg){bestProg=grp.cars[i].totalProg;bestAI=grp.controllers[i];}
+    for(let i=0;i<grp.cars.length;i++){
+      const f=grp.cars[i]._fitness??-Infinity;
+      if(f>bestFitNN&&!grp.cars[i]._offTrack){bestFitNN=f;bestAI=grp.controllers[i];}
+    }
   const ai=bestAI;
   if(!ai||!ai.layers||!ai.weights) return;
 

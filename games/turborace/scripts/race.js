@@ -228,8 +228,9 @@ export async function initTraining({preserveGen=0, preservedGenome=null, forceRa
   const hiddenSize=Math.max(3,Math.min(100,state.trainHiddenSize||5));
   const layers=[20,...Array(hiddenLayers).fill(hiddenSize),3];
 
-  // Only use saved genome if it matches the current architecture; prefer preserved genome from track switch
-  const rawSaved=preservedGenome||GeneticTrainer.loadFromLocalStorage();
+  // Only use saved genome if it matches the current architecture; prefer preserved genome from track switch.
+  // When forceRandom is true (Reset AI), skip all saved/default genomes entirely.
+  const rawSaved=forceRandom?null:(preservedGenome||GeneticTrainer.loadFromLocalStorage());
   const savedGenome=(rawSaved&&rawSaved.length===computeGenomeSize(layers))?rawSaved:null;
 
   // Shared context function (same track for all sims)
@@ -279,6 +280,8 @@ export async function initTraining({preserveGen=0, preservedGenome=null, forceRa
   // Global best genome shared across all simulations
   state.trainGlobalBestGenome=null;
   state.trainGlobalBestFitness=-Infinity;
+  // Auto-follow best car with camera (reset on each training init)
+  state._trainAutoFollow=true;
 
   // Single top-down orthographic camera showing all simulations at once
   {

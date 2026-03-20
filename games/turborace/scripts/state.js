@@ -87,4 +87,5 @@ export const state = {
     trainMode: 'timed',         // 'timed' | 'lap' — training objective mode
     trainLapBonus: 1000,        // Max fitness points awarded for a perfect (instant) lap in lap mode
     trainSingleCarModel: false, // when true: all AIs in a generation use the same randomly chosen car model
+    _trainAutoFollow: true,     // auto-follow best car with camera (false when user manually pans)
 };
