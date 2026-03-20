@@ -119,13 +119,32 @@ export class GeneticTrainer {
 
   // Seed from saved genome or hand-designed defaults.
   // Generation 0 has mild perturbations from the seed to explore nearby space.
-  initPopulation(seedGenome = null) {
-    const seed = (seedGenome && seedGenome.length === this.genomeSize)
-      ? seedGenome
-      : buildDefaultGenome(this.layers);
+  // Pass forceRandom=true (e.g. from the Reset button) to skip the hand-designed
+  // seed and start from fully random Xavier weights instead.
+  initPopulation(seedGenome = null, forceRandom = false) {
+    let seed;
+    if (!forceRandom && seedGenome && seedGenome.length === this.genomeSize) {
+      seed = seedGenome;
+    } else if (!forceRandom) {
+      seed = buildDefaultGenome(this.layers);
+    } else {
+      seed = null; // forces per-car random init below
+    }
     this.population = Array.from({ length: this.popSize }, (_, i) => {
-      const genome = [...seed];
-      if (i > 0) this._mutate(genome, 0.4, 0.8); // wider spread for diversity
+      let genome;
+      if (seed) {
+        genome = [...seed];
+        if (i > 0) this._mutate(genome, 0.4, 0.8); // wider spread for diversity
+      } else {
+        // True random Xavier init — used when forceRandom=true
+        genome = [];
+        for (let l = 0; l < this.layers.length - 1; l++) {
+          const nIn = this.layers[l], nOut = this.layers[l + 1];
+          const std = Math.sqrt(2 / (nIn + nOut));
+          for (let j = 0; j < nOut * nIn; j++) genome.push((Math.random() * 2 - 1) * std);
+          for (let j = 0; j < nOut; j++) genome.push(0);
+        }
+      }
       return { genome, fitness: 0 };
     });
     this._peakProg = new Array(this.popSize).fill(0);

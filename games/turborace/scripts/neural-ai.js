@@ -191,6 +191,13 @@ export class NeuralAI {
   setWeights(genome) {
     if (genome.length === NeuralAI.genomeSize(this.layers)) {
       this.weights = NeuralAI._unpack(genome, this.layers);
+      // Reset internal driving state so the new generation starts clean,
+      // not mid-reverse or mid-stuck-recovery from the previous generation.
+      this.slowTimer = 0;
+      this.prevPos = null;
+      this.stuckCount = 0;
+      this.revMode = 'none';
+      this.revTimer = 0;
     }
   }
 
