@@ -112,7 +112,6 @@ export class GeneticTrainer {
     this.bestFitness = -Infinity;
     this.avgFitness = 0;
     this._peakProg = [];
-    this.pendingEvolve = false; // set to true in elite-clone mode when timer expires
   }
 
   // Seed from saved genome or hand-designed defaults.
@@ -154,12 +153,6 @@ export class GeneticTrainer {
       this.population[i].fitness = this._peakProg[i];
     }
     if (this.genTime >= this.genDuration) {
-      const eliteClone = typeof state !== 'undefined' && state && state.trainEliteCloneMode;
-      if (eliteClone) {
-        // Signal readiness; game.js coordinates all groups before evolving
-        this.pendingEvolve = true;
-        return false;
-      }
       this._evolve();
       return true;
     }
@@ -215,33 +208,6 @@ export class GeneticTrainer {
     this._peakProg = new Array(this.popSize).fill(0);
     this.generation++;
     this.genTime = 0;
-  }
-
-  // Elite clone evolution: fill population with mutated copies of a single best genome.
-  // Called by game.js after all simulation groups have signalled pendingEvolve.
-  evolveEliteClone(bestGenome) {
-    // Update fitness tracking for this group's population
-    this.population.sort((a, b) => b.fitness - a.fitness);
-    const best = this.population[0];
-    if (best && best.fitness > this.bestFitness) {
-      this.bestFitness = best.fitness;
-      this.bestGenome = [...best.genome];
-    }
-    this.avgFitness = this.population.reduce((s, p) => s + p.fitness, 0) / this.population.length;
-
-    // First slot: exact copy of global best (preserved champion, no mutation)
-    const next = [{ genome: [...bestGenome], fitness: 0 }];
-    // All remaining slots: copies of global best with mutations
-    while (next.length < this.popSize) {
-      const child = [...bestGenome];
-      this._mutate(child, this.mutRate, this.mutStrength);
-      next.push({ genome: child, fitness: 0 });
-    }
-    this.population = next;
-    this._peakProg = new Array(this.popSize).fill(0);
-    this.generation++;
-    this.genTime = 0;
-    this.pendingEvolve = false;
   }
 
   _mutate(genome, rate, strength) {
