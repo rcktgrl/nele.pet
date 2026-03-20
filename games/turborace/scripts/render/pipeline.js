@@ -54,7 +54,15 @@ export function createRenderPipeline({
         const y = _H - (row + 1) * vh; // THREE.js y is bottom-up
         renderer.setViewport(x, y, vw, vh);
         renderer.setScissor(x, y, vw, vh);
-        splitCams[i].aspect = vw / vh;
+        if (splitCams[i].isOrthographicCamera && splitCams[i]._span !== undefined) {
+          const a = vw / vh;
+          splitCams[i].left = -splitCams[i]._span * a;
+          splitCams[i].right = splitCams[i]._span * a;
+          splitCams[i].top = splitCams[i]._span;
+          splitCams[i].bottom = -splitCams[i]._span;
+        } else {
+          splitCams[i].aspect = vw / vh;
+        }
         splitCams[i].updateProjectionMatrix();
         renderer.render(scene, splitCams[i]);
       }

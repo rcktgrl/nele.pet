@@ -55,24 +55,7 @@ export function toggleCam(){
 }
 
 export function updateTrainSplitCameras(){
-  const cams=state.trainSplitCams;
-  const groups=state.trainGroups;
-  if(!cams||!cams.length||!groups||!groups.length)return;
-  // One camera per simulation group, following the best car in that group
-  for(let i=0;i<cams.length;i++){
-    const grp=groups[i];
-    if(!grp||!grp.cars.length)continue;
-    // Pick the car with the highest progress in this group
-    let car=grp.cars[0];
-    for(const c of grp.cars)if(c.totalProg>car.totalProg)car=c;
-    const cam=cams[i];
-    const backHdg=car.hdg+Math.PI;
-    const back=new THREE.Vector3(Math.sin(backHdg),0,Math.cos(backHdg));
-    const fwd=new THREE.Vector3(Math.sin(car.hdg),0,Math.cos(car.hdg));
-    const tgt=car.pos.clone().addScaledVector(back,11).add(new THREE.Vector3(0,5,0));
-    cam.position.lerp(tgt,0.12);
-    cam.lookAt(car.pos.clone().addScaledVector(fwd,5).add(new THREE.Vector3(0,0.8,0)));
-  }
+  // Top-down orthographic camera is static; aspect ratio is updated in the render pipeline
 }
 
 export function resetEditorCameraToTrack(){

@@ -3,26 +3,64 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  Shared genome constants
 // ─────────────────────────────────────────────────────────────────────────────
-export const GENOME_SIZE = 52; // W1(35) + b1(5) + W2(10) + b2(2)
+/** Total scalar parameters for a given layer spec (e.g. [9,5,2]). */
+export function computeGenomeSize(layers) {
+  let s = 0;
+  for (let i = 0; i < layers.length - 1; i++) s += layers[i + 1] * (layers[i] + 1);
+  return s;
+}
 
-// Flat representation of the hand-designed weights from neural-ai.js.
-// Used as the seed genome so generation-0 starts from a driver that can
-// already corner, rather than from random noise.
+/** Legacy: genome size for default [9,5,2] architecture. */
+export const GENOME_SIZE = computeGenomeSize([9, 5, 2]); // 62
+
+// Hand-designed seed genome for [9,5,2]:
+//   5 wall sensors + speed + waypointErr + edgeProximity + gravelFlag → 5 hidden → 2 out
 export const DEFAULT_GENOME = [
-  // W1: 5 rows × 7 inputs
-  -2.0, -3.0, -0.5,  0.5,  0.3,  0.0,  0.0,  // H0 danger-left
-   0.3,  0.5, -0.5, -3.0, -2.0,  0.0,  0.0,  // H1 danger-right
-   0.0, -0.5, -3.0, -0.5,  0.0,  0.0,  0.0,  // H2 danger-ahead
-   0.8,  0.8,  1.5,  0.8,  0.8,  1.5,  0.0,  // H3 open-track
-   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  // H4 waypoint-err
+  // W1: 5 rows × 9 inputs  (s-60 s-30 s0 s+30 s+60 spd wpt edge grav)
+  -2.0, -3.0, -0.5,  0.5,  0.3,  0.0,  0.0,  0.8,  0.5,  // H0 danger-left
+   0.3,  0.5, -0.5, -3.0, -2.0,  0.0,  0.0,  0.8,  0.5,  // H1 danger-right
+   0.0, -0.5, -3.0, -0.5,  0.0,  0.0,  0.0,  0.5,  0.5,  // H2 danger-ahead
+   0.8,  0.8,  1.5,  0.8,  0.8,  1.5,  0.0, -1.5, -1.0,  // H3 open-track
+   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  // H4 waypoint-err
   // b1: 5
   1.0, 1.0, 1.5, -4.0, 0.0,
-  // W2: 2 rows × 5 inputs
+  // W2: 2 rows × 5
    1.2, -1.2,  0.0,  0.0,  1.5,  // steer
   -0.3, -0.3, -1.5,  1.5,  0.0,  // throttle
   // b2: 2
   0.0, 0.5,
 ];
+
+/**
+ * Build a seed genome for the given architecture.
+ * Uses hand-designed weights for known architectures; Xavier random otherwise.
+ */
+export function buildDefaultGenome(layers) {
+  const key = JSON.stringify(layers);
+  if (key === '[9,5,2]') return [...DEFAULT_GENOME];
+  if (key === '[7,5,2]') {
+    return [
+      -2.0,-3.0,-0.5, 0.5, 0.3, 0.0, 0.0,
+       0.3, 0.5,-0.5,-3.0,-2.0, 0.0, 0.0,
+       0.0,-0.5,-3.0,-0.5, 0.0, 0.0, 0.0,
+       0.8, 0.8, 1.5, 0.8, 0.8, 1.5, 0.0,
+       0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0,
+      1.0, 1.0, 1.5,-4.0, 0.0,
+       1.2,-1.2, 0.0, 0.0, 1.5,
+      -0.3,-0.3,-1.5, 1.5, 0.0,
+      0.0, 0.5,
+    ];
+  }
+  // Xavier random init for novel architectures
+  const genome = [];
+  for (let l = 0; l < layers.length - 1; l++) {
+    const nIn = layers[l], nOut = layers[l + 1];
+    const std = Math.sqrt(2 / (nIn + nOut));
+    for (let j = 0; j < nOut * nIn; j++) genome.push((Math.random() * 2 - 1) * std);
+    for (let j = 0; j < nOut; j++) genome.push(0);
+  }
+  return genome;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Grid builder — places N cars in rows of 4 behind the track start line
@@ -67,24 +105,28 @@ export function resetCarForTraining(car, pos, hdg) {
 const LS_KEY = 'turborace_nn_weights';
 
 export class GeneticTrainer {
-  constructor({ popSize = 20, genDuration = 35, mutRate = 0.15, mutStrength = 0.35 } = {}) {
+  constructor({ popSize = 20, genDuration = 35, mutRate = 0.15, mutStrength = 0.35, layers = [9, 5, 2] } = {}) {
     this.popSize = popSize;
     this.genDuration = genDuration;
     this.mutRate = mutRate;
     this.mutStrength = mutStrength;
+    this.layers = layers;
+    this.genomeSize = computeGenomeSize(layers);
     this.generation = 0;
     this.genTime = 0;
     this.population = [];
     this.bestGenome = null;
     this.bestFitness = -Infinity;
     this.avgFitness = 0;
-    this._peakProg = [];   // max totalProg seen this generation per car
+    this._peakProg = [];
   }
 
   // Seed from saved genome or hand-designed defaults.
   // Generation 0 has mild perturbations from the seed to explore nearby space.
   initPopulation(seedGenome = null) {
-    const seed = seedGenome || DEFAULT_GENOME;
+    const seed = (seedGenome && seedGenome.length === this.genomeSize)
+      ? seedGenome
+      : buildDefaultGenome(this.layers);
     this.population = Array.from({ length: this.popSize }, (_, i) => {
       const genome = [...seed];
       if (i > 0) this._mutate(genome, 0.4, 0.8); // wider spread for diversity

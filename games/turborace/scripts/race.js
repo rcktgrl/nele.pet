@@ -5,7 +5,7 @@ import { buildTrack } from './track-gen.js';
 import { instantiateRaceCars, Car } from './car.js';
 import { AI } from './ai-script.js';
 import { NeuralAI } from './neural-ai.js';
-import { GeneticTrainer, buildTrainingGrid, resetCarForTraining } from './trainer.js';
+import { GeneticTrainer, buildTrainingGrid, resetCarForTraining, computeGenomeSize } from './trainer.js';
 import { setupLights } from './lighting.js';
 import {
   initAudio, initAiSounds, clearAiSounds,
@@ -217,7 +217,15 @@ export async function initTraining(){
   state.trkData.laps=999;
 
   const carsPerSim=Math.max(1,state.trainPopSize||8);
-  const savedGenome=GeneticTrainer.loadFromLocalStorage();
+
+  // Build network architecture from settings
+  const hiddenLayers=Math.max(1,Math.min(4,state.trainHiddenLayers||1));
+  const hiddenSize=Math.max(3,Math.min(8,state.trainHiddenSize||5));
+  const layers=[9,...Array(hiddenLayers).fill(hiddenSize),2];
+
+  // Only use saved genome if it matches the current architecture
+  const rawSaved=GeneticTrainer.loadFromLocalStorage();
+  const savedGenome=(rawSaved&&rawSaved.length===computeGenomeSize(layers))?rawSaved:null;
 
   // Shared context function (same track for all sims)
   const contextFn=()=>({
@@ -231,7 +239,7 @@ export async function initTraining(){
 
   // Create N_SIMS independent simulations, each with their own trainer and cars
   for(let s=0;s<N_SIMS;s++){
-    const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:35});
+    const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:35,layers});
     trainer.initPopulation(savedGenome);
     const grid=buildTrainingGrid(state.trkPts,carsPerSim);
     const cars=[], controllers=[];
@@ -240,7 +248,7 @@ export async function initTraining(){
       const carData=CARS[Math.floor(Math.random()*CARS.length)];
       const car=new Car(carData,g.pos,g.hdg,false,scene);
       car.aiAgg=1.0;
-      const ai=new NeuralAI(car,0.044+i*0.001,contextFn,trainer.population[i].genome);
+      const ai=new NeuralAI(car,0.044+i*0.001,contextFn,trainer.population[i].genome,layers);
       cars.push(car); controllers.push(ai);
     }
     state.trainGroups.push({cars,controllers,trainer,grid});
@@ -255,12 +263,29 @@ export async function initTraining(){
   state.trainer=state.trainGroups[0].trainer;
   state.trainGrid=state.trainGroups[0].grid;
 
-  // One split-screen camera per simulation (follows best car in each group)
-  state.trainSplitCams=Array.from({length:N_SIMS},()=>{
-    const cam=new THREE.PerspectiveCamera(72,1,0.1,2000);
-    cam.position.set(0,80,0);
-    return cam;
-  });
+  // Only show group 0's cars initially; rest run hidden
+  for(let s=0;s<state.trainGroups.length;s++)
+    for(const car of state.trainGroups[s].cars) car.mesh.visible=(s===0);
+  state._trainVisibleGroup=0;
+  // Global best genome shared across all simulations
+  state.trainGlobalBestGenome=null;
+  state.trainGlobalBestFitness=-Infinity;
+
+  // Single top-down orthographic camera showing all simulations at once
+  {
+    const xs=state.trkPts.map(p=>p.x), zs=state.trkPts.map(p=>p.z);
+    const minX=xs.length?Math.min(...xs):-200, maxX=xs.length?Math.max(...xs):200;
+    const minZ=zs.length?Math.min(...zs):-200, maxZ=zs.length?Math.max(...zs):200;
+    const tcx=(minX+maxX)/2, tcz=(minZ+maxZ)/2;
+    const span=Math.max(maxX-minX,maxZ-minZ)*0.6+80;
+    const aspect=window.innerWidth/window.innerHeight;
+    const topDownCam=new THREE.OrthographicCamera(-span*aspect,span*aspect,span,-span,1,2000);
+    topDownCam._span=span;
+    topDownCam.up.set(0,0,-1);
+    topDownCam.position.set(tcx,800,tcz);
+    topDownCam.lookAt(tcx,0,tcz);
+    state.trainSplitCams=[topDownCam];
+  }
 
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
   document.getElementById('hud').style.display='none';
@@ -303,6 +328,9 @@ export function stopTraining(){
   }
   if(_bestMarker){ scene.remove(_bestMarker); _bestMarker=null; }
   state.trainBestCarPos=null;
+  state._trainVisibleGroup=0;
+  state.trainGlobalBestGenome=null;
+  state.trainGlobalBestFitness=-Infinity;
   document.getElementById('trainHud').style.display='none';
   state.trainer=null;
   state.trainGrid=[];

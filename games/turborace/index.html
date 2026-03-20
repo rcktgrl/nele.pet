@@ -47,16 +47,25 @@
   <div style="width:340px;height:6px;background:#111;border-radius:3px;overflow:hidden;pointer-events:none;">
     <div id="trainBar" style="height:100%;width:0%;background:linear-gradient(90deg,#4af,#4f4);border-radius:3px;transition:width .2s linear;"></div>
   </div>
-  <!-- Sliders -->
+  <!-- Sliders row 1 -->
   <div style="display:flex;gap:18px;align-items:center;background:rgba(5,5,20,.78);border:1px solid #1a2030;border-radius:8px;padding:8px 18px;pointer-events:auto;">
     <label style="color:#889;font-size:.7rem;white-space:nowrap;">CARS&nbsp;<span id="trainPopVal" style="color:#4af;">8</span></label>
-    <input id="trainPopSlider" type="range" min="1" max="8" value="8" step="1" style="width:90px;accent-color:#4af;">
+    <input id="trainPopSlider" type="range" min="1" max="8" value="8" step="1" style="width:80px;accent-color:#4af;">
     <span style="color:#334;font-size:.65rem;">next&nbsp;run</span>
     <span style="color:#445;">│</span>
     <label style="color:#889;font-size:.7rem;white-space:nowrap;">SPEED&nbsp;<span id="trainFFVal" style="color:#fa4;">1×</span></label>
-    <input id="trainFFSlider" type="range" min="1" max="100" value="1" step="1" style="width:90px;accent-color:#fa4;">
+    <input id="trainFFSlider" type="range" min="1" max="100" value="1" step="1" style="width:80px;accent-color:#fa4;">
   </div>
-  <div style="color:#445;font-size:.65rem;pointer-events:none;">8 INDEPENDENT SIMULATIONS · 8 CARS EACH · BEST CAR SHOWN PER VIEW</div>
+  <!-- Sliders row 2: hidden layers -->
+  <div style="display:flex;gap:18px;align-items:center;background:rgba(5,5,20,.78);border:1px solid #1a2030;border-radius:8px;padding:8px 18px;pointer-events:auto;">
+    <label style="color:#889;font-size:.7rem;white-space:nowrap;">HIDDEN&nbsp;<span id="trainHiddenVal" style="color:#c8f;">1</span></label>
+    <input id="trainHiddenSlider" type="range" min="1" max="4" value="1" step="1" style="width:80px;accent-color:#c8f;">
+    <span style="color:#334;font-size:.65rem;">next&nbsp;run</span>
+    <span style="color:#445;">│</span>
+    <label style="color:#889;font-size:.7rem;white-space:nowrap;">NODES&nbsp;<span id="trainNodesVal" style="color:#f84;">5</span></label>
+    <input id="trainNodesSlider" type="range" min="3" max="8" value="5" step="1" style="width:80px;accent-color:#f84;">
+  </div>
+  <div style="color:#445;font-size:.65rem;pointer-events:none;">8 SIMS · SCROLL=ZOOM · DRAG=PAN · BEST SIM SHOWN · SWAPS AT GENERATION END</div>
   <!-- Neural network visualiser -->
   <canvas id="trainNNCanvas" width="260" height="160" style="position:fixed;bottom:18px;right:18px;border:1px solid #1a2535;border-radius:8px;background:rgba(4,6,18,.88);pointer-events:none;"></canvas>
 </div>
