@@ -35,7 +35,7 @@ import {
 import {
   pauseRace, resumeRace,
   startRace, restartRace, updateResultsUI,
-  initTraining, stopTraining, placeBestCarMarker
+  initTraining, stopTraining, placeBestCarMarker, switchTrainingTrack
 } from './race.js';
 import { resetCarForTraining } from './trainer.js';
 import {
@@ -277,6 +277,7 @@ function updateTrainingHUD(){
 }
 
 let _lbRows=null;
+let _lbTopEntries=[];
 function _updateTrainLeaderboard(){
   if(!_lbRows)_lbRows=document.getElementById('trainLbRows');
   if(!_lbRows||!state.trainGroups||!state.trainGroups.length)return;
@@ -290,16 +291,16 @@ function _updateTrainLeaderboard(){
       // Brake indicator: check neural output index 2 (brake), or car reversing
       const brakeOut=ctrl&&ctrl.lastOutputs?ctrl.lastOutputs[2]:0;
       const braking=brakeOut>0.1||car.isReversing;
-      entries.push({score,spd:car.spd,braking,offTrack:!!car._offTrack,onGravel:car.onGravel,color:car.data&&car.data.hex?car.data.hex:'#889'});
+      entries.push({score,spd:car.spd,braking,offTrack:!!car._offTrack,onGravel:car.onGravel,color:car.data&&car.data.hex?car.data.hex:'#889',car});
     }
   }
   entries.sort((a,b)=>b.score-a.score);
-  const top=entries.slice(0,8);
+  _lbTopEntries=entries.slice(0,8);
   const RANK_COLORS=['#ffd700','#c0c0c0','#cd7f32','#778','#778','#778','#778','#778'];
   const ROW_COUNT=8;
   let html='';
   for(let i=0;i<ROW_COUNT;i++){
-    const e=top[i];
+    const e=_lbTopEntries[i];
     if(e){
       const spdKph=Math.round(e.spd*3.6);
       const rc=RANK_COLORS[i]||'#778';
@@ -307,7 +308,7 @@ function _updateTrainLeaderboard(){
       const brakeHtml=e.braking
         ?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f33;box-shadow:0 0 5px #f33;"></span>'
         :'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a1a2a;border:1px solid #223;"></span>';
-      html+=`<div style="display:grid;grid-template-columns:18px 10px 1fr 48px 14px;gap:2px 6px;align-items:center;padding:1px 0;">`
+      html+=`<div data-lbidx="${i}" style="display:grid;grid-template-columns:18px 10px 1fr 48px 14px;gap:2px 6px;align-items:center;padding:1px 0;cursor:pointer;pointer-events:auto;border-radius:3px;" onmouseenter="this.style.background='rgba(80,160,255,.08)'" onmouseleave="this.style.background=''">`
         +`<span style="color:${rc};font-size:.6rem;text-align:right;">${i+1}</span>`
         +`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${e.color};box-shadow:0 0 4px ${e.color};"></span>`
         +`<span style="color:${scoreColor};font-size:.65rem;">${e.offTrack?'X':e.score.toFixed(1)}</span>`
@@ -326,6 +327,19 @@ function _updateTrainLeaderboard(){
   }
   _lbRows.innerHTML=html;
 }
+
+// Center the training top-down camera on a leaderboard car when its row is clicked
+document.getElementById('trainLbRows').addEventListener('click',e=>{
+  const row=e.target.closest('[data-lbidx]');
+  if(!row)return;
+  const idx=parseInt(row.dataset.lbidx,10);
+  const entry=_lbTopEntries[idx];
+  if(!entry)return;
+  const cam=state.trainSplitCams&&state.trainSplitCams[0];
+  if(!cam||!entry.car.pos)return;
+  cam.position.x=entry.car.pos.x;
+  cam.position.z=entry.car.pos.z;
+});
 
 function _drawNNViz(){
   if(!_nnCanvas) _nnCanvas=document.getElementById('trainNNCanvas');
@@ -491,18 +505,49 @@ document.getElementById('leaderboardModal').addEventListener('click',e=>{ if(e.t
 document.getElementById('menuBtn').addEventListener('click',showMain);
 document.getElementById('raceAgainBtn').addEventListener('click',restartRace);
 document.getElementById('trainAiBtn').addEventListener('click',()=>{ tryStartMenuMusic(); showTrainTrkSel(); });
-document.getElementById('btnTrainStart').addEventListener('click',()=>{ void initTraining(); });
-document.getElementById('trainSaveBtn').addEventListener('click',()=>{
+document.getElementById('btnTrainStart').addEventListener('click', async ()=>{
+  await initTraining();
+  _populateTrainTrkSelect();
+});
+function _getBestTrainer(){
   const groups=state.trainGroups;
-  if(!groups||!groups.length)return;
-  // Save the best genome across all parallel simulations
-  const best=groups.reduce((b,g)=>g.trainer.bestFitness>b.trainer.bestFitness?g:b,groups[0]).trainer;
-  const saved=best.saveToLocalStorage();
-  const exported=best.exportAsJSON(`gen${best.generation}-${best.layers.join('x')}`);
-  if(saved||exported) document.getElementById('trainSaveBtn').textContent='EXPORTED ✓';
-  setTimeout(()=>{ const b=document.getElementById('trainSaveBtn'); if(b)b.textContent='SAVE & EXPORT'; },2000);
+  if(!groups||!groups.length)return null;
+  return groups.reduce((b,g)=>g.trainer.bestFitness>b.trainer.bestFitness?g:b,groups[0]).trainer;
+}
+document.getElementById('trainSaveBtn').addEventListener('click',()=>{
+  const best=_getBestTrainer(); if(!best)return;
+  const defaultName=`gen${best.generation}-${best.layers.join('x')}`;
+  const name=(prompt('Name this model:',defaultName)||'').trim()||defaultName;
+  best.saveToLocalStorage();
+  localStorage.setItem('turborace_nn_name',name);
+  const btn=document.getElementById('trainSaveBtn');
+  btn.textContent='SAVED ✓';
+  setTimeout(()=>{ btn.textContent='SAVE'; },2000);
+});
+document.getElementById('trainExportBtn').addEventListener('click',()=>{
+  const best=_getBestTrainer(); if(!best)return;
+  const defaultName=`gen${best.generation}-${best.layers.join('x')}`;
+  const name=(prompt('Name this model:',defaultName)||'').trim()||defaultName;
+  const exported=best.exportAsJSON(name);
+  if(exported){
+    const btn=document.getElementById('trainExportBtn');
+    btn.textContent='EXPORTED ✓';
+    setTimeout(()=>{ btn.textContent='EXPORT'; },2000);
+  }
 });
 document.getElementById('trainStopBtn').addEventListener('click',()=>{ stopTraining(); showMain(); });
+document.getElementById('trainTrkSelect').addEventListener('change', async e=>{
+  const newId=e.target.value;
+  if(!newId||newId===String(state.selTrk))return;
+  await switchTrainingTrack(newId);
+  _populateTrainTrkSelect();
+});
+function _populateTrainTrkSelect(){
+  const sel=document.getElementById('trainTrkSelect');
+  if(!sel)return;
+  const tracks=[...state.folderTracks,...(state.editorTracks||[])];
+  sel.innerHTML=tracks.map(t=>`<option value="${t.id}"${String(t.id)===String(state.selTrk)?' selected':''}>${t.name||t.id}</option>`).join('');
+}
 document.getElementById('trainPopSlider').addEventListener('input',e=>{
   state.trainPopSize=parseInt(e.target.value);
   document.getElementById('trainPopVal').textContent=e.target.value;

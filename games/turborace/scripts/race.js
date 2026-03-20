@@ -200,7 +200,7 @@ let _trainLapsBackup = null;
 
 const N_SIMS = 8; // Number of independent parallel simulations per generation
 
-export async function initTraining(){
+export async function initTraining({preserveGen=0, preservedGenome=null}={}){
   // Clean up any prior race / training
   for(const c of state.allCars) scene.remove(c.mesh);
   state.allCars=[]; state.aiCars=[]; state.aiControllers=[]; state.pCar=null;
@@ -223,8 +223,8 @@ export async function initTraining(){
   const hiddenSize=Math.max(3,Math.min(8,state.trainHiddenSize||5));
   const layers=[13,...Array(hiddenLayers).fill(hiddenSize),3];
 
-  // Only use saved genome if it matches the current architecture
-  const rawSaved=GeneticTrainer.loadFromLocalStorage();
+  // Only use saved genome if it matches the current architecture; prefer preserved genome from track switch
+  const rawSaved=preservedGenome||GeneticTrainer.loadFromLocalStorage();
   const savedGenome=(rawSaved&&rawSaved.length===computeGenomeSize(layers))?rawSaved:null;
 
   // Shared context function (same track for all sims)
@@ -241,6 +241,7 @@ export async function initTraining(){
   for(let s=0;s<N_SIMS;s++){
     const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:state.trainGenDuration||35,layers});
     trainer.initPopulation(savedGenome);
+    if(preserveGen>0) trainer.generation=preserveGen;
     const grid=buildTrainingGrid(state.trkPts,carsPerSim);
     const cars=[], controllers=[];
     for(let i=0;i<carsPerSim;i++){
@@ -295,6 +296,17 @@ export async function initTraining(){
   dc.style.display='none';
   stopAudio(); stopMusic();
   state.gState='training';
+}
+
+export async function switchTrainingTrack(newTrkId){
+  // Preserve generation count and best genome across track switch
+  const bestTrainer=state.trainGroups.length>0
+    ?state.trainGroups.reduce((b,g)=>g.trainer.bestFitness>b.trainer.bestFitness?g:b,state.trainGroups[0]).trainer
+    :null;
+  const preserveGen=bestTrainer?bestTrainer.generation:0;
+  const preservedGenome=bestTrainer?bestTrainer.bestGenome:null;
+  state.selTrk=newTrkId;
+  await initTraining({preserveGen,preservedGenome});
 }
 
 // ─── Best-car position marker ───────────────────────────────────────────────
