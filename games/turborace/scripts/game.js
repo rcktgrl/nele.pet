@@ -619,6 +619,11 @@ function _populateTrainTrkSelect(){
   const tracks=[...state.folderTracks,...(state.editorTracks||[])];
   sel.innerHTML=tracks.map(t=>`<option value="${t.id}"${String(t.id)===String(state.selTrk)?' selected':''}>${t.name||t.id}</option>`).join('');
 }
+document.getElementById('trainNumSimsSlider').addEventListener('input',e=>{
+  state.trainNumSims=parseInt(e.target.value);
+  document.getElementById('trainNumSimsVal').textContent=e.target.value;
+  document.getElementById('trainSimsHint').textContent=e.target.value;
+});
 document.getElementById('trainPopSlider').addEventListener('input',e=>{
   state.trainPopSize=parseInt(e.target.value);
   document.getElementById('trainPopVal').textContent=e.target.value;
