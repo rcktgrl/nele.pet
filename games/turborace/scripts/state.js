@@ -84,4 +84,5 @@ export const state = {
     trainEliteCloneMode: false, // when true: all sims run full duration, then best car is cloned with mutations
     trainMode: 'timed',         // 'timed' | 'lap' — training objective mode
     trainLapBonus: 1000,        // Max fitness points awarded for a perfect (instant) lap in lap mode
+    trainSingleCarModel: false, // when true: all AIs in a generation use the same randomly chosen car model
 };

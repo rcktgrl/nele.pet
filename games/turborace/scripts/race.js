@@ -226,7 +226,7 @@ export async function initTraining({preserveGen=0, preservedGenome=null}={}){
   // Build network architecture from settings
   const hiddenLayers=Math.max(1,Math.min(100,state.trainHiddenLayers||1));
   const hiddenSize=Math.max(3,Math.min(100,state.trainHiddenSize||5));
-  const layers=[15,...Array(hiddenLayers).fill(hiddenSize),3];
+  const layers=[17,...Array(hiddenLayers).fill(hiddenSize),3];
 
   // Only use saved genome if it matches the current architecture; prefer preserved genome from track switch
   const rawSaved=preservedGenome||GeneticTrainer.loadFromLocalStorage();
@@ -243,6 +243,8 @@ export async function initTraining({preserveGen=0, preservedGenome=null}={}){
   });
 
   const nSims=Math.max(1,state.trainNumSims||8);
+  // In single-car mode, pick one model for ALL sims in this generation
+  const globalCarData=state.trainSingleCarModel?CARS[Math.floor(Math.random()*CARS.length)]:null;
   // Create nSims independent simulations, each with their own trainer and cars
   for(let s=0;s<nSims;s++){
     const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:state.trainGenDuration||35,layers});
@@ -252,7 +254,7 @@ export async function initTraining({preserveGen=0, preservedGenome=null}={}){
     const cars=[], controllers=[];
     for(let i=0;i<carsPerSim;i++){
       const g=grid[i];
-      const carData=CARS[Math.floor(Math.random()*CARS.length)];
+      const carData=globalCarData||CARS[Math.floor(Math.random()*CARS.length)];
       const car=new Car(carData,g.pos,g.hdg,false,scene);
       car.aiAgg=1.0;
       const ai=new NeuralAI(car,0.044+i*0.001,contextFn,trainer.population[i].genome,layers);
@@ -337,6 +339,12 @@ export function placeBestCarMarker(x,y,z){
     _bestMarker=group;
   }
   _bestMarker.position.set(x,y+0.2,z);
+}
+
+export function clearBestCarMarker(){
+  if(_bestMarker){ scene.remove(_bestMarker); _bestMarker=null; }
+  state.trainBestCarPos=null;
+  state._trainFollowCar=null;
 }
 
 export function stopTraining(){
