@@ -50,7 +50,7 @@ import {
 import {
   showMain, showIntro, showTrkSel, showCarSel,
   showDiffSel, showNeuralModelSel, showOnlineTrkSel, showSettings, closeSettings,
-  showTrainTrkSel, showTrainSetup, getTrainSetupGenome
+  showTrainTrkSel, showTrainSetup, getTrainSetupGenome, getTrainSetupForceRandom
 } from './menu.js';
 import {
   closeTrackLeaderboardModal
@@ -787,7 +787,10 @@ document.getElementById('trainAiBtn').addEventListener('click',()=>{ tryStartMen
 document.getElementById('btnTrainStart').addEventListener('click',()=>{ showTrainSetup(); });
 document.getElementById('trainSetupBackBtn').addEventListener('click',()=>{ showTrainTrkSel(); });
 document.getElementById('trainSetupStartBtn').addEventListener('click', async ()=>{
-  await initTraining({preservedGenome: getTrainSetupGenome()});
+  await initTraining({
+    preservedGenome: getTrainSetupGenome(),
+    forceRandom: getTrainSetupForceRandom()
+  });
   _syncTrainHudSliders();
   _populateTrainTrkSelect();
 });
