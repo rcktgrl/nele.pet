@@ -284,12 +284,14 @@ export async function showTrainTrkSel(){
 //  AI TRAINING SETUP
 // ═══════════════════════════════════════════════════════
 let _trainSetupGenome=null;
+let _trainSetupForceRandom=false;
 
 export async function showTrainSetup(){
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrainSetup').style.display='flex';
 
   _trainSetupGenome=null;
+  _trainSetupForceRandom=false;
 
   // Sync training mode cards with current state
   document.querySelectorAll('#trainModeCards .diffCard').forEach(card=>{
@@ -340,7 +342,7 @@ export async function showTrainSetup(){
   }
 
   // Fresh random start
-  models.push({label:'Fresh Start',desc:'Random initialisation',genome:null,icon:'✨',layers:null});
+  models.push({label:'Fresh Start',desc:'Fully random initialisation',genome:null,icon:'✨',layers:null,forceRandom:true});
 
   // Default select: first model
   _trainSetupGenome=models[0].genome;
@@ -348,6 +350,7 @@ export async function showTrainSetup(){
 
   function _applyModelSelection(m){
     _trainSetupGenome=m.genome;
+    _trainSetupForceRandom=!!m.forceRandom;
     const archSection=document.getElementById('trainSetupArchSection');
     // Only hide sliders for models compatible with the training format (15 inputs, 3 outputs)
     const compatible=m.layers&&m.layers.length>=3&&m.layers[0]===15&&m.layers[m.layers.length-1]===3;
@@ -385,6 +388,7 @@ export async function showTrainSetup(){
 }
 
 export function getTrainSetupGenome(){ return _trainSetupGenome; }
+export function getTrainSetupForceRandom(){ return _trainSetupForceRandom; }
 
 export function showDiffSel(){
   if(state.selTrk==null){ showTrkSel(); return; }
