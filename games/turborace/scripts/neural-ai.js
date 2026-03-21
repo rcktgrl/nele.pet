@@ -278,7 +278,7 @@ export class NeuralAI {
   // ── Main update (called every physics tick) ─────────────────────────────────
 
   update(dt) {
-    const { trackPoints, trackCurvature, cityAiPoints, trackData } = this.context();
+    const { trackPoints, cityAiPoints, trackData } = this.context();
     if (!trackPoints.length || this.car.finished) return;
     const c = this.car;
 
@@ -333,7 +333,6 @@ export class NeuralAI {
     // ── Waypoint navigation ──────────────────────────────────────────────────
     const useCity = !!cityAiPoints;
     const navPts = useCity ? cityAiPoints.pts : trackPoints;
-    const navCurv = useCity ? cityAiPoints.curv : trackCurvature;
     let md = Infinity, ci = 0;
     for (let i = 0; i < navPts.length; i++) {
       const d = (c.pos.x - navPts[i].x) ** 2 + (c.pos.z - navPts[i].z) ** 2;
@@ -345,8 +344,6 @@ export class NeuralAI {
     const ti = (ci + look) % n;
     const dh = Math.atan2(navPts[ti].x - c.pos.x, navPts[ti].z - c.pos.z);
     const he = ((dh - c.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-    const wpSteer = Math.max(-1, Math.min(1, he * 1.8));
-
     // ── Neural network ───────────────────────────────────────────────────────
     const sensors = this._castRays(state.trkWallLeft || [], state.trkWallRight || []);
     const edgeSensors = this._castEdgeRays(state.trkEdgeLeft || [], state.trkEdgeRight || []);
@@ -377,47 +374,11 @@ export class NeuralAI {
       ? Math.max(0, nnBrakeRaw || 0)
       : 0;
 
-    // sensors: -90°[0], -60°[1], -30°[2], -10°[3], -5°[4], 0°[5], +5°[6], +10°[7], +30°[8], +60°[9], +90°[10]
-    const fwdDanger = 1 - Math.min(sensors[2], sensors[3], sensors[4]);
-    const nnBlend = 0.3 + fwdDanger * 0.5;
-    let str = wpSteer * (1 - nnBlend) + nnSteer * nnBlend;
-    str = Math.max(-1, Math.min(1, str));
-
-    // Edge pull-back: steer toward track center when drifting wide
-    if (!useCity && trackData) {
-      const edgeDist = Math.sqrt(md);
-      const wallDist = trackData.rw * 0.5;
-      if (edgeDist > wallDist * 0.5) {
-        const np = trackPoints[ci];
-        const pullAngle = Math.atan2(np.x - c.pos.x, np.z - c.pos.z);
-        const pullErr = ((pullAngle - c.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-        const gravelBoost = c.onGravel ? 2.2 : 1.0;
-        const pushFactor = Math.min(1, (edgeDist - wallDist * 0.5) / (wallDist * 0.5));
-        str = Math.max(-1, Math.min(1, str + pullErr * pushFactor * 1.5 * gravelBoost));
-      }
-    }
-
-    // ── Braking ──────────────────────────────────────────────────────────────
-    const ptSpacing = 2;
-    const scanDist = Math.round(6 + speedFrac * 44);
-    let reqBrake = 0;
-    for (let k = 1; k < scanDist; k++) {
-      const ki = (ci + k) % n;
-      const curv = navCurv[ki];
-      if (curv < 0.03) continue;
-      const cornerSpd = c.data.maxSpd * c.data.hdl * (0.18 + 0.77 * (1 - curv));
-      const dist = k * ptSpacing;
-      const speedOver = c.spd - cornerSpd;
-      if (speedOver > 0 && dist > 0) {
-        const decel = (c.spd * c.spd - cornerSpd * cornerSpd) / (2 * dist);
-        const brake = Math.min(1, decel / c.data.brake * 1.0);
-        if (brake > reqBrake) reqBrake = brake;
-      }
-    }
+    let str = Math.max(-1, Math.min(1, nnSteer));
 
     // ── Throttle & brake ──────────────────────────────────────────────────────
-    let thr = 1.0;
-    let brk = Math.max(reqBrake, nnBrake * 0.8);
+    let thr = Math.max(0, thrMod);
+    let brk = nnBrake;
     if (brk > 0.05) thr = Math.min(thr, 1 - brk);
     thr *= 0.85 + thrMod * 0.25;
     if (c.onGravel) thr = Math.min(thr, 0.7);
