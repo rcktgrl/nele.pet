@@ -37,7 +37,7 @@ import {
   startRace, restartRace, updateResultsUI,
   initTraining, stopTraining, placeBestCarMarker, clearBestCarMarker, switchTrainingTrack
 } from './race.js';
-import { resetCarForTraining, computeFitness } from './trainer.js';
+import { resetCarForTraining } from './trainer.js';
 import {
   editorRebuildScene, drawEditorCanvas,
   setEditorNodeCount, setEditorBrushAsset, setEditorBrushEnabled, setEditorBrushSize, setEditorBrushSpacing,
@@ -245,7 +245,7 @@ function _tickTrainingGroup(grp,gi,subDt){
 /**
  * Elite clone mode: wait until ALL groups have finished their generation,
  * then pick the single best genome across all groups and clone it into
- * every group with per-group mutation diversity.
+ * every group so each non-champion car is a slight mutation of that same winner.
  */
 function _coordinateEliteCloneEvolution(){
   if(!state.trainEliteCloneMode) return;
@@ -277,12 +277,11 @@ function _coordinateEliteCloneEvolution(){
     state.trainGlobalBestGenome=[...globalBestGenome];
   }
 
-  // ── Evolve all groups with per-group mutation diversity ──
+  // ── Evolve all groups from the same global champion ──
   const nGroups=state.trainGroups.length;
   for(let gi=0;gi<nGroups;gi++){
     const grp=state.trainGroups[gi];
-    // Pass groupIndex and totalGroups for exploitation→exploration gradient
-    grp.trainer.evolveEliteClone(globalBestGenome,gi,nGroups);
+    grp.trainer.evolveEliteClone(globalBestGenome);
     const{cars,controllers,grid}=grp;
     for(let i=0;i<cars.length;i++){
       resetCarForTraining(cars[i],grid[i%grid.length].pos,grid[i%grid.length].hdg);
@@ -1028,7 +1027,6 @@ document.getElementById('trainLoadBtn').addEventListener('click', async ()=>{
   if(!saved){alert('No saved AI found in local storage. Train and SAVE one first.');return;}
   try{
     const genome=JSON.parse(saved);
-    const name=localStorage.getItem('turborace_nn_name')||'saved';
     const best=_getBestTrainer();
     if(best&&genome.length!==best.genomeSize){
       alert(`Genome size mismatch: saved=${genome.length}, current=${best.genomeSize}. Architecture must match.`);

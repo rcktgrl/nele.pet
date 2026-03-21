@@ -343,14 +343,13 @@ export class GeneticTrainer {
   // ── Elite clone evolution (multi-sim synchronised) ────────────────────────
   //
   // Called by game.js after ALL simulation groups have signalled pendingEvolve.
-  // Each group receives the global-best genome and creates mutated variants.
-  //
-  // groupIndex/totalGroups create an exploitation→exploration gradient:
-  //   Group 0: low mutation   (fine-tuning near the best)
-  //   Last group: high mutation (exploring distant variants + random genomes)
-  // This prevents all groups from driving identically.
+  // Every group receives the single global champion and rebuilds its entire
+  // population from that genome: slot 0 is an exact carry-over, every other
+  // slot is a slightly mutated clone of the same champion. This keeps all sims
+  // searching around the true best driver instead of drifting into separate
+  // lineages or injecting random genomes.
 
-  evolveEliteClone(bestGenome, groupIndex = 0, totalGroups = 1) {
+  evolveEliteClone(bestGenome) {
     // Update fitness tracking for this group's population
     this.population.sort((a, b) => b.fitness - a.fitness);
     const best = this.population[0];
@@ -360,27 +359,14 @@ export class GeneticTrainer {
     }
     this.avgFitness = this.population.reduce((s, p) => s + p.fitness, 0) / this.population.length;
 
-    // ── Per-group mutation gradient (exploitation → exploration) ──
-    const t = totalGroups > 1 ? groupIndex / (totalGroups - 1) : 0.5;
-    const groupMutRate     = this.mutRate     * (0.5 + t * 1.5);   // 0.5× to 2.0× base rate
-    const groupMutStrength = this.mutStrength * (0.3 + t * 2.0);   // 0.3× to 2.3× base strength
-
     // Slot 0: exact copy of global best (champion, no mutation)
     const next = [{ genome: [...bestGenome], fitness: 0 }];
 
-    // Determine how many slots get random Xavier init (exploration groups only)
-    const nRandom = t > 0.8 ? Math.max(1, Math.floor(this.popSize * 0.25)) : 0;
-
-    // Fill mutated clones
-    while (next.length < this.popSize - nRandom) {
-      const child = [...bestGenome];
-      this._mutate(child, groupMutRate, groupMutStrength);
-      next.push({ genome: child, fitness: 0 });
-    }
-
-    // Fill random Xavier genomes for high-exploration groups (fresh genetic material)
+    // Every remaining slot is a lightly mutated clone of the same champion.
     while (next.length < this.popSize) {
-      next.push({ genome: _xavierGenome(this.layers), fitness: 0 });
+      const child = [...bestGenome];
+      this._mutate(child, this.mutRate, this.mutStrength);
+      next.push({ genome: child, fitness: 0 });
     }
 
     this.population = next;
