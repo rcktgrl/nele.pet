@@ -63,7 +63,7 @@ const RAY_ANGLES = [
   Math.PI / 36, Math.PI / 18,
   Math.PI / 6, Math.PI / 3, Math.PI / 2,
 ];
-const RAY_DIST = 35;
+const RAY_DIST = 200;
 
 // 7 wall rays: ±90°, ±45°, ±10°, 0° — cast against wall segments
 const EDGE_RAY_ANGLES = [
@@ -238,7 +238,7 @@ export class NeuralAI {
         const t = raySegment(ox, oz, dx, dz, w.x0, w.z0, w.x1, w.z1);
         if (t > 0 && t < minT) minT = t;
       }
-      return minT / RAY_DIST;
+      return Math.sqrt(minT / RAY_DIST);
     });
   }
 
@@ -355,7 +355,7 @@ export class NeuralAI {
     const he = ((dh - c.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     // ── Neural network ───────────────────────────────────────────────────────
     // sensors = 11 track-edge distances; edgeSensors = 7 wall distances
-    const sensors = this._castRays(state.trkEdgeLeft || [], state.trkEdgeRight || []);
+    const sensors = this._castRays(state.trkWallLeft || [], state.trkWallRight || []);
     const edgeSensors = this._castEdgeRays(state.trkWallLeft || [], state.trkWallRight || []);
 
     // Edge proximity: 0 = at track center, 1 = at/beyond edge
