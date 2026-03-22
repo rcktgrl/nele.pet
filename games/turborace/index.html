@@ -33,85 +33,102 @@
   <div id="mm"><canvas id="mmc" width="150" height="150"></canvas></div>
 </div>
 <!-- TRAINING HUD -->
-<div id="trainHud" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:50;flex-direction:column;align-items:center;justify-content:flex-start;padding:18px 24px;gap:8px;font-family:Orbitron,monospace;">
-  <!-- Stats + action buttons -->
-  <div style="display:flex;gap:20px;align-items:center;background:rgba(5,5,20,.85);border:1px solid #223;border-radius:10px;padding:10px 20px;pointer-events:auto;flex-wrap:wrap;justify-content:center;">
+<div id="trainHud" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:50;flex-direction:column;align-items:center;justify-content:flex-start;padding:12px 24px;gap:6px;font-family:Orbitron,monospace;">
+  <!-- Row 1: Stats + track select + actions -->
+  <div style="display:flex;gap:10px;align-items:center;background:rgba(5,5,20,.88);border:1px solid #223;border-radius:10px;padding:8px 16px;pointer-events:auto;flex-wrap:wrap;justify-content:center;">
     <span id="trainGenNum" style="color:#4af;font-size:1.1rem;font-weight:700;">GEN 1</span>
     <span id="trainModeLabel" style="color:#fa4;font-size:.7rem;font-weight:700;letter-spacing:1px;border:1px solid #443;border-radius:4px;padding:2px 6px;">TIMED</span>
     <span id="trainCountdown" style="color:#aaa;font-size:1rem;">35s</span>
     <span id="trainBestFit" style="color:#4f4;font-size:1rem;">BEST —</span>
     <span id="trainAvgFit" style="color:#fa4;font-size:1rem;">AVG 0.0</span>
-    <button id="trainSaveBtn" class="btn btn-p" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">SAVE</button>
-    <button id="trainExportBtn" class="btn btn-p" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">EXPORT</button>
-    <button id="trainLoadBtn" class="btn btn-s" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">LOAD</button>
-    <button id="trainImportBtn" class="btn btn-s" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">IMPORT JSON</button>
+    <span style="color:#334;">│</span>
+    <select id="trainTrkSelect" style="pointer-events:auto;background:#0a0f1c;color:#4af;border:1px solid #2a3a5a;border-radius:5px;padding:4px 8px;font-size:.7rem;font-family:Orbitron,monospace;cursor:pointer;max-width:140px;"></select>
+    <span style="color:#334;">│</span>
+    <button id="trainSaveBtn" class="btn btn-p" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;">SAVE</button>
+    <button id="trainExportBtn" class="btn btn-p" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;">EXPORT</button>
+    <button id="trainLoadBtn" class="btn btn-s" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;">LOAD</button>
+    <button id="trainImportBtn" class="btn btn-s" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;">IMPORT JSON</button>
     <input type="file" id="trainImportFile" accept=".json" style="display:none;">
-    <select id="trainTrkSelect" style="pointer-events:auto;background:#0a0f1c;color:#4af;border:1px solid #2a3a5a;border-radius:5px;padding:5px 8px;font-size:.7rem;font-family:Orbitron,monospace;cursor:pointer;max-width:140px;"></select>
-    <button id="trainStopBtn" class="btn btn-s" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;">STOP</button>
-    <button id="trainResetBtn" class="btn btn-s" style="pointer-events:auto;padding:6px 14px;font-size:.75rem;color:#f44;border-color:#422;" title="Delete all cars and restart AI from scratch">RESET AI</button>
+    <span style="color:#334;">│</span>
+    <button id="trainStopBtn" class="btn btn-s" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;">STOP</button>
+    <button id="trainResetBtn" class="btn btn-s" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;color:#f44;border-color:#422;" title="Delete all cars and restart AI from scratch">RESET AI</button>
   </div>
-  <!-- Generation progress bar -->
+  <!-- Row 2: Generation progress bar -->
   <div style="width:340px;height:6px;background:#111;border-radius:3px;overflow:hidden;pointer-events:none;">
     <div id="trainBar" style="height:100%;width:0%;background:linear-gradient(90deg,#4af,#4f4);border-radius:3px;transition:width .2s linear;"></div>
   </div>
-  <!-- Sliders row 1 -->
-  <div style="display:flex;gap:18px;align-items:center;background:rgba(5,5,20,.78);border:1px solid #1a2030;border-radius:8px;padding:8px 18px;pointer-events:auto;">
-    <label style="color:#889;font-size:.7rem;white-space:nowrap;">SIMS&nbsp;<span id="trainNumSimsVal" style="color:#4af;">8</span></label>
-    <input id="trainNumSimsSlider" type="range" min="1" max="32" value="8" step="1" style="width:80px;accent-color:#4af;">
-    <span style="color:#334;font-size:.65rem;">next&nbsp;run</span>
-    <span style="color:#445;">│</span>
-    <label style="color:#889;font-size:.7rem;white-space:nowrap;">CARS&nbsp;<span id="trainPopVal" style="color:#4af;">8</span></label>
-    <input id="trainPopSlider" type="range" min="1" max="8" value="8" step="1" style="width:80px;accent-color:#4af;">
-    <span style="color:#334;font-size:.65rem;">next&nbsp;run</span>
-    <span style="color:#445;">│</span>
-    <label style="color:#889;font-size:.7rem;white-space:nowrap;">SPEED&nbsp;<span id="trainFFVal" style="color:#fa4;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">1×</span></label>
-    <input id="trainFFSlider" type="range" min="1" max="100" value="1" step="1" style="width:80px;accent-color:#fa4;">
-    <span style="color:#445;">│</span>
-    <label style="color:#889;font-size:.7rem;white-space:nowrap;" id="trainGenDurLabel">SIM TIME&nbsp;<span id="trainGenDurVal" style="color:#4fa;">35s</span></label>
-    <input id="trainGenDurSlider" type="range" min="5" max="120" value="35" step="5" style="width:80px;accent-color:#4fa;">
+  <!-- Row 3: Controls grouped by when they take effect -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;pointer-events:auto;">
+
+    <!-- ⚡ LIVE — takes effect immediately -->
+    <div style="background:rgba(5,5,20,.82);border:1px solid #1a3520;border-radius:8px;padding:8px 14px;">
+      <div style="color:#4f4;font-size:.58rem;font-weight:700;letter-spacing:2px;margin-bottom:6px;text-align:center;">⚡ LIVE</div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;">SPEED&nbsp;<span id="trainFFVal" style="color:#fa4;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">1×</span></label>
+        <input id="trainFFSlider" type="range" min="1" max="100" value="1" step="1" style="width:80px;accent-color:#fa4;">
+      </div>
+    </div>
+
+    <!-- ◷ NEXT GENERATION — applied when the current generation ends -->
+    <div style="background:rgba(5,5,20,.82);border:1px solid #3a2d00;border-radius:8px;padding:8px 14px;">
+      <div style="color:#fa4;font-size:.58rem;font-weight:700;letter-spacing:2px;margin-bottom:6px;text-align:center;">◷ NEXT GENERATION</div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;" id="trainGenDurLabel">SIM TIME&nbsp;<span id="trainGenDurVal" style="color:#4fa;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">35s</span></label>
+        <input id="trainGenDurSlider" type="range" min="5" max="120" value="35" step="5" style="width:80px;accent-color:#4fa;">
+        <span style="color:#334;">│</span>
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;">CARS&nbsp;<span id="trainPopVal" style="color:#4af;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">8</span></label>
+        <input id="trainPopSlider" type="range" min="1" max="8" value="8" step="1" style="width:80px;accent-color:#4af;">
+      </div>
+    </div>
+
+    <!-- ↺ RESTART REQUIRED — only applies when training is restarted -->
+    <div style="background:rgba(5,5,20,.82);border:1px solid #3a1800;border-radius:8px;padding:8px 14px;">
+      <div style="color:#f84;font-size:.58rem;font-weight:700;letter-spacing:2px;margin-bottom:6px;text-align:center;">↺ RESTART REQUIRED</div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;">SIMS&nbsp;<span id="trainNumSimsVal" style="color:#4af;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">8</span></label>
+        <input id="trainNumSimsSlider" type="range" min="1" max="32" value="8" step="1" style="width:70px;accent-color:#4af;">
+        <span style="color:#334;">│</span>
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;">HIDDEN&nbsp;<span id="trainHiddenVal" style="color:#c8f;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">1</span></label>
+        <input id="trainHiddenSlider" type="range" min="1" max="100" value="1" step="1" style="width:70px;accent-color:#c8f;">
+        <span style="color:#334;">│</span>
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;">NODES&nbsp;<span id="trainNodesVal" style="color:#f84;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">5</span></label>
+        <input id="trainNodesSlider" type="range" min="3" max="100" value="5" step="1" style="width:70px;accent-color:#f84;">
+      </div>
+    </div>
+
   </div>
-  <!-- Sliders row 2: hidden layers -->
-  <div style="display:flex;gap:18px;align-items:center;background:rgba(5,5,20,.78);border:1px solid #1a2030;border-radius:8px;padding:8px 18px;pointer-events:auto;">
-    <label style="color:#889;font-size:.7rem;white-space:nowrap;">HIDDEN&nbsp;<span id="trainHiddenVal" style="color:#c8f;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">1</span></label>
-    <input id="trainHiddenSlider" type="range" min="1" max="100" value="1" step="1" style="width:80px;accent-color:#c8f;">
-    <span style="color:#334;font-size:.65rem;">next&nbsp;run</span>
-    <span style="color:#445;">│</span>
-    <label style="color:#889;font-size:.7rem;white-space:nowrap;">NODES&nbsp;<span id="trainNodesVal" style="color:#f84;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">5</span></label>
-    <input id="trainNodesSlider" type="range" min="3" max="100" value="5" step="1" style="width:80px;accent-color:#f84;">
-  </div>
-  <!-- Rewards / Penalties panel (collapsible) -->
+  <!-- Row 4: Rewards & Penalties (collapsible, all LIVE) -->
   <div style="pointer-events:auto;">
-    <button id="trainRewardsPanelToggle" style="background:rgba(5,5,20,.78);border:1px solid #2a3a5a;border-radius:6px;color:#fa4;font-size:.65rem;font-family:Orbitron,monospace;padding:4px 12px;cursor:pointer;letter-spacing:1px;">▶ REWARDS &amp; PENALTIES</button>
+    <button id="trainRewardsPanelToggle" style="background:rgba(5,5,20,.78);border:1px solid #1a3520;border-radius:6px;color:#fa4;font-size:.65rem;font-family:Orbitron,monospace;padding:4px 12px;cursor:pointer;letter-spacing:1px;">▶ REWARDS &amp; PENALTIES &nbsp;<span style="color:#4f4;font-size:.6rem;">⚡ LIVE</span></button>
   </div>
-  <div id="trainRewardsPanel" style="display:none;background:rgba(5,5,20,.88);border:1px solid #2a3050;border-radius:8px;padding:10px 18px;pointer-events:auto;max-width:700px;width:100%;">
-    <div style="color:#fa4;font-size:.65rem;font-weight:700;letter-spacing:1px;margin-bottom:8px;text-align:center;">REWARDS &amp; PENALTIES — live, affects current generation</div>
+  <div id="trainRewardsPanel" style="display:none;background:rgba(5,5,20,.88);border:1px solid #1a3520;border-radius:8px;padding:10px 18px;pointer-events:auto;max-width:760px;width:100%;">
     <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:center;">
-      <label style="color:#889;font-size:.65rem;white-space:nowrap;">ON-TRACK REWARD/s&nbsp;<span id="trainOnTrackRateVal" style="color:#4f4;">0.10</span></label>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">ON-TRACK REWARD/s&nbsp;<span id="trainOnTrackRateVal" style="color:#4f4;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">0.10</span></label>
       <input id="trainOnTrackRateSlider" type="range" min="0" max="1" value="0.10" step="0.01" style="width:80px;accent-color:#4f4;">
       <span style="color:#445;">│</span>
-      <label style="color:#889;font-size:.65rem;white-space:nowrap;">STUCK PENALTY/s&nbsp;<span id="trainStuckPenaltyVal" style="color:#f44;">5.0</span></label>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">STUCK PENALTY/s&nbsp;<span id="trainStuckPenaltyVal" style="color:#f44;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">5.0</span></label>
       <input id="trainStuckPenaltySlider" type="range" min="0" max="20" value="5" step="0.5" style="width:80px;accent-color:#f44;">
       <span style="color:#445;">│</span>
-      <label style="color:#889;font-size:.65rem;white-space:nowrap;">GRAVEL BASE/s&nbsp;<span id="trainGravelPenaltyVal" style="color:#fa4;">0.5</span></label>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">GRAVEL BASE/s&nbsp;<span id="trainGravelPenaltyVal" style="color:#fa4;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">0.5</span></label>
       <input id="trainGravelPenaltySlider" type="range" min="0" max="5" value="0.5" step="0.1" style="width:80px;accent-color:#fa4;">
       <span style="color:#445;">│</span>
-      <label style="color:#889;font-size:.65rem;white-space:nowrap;">GRAVEL GROWTH&nbsp;<span id="trainGravelGrowthVal" style="color:#fa4;">0.30</span></label>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">GRAVEL GROWTH&nbsp;<span id="trainGravelGrowthVal" style="color:#fa4;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">0.30</span></label>
       <input id="trainGravelGrowthSlider" type="range" min="0" max="2" value="0.30" step="0.05" style="width:80px;accent-color:#fa4;">
     </div>
     <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
-      <label style="color:#889;font-size:.65rem;white-space:nowrap;">OFF-TRACK MULT&nbsp;<span id="trainOffTrackMultVal" style="color:#f84;">10×</span></label>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">OFF-TRACK MULT&nbsp;<span id="trainOffTrackMultVal" style="color:#f84;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">10×</span></label>
       <input id="trainOffTrackMultSlider" type="range" min="1" max="50" value="10" step="1" style="width:80px;accent-color:#f84;">
       <span style="color:#445;">│</span>
-      <label style="color:#889;font-size:.65rem;white-space:nowrap;">OFF-TRACK DQ TIME&nbsp;<span id="trainOffTrackDQTimeVal" style="color:#f84;">3s</span></label>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">OFF-TRACK DQ TIME&nbsp;<span id="trainOffTrackDQTimeVal" style="color:#f84;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">3.0s</span></label>
       <input id="trainOffTrackDQTimeSlider" type="range" min="0.5" max="10" value="3" step="0.5" style="width:80px;accent-color:#f84;">
       <span style="color:#445;">│</span>
-      <label style="color:#889;font-size:.65rem;white-space:nowrap;">DQ PENALTY&nbsp;<span id="trainDQPenaltyVal" style="color:#f44;">200</span></label>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">DQ PENALTY&nbsp;<span id="trainDQPenaltyVal" style="color:#f44;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">200</span></label>
       <input id="trainDQPenaltySlider" type="range" min="0" max="500" value="200" step="10" style="width:80px;accent-color:#f44;">
       <span style="color:#445;">│</span>
-      <label style="color:#889;font-size:.65rem;white-space:nowrap;">MUT RATE&nbsp;<span id="trainMutRateVal" style="color:#c8f;">0.15</span></label>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">MUT RATE&nbsp;<span id="trainMutRateVal" style="color:#c8f;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">0.15</span></label>
       <input id="trainMutRateSlider" type="range" min="0" max="1" value="0.15" step="0.01" style="width:80px;accent-color:#c8f;">
       <span style="color:#445;">│</span>
-      <label style="color:#889;font-size:.65rem;white-space:nowrap;">MUT STRENGTH&nbsp;<span id="trainMutStrengthVal" style="color:#c8f;">0.35</span></label>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">MUT STRENGTH&nbsp;<span id="trainMutStrengthVal" style="color:#c8f;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">0.35</span></label>
       <input id="trainMutStrengthSlider" type="range" min="0" max="2" value="0.35" step="0.05" style="width:80px;accent-color:#c8f;">
     </div>
     <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
@@ -123,6 +140,7 @@
       <span style="color:#445;font-size:.6rem;max-width:260px;">When ON: one car model is chosen and used by every AI in the generation.</span>
     </div>
   </div>
+  <!-- Row 5: Hint -->
   <div style="color:#445;font-size:.65rem;pointer-events:none;"><span id="trainSimsHint">8</span> SIMS · SCROLL=ZOOM · DRAG=PAN · BEST SIM SHOWN · SWAPS AT GENERATION END</div>
   <!-- Neural network visualiser -->
   <canvas id="trainNNCanvas" width="420" height="280" style="position:fixed;bottom:18px;right:18px;border:1px solid #1a2535;border-radius:8px;background:rgba(4,6,18,.88);cursor:grab;"></canvas>

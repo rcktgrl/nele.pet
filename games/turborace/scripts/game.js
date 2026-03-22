@@ -870,6 +870,7 @@ document.getElementById('trainNumSimsSlider').addEventListener('input',e=>{
 document.getElementById('trainPopSlider').addEventListener('input',e=>{
   state.trainPopSize=parseInt(e.target.value);
   document.getElementById('trainPopVal').textContent=e.target.value;
+  for(const grp of state.trainGroups) grp.trainer.popSize=parseInt(e.target.value);
 });
 document.getElementById('trainFFSlider').addEventListener('input',e=>{
   state.trainFF=parseInt(e.target.value);
@@ -890,43 +891,62 @@ document.getElementById('trainGenDurSlider').addEventListener('input',e=>{
   for(const grp of state.trainGroups) grp.trainer.genDuration=v;
 });
 
-// Click-to-type for SPEED, HIDDEN, NODES value spans
-function _makeClickToType(spanId,{suffix='',min=1,max=null,stateKey,sliderId,formatter}){
+// Click-to-type for slider value spans — click a value label to type an exact number
+function _makeClickToType(spanId,{suffix='',min=1,max=null,stateKey,sliderId,formatter,step=1}){
   const span=document.getElementById(spanId);
   if(!span)return;
   span.addEventListener('click',()=>{
-    const cur=state[stateKey]||parseInt(span.textContent)||min;
+    const cur=typeof state[stateKey]==='number'?state[stateKey]:min;
     const inp=document.createElement('input');
     inp.type='number';
     inp.value=cur;
     inp.min=min;
     if(max!==null)inp.max=max;
-    inp.step=1;
+    inp.step=step;
     inp.style.cssText='width:3.5em;font-size:.7rem;background:#0a0f1c;color:inherit;border:1px solid #4af;border-radius:3px;padding:1px 3px;font-family:inherit;';
     span.replaceWith(inp);
     inp.focus(); inp.select();
     const commit=()=>{
-      let v=parseInt(inp.value);
+      let v=step<1?parseFloat(inp.value):parseInt(inp.value);
       if(isNaN(v))v=cur;
       v=Math.max(min,max!==null?Math.min(max,v):v);
+      // Preserve float precision matching the step
+      if(step>0&&step<1){
+        const decimals=(step.toString().split('.')[1]||'').length;
+        v=parseFloat(v.toFixed(decimals));
+      }
       state[stateKey]=v;
       const slider=document.getElementById(sliderId);
-      if(slider){slider.value=Math.min(parseInt(slider.max),v);}
+      if(slider)slider.value=v;
       const newSpan=document.createElement('span');
       newSpan.id=spanId;
       newSpan.style.cssText=span.style.cssText;
       newSpan.setAttribute('title','Click to type value');
       newSpan.textContent=formatter?formatter(v):v;
       inp.replaceWith(newSpan);
-      _makeClickToType(spanId,{suffix,min,max,stateKey,sliderId,formatter});
+      _makeClickToType(spanId,{suffix,min,max,stateKey,sliderId,formatter,step});
     };
     inp.addEventListener('keydown',e=>{if(e.key==='Enter')commit();if(e.key==='Escape'){inp.replaceWith(span);}});
     inp.addEventListener('blur',commit);
   });
 }
-_makeClickToType('trainFFVal',{min:1,max:null,stateKey:'trainFF',sliderId:'trainFFSlider',formatter:v=>v+'×'});
-_makeClickToType('trainHiddenVal',{min:1,max:null,stateKey:'trainHiddenLayers',sliderId:'trainHiddenSlider'});
-_makeClickToType('trainNodesVal',{min:1,max:null,stateKey:'trainHiddenSize',sliderId:'trainNodesSlider'});
+// Integer sliders
+_makeClickToType('trainFFVal',{min:1,max:100,stateKey:'trainFF',sliderId:'trainFFSlider',formatter:v=>v+'×'});
+_makeClickToType('trainGenDurVal',{min:5,max:120,stateKey:'trainGenDuration',sliderId:'trainGenDurSlider',formatter:v=>v+'s'});
+_makeClickToType('trainPopVal',{min:1,max:8,stateKey:'trainPopSize',sliderId:'trainPopSlider'});
+_makeClickToType('trainNumSimsVal',{min:1,max:32,stateKey:'trainNumSims',sliderId:'trainNumSimsSlider'});
+_makeClickToType('trainHiddenVal',{min:1,max:100,stateKey:'trainHiddenLayers',sliderId:'trainHiddenSlider'});
+_makeClickToType('trainNodesVal',{min:3,max:100,stateKey:'trainHiddenSize',sliderId:'trainNodesSlider'});
+// Rewards & Penalties — float sliders
+_makeClickToType('trainOnTrackRateVal',{min:0,max:1,stateKey:'trainOnTrackRewardRate',sliderId:'trainOnTrackRateSlider',formatter:v=>v.toFixed(2),step:0.01});
+_makeClickToType('trainStuckPenaltyVal',{min:0,max:20,stateKey:'trainStuckPenaltyRate',sliderId:'trainStuckPenaltySlider',formatter:v=>v.toFixed(1),step:0.5});
+_makeClickToType('trainGravelPenaltyVal',{min:0,max:5,stateKey:'trainGravelPenaltyBase',sliderId:'trainGravelPenaltySlider',formatter:v=>v.toFixed(1),step:0.1});
+_makeClickToType('trainGravelGrowthVal',{min:0,max:2,stateKey:'trainGravelGrowth',sliderId:'trainGravelGrowthSlider',formatter:v=>v.toFixed(2),step:0.05});
+_makeClickToType('trainOffTrackMultVal',{min:1,max:50,stateKey:'trainOffTrackMult',sliderId:'trainOffTrackMultSlider',formatter:v=>v+'×'});
+_makeClickToType('trainOffTrackDQTimeVal',{min:0.5,max:10,stateKey:'trainOffTrackDQTime',sliderId:'trainOffTrackDQTimeSlider',formatter:v=>v.toFixed(1)+'s',step:0.5});
+_makeClickToType('trainDQPenaltyVal',{min:0,max:500,stateKey:'trainDQPenalty',sliderId:'trainDQPenaltySlider',formatter:v=>String(parseInt(v)),step:10});
+_makeClickToType('trainMutRateVal',{min:0,max:1,stateKey:'trainMutRate',sliderId:'trainMutRateSlider',formatter:v=>v.toFixed(2),step:0.01});
+_makeClickToType('trainMutStrengthVal',{min:0,max:2,stateKey:'trainMutStrength',sliderId:'trainMutStrengthSlider',formatter:v=>v.toFixed(2),step:0.05});
 
 // Rewards & Penalties panel toggle
 function _syncTrainHudSliders(){
@@ -947,8 +967,9 @@ function _syncTrainHudSliders(){
 document.getElementById('trainRewardsPanelToggle').addEventListener('click',()=>{
   const panel=document.getElementById('trainRewardsPanel');
   const btn=document.getElementById('trainRewardsPanelToggle');
-  if(panel.style.display==='none'){panel.style.display='block';btn.textContent='▼ REWARDS & PENALTIES';}
-  else{panel.style.display='none';btn.textContent='▶ REWARDS & PENALTIES';}
+  const live='&nbsp;<span style="color:#4f4;font-size:.6rem;">⚡ LIVE</span>';
+  if(panel.style.display==='none'){panel.style.display='block';btn.innerHTML='▼ REWARDS &amp; PENALTIES '+live;}
+  else{panel.style.display='none';btn.innerHTML='▶ REWARDS &amp; PENALTIES '+live;}
 });
 // Rewards & Penalties sliders
 document.getElementById('trainOnTrackRateSlider').addEventListener('input',e=>{
