@@ -12,38 +12,38 @@ export function computeGenomeSize(layers) {
   return s;
 }
 
-/** Genome size for default [20,5,3] architecture. */
-export const GENOME_SIZE = computeGenomeSize([20, 5, 3]); // 123
+/** Genome size for default [24,5,3] architecture. */
+export const GENOME_SIZE = computeGenomeSize([24, 5, 3]); // 143
 
-// Hand-designed seed genome for [20,5,3]:
-//   11 wall sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90)
-//   + 3 edge sensors (e-10,e0,e+10) + speed + waypointErr
-//   + edgeProximity + gravelFlag + grip + accel
+// Hand-designed seed genome for [24,5,3]:
+//   11 track-edge sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90)
+//   + 7 wall sensors (-90,-45,-10,0,+10,+45,+90)
+//   + speed + waypointErr + edgeProximity + gravelFlag + grip + accel
 //   → 5 hidden → 3 out (steer, throttle, brake)
 export const DEFAULT_GENOME = [
-  // W1: 5 rows × 20 inputs  (s-90 s-60 s-30 s-10 s-5 s0 s+5 s+10 s+30 s+60 s+90 e-10 e0 e+10 spd wpt edge grav grip acl)
-  -3.0, -2.0, -3.0, -1.5, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0, -0.5, -0.3,  0.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0,  // H0 danger-left
-   0.0,  0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -1.5, -3.0, -2.0, -3.0,  0.0, -0.3, -0.5,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0,  // H1 danger-right
-   0.0,  0.0, -0.5, -0.8, -1.5, -3.0, -1.5, -0.8, -0.5,  0.0,  0.0, -1.0, -1.5, -1.0,  0.0,  0.0,  0.5,  0.5,  0.0,  0.0,  // H2 danger-ahead
-   0.8,  0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  0.8,  0.5,  0.8,  0.5,  1.5,  0.0, -1.5, -1.0,  0.0,  0.0,  // H3 open-track
-   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  0.0,  0.0,  // H4 waypoint-err
+  // W1: 5 rows × 24 inputs  (t-90 t-60 t-30 t-10 t-5 t0 t+5 t+10 t+30 t+60 t+90 | w-90 w-45 w-10 w0 w+10 w+45 w+90 | spd wpt edge grav grip acl)
+  -2.0, -2.5, -3.0, -2.0, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0, -1.0, -1.5, -0.5,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0,  // H0 danger-left
+   0.0,  0.3,  0.5,  0.0,  0.3, -0.5, -1.0, -2.0, -3.0, -2.5, -2.0,  0.0,  0.0,  0.0,  0.0, -0.5, -1.5, -1.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0,  // H1 danger-right
+   0.0,  0.0, -0.5, -1.0, -2.0, -3.0, -2.0, -1.0, -0.5,  0.0,  0.0, -0.3, -0.8, -1.5, -3.0, -1.5, -0.8, -0.3,  0.0,  0.0,  0.5,  0.5,  0.0,  0.0,  // H2 danger-ahead
+   0.8,  0.8,  0.8,  0.6,  0.5,  1.5,  0.5,  0.6,  0.8,  0.8,  0.8,  0.5,  0.8,  0.8,  1.0,  0.8,  0.8,  0.5,  1.5,  0.0, -1.5, -1.0,  0.0,  0.0,  // H3 open-track
+   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  0.0,  0.0,  // H4 waypoint-err
   // b1: 5
-  1.0, 1.0, 1.5, -4.0, 0.0,
+  2.0, 2.0, 2.0, -6.0, 0.0,
   // W2: 3 rows × 5
    1.2, -1.2,  0.0,  0.0,  1.5,  // steer
   -0.3, -0.3, -1.5,  1.5,  0.0,  // throttle
-  -0.5, -0.5, -2.0, -0.5,  0.0,  // brake
+  -0.5, -0.5,  2.0, -0.5,  0.0,  // brake
   // b2: 3
   0.0, 0.5, -1.5,
 ];
 
 /**
  * Build a seed genome for the given architecture.
- * Uses hand-designed weights for [20,5,3]; Xavier random otherwise.
+ * Uses hand-designed weights for [24,5,3]; Xavier random otherwise.
  */
 export function buildDefaultGenome(layers) {
   const key = JSON.stringify(layers);
-  if (key === '[20,5,3]') return [...DEFAULT_GENOME];
+  if (key === '[24,5,3]') return [...DEFAULT_GENOME];
   return _xavierGenome(layers);
 }
 
@@ -322,10 +322,22 @@ export class GeneticTrainer {
     }
     this.avgFitness = this.population.reduce((s, p) => s + p.fitness, 0) / this.population.length;
 
+    // Publish this group's best to global state immediately so that other
+    // groups evolving in the same frame can see it when mutRate === 0.
+    if (state && best.fitness > (state.trainGlobalBestFitness ?? -Infinity)) {
+      state.trainGlobalBestFitness = best.fitness;
+      state.trainGlobalBestGenome = [...best.genome];
+    }
+
     // ── Build next generation ──
     // Slot 0: exact copy of this generation's champion (no mutation)
     // All other slots: independent mutated copies of the champion
-    const champion = best.genome;
+    //
+    // Always evolve from the global best so every simulation group shares
+    // the same champion genome.  This prevents independent groups from
+    // drifting into separate lineages.  Fall back to the local champion
+    // only on the very first generation before any global best exists.
+    const champion = state?.trainGlobalBestGenome ?? best.genome;
     const next = [{ genome: [...champion], fitness: 0 }];
 
     while (next.length < this.popSize) {
