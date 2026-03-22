@@ -1,4 +1,10 @@
 {
   "default": "default",
-  "models": ["default", "superjeff-gen1124-15x5x5x3.json", "superjeff-gen1131-15x8x8x8x8x3.json", "superjeffgen1126-15x4x4x4x4x3.json"]
+  "models": [
+    "default",
+    "superjeff-gen1124-15x5x5x3.json",
+    "superjeff-gen1131-15x8x8x8x8x3.json",
+    "superjeffgen1126-15x4x4x4x4x3.json",
+    "gen100-24x26x26x26x2-recar.json"
+  ]
 }
