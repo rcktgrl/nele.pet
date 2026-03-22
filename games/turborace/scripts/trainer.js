@@ -171,7 +171,7 @@ export function resetCarForTraining(car, pos, hdg) {
 const LS_KEY = 'turborace_nn_weights';
 
 export class GeneticTrainer {
-  constructor({ popSize = 20, genDuration = 35, mutRate = 0.15, mutStrength = 0.35, layers = [13, 5, 3] } = {}) {
+  constructor({ popSize = 20, genDuration = 35, mutRate = 0.15, mutStrength = 0.35, layers = [13, 5, 2] } = {}) {
     this.popSize = popSize;
     this.genDuration = genDuration;
     this.mutRate = mutRate;

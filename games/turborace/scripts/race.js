@@ -226,7 +226,7 @@ export async function initTraining({preserveGen=0, preservedGenome=null, forceRa
   // Build network architecture from settings
   const hiddenLayers=Math.max(1,Math.min(100,state.trainHiddenLayers||1));
   const hiddenSize=Math.max(3,Math.min(100,state.trainHiddenSize||5));
-  const layers=[24,...Array(hiddenLayers).fill(hiddenSize),3];
+  const layers=[24,...Array(hiddenLayers).fill(hiddenSize),2];
 
   // Only use saved genome if it matches the current architecture; prefer preserved genome from track switch.
   // When forceRandom is true (Reset AI), skip all saved/default genomes entirely.
