@@ -33,6 +33,7 @@ import { THREE } from './three.js';
 //  RACE LOGIC
 // ═══════════════════════════════════════════════════════
 export async function initRace(){
+  for(const ctrl of state.aiControllers)if(ctrl.destroy)ctrl.destroy();
   for(const c of state.allCars)scene.remove(c.mesh);
   state.allCars=[]; state.aiCars=[]; state.aiControllers=[]; state.pCar=null;
   clearAiSounds();
@@ -207,6 +208,7 @@ let _trainLapsBackup = null;
 
 export async function initTraining({preserveGen=0, preservedGenome=null, forceRandom=false}={}){
   // Clean up any prior race / training
+  for(const ctrl of state.aiControllers)if(ctrl.destroy)ctrl.destroy();
   for(const c of state.allCars) scene.remove(c.mesh);
   state.allCars=[]; state.aiCars=[]; state.aiControllers=[]; state.pCar=null;
   state.trainGroups=[];
@@ -226,7 +228,7 @@ export async function initTraining({preserveGen=0, preservedGenome=null, forceRa
   // Build network architecture from settings
   const hiddenLayers=Math.max(1,Math.min(100,state.trainHiddenLayers||1));
   const hiddenSize=Math.max(3,Math.min(100,state.trainHiddenSize||5));
-  const layers=[24,...Array(hiddenLayers).fill(hiddenSize),2];
+  const layers=[29,...Array(hiddenLayers).fill(hiddenSize),4];
 
   // Only use saved genome if it matches the current architecture; prefer preserved genome from track switch.
   // When forceRandom is true (Reset AI), skip all saved/default genomes entirely.
