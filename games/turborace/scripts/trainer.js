@@ -322,10 +322,25 @@ export class GeneticTrainer {
     }
     this.avgFitness = this.population.reduce((s, p) => s + p.fitness, 0) / this.population.length;
 
+    // Publish this group's best to global state immediately so that other
+    // groups evolving in the same frame can see it when mutRate === 0.
+    if (state && best.fitness > (state.trainGlobalBestFitness ?? -Infinity)) {
+      state.trainGlobalBestFitness = best.fitness;
+      state.trainGlobalBestGenome = [...best.genome];
+    }
+
     // ── Build next generation ──
     // Slot 0: exact copy of this generation's champion (no mutation)
     // All other slots: independent mutated copies of the champion
-    const champion = best.genome;
+    //
+    // When mutRate === 0 there is no exploration at all, so all simulation
+    // groups must run the *same* genome — otherwise they each freeze on
+    // their own local champion and diverge permanently.  Use the global
+    // best if one is available; fall back to the local champion only on
+    // the very first generation before any global best exists.
+    const champion = (this.mutRate === 0 && state?.trainGlobalBestGenome)
+      ? state.trainGlobalBestGenome
+      : best.genome;
     const next = [{ genome: [...champion], fitness: 0 }];
 
     while (next.length < this.popSize) {
