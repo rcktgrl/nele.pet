@@ -191,7 +191,7 @@ export class NeuralAI {
     const weights = [];
     for (let l = 0; l < layers.length - 1; l++) {
       const nIn = layers[l], nOut = layers[l + 1];
-      const std = Math.sqrt(2 / (nIn + nOut));
+      const std = Math.sqrt(2 / (nIn + nOut)) * 3;
       const W = Array.from({ length: nOut }, () =>
         Array.from({ length: nIn }, () => (Math.random() * 2 - 1) * std)
       );

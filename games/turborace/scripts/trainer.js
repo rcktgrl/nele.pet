@@ -51,7 +51,7 @@ function _xavierGenome(layers) {
   const genome = [];
   for (let l = 0; l < layers.length - 1; l++) {
     const nIn = layers[l], nOut = layers[l + 1];
-    const std = Math.sqrt(2 / (nIn + nOut));
+    const std = Math.sqrt(2 / (nIn + nOut)) * 3;
     for (let j = 0; j < nOut * nIn; j++) genome.push((Math.random() * 2 - 1) * std);
     for (let j = 0; j < nOut; j++) genome.push(0);
   }
