@@ -527,9 +527,9 @@ function _updateTrainLeaderboard(){
         score=car._fitness??0;
         lapLabel=null;
       }
-      // Brake indicator: check neural output index 2 (brake), or car reversing
-      const brakeOut=ctrl&&ctrl.lastOutputs?ctrl.lastOutputs[2]:0;
-      const braking=brakeOut>0.1||car.isReversing;
+      // Brake indicator: throttle output (index 1) negative = braking, or car reversing
+      const thrOut=ctrl&&ctrl.lastOutputs?ctrl.lastOutputs[1]:0;
+      const braking=thrOut<-0.1||car.isReversing;
       entries.push({score,lapLabel,lapMode,spd:car.spd,braking,offTrack:!!car._offTrack,onGravel:car.onGravel,color:car.data&&car.data.hex?car.data.hex:'#889',car});
     }
   }
@@ -649,7 +649,7 @@ function _drawNNViz(){
   const hiddens=ai.lastHiddens||[];
   const activations=[ai.lastInputs||[],...hiddens,ai.lastOutputs||[]];
   const INPUT_LABELS=['s-90','s-60','s-30','s-10','s-5','s0','s+5','s+10','s+30','s+60','s+90','e-10','e0','e+10','spd','wpt','edge','grav','grip','acl'];
-  const OUTPUT_LABELS=['steer','thrtl','brake'];
+  const OUTPUT_LABELS=['steer','thrtl'];
 
   // Draw edges — skip transitions where either side has >40 nodes (too dense to be useful)
   const edgeAlphaMin=0.05;

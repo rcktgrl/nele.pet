@@ -12,14 +12,14 @@ export function computeGenomeSize(layers) {
   return s;
 }
 
-/** Genome size for default [24,5,3] architecture. */
-export const GENOME_SIZE = computeGenomeSize([24, 5, 3]); // 143
+/** Genome size for default [24,5,2] architecture. */
+export const GENOME_SIZE = computeGenomeSize([24, 5, 2]); // 137
 
-// Hand-designed seed genome for [24,5,3]:
+// Hand-designed seed genome for [24,5,2]:
 //   11 track-edge sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90)
 //   + 7 wall sensors (-90,-45,-10,0,+10,+45,+90)
 //   + speed + waypointErr + edgeProximity + gravelFlag + grip + accel
-//   → 5 hidden → 3 out (steer, throttle, brake)
+//   → 5 hidden → 2 out (steer, throttle; negative throttle = brake)
 export const DEFAULT_GENOME = [
   // W1: 5 rows × 24 inputs  (t-90 t-60 t-30 t-10 t-5 t0 t+5 t+10 t+30 t+60 t+90 | w-90 w-45 w-10 w0 w+10 w+45 w+90 | spd wpt edge grav grip acl)
   -2.0, -2.5, -3.0, -2.0, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0, -1.0, -1.5, -0.5,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0,  // H0 danger-left
@@ -29,12 +29,11 @@ export const DEFAULT_GENOME = [
    0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0,  0.0,  0.0,  0.0,  0.0,  // H4 waypoint-err
   // b1: 5
   2.0, 2.0, 2.0, -6.0, 0.0,
-  // W2: 3 rows × 5
+  // W2: 2 rows × 5
    1.2, -1.2,  0.0,  0.0,  1.5,  // steer
-  -0.3, -0.3, -1.5,  1.5,  0.0,  // throttle
-  -0.5, -0.5,  2.0, -0.5,  0.0,  // brake
-  // b2: 3
-  0.0, 0.5, -1.5,
+  -0.3, -0.3, -1.5,  1.5,  0.0,  // throttle (negative = brake)
+  // b2: 2
+  0.0, 0.5,
 ];
 
 /**
@@ -43,7 +42,7 @@ export const DEFAULT_GENOME = [
  */
 export function buildDefaultGenome(layers) {
   const key = JSON.stringify(layers);
-  if (key === '[24,5,3]') return [...DEFAULT_GENOME];
+  if (key === '[24,5,2]') return [...DEFAULT_GENOME];
   return _xavierGenome(layers);
 }
 
