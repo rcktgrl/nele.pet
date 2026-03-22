@@ -297,9 +297,15 @@ class Car {
         }
       }
     }
-    const ni = (this.lastCP + 1 + n) % n, nw = state.trkData.wp[ni];
-    const dd = Math.sqrt((this.pos.x - nw[0]) ** 2 + (this.pos.z - nw[2]) ** 2);
-    this.totalProg = this.lap * n + this.cpPassed + Math.max(0, 1 - dd / 35);
+    const ni = (this.lastCP + 1 + n) % n;
+    const nw = wps[ni];
+    const pw = wps[this.lastCP];
+    // Project car onto segment [lastCP → nextCP] for continuous, geometry-accurate progress
+    const sx = nw[0] - pw[0], sz = nw[2] - pw[2];
+    const segLen2 = sx * sx + sz * sz || 1;
+    const cx = this.pos.x - pw[0], cz = this.pos.z - pw[2];
+    const t = Math.max(0, Math.min(1, (cx * sx + cz * sz) / segLen2));
+    this.totalProg = this.lap * n + this.cpPassed + t;
   }
 }
 
