@@ -1,6 +1,5 @@
 'use strict';
-import { state, scene } from './state.js';
-import { THREE } from './three.js';
+import { state } from './state.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Repo model pre-fetch — loaded at module init, used as fallback in constructor
@@ -77,9 +76,8 @@ const EDGE_RAY_ANGLES = [
 ];
 const EDGE_RAY_DIST = 35;
 
-// 5 sensor-ball rays: 0°, ±30°, ±60° — cast from the ball's world position
+// 5 sensor-ball rays: 0°, ±30°, ±60° — cast from the ball's world position (same type as main rays)
 const BALL_RAY_ANGLES = [-Math.PI / 3, -Math.PI / 6, 0, Math.PI / 6, Math.PI / 3];
-const BALL_RAY_DIST = 200;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  NeuralAI — configurable-depth network
@@ -108,13 +106,6 @@ export class NeuralAI {
     // Sensor ball state — updated each frame from NN outputs 2 & 3
     this._ballDistRaw = 0;   // -1→0m, 0→30m, +1→60m
     this._ballAngleRaw = 0;  // -1→-20°, 0→0°, +1→+20°
-
-    // Visual sphere for the sensor ball (cyan, semi-transparent)
-    this._ballMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(1.5, 8, 6),
-      new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.7 })
-    );
-    scene.add(this._ballMesh);
 
     // Determine architecture
     if (layers) {
@@ -244,10 +235,6 @@ export class NeuralAI {
     }
   }
 
-  /** Remove the sensor ball visual from the scene. Call when discarding this controller. */
-  destroy() {
-    if (this._ballMesh) { scene.remove(this._ballMesh); this._ballMesh = null; }
-  }
 
   // ── Sensors ─────────────────────────────────────────────────────────────────
 
@@ -300,8 +287,9 @@ export class NeuralAI {
   }
 
   // 5 rays cast from the sensor ball's world position at 0°, ±30°, ±60° relative to ball heading
+  // Uses same normalization as _castRays: sqrt(minT / RAY_DIST)
   _castBallRays(edgeLeft, edgeRight, bx, bz, bHdg) {
-    const rr = BALL_RAY_DIST * BALL_RAY_DIST * 1.5;
+    const rr = RAY_DIST * RAY_DIST * 1.5;
     const near = [];
     for (const segs of [edgeLeft, edgeRight]) {
       for (const w of segs) {
@@ -312,12 +300,12 @@ export class NeuralAI {
     return BALL_RAY_ANGLES.map(a => {
       const angle = bHdg + a;
       const dx = Math.sin(angle), dz = Math.cos(angle);
-      let minT = BALL_RAY_DIST;
+      let minT = RAY_DIST;
       for (const w of near) {
         const t = raySegment(bx, bz, dx, dz, w.x0, w.z0, w.x1, w.z1);
         if (t > 0 && t < minT) minT = t;
       }
-      return Math.sqrt(minT / BALL_RAY_DIST);
+      return Math.sqrt(minT / RAY_DIST);
     });
   }
 
@@ -420,7 +408,6 @@ export class NeuralAI {
     const bx = c.pos.x + ballDist * Math.sin(ballHdg);
     const bz = c.pos.z + ballDist * Math.cos(ballHdg);
     const ballSensors = this._castBallRays(state.trkWallLeft || [], state.trkWallRight || [], bx, bz, ballHdg);
-    if (this._ballMesh) this._ballMesh.position.set(bx, c.pos.y + 1, bz);
 
     // Edge proximity: 0 = at track center, 1 = at/beyond edge
     const halfW = trackData ? trackData.rw * 0.5 : 999;
