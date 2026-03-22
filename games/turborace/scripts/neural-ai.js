@@ -19,13 +19,13 @@ let _repoGenome = null;
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Default hand-designed weights for [24, 5, 3] architecture
+//  Default hand-designed weights for [24, 5, 2] architecture
 //  Inputs: 11 track-edge sensors (-90,-60,-30,-10,-5,0,+5,+10,+30,+60,+90)
 //        + 7 wall sensors (-90,-45,-10,0,+10,+45,+90)
 //        + speed, waypointErr, edgeProximity, gravelFlag, grip, accel
-//  Outputs: steer, throttle, brake
+//  Outputs: steer, throttle (negative value = brake)
 // ─────────────────────────────────────────────────────────────────────────────
-const _DEFAULT_LAYERS = [24, 5, 3];
+const _DEFAULT_LAYERS = [24, 5, 2];
 //                    t-90  t-60  t-30  t-10   t-5    t0   t+5  t+10  t+30  t+60  t+90 | w-90  w-45  w-10    w0  w+10  w+45  w+90 | spd   wpt  edge  grav  grip   acl
 const _W1 = [
   [-2.0, -2.5, -3.0, -2.0, -1.0, -0.5,  0.0,  0.3,  0.5,  0.3,  0.0, -1.0, -1.5, -0.5,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.8,  0.5,  0.0,  0.0], // H0 danger-left
@@ -37,10 +37,9 @@ const _W1 = [
 const _b1 = [2.0, 2.0, 2.0, -6.0, 0.0];
 const _W2 = [
   [ 1.2, -1.2,  0.0,  0.0,  1.5], // steer
-  [-0.3, -0.3, -1.5,  1.5,  0.0], // throttle
-  [-0.5, -0.5,  2.0, -0.5,  0.0], // brake
+  [-0.3, -0.3, -1.5,  1.5,  0.0], // throttle (negative = brake)
 ];
-const _b2 = [0.0, 0.5, -1.5];
+const _b2 = [0.0, 0.5];
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Ray-segment intersection
@@ -132,6 +131,7 @@ export class NeuralAI {
     if (s === 98) return [15, 5, 3];
     if (s === 108) return [17, 5, 3];
     if (s === 123) return [20, 5, 3];
+    if (s === 137) return [24, 5, 2];
     if (s === 143) return [24, 5, 3];
     // Try [nIn, 5, 3] variants (last layer [5→3] = 3*6 = 18)
     const r3 = s - 18;
@@ -166,7 +166,7 @@ export class NeuralAI {
   // ── Weight management ───────────────────────────────────────────────────────
 
   _useDefaults() {
-    if (JSON.stringify(this.layers) === '[24,5,3]') {
+    if (JSON.stringify(this.layers) === '[24,5,2]') {
       this.weights = [{ W: _W1.map(r => [...r]), b: [..._b1] }, { W: _W2.map(r => [...r]), b: [..._b2] }];
       return;
     }
@@ -383,18 +383,15 @@ export class NeuralAI {
               ? [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]    // 13 items
               : [...sensors9, speedFrac, Math.max(-1, Math.min(1, he / Math.PI))];                         // 11 items
 
-    const [nnSteer, thrMod, nnBrakeRaw] = this._forward(inputs);
-    // brake output: tanh [-1,1] → clamp to [0,1] (positive = brake)
-    const nnBrake = this.weights.length >= 2 && this.layers[this.layers.length - 1] >= 3
-      ? Math.max(0, nnBrakeRaw || 0)
-      : 0;
+    const [nnSteer, thrMod] = this._forward(inputs);
+    // throttle output: tanh [-1,1]; positive = accelerate, negative = brake
+    const nnBrake = thrMod < 0 ? -thrMod : 0;
 
     let str = Math.max(-1, Math.min(1, nnSteer));
 
     // ── Throttle & brake ──────────────────────────────────────────────────────
-    let thr = Math.max(0, thrMod);
+    let thr = thrMod > 0 ? thrMod : 0;
     let brk = nnBrake;
-    if (brk > 0.05) thr = Math.min(thr, 1 - brk);
     thr *= 0.85 + thrMod * 0.25;
     if (c.onGravel) thr = Math.min(thr, 0.7);
     thr *= c.data.aiSpd * c.aiAgg * 1.15;
