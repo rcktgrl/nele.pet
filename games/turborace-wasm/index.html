@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>F³ Racing Experimental</title>
+<link rel="stylesheet" href="../turborace/styles/game.css">
+<script type="module" src="../turborace/scripts/game.js" defer></script>
+</head>
+<body>
+<canvas id="gc"></canvas>
+<canvas id="dc"></canvas>
+<div class="screen introScreen" id="sIntro">
+  <h1>F³ Racing Experimental</h1>
+  <div class="sub">Experimental build · test new ideas</div>
+  <div class="menuActions">
+    <button id="introStartBtn" class="btn btn-p">START GAME</button>
+  </div>
+  <div class="menuVersion" aria-label="Game version">v0.120</div>
+</div>
+<div id="hud" role="status" aria-live="polite">
+  <div id="raceTop">
+    <div id="lapNum">LAP</div>
+    <div id="lapVal">1 / 3</div>
+    <div id="cpRow"><span id="cpLabel">CP</span> <span id="cpVal">0 / 0</span></div>
+    <div id="timer">00:00.000</div>
+    <div id="lapTimes"></div>
+  </div>
+  <div id="pos"><div id="posNum">1<sup style="font-size:20px">ST</sup></div><div id="posLabel">POSITION</div></div>
+  <div id="speedBox" class="hudBottomDock"><div id="speedNum">0</div><div id="speedUnit">KM/H</div></div>
+  <div id="gearBox" class="hudBottomDock"><div id="gearNum">1</div><div id="gearLabel">GEAR</div></div>
+  <div id="camLabel" class="hudBottomDock">[ C ] COCKPIT VIEW</div>
+  <div id="mm"><canvas id="mmc" width="150" height="150"></canvas></div>
+</div>
+<!-- TRAINING HUD -->
+<div id="trainHud" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:50;flex-direction:column;align-items:center;justify-content:flex-start;padding:12px 24px;gap:6px;font-family:Orbitron,monospace;">
+  <!-- Row 1: Stats + track select + actions -->
+  <div style="display:flex;gap:10px;align-items:center;background:rgba(5,5,20,.88);border:1px solid #223;border-radius:10px;padding:8px 16px;pointer-events:auto;flex-wrap:wrap;justify-content:center;">
+    <span id="trainGenNum" style="color:#4af;font-size:1.1rem;font-weight:700;">GEN 1</span>
+    <span id="trainModeLabel" style="color:#fa4;font-size:.7rem;font-weight:700;letter-spacing:1px;border:1px solid #443;border-radius:4px;padding:2px 6px;">TIMED</span>
+    <span id="trainCountdown" style="color:#aaa;font-size:1rem;">35s</span>
+    <span id="trainBestFit" style="color:#4f4;font-size:1rem;">BEST —</span>
+    <span id="trainAvgFit" style="color:#fa4;font-size:1rem;">AVG 0.0</span>
+    <span style="color:#334;">│</span>
+    <select id="trainTrkSelect" style="pointer-events:auto;background:#0a0f1c;color:#4af;border:1px solid #2a3a5a;border-radius:5px;padding:4px 8px;font-size:.7rem;font-family:Orbitron,monospace;cursor:pointer;max-width:140px;"></select>
+    <span style="color:#334;">│</span>
+    <button id="trainSaveBtn" class="btn btn-p" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;">SAVE</button>
+    <button id="trainExportBtn" class="btn btn-p" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;">EXPORT</button>
+    <button id="trainLoadBtn" class="btn btn-s" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;">LOAD</button>
+    <button id="trainImportBtn" class="btn btn-s" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;">IMPORT JSON</button>
+    <input type="file" id="trainImportFile" accept=".json" style="display:none;">
+    <span style="color:#334;">│</span>
+    <button id="trainStopBtn" class="btn btn-s" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;">STOP</button>
+    <button id="trainResetBtn" class="btn btn-s" style="pointer-events:auto;padding:5px 12px;font-size:.7rem;color:#f44;border-color:#422;" title="Delete all cars and restart AI from scratch">RESET AI</button>
+  </div>
+  <!-- Row 2: Generation progress bar -->
+  <div style="width:340px;height:6px;background:#111;border-radius:3px;overflow:hidden;pointer-events:none;">
+    <div id="trainBar" style="height:100%;width:0%;background:linear-gradient(90deg,#4af,#4f4);border-radius:3px;transition:width .2s linear;"></div>
+  </div>
+  <!-- Row 3: Controls grouped by when they take effect -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;pointer-events:auto;">
+
+    <!-- ⚡ LIVE — takes effect immediately -->
+    <div style="background:rgba(5,5,20,.82);border:1px solid #1a3520;border-radius:8px;padding:8px 14px;">
+      <div style="color:#4f4;font-size:.58rem;font-weight:700;letter-spacing:2px;margin-bottom:6px;text-align:center;">⚡ LIVE</div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;">SPEED&nbsp;<span id="trainFFVal" style="color:#fa4;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">1×</span></label>
+        <input id="trainFFSlider" type="range" min="1" max="100" value="1" step="1" style="width:80px;accent-color:#fa4;">
+      </div>
+    </div>
+
+    <!-- ◷ NEXT GENERATION — applied when the current generation ends -->
+    <div style="background:rgba(5,5,20,.82);border:1px solid #3a2d00;border-radius:8px;padding:8px 14px;">
+      <div style="color:#fa4;font-size:.58rem;font-weight:700;letter-spacing:2px;margin-bottom:6px;text-align:center;">◷ NEXT GENERATION</div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;" id="trainGenDurLabel">SIM TIME&nbsp;<span id="trainGenDurVal" style="color:#4fa;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">35s</span></label>
+        <input id="trainGenDurSlider" type="range" min="5" max="120" value="35" step="5" style="width:80px;accent-color:#4fa;">
+        <span style="color:#334;">│</span>
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;">CARS&nbsp;<span id="trainPopVal" style="color:#4af;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">8</span></label>
+        <input id="trainPopSlider" type="range" min="1" max="8" value="8" step="1" style="width:80px;accent-color:#4af;">
+      </div>
+    </div>
+
+    <!-- ↺ RESTART REQUIRED — only applies when training is restarted -->
+    <div style="background:rgba(5,5,20,.82);border:1px solid #3a1800;border-radius:8px;padding:8px 14px;">
+      <div style="color:#f84;font-size:.58rem;font-weight:700;letter-spacing:2px;margin-bottom:6px;text-align:center;">↺ RESTART REQUIRED</div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;">SIMS&nbsp;<span id="trainNumSimsVal" style="color:#4af;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">8</span></label>
+        <input id="trainNumSimsSlider" type="range" min="1" max="32" value="8" step="1" style="width:70px;accent-color:#4af;">
+        <span style="color:#334;">│</span>
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;">HIDDEN&nbsp;<span id="trainHiddenVal" style="color:#c8f;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">1</span></label>
+        <input id="trainHiddenSlider" type="range" min="1" max="100" value="1" step="1" style="width:70px;accent-color:#c8f;">
+        <span style="color:#334;">│</span>
+        <label style="color:#889;font-size:.7rem;white-space:nowrap;">NODES&nbsp;<span id="trainNodesVal" style="color:#f84;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">5</span></label>
+        <input id="trainNodesSlider" type="range" min="3" max="100" value="5" step="1" style="width:70px;accent-color:#f84;">
+      </div>
+    </div>
+
+  </div>
+  <!-- Row 4: Rewards & Penalties (collapsible, all LIVE) -->
+  <div style="pointer-events:auto;">
+    <button id="trainRewardsPanelToggle" style="background:rgba(5,5,20,.78);border:1px solid #1a3520;border-radius:6px;color:#fa4;font-size:.65rem;font-family:Orbitron,monospace;padding:4px 12px;cursor:pointer;letter-spacing:1px;">▶ REWARDS &amp; PENALTIES &nbsp;<span style="color:#4f4;font-size:.6rem;">⚡ LIVE</span></button>
+  </div>
+  <div id="trainRewardsPanel" style="display:none;background:rgba(5,5,20,.88);border:1px solid #1a3520;border-radius:8px;padding:10px 18px;pointer-events:auto;max-width:760px;width:100%;">
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:center;">
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">ON-TRACK REWARD/s&nbsp;<span id="trainOnTrackRateVal" style="color:#4f4;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">0.10</span></label>
+      <input id="trainOnTrackRateSlider" type="range" min="0" max="1" value="0.10" step="0.01" style="width:80px;accent-color:#4f4;">
+      <span style="color:#445;">│</span>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">STUCK PENALTY/s&nbsp;<span id="trainStuckPenaltyVal" style="color:#f44;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">5.0</span></label>
+      <input id="trainStuckPenaltySlider" type="range" min="0" max="20" value="5" step="0.5" style="width:80px;accent-color:#f44;">
+      <span style="color:#445;">│</span>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">GRAVEL BASE/s&nbsp;<span id="trainGravelPenaltyVal" style="color:#fa4;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">0.5</span></label>
+      <input id="trainGravelPenaltySlider" type="range" min="0" max="5" value="0.5" step="0.1" style="width:80px;accent-color:#fa4;">
+      <span style="color:#445;">│</span>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">GRAVEL GROWTH&nbsp;<span id="trainGravelGrowthVal" style="color:#fa4;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">0.30</span></label>
+      <input id="trainGravelGrowthSlider" type="range" min="0" max="2" value="0.30" step="0.05" style="width:80px;accent-color:#fa4;">
+    </div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">OFF-TRACK MULT&nbsp;<span id="trainOffTrackMultVal" style="color:#f84;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">10×</span></label>
+      <input id="trainOffTrackMultSlider" type="range" min="1" max="50" value="10" step="1" style="width:80px;accent-color:#f84;">
+      <span style="color:#445;">│</span>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">OFF-TRACK DQ TIME&nbsp;<span id="trainOffTrackDQTimeVal" style="color:#f84;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">3.0s</span></label>
+      <input id="trainOffTrackDQTimeSlider" type="range" min="0.5" max="10" value="3" step="0.5" style="width:80px;accent-color:#f84;">
+      <span style="color:#445;">│</span>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">DQ PENALTY&nbsp;<span id="trainDQPenaltyVal" style="color:#f44;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">200</span></label>
+      <input id="trainDQPenaltySlider" type="range" min="0" max="500" value="200" step="10" style="width:80px;accent-color:#f44;">
+      <span style="color:#445;">│</span>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">MUT RATE&nbsp;<span id="trainMutRateVal" style="color:#c8f;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">0.15</span></label>
+      <input id="trainMutRateSlider" type="range" min="0" max="1" value="0.15" step="0.01" style="width:80px;accent-color:#c8f;">
+      <span style="color:#445;">│</span>
+      <label style="color:#889;font-size:.65rem;white-space:nowrap;">MUT STRENGTH&nbsp;<span id="trainMutStrengthVal" style="color:#c8f;cursor:pointer;text-decoration:underline dotted;" title="Click to type value">0.35</span></label>
+      <input id="trainMutStrengthSlider" type="range" min="0" max="2" value="0.35" step="0.05" style="width:80px;accent-color:#c8f;">
+    </div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:8px;">
+      <span style="color:#889;font-size:.65rem;white-space:nowrap;">MUTATION STRATEGY</span>
+      <button id="trainEliteCloneBtn" style="background:#0a0f1c;border:1px solid #445;border-radius:5px;color:#889;font-size:.65rem;font-family:Orbitron,monospace;padding:4px 10px;cursor:pointer;letter-spacing:1px;">ELITE CLONE: OFF</button>
+      <span style="color:#445;font-size:.6rem;max-width:260px;">When ON: all sims run full duration, then best car is cloned with mutations into the next generation.</span>
+      <span style="color:#445;">│</span>
+      <button id="trainSingleCarBtn" style="background:#0a0f1c;border:1px solid #445;border-radius:5px;color:#889;font-size:.65rem;font-family:Orbitron,monospace;padding:4px 10px;cursor:pointer;letter-spacing:1px;">SAME CAR: OFF</button>
+      <span style="color:#445;font-size:.6rem;max-width:260px;">When ON: one car model is chosen and used by every AI in the generation.</span>
+    </div>
+  </div>
+  <!-- Row 5: Hint -->
+  <div style="color:#445;font-size:.65rem;pointer-events:none;"><span id="trainSimsHint">8</span> SIMS · SCROLL=ZOOM · DRAG=PAN · BEST SIM SHOWN · SWAPS AT GENERATION END</div>
+  <!-- Neural network visualiser -->
+  <canvas id="trainNNCanvas" width="420" height="280" style="position:fixed;bottom:18px;right:18px;border:1px solid #1a2535;border-radius:8px;background:rgba(4,6,18,.88);cursor:grab;"></canvas>
+  <!-- Training Leaderboard -->
+  <div id="trainLeaderboard" style="position:fixed;bottom:18px;left:18px;background:rgba(4,6,18,.88);border:1px solid #1a2535;border-radius:8px;padding:10px 14px;pointer-events:none;min-width:220px;font-family:Orbitron,monospace;">
+    <div style="color:#4af;font-size:.65rem;font-weight:700;margin-bottom:6px;letter-spacing:1px;text-align:center;">AI LEADERBOARD</div>
+    <div style="display:grid;grid-template-columns:18px 10px 1fr 48px 14px;gap:2px 6px;align-items:center;margin-bottom:3px;padding-bottom:3px;border-bottom:1px solid #1a2535;">
+      <span style="color:#334;font-size:.55rem;">#</span>
+      <span></span>
+      <span style="color:#334;font-size:.55rem;">SCORE</span>
+      <span style="color:#334;font-size:.55rem;text-align:right;">SPEED</span>
+      <span style="color:#334;font-size:.55rem;text-align:center;">BRK</span>
+    </div>
+    <div id="trainLbRows"></div>
+  </div>
+</div>
+
+<div id="notif"></div>
+<div id="cd"></div>
+<div id="hint" class="hudBottomDock">W/↑ THROTTLE · S/↓ BRAKE (HOLD WHILE STOPPED = REVERSE) · A/D STEER · C CAMERA · ESC PAUSE</div>
+<div id="touchControls" aria-label="On-screen controls">
+  <div class="touchCluster touchCluster-utility">
+    <button class="touchBtn touchBtn-small" data-tap="camera" aria-label="Toggle camera">CAM</button>
+    <button class="touchBtn touchBtn-small" data-tap="pause" aria-label="Pause">⏸</button>
+  </div>
+  <div class="touchCluster touchCluster-left" id="touchClusterLeft">
+    <div id="gyroSteerBar" class="gyroSteerBar" style="display:none" aria-label="Gyro steering">
+      <div class="gyroSteerDz"></div>
+      <div class="gyroSteerDot" id="gyroSteerDot"></div>
+    </div>
+    <div id="touchSteerSlider" class="touchSteerSlider" aria-label="Steer left or right">
+      <div class="touchSteerCenter"></div>
+      <div class="touchSteerThumb" id="touchSteerThumb"></div>
+    </div>
+  </div>
+  <div class="touchCluster touchCluster-right">
+    <button class="touchBtn touchBtn-primary" data-control="brake" aria-label="Brake or reverse">BRAKE</button>
+  </div>
+</div>
+
+<!-- PAUSE MENU -->
+<div id="pauseMenu">
+  <div class="menuPanel">
+    <h2>PAUSED</h2>
+    <div class="menuActions">
+      <button id="resumeBtn" class="btn btn-p">RESUME</button>
+      <button id="restartBtn" class="btn btn-s">RESTART</button>
+      <button id="showSettingsBtn" class="btn btn-s">SETTINGS</button>
+      <button id="quitToMenuBtn" class="btn btn-s">QUIT TO MENU</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="settingsModal">
+  <h2>Settings</h2>
+  <div class="vol-row">
+    <span class="vol-lbl">MUSIC VOL</span>
+    <input id="musicVolSlider" class="vol-slider" type="range" min="0" max="100" value="60">
+    <span class="vol-val" id="musicVolVal">60</span>
+  </div>
+  <div class="vol-row">
+    <span class="vol-lbl">SFX VOL</span>
+    <input id="sfxVolSlider" class="vol-slider" type="range" min="0" max="100" value="80">
+    <span class="vol-val" id="sfxVolVal">80</span>
+  </div>
+  <div class="s-sep"></div>
+  <label class="toggleRow" for="touchToggleInput">
+    <span class="toggleLbl">TOUCH CONTROLS</span>
+    <input type="checkbox" id="touchToggleInput">
+  </label>
+  <label class="toggleRow" for="gyroToggleInput">
+    <span class="toggleLbl">GYRO STEERING</span>
+    <input type="checkbox" id="gyroToggleInput">
+  </label>
+  <div class="touchCfgHint" id="gyroStatus" aria-live="polite">GYRO: checking availability...</div>
+  <div id="gyroSettingsBar" class="gyroSettingsBar" style="display:none" aria-hidden="true">
+    <div class="gyroSettingsDz"></div>
+    <div class="gyroSettingsDot" id="gyroSettingsDot"></div>
+  </div>
+  <label class="toggleRow" for="onlineGhostToggleInput">
+    <span class="toggleLbl">ONLINE LEADERBOARD GHOSTS</span>
+    <input type="checkbox" id="onlineGhostToggleInput">
+  </label>
+  <label class="toggleRow" for="onlineGhostCountSelect">
+    <span class="toggleLbl">ONLINE GHOST COUNT</span>
+    <select id="onlineGhostCountSelect">
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+      <option value="6">6</option>
+      <option value="7">7</option>
+      <option value="8">8</option>
+      <option value="9">9</option>
+      <option value="10">10</option>
+    </select>
+  </label>
+  <div class="touchCfgHint">Auto-throttle on touch. Hold BRAKE for slowing down or reverse.</div>
+  <div class="touchCfgHint">When online ghost mode is enabled, AI cars are replaced by ghost cars.</div>
+  <div class="touchCfgHint">Online ghost count pulls from the highest-ranked leaderboard entries with ghost data.</div>
+  <div class="s-sep"></div>
+  <div class="ctrl-grid">
+    <span>THROTTLE</span><span>W / ↑</span>
+    <span>BRAKE</span><span>S / ↓</span>
+    <span>STEER LEFT</span><span>A / ←</span>
+    <span>STEER RIGHT</span><span>D / →</span>
+    <span>CAMERA</span><span>C</span>
+    <span>PAUSE / MENU</span><span>ESC</span>
+  </div>
+  <div style="text-align:center">
+    <button class="btn btn-p" id="settingsCloseBtn">CLOSE</button>
+  </div>
+</div>
+
+<!-- MAIN MENU -->
+<div class="screen" id="sMain">
+  <h1>F³ Racing Experimental</h1>
+  <div class="sub">Experimental build · Multiple Circuits · Full Cockpit</div>
+  <div class="menuActions">
+    <button id="gameStartBtn" class="btn btn-p">START RACE</button>
+    <button id="trainAiBtn" class="btn btn-s">TRAIN AI 🧠</button>
+    <button id="trackEditorBtn" class="btn btn-s">TRACK EDITOR</button>
+<button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
+    <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
+  </div>
+  <div class="menuVersion" aria-label="Game version">v0.120</div>
+
+</div>
+
+<!-- CAR SELECT -->
+<div class="screen" id="sCar" style="display:none">
+  <h2>Select Your Car</h2>
+  <div class="cards" id="carCards"></div>
+  <div class="menuActions menuActions-inline">
+    <button id="showTrkSelBtn" class="btn btn-s">BACK</button>
+    <button id="btnGo" class="btn btn-p" disabled>RACE!</button>
+  </div>
+  </div>
+</div>
+
+<!-- TRACK SELECT -->
+<div class="screen" id="sTrk" style="display:none">
+  <h2>Built-in Tracks</h2>
+  <div id="trkCards" class="trackCards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;"></div>
+  <div class="menuActions menuActions-inline">
+    <button id="trkSelBackBtn" class="btn btn-s">BACK</button>
+    <button id="loadOnlineTracksBtn" class="btn btn-s">LOAD ONLINE TRACKS</button>
+    <button id="btnTrainStart" class="btn btn-s" disabled>TRAIN 🧠</button>
+    <button id="btnNxt" class="btn btn-p" disabled>NEXT</button>
+  </div>
+</div>
+
+<!-- AI TRAINING SETUP -->
+<div class="screen" id="sTrainSetup" style="display:none">
+  <h2>Training Setup</h2>
+  <div class="setupSection">
+    <div class="setupLabel">Training Mode</div>
+    <div class="diffCards" id="trainModeCards" style="gap:14px;justify-content:center;">
+      <div class="diffCard sel" data-trainmode="timed">
+        <div class="diffIcon">⏱️</div>
+        <div class="diffName">Timed</div>
+        <div class="diffDesc">Run for a set duration — maximize track progress</div>
+      </div>
+      <div class="diffCard" data-trainmode="lap">
+        <div class="diffIcon">🏁</div>
+        <div class="diffName">Lap Race</div>
+        <div class="diffDesc">Finish one lap — faster lap time = more fitness points</div>
+      </div>
+    </div>
+  </div>
+  <div class="setupSection">
+    <div class="setupLabel">Starting Model</div>
+    <div id="trainSetupModelCards" class="diffCards" style="flex-wrap:wrap;gap:14px;justify-content:center;min-height:80px;"></div>
+  </div>
+  <div class="setupSection" id="trainSetupArchSection">
+    <div class="setupLabel">Architecture</div>
+    <div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap;padding:8px 0;">
+      <label style="display:flex;align-items:center;gap:8px;color:#889;font-size:.85rem;">
+        HIDDEN LAYERS <strong id="trainSetupHiddenVal" style="color:#c8f;">1</strong>
+        <input id="trainSetupHiddenSlider" type="range" min="1" max="10" value="1" style="width:100px;accent-color:#c8f;">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;color:#889;font-size:.85rem;">
+        NODES/LAYER <strong id="trainSetupNodesVal" style="color:#f84;">5</strong>
+        <input id="trainSetupNodesSlider" type="range" min="3" max="100" value="5" style="width:100px;accent-color:#f84;">
+      </label>
+    </div>
+  </div>
+  <div class="menuActions menuActions-inline">
+    <button id="trainSetupBackBtn" class="btn btn-s">BACK</button>
+    <button id="trainSetupStartBtn" class="btn btn-p">START TRAINING 🧠</button>
+  </div>
+</div>
+
+<!-- RACE SETUP: DIFFICULTY + OPPONENT MODE -->
+<div class="screen" id="sDiff" style="display:none">
+  <h2>Race Setup</h2>
+  <div class="setupSection">
+    <div class="setupLabel">Difficulty</div>
+    <div class="diffCards" id="diffCards">
+      <div class="diffCard" data-diff="easy">
+        <div class="diffIcon">🟢</div>
+        <div class="diffName">Easy</div>
+        <div class="diffDesc">Slower AI, gentler cornering</div>
+      </div>
+      <div class="diffCard sel" data-diff="medium">
+        <div class="diffIcon">🟡</div>
+        <div class="diffName">Medium</div>
+        <div class="diffDesc">Balanced challenge</div>
+      </div>
+      <div class="diffCard" data-diff="hard">
+        <div class="diffIcon">🔴</div>
+        <div class="diffName">Hard</div>
+        <div class="diffDesc">Aggressive, full speed</div>
+      </div>
+      <div class="diffCard" data-diff="neural">
+        <div class="diffIcon">🧠</div>
+        <div class="diffName">Advanced AI</div>
+        <div class="diffDesc">Neural network with wall sensors</div>
+      </div>
+    </div>
+  </div>
+  <div class="setupSection">
+    <div class="setupLabel">Opponents</div>
+    <div class="diffCards" id="oppCards">
+      <div class="diffCard sel" data-opp="ai">
+        <div class="diffIcon">🤖</div>
+        <div class="diffName">AI Opponents</div>
+        <div class="diffDesc">Race 4 computer-controlled cars</div>
+      </div>
+      <div class="diffCard" data-opp="ghost">
+        <div class="diffIcon">👻</div>
+        <div class="diffName">Ghost Cars</div>
+        <div class="diffDesc">Race leaderboard ghost replays</div>
+      </div>
+    </div>
+  </div>
+  <div class="menuActions menuActions-inline">
+    <button id="diffBackBtn" class="btn btn-s">BACK</button>
+    <button id="diffNextBtn" class="btn btn-p">NEXT</button>
+  </div>
+</div>
+
+<!-- NEURAL MODEL SELECT -->
+<div class="screen" id="sNeuralModel" style="display:none">
+  <h2>Select Neural Model</h2>
+  <div class="setupSection">
+    <div class="setupLabel">Available Models</div>
+    <div class="diffCards" id="neuralModelCards" style="flex-wrap:wrap;gap:14px;justify-content:center;min-height:80px;"></div>
+  </div>
+  <div class="menuActions menuActions-inline">
+    <button id="neuralModelBackBtn" class="btn btn-s">BACK</button>
+    <button id="neuralModelNextBtn" class="btn btn-p">NEXT</button>
+  </div>
+</div>
+
+<!-- ONLINE TRACKS SELECT -->
+<div class="screen" id="sOnlineTrk" style="display:none">
+  <h2>Online Tracks</h2>
+  <div id="onlineTrkCards" class="trackCards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;"></div>
+  <div class="menuActions menuActions-inline">
+    <button id="onlineTrkBackBtn" class="btn btn-s">BACK</button>
+    <button id="btnOnlineNxt" class="btn btn-p" disabled>NEXT</button>
+  </div>
+</div>
+
+<!-- TRACK EDITOR -->
+<div class="screen editorScreen" id="sEditor" style="display:none">
+  <div class="editorWrap">
+    <aside class="editorSidebar">
+      <div class="editorTop">
+        <div>
+          <h2>Track Editor</h2>
+          <div class="editorSub">Bird's-eye 3D editor. WASD moves, mouse rotates, wheel zooms, left drag edits.</div>
+        </div>
+        <button id="closeEditorBtn" class="btn btn-s btn-tight">BACK</button>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Tracks</div>
+        <div class="editorList" id="editorTrackList"></div>
+        <div class="editorRow">
+          <button id="newTrackBtn" class="btn btn-p btn-tight">NEW TRACK</button>
+          <button id="dupeTrackBtn" class="btn btn-s btn-tight">DUPLICATE</button>
+          <button id="delTrackBtn" class="btn btn-s btn-tight">DELETE TRACK</button>
+        </div>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Track</div>
+        <label class="editorField">
+          <span>Track Node Count <strong id="editorNodeCountVal">5</strong></span>
+          <input id="editorNodeCount" type="range" min="3" max="100" value="5">
+        </label>
+        <label class="editorField">
+          <span>Hide Nodes on Canvas</span>
+          <input type="checkbox" id="editorHideNodes">
+        </label>
+        <label class="editorField">
+          <span>Name</span>
+          <input id="editorTrackName" type="text" maxlength="40">
+        </label>
+        <label class="editorField">
+          <span>Description</span>
+          <input id="editorTrackDesc" type="text" maxlength="90">
+        </label>
+        <div class="editorGrid2">
+          <label class="editorField">
+            <span>Laps</span>
+            <input id="editorTrackLaps" type="number" min="1" max="9" value="3">
+          </label>
+          <label class="editorField">
+            <span>Road Width</span>
+            <input id="editorTrackWidth" type="number" min="6" max="30" value="12">
+          </label>
+        </div>
+        <div class="editorGrid2">
+          <label class="editorField">
+            <span>Preview Colour</span>
+            <input id="editorTrackColor" type="color" value="#44aaff">
+          </label>
+          <label class="editorField editorCheckbox">
+            <span>Bezier Curves</span>
+            <input id="editorUseBezier" type="checkbox" checked>
+          </label>
+        </div>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Environment</div>
+        <div class="editorGrid2">
+          <label class="editorField">
+            <span>Ground</span>
+            <input id="editorGroundColor" type="color" value="#1a3018">
+          </label>
+          <label class="editorField">
+            <span>Sky</span>
+            <input id="editorSkyColor" type="color" value="#0d1a2e">
+          </label>
+        </div>
+        <label class="editorField">
+          <span>Time of Day</span>
+          <select id="editorTimeOfDay">
+            <option value="day">Day</option>
+            <option value="sunset">Sunset</option>
+            <option value="night">Night</option>
+          </select>
+        </label>
+        <div class="editorGrid2">
+          <label class="editorField editorCheckbox">
+            <span>Street Grid</span>
+            <input id="editorStreetGrid" type="checkbox">
+          </label>
+          <label class="editorField editorCheckbox">
+            <span>Gravel Runoff</span>
+            <input id="editorEnableRunoff" type="checkbox" checked>
+          </label>
+        </div>
+        <div class="editorGrid2">
+          <label class="editorField">
+            <span>Fog Distance <strong id="editorFogDistVal">1200</strong></span>
+            <input id="editorFogDist" type="range" min="100" max="2000" step="50" value="1200">
+          </label>
+        </div>
+        <div class="editorGrid2">
+          <label class="editorField">
+            <span>Grid Size</span>
+            <input id="editorGridSize" type="number" min="40" max="120" step="5" value="70">
+          </label>
+        </div>
+        <div class="editorRow">
+          <button id="upgradeTrackGenerationBtn" class="btn btn-s btn-tight">UPDATE TO LATEST TRACK GENERATION</button>
+        </div>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Selected Node</div>
+        <label class="editorField">
+          <span>Node Type</span>
+          <select id="editorNodeType">
+            <option value="start-finish">Start/finish</option>
+            <option value="no-auto">No scenery</option>
+          </select>
+        </label>
+        <label class="editorField">
+          <span>Curve Steepness</span>
+          <input id="editorSteepness" type="range" min="0" max="100" value="40">
+        </label>
+        <label class="editorField">
+          <span>Gravel Size <strong id="editorNodeGravelPitSizeVal">100</strong>%</span>
+          <input id="editorNodeGravelPitSize" type="range" min="0" max="400" step="5" value="100">
+        </label>
+        <label class="editorField">
+          <span>Gravel Left <strong id="editorNodeGravelLeftVal">0</strong>m</span>
+          <input id="editorNodeGravelLeft" type="range" min="0" max="20" step="0.5" value="0">
+        </label>
+        <label class="editorField">
+          <span>Gravel Right <strong id="editorNodeGravelRightVal">0</strong>m</span>
+          <input id="editorNodeGravelRight" type="range" min="0" max="20" step="0.5" value="0">
+        </label>
+        <div class="editorHint" id="editorNodeInfo">Select and drag a node in the 3D view.</div>
+        <div class="editorRow editorRowWrap">
+          <button id="addNodeBtn" class="btn btn-p btn-tight">ADD NODE</button>
+          <button id="insertNodeBtn" class="btn btn-s btn-tight">INSERT AFTER</button>
+          <button id="delNodeBtn" class="btn btn-s btn-tight">DELETE NODE</button>
+        </div>
+        <div class="editorRow">
+          <button id="reverseDirectionBtn" class="btn btn-s btn-tight">REVERSE DIRECTION</button>
+        </div>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Placed Assets</div>
+        <label class="editorField">
+          <span>Brush Asset</span>
+          <select id="editorBrushAsset">
+            <option value="tree">🌲 Tree</option>
+            <option value="building">🏢 Building</option>
+            <option value="park">🟩 Park</option>
+            <option value="stand">🏟 Stand</option>
+          </select>
+        </label>
+        <label class="editorField">
+          <span>Brush Count <strong id="editorBrushSizeVal">1</strong></span>
+          <input id="editorBrushSize" type="range" min="1" max="25" step="1" value="1">
+        </label>
+        <label class="editorField">
+          <span>Brush Spacing <strong id="editorBrushSpacingVal">12</strong>m</span>
+          <input id="editorBrushSpacing" type="range" min="6" max="60" step="1" value="12">
+        </label>
+        <label class="editorField editorFieldInline">
+          <span>Brush Enabled</span>
+          <input id="editorBrushEnabled" type="checkbox">
+        </label>
+        <div class="editorHint">Toggle brush on to paint assets in the viewport. Existing placed assets also appear in the 3D editor.</div>
+        <div class="editorAssetPalette" id="editorAssetPalette">
+          <div class="assetChip" draggable="true" data-asset="tree">🌲 Tree</div>
+          <div class="assetChip" draggable="true" data-asset="building">🏢 Building</div>
+          <div class="assetChip" draggable="true" data-asset="park">🟩 Park</div>
+          <div class="assetChip" draggable="true" data-asset="stand">🏟 Stand</div>
+        </div>
+        <div class="editorRow">
+          <button id="delAssetBtn" class="btn btn-s btn-tight">DELETE ASSET</button>
+          <button id="resetEditorCamBtn" class="btn btn-s btn-tight">RESET CAMERA</button>
+        </div>
+      </div>
+
+      <div class="editorSection">
+        <div class="editorLabel">Save</div>
+        <div class="editorRow editorRowWrap">
+          <button id="saveEditorTrackBtn" class="btn btn-p btn-tight">SAVE TRACK</button>
+          <button id="exportTrackJsonBtn" class="btn btn-s btn-tight">EXPORT JSON</button>
+          <button id="resetEditorTrackBtn" class="btn btn-s btn-tight">RESET</button>
+        </div>
+      </div>
+    </aside>
+
+    <section class="editorCanvasPanel">
+      <canvas id="trackEditorCanvas" width="1100" height="720"></canvas>
+      <div class="editorCanvasHint">WASD move · Mouse wheel zoom · Right mouse rotate · Left mouse drag nodes or assets/paint brush · Shift snaps to grid</div>
+      <div class="editorPreviewBanner" id="editorPreviewBanner">Live 3D editor view</div>
+    </section>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="results">
+  <h1 id="rTitle" style="color:#ffd700">RACE OVER</h1>
+  <div id="podium"></div>
+  <div id="ptime"></div>
+  <div id="runCar"></div>
+  <div id="resultsLbWrap">
+    <h3>Track Leaderboard</h3>
+    <div id="resultsLeaderboard"></div>
+  </div>
+  <div class="menuActions menuActions-inline">
+    <button id="menuBtn" class="btn btn-p">MENU</button>
+    <button id="raceAgainBtn" class="btn btn-s">RACE AGAIN</button>
+  </div>
+</div>
+
+<div id="leaderboardModal" aria-hidden="true">
+  <div class="leaderboardPanel" role="dialog" aria-modal="true" aria-labelledby="leaderboardModalTitle">
+    <h3 id="leaderboardModalTitle">Track Leaderboard</h3>
+    <div id="leaderboardModalList"></div>
+    <div class="menuActions menuActions-inline">
+      <button id="closeLeaderboardModalBtn" class="btn btn-p">CLOSE</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
