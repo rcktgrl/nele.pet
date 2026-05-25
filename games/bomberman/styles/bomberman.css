@@ -1,15 +1,24 @@
 /* ─── Reset & Base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Covers the areas behind the iOS status bar / Safari chrome */
+html { background-color: #080b18; }
+
 body {
   font-family: 'Courier New', monospace;
-  background: radial-gradient(ellipse at center, #1e2245 0%, #080b18 100%);
+  background: radial-gradient(ellipse at center, #1e2245 0%, #080b18 100%) #080b18;
   color: #c8c4e8;
   min-height: 100vh;
+  min-height: 100dvh; /* dynamic viewport — correct on iOS Safari */
   display: flex;
   align-items: center;
   justify-content: center;
   overflow-x: hidden;
+  /* extend content behind iOS notch / home indicator */
+  padding-top:    env(safe-area-inset-top,    0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left:   env(safe-area-inset-left,   0px);
+  padding-right:  env(safe-area-inset-right,  0px);
 }
 
 /* ─── Screens ──────────────────────────────────────────────────────────────── */

@@ -373,6 +373,10 @@ function handleBombPlaced({ bombId, placedBy, tileX, tileY, explodesAt, range, t
   state.addBomb(bombId, placedBy, tileX, tileY, explodesAt, range, type ?? 'normal');
   const delay = Math.max(0, explodesAt - Date.now());
   setTimeout(() => triggerExplosion(bombId), delay);
+  // Award 10pts for other players' special bombs (local player handles it in placeSpecialBomb)
+  if (type && type !== BOMB_TYPE.NORMAL && placedBy !== net.myId) {
+    awardGameScore(placedBy, 10);
+  }
 }
 
 function handleBombKick({ bombId, newTileX, newTileY }) {
@@ -657,7 +661,7 @@ function gameLoop() {
     for (const ai of aiInstances) {
       ai.update(state, now, net, (bombId, delay) => {
         setTimeout(() => triggerExplosion(bombId), delay);
-      });
+      }, awardGameScore);
     }
   }
 
