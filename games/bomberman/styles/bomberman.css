@@ -315,6 +315,7 @@ input[type="text"]::placeholder { color: #4e4a72; }
   transition: border-color 0.2s;
 }
 .complexity-select:focus { border-color: #a78bfa; }
+.complexity-select:disabled { opacity: 0.45; cursor: default; }
 
 .lobby-msg { font-size: 0.82rem; color: #5e5a82; text-align: center; min-height: 1.2em; }
 

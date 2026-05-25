@@ -31,17 +31,19 @@ let aiInstances      = [];
 
 const keys = {};
 let lastMoveTime = 0;
-const MOVE_COOLDOWN = 130;
+const MOVE_COOLDOWN = 200; // 200 ms = max 5 tiles/s
 let bombCooldown = false;
 
 // Fixed viewport size (15×13 tiles)
 const VP_W = 15 * 40;
 const VP_H = 13 * 40;
 
-// ─── Sound init on first user gesture ────────────────────────────────────────
-window.addEventListener('keydown',  () => sound.init(), { once: true });
-window.addEventListener('click',    () => sound.init(), { once: true });
-window.addEventListener('touchend', () => sound.init(), { once: true });
+// ─── Audio unlock ─────────────────────────────────────────────────────────────
+// The AudioContext is created immediately (suspended). Any user interaction
+// resumes it. We keep the listeners permanently — tryResume() is idempotent.
+document.addEventListener('click',    () => sound.tryResume(), true);
+document.addEventListener('keydown',  () => sound.tryResume(), true);
+document.addEventListener('touchend', () => sound.tryResume(), true);
 
 // ─── DOM helpers ──────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -485,9 +487,10 @@ async function init() {
   showSection('lobby');
   renderSlots();
 
-  // Show complexity selector for host only
-  if (isHost) {
-    $('complexity-row').classList.remove('hidden');
+  // Complexity selector — visible to all, changeable only by host
+  if (!isHost) {
+    $('complexity-select').disabled = true;
+  } else {
     $('complexity-select').addEventListener('change', e => {
       complexity = parseInt(e.target.value, 10);
     });
