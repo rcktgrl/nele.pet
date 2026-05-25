@@ -8,7 +8,7 @@ export class Network {
 
     // Callbacks — set before joinRoom()
     this.onPresenceUpdate    = null;
-    this.onAIUpdate          = null;   // { aiPlayers }
+    this.onAIUpdate          = null;
     this.onGameStart         = null;
     this.onPlayerMove        = null;
     this.onBombPlaced        = null;
@@ -27,15 +27,17 @@ export class Network {
       },
     });
 
-    // Presence — lobby player list
-    this.channel.on('presence', { event: 'sync' }, () => {
-      if (this.onPresenceUpdate) {
-        const players = Object.values(this.channel.presenceState()).flat();
-        this.onPresenceUpdate(players);
-      }
-    });
+    // ── Presence — fire on sync, join, AND leave for reliability ──────────
+    const refreshPresence = () => {
+      if (!this.onPresenceUpdate) return;
+      const players = Object.values(this.channel.presenceState()).flat();
+      this.onPresenceUpdate(players);
+    };
+    this.channel.on('presence', { event: 'sync'  }, refreshPresence);
+    this.channel.on('presence', { event: 'join'  }, refreshPresence);
+    this.channel.on('presence', { event: 'leave' }, refreshPresence);
 
-    // Broadcast events
+    // ── Broadcast events ───────────────────────────────────────────────────
     const on = (event, cb) =>
       this.channel.on('broadcast', { event }, ({ payload }) => cb?.(payload));
 
@@ -47,12 +49,18 @@ export class Network {
     on('powerup_collected', p => this.onPowerupCollected?.(p));
     on('game_end',          p => this.onGameEnd?.(p));
 
-    // Subscribe and announce presence
-    await new Promise(resolve => {
+    // ── Subscribe then track presence ──────────────────────────────────────
+    await new Promise((resolve, reject) => {
       this.channel.subscribe(async status => {
         if (status === 'SUBSCRIBED') {
-          await this.channel.track({ id: this.myId, name: playerName, isHost });
+          try {
+            await this.channel.track({ id: this.myId, name: playerName, isHost });
+          } catch (e) {
+            console.warn('presence track failed:', e);
+          }
           resolve();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          reject(new Error(`Channel ${status}`));
         }
       });
     });
@@ -64,7 +72,6 @@ export class Network {
   }
 
   // ── Lobby ──────────────────────────────────────────────────────────────────
-  /** Host broadcasts current AI player list to sync all lobby UIs */
   sendAIUpdate(aiPlayers) {
     return this.#send('ai_update', { aiPlayers });
   }
@@ -95,17 +102,14 @@ export class Network {
   }
 
   // ── Game — AI / any player (host only) ────────────────────────────────────
-  /** Broadcast a move on behalf of any player id (used for AI) */
   sendAnyMove(id, tileX, tileY) {
     return this.#send('player_move', { id, tileX, tileY });
   }
 
-  /** Broadcast a bomb placement on behalf of any player id (used for AI) */
   sendAnyBomb(bombId, placedBy, tileX, tileY, explodesAt, range) {
     return this.#send('bomb_placed', { bombId, placedBy, tileX, tileY, explodesAt, range });
   }
 
-  /** Broadcast death on behalf of any player id (used for AI) */
   sendAnyPlayerDead(id) {
     return this.#send('player_dead', { id });
   }

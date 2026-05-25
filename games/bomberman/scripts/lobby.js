@@ -1,15 +1,16 @@
 import { GameState, createMap, BOMB_FUSE, PLAYER_COLORS } from './game.js';
-import { Renderer } from './renderer.js';
-import { Network }  from './network.js';
+import { Renderer }  from './renderer.js';
+import { Network }   from './network.js';
 import { AIPlayer, BOT_NAMES } from './ai.js';
+import { supabase }  from './supabase.js';
 
 // ─── URL params ───────────────────────────────────────────────────────────────
 const params     = new URLSearchParams(location.search);
 const roomCode   = params.get('room')?.slice(0, 4).toUpperCase();
 const playerName = decodeURIComponent(params.get('name') || '').trim();
 const isHost     = params.has('host');
+const isPrivate  = params.has('private');
 
-// Redirect back if params are missing
 if (!roomCode || !playerName) location.replace('index.html');
 
 // ─── Core objects ─────────────────────────────────────────────────────────────
@@ -19,12 +20,10 @@ let renderer    = null;
 let myPlayer    = null;
 let gameRunning = false;
 
-// Lobby state
-let lobbyRealPlayers = []; // from Supabase presence
-let lobbyAIPlayers   = []; // { id, name, isAI: true } — managed by host
-let aiInstances      = []; // AIPlayer[]  — only on host
+let lobbyRealPlayers = [];
+let lobbyAIPlayers   = [];
+let aiInstances      = [];
 
-// Input
 const keys = {};
 let lastMoveTime = 0;
 const MOVE_COOLDOWN = 130;
@@ -35,12 +34,43 @@ const $ = id => document.getElementById(id);
 
 function showSection(name) {
   ['lobby', 'game', 'result'].forEach(s => {
-    $(`${s}-section`).classList.toggle('hidden',   s !== name);
-    $(`${s}-section`).classList.toggle('active',   s === name);
+    $(`${s}-section`).classList.toggle('hidden', s !== name);
+    $(`${s}-section`).classList.toggle('active', s === name);
   });
 }
 
+// ─── Room database helpers (public rooms only) ────────────────────────────────
+async function dbRegisterRoom() {
+  if (!isHost || isPrivate) return;
+  await supabase.from('bomberman_rooms').upsert(
+    { code: roomCode, host_name: playerName, player_count: 1, status: 'waiting' },
+    { onConflict: 'code' }
+  );
+}
+
+async function dbUpdatePlayerCount(n) {
+  if (!isHost || isPrivate) return;
+  await supabase.from('bomberman_rooms').update({ player_count: n }).eq('code', roomCode);
+}
+
+async function dbMarkStarted() {
+  if (!isHost || isPrivate) return;
+  await supabase.from('bomberman_rooms').update({ status: 'started' }).eq('code', roomCode);
+}
+
+async function dbDeleteRoom() {
+  if (!isHost || isPrivate) return;
+  await supabase.from('bomberman_rooms').delete().eq('code', roomCode);
+}
+
 // ─── Lobby UI ─────────────────────────────────────────────────────────────────
+function el(tag, cls, text = '') {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text) e.textContent = text;
+  return e;
+}
+
 function renderSlots() {
   const all = [...lobbyRealPlayers, ...lobbyAIPlayers];
 
@@ -55,7 +85,7 @@ function renderSlots() {
       slot.classList.add('slot-filled');
       slot.style.setProperty('--color', PLAYER_COLORS[i]);
 
-      const dot  = el('span', 'slot-dot');
+      const dot   = el('span', 'slot-dot');
       const label = el('span', 'slot-name',
         (p.isAI ? '🤖 ' : '') + p.name + (!p.isAI && p.isHost ? ' 👑' : ''));
       slot.append(dot, label);
@@ -79,21 +109,21 @@ function renderSlots() {
 
   const total    = all.length;
   const canStart = isHost && total >= 2;
-  $('start-btn').classList.toggle('hidden', !canStart);
+
+  // Start button: always visible, disabled when not ready
+  const startBtn = $('start-btn');
+  startBtn.disabled = !canStart;
+
   $('lobby-msg').textContent = isHost
     ? (total >= 2 ? `${total} players ready!` : 'Add 1 more player or bot to start.')
     : 'Waiting for host to start the game…';
 }
 
-function el(tag, cls, text = '') {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text) e.textContent = text;
-  return e;
-}
-
 function updateRoomDisplay() {
   $('room-code-display').textContent = roomCode;
+  // Show private badge if applicable
+  const badge = $('private-badge');
+  if (badge) badge.classList.toggle('hidden', !isPrivate);
 }
 
 // ─── AI management ────────────────────────────────────────────────────────────
@@ -124,6 +154,7 @@ async function startGame() {
   const map         = createMap(Date.now());
   const playerOrder = all.map(p => ({ id: p.id, name: p.name, isAI: !!p.isAI }));
 
+  await dbMarkStarted();
   beginGame(map, playerOrder);
   await net.sendGameStart(map, playerOrder);
 }
@@ -146,7 +177,6 @@ function beginGame(map, playerOrder) {
 
 // ─── In-game network events ───────────────────────────────────────────────────
 function handlePlayerMove({ id, tileX, tileY }) {
-  // Apply moves for any player that isn't me (includes remote AI from host)
   const p = state.players.get(id);
   if (p && id !== net.myId) p.startMove(tileX, tileY, Date.now());
 }
@@ -171,7 +201,7 @@ function handlePowerupCollected({ playerId, tileX, tileY }) {
 function handleGameEnd({ winnerId }) {
   gameRunning = false;
   const winner = winnerId ? state.players.get(winnerId) : null;
-  $('result-title').textContent = winner ? `${winner.name} wins! 🎉` : "It's a draw! 💥";
+  $('result-title').textContent    = winner ? `${winner.name} wins! 🎉` : "It's a draw! 💥";
   $('result-subtitle').textContent = winner
     ? `${winner.name} was the last one standing.`
     : 'Everyone eliminated at the same time.';
@@ -197,12 +227,8 @@ function triggerExplosion(bombId) {
 
   updateHUD();
 
-  // Each human self-reports only their own death
-  if (myPlayer && wasMyPlayerAlive && !myPlayer.alive) {
-    net.sendPlayerDead(net.myId);
-  }
+  if (myPlayer && wasMyPlayerAlive && !myPlayer.alive) net.sendPlayerDead(net.myId);
 
-  // Host also reports AI deaths
   if (isHost) {
     for (const id of justKilled) {
       if (id.startsWith('ai-')) net.sendAnyPlayerDead(id);
@@ -276,7 +302,6 @@ function gameLoop() {
   if (!gameRunning) return;
   const now = Date.now();
 
-  // AI updates (host only)
   if (isHost) {
     for (const ai of aiInstances) {
       ai.update(state, now, net, (bombId, delay) => {
@@ -294,8 +319,8 @@ function gameLoop() {
 
 // ─── HUD ──────────────────────────────────────────────────────────────────────
 function updateHUD() {
-  const el = $('player-stats');
-  el.innerHTML = '';
+  const hudEl = $('player-stats');
+  hudEl.innerHTML = '';
   let i = 0;
   for (const [, p] of state.players) {
     const chip = document.createElement('div');
@@ -306,7 +331,7 @@ function updateHUD() {
       <span class="chip-name">${p.name}</span>
       <span class="chip-info">🔥${p.bombRange} 💣${p.maxBombs}</span>
     `;
-    el.appendChild(chip);
+    hudEl.appendChild(chip);
   }
 }
 
@@ -314,11 +339,13 @@ function updateHUD() {
 async function init() {
   updateRoomDisplay();
   showSection('lobby');
+  renderSlots(); // initial render (empty, but shows structure)
 
-  // Wire callbacks before joining
   net.onPresenceUpdate = players => {
     lobbyRealPlayers = players;
     renderSlots();
+    // Host keeps room player count in sync
+    if (isHost && !isPrivate) dbUpdatePlayerCount(players.length);
   };
   net.onAIUpdate = ({ aiPlayers }) => {
     lobbyAIPlayers = aiPlayers ?? [];
@@ -331,11 +358,25 @@ async function init() {
   net.onPowerupCollected  = handlePowerupCollected;
   net.onGameEnd           = handleGameEnd;
 
-  await net.joinRoom(roomCode, playerName, isHost);
+  try {
+    await net.joinRoom(roomCode, playerName, isHost);
+  } catch (e) {
+    $('lobby-msg').textContent = `Connection failed: ${e.message}. Try refreshing.`;
+    return;
+  }
 
-  // Force-refresh lobby list (presence sync may have fired during async join)
+  // Register public room in database
+  if (isHost) await dbRegisterRoom();
+
+  // Immediate presence refresh (sync may have already fired during join)
   lobbyRealPlayers = net.getPresencePlayers();
   renderSlots();
+
+  // Delayed fallback: presence state sometimes lags one round-trip behind track()
+  setTimeout(() => {
+    lobbyRealPlayers = net.getPresencePlayers();
+    renderSlots();
+  }, 800);
 }
 
 // ─── Button wiring ────────────────────────────────────────────────────────────
@@ -343,30 +384,30 @@ $('start-btn').addEventListener('click', startGame);
 
 $('back-btn').addEventListener('click', async e => {
   e.preventDefault();
+  await dbDeleteRoom();
   await net.leave();
   location.href = 'index.html';
 });
 
 $('play-again-btn').addEventListener('click', () => {
-  // Reset game state and go back to lobby view in-page (same channel)
   gameRunning = false;
   showSection('lobby');
   renderSlots();
-  // Re-send AI list to sync (host may want to add/remove bots)
-  if (isHost) net.sendAIUpdate(lobbyAIPlayers);
+  if (isHost) {
+    net.sendAIUpdate(lobbyAIPlayers);
+    // Re-open room in database if public
+    if (!isPrivate) dbRegisterRoom();
+  }
 });
 
-// Copy room code
 $('room-code-display').addEventListener('click', async () => {
-  const code = roomCode;
   try {
-    await navigator.clipboard.writeText(code);
+    await navigator.clipboard.writeText(roomCode);
     $('room-code-display').textContent = 'Copied!';
-    setTimeout(() => { $('room-code-display').textContent = code; }, 1200);
+    setTimeout(() => { $('room-code-display').textContent = roomCode; }, 1200);
   } catch { /* ignore */ }
 });
 
-// Copy invite link
 $('copy-link-btn').addEventListener('click', async () => {
   const url = `${location.origin}/games/bomberman/?room=${roomCode}`;
   const btn = $('copy-link-btn');
@@ -375,6 +416,14 @@ $('copy-link-btn').addEventListener('click', async () => {
     btn.textContent = '✓ Copied!';
     setTimeout(() => { btn.textContent = '🔗 Copy link'; }, 1800);
   } catch { /* ignore */ }
+});
+
+// Clean up room if tab/window closes
+window.addEventListener('beforeunload', () => {
+  if (isHost && !isPrivate) {
+    // Best-effort delete on page unload (may not always fire)
+    navigator.sendBeacon && supabase.from('bomberman_rooms').delete().eq('code', roomCode);
+  }
 });
 
 init();
