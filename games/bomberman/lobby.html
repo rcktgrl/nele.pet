@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bomber — Arcade</title>
+  <link rel="stylesheet" href="styles/bomberman.css">
+</head>
+<body>
+
+  <!-- ── Lobby ──────────────────────────────────────────────────────────────── -->
+  <div id="lobby-section" class="screen active">
+
+    <div class="lobby-top">
+      <h1>💣 Bomber</h1>
+      <div class="room-header">
+        <div class="room-code-block">
+          <span class="room-label">Room</span>
+          <span id="room-code-display" class="room-code" title="Click to copy"></span>
+        </div>
+        <button id="copy-link-btn" class="btn small">🔗 Copy link</button>
+      </div>
+    </div>
+
+    <div id="player-slots" class="player-slots">
+      <div class="slot" id="slot-0"></div>
+      <div class="slot" id="slot-1"></div>
+      <div class="slot" id="slot-2"></div>
+      <div class="slot" id="slot-3"></div>
+    </div>
+
+    <p id="lobby-msg" class="lobby-msg"></p>
+
+    <div class="lobby-actions">
+      <button id="back-btn" class="btn">← Back</button>
+      <button id="start-btn" class="btn primary hidden">▶ Start Game</button>
+    </div>
+  </div>
+
+  <!-- ── Game ───────────────────────────────────────────────────────────────── -->
+  <div id="game-section" class="screen hidden">
+    <div id="game-header">
+      <div id="player-stats"></div>
+    </div>
+    <canvas id="game-canvas"></canvas>
+    <p class="controls-hint">WASD / Arrows — move &nbsp;·&nbsp; Space / F — bomb</p>
+  </div>
+
+  <!-- ── Result ─────────────────────────────────────────────────────────────── -->
+  <div id="result-section" class="screen hidden">
+    <h2 id="result-title"></h2>
+    <p id="result-subtitle"></p>
+    <button id="play-again-btn" class="btn primary">Play Again</button>
+    <a href="/games/" class="btn">← Back to Arcade</a>
+  </div>
+
+  <script type="module" src="scripts/lobby.js"></script>
+</body>
+</html>
