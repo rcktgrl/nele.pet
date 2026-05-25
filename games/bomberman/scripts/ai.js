@@ -60,6 +60,10 @@ export class AIPlayer {
 
     this.preferredDir = DIRS[Math.floor(Math.random() * 4)];
     this.stickCount   = 0;
+
+    // Tracks tiles that recently exploded; value is the timestamp after which
+    // the tile is considered safe again (explosion end + 100–500 ms randomised).
+    this.recentlyExplodedTiles = new Map(); // 'x,y' → safeAt (ms)
   }
 
   #isTileWalkable(state, x, y, dangerSet, skipDanger = false) {
@@ -138,6 +142,29 @@ export class AIPlayer {
     if (!me || !me.alive) return;
 
     const dangerSet = buildDangerSet(state);
+
+    // ── Post-explosion cooldown ──────────────────────────────────────────────
+    // For every active explosion tile, register a randomised cool-down window
+    // that starts when the explosion visual ends (dieAt) and lasts an extra
+    // 100–500 ms so the AI doesn't immediately walk back through hot tiles.
+    for (const exp of state.explosions) {
+      for (const t of exp.tiles) {
+        const key = `${t.x},${t.y}`;
+        if (!this.recentlyExplodedTiles.has(key)) {
+          const safeAt = exp.dieAt + 100 + Math.random() * 400;
+          this.recentlyExplodedTiles.set(key, safeAt);
+        }
+      }
+    }
+    // Purge expired entries; keep still-cooling tiles in the danger set.
+    for (const [key, safeAt] of this.recentlyExplodedTiles) {
+      if (safeAt <= now) {
+        this.recentlyExplodedTiles.delete(key);
+      } else {
+        dangerSet.add(key);
+      }
+    }
+
     const inDanger  = dangerSet.has(`${me.tileX},${me.tileY}`);
 
     if (
