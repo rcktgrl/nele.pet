@@ -2,7 +2,7 @@ import { GameState, createMap, BOMB_FUSE, PLAYER_COLORS } from './game.js';
 import { Renderer }  from './renderer.js';
 import { Network }   from './network.js';
 import { AIPlayer, BOT_NAMES } from './ai.js';
-import { supabase }  from './supabase.js';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase.js';
 
 // ─── URL params ───────────────────────────────────────────────────────────────
 const params     = new URLSearchParams(location.search);
@@ -20,6 +20,7 @@ let renderer    = null;
 let myPlayer    = null;
 let gameRunning = false;
 
+// lobbyRealPlayers = other real humans (self is always pinned separately)
 let lobbyRealPlayers = [];
 let lobbyAIPlayers   = [];
 let aiInstances      = [];
@@ -37,6 +38,18 @@ function showSection(name) {
     $(`${s}-section`).classList.toggle('hidden', s !== name);
     $(`${s}-section`).classList.toggle('active', s === name);
   });
+}
+
+// ─── Player list helpers ──────────────────────────────────────────────────────
+// Self is always slot 0 — built from URL params, not from presence.
+function selfEntry() {
+  return { id: net.myId, name: playerName, isHost, isAI: false };
+}
+
+// Full ordered list: [self, ...other humans, ...bots]
+function allPlayers() {
+  const others = lobbyRealPlayers.filter(p => p.id !== net.myId);
+  return [selfEntry(), ...others, ...lobbyAIPlayers];
 }
 
 // ─── Room database helpers (public rooms only) ────────────────────────────────
@@ -59,8 +72,26 @@ async function dbMarkStarted() {
 }
 
 async function dbDeleteRoom() {
-  if (!isHost || isPrivate) return;
+  if (isPrivate) return;
   await supabase.from('bomberman_rooms').delete().eq('code', roomCode);
+}
+
+// keepalive DELETE — fires reliably on page unload even if JS engine is tearing down
+function dbDeleteRoomBeacon() {
+  if (isPrivate) return;
+  try {
+    fetch(
+      `${SUPABASE_URL}/rest/v1/bomberman_rooms?code=eq.${roomCode}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        keepalive: true,
+      }
+    );
+  } catch { /* ignore */ }
 }
 
 // ─── Lobby UI ─────────────────────────────────────────────────────────────────
@@ -72,7 +103,7 @@ function el(tag, cls, text = '') {
 }
 
 function renderSlots() {
-  const all = [...lobbyRealPlayers, ...lobbyAIPlayers];
+  const all = allPlayers();
 
   for (let i = 0; i < 4; i++) {
     const slot = $(`slot-${i}`);
@@ -110,10 +141,7 @@ function renderSlots() {
   const total    = all.length;
   const canStart = isHost && total >= 2;
 
-  // Start button: always visible, disabled when not ready
-  const startBtn = $('start-btn');
-  startBtn.disabled = !canStart;
-
+  $('start-btn').disabled = !canStart;
   $('lobby-msg').textContent = isHost
     ? (total >= 2 ? `${total} players ready!` : 'Add 1 more player or bot to start.')
     : 'Waiting for host to start the game…';
@@ -121,15 +149,13 @@ function renderSlots() {
 
 function updateRoomDisplay() {
   $('room-code-display').textContent = roomCode;
-  // Show private badge if applicable
   const badge = $('private-badge');
   if (badge) badge.classList.toggle('hidden', !isPrivate);
 }
 
 // ─── AI management ────────────────────────────────────────────────────────────
 function addAI() {
-  const total = lobbyRealPlayers.length + lobbyAIPlayers.length;
-  if (total >= 4) return;
+  if (allPlayers().length >= 4) return;
   const idx  = aiInstances.length;
   const id   = `ai-${crypto.randomUUID()}`;
   const name = BOT_NAMES[idx % BOT_NAMES.length];
@@ -148,7 +174,7 @@ function removeAI(id) {
 
 // ─── Game start ───────────────────────────────────────────────────────────────
 async function startGame() {
-  const all = [...lobbyRealPlayers, ...lobbyAIPlayers];
+  const all = allPlayers();
   if (all.length < 2) return;
 
   const map         = createMap(Date.now());
@@ -288,7 +314,7 @@ function placeBomb() {
   for (const [, b] of state.bombs) {
     if (b.tileX === tileX && b.tileY === tileY) return;
   }
-  const bombId    = crypto.randomUUID();
+  const bombId     = crypto.randomUUID();
   const explodesAt = Date.now() + BOMB_FUSE;
   state.addBomb(bombId, net.myId, tileX, tileY, explodesAt, myPlayer.bombRange);
   net.sendBomb(bombId, tileX, tileY, explodesAt, myPlayer.bombRange);
@@ -339,18 +365,71 @@ function updateHUD() {
 async function init() {
   updateRoomDisplay();
   showSection('lobby');
-  renderSlots(); // initial render (empty, but shows structure)
+  renderSlots(); // self is always shown immediately
 
+  // ── Presence: full sync (e.g. after reconnect) ─────────────────────────────
   net.onPresenceUpdate = players => {
-    lobbyRealPlayers = players;
+    lobbyRealPlayers = players.filter(p => p.id !== net.myId);
     renderSlots();
-    // Host keeps room player count in sync
-    if (isHost && !isPrivate) dbUpdatePlayerCount(players.length);
+    if (isHost && !isPrivate) {
+      dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+    }
   };
-  net.onAIUpdate = ({ aiPlayers }) => {
-    lobbyAIPlayers = aiPlayers ?? [];
-    renderSlots();
+
+  // ── Presence: incremental join — newPresences is more reliable than presenceState() ──
+  net.onPresenceJoin = newPlayers => {
+    let changed = false;
+    for (const p of newPlayers) {
+      if (p.id !== net.myId && !lobbyRealPlayers.find(r => r.id === p.id)) {
+        lobbyRealPlayers.push(p);
+        changed = true;
+      }
+    }
+    if (changed) {
+      renderSlots();
+      if (isHost && !isPrivate) {
+        dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+      }
+    }
   };
+
+  // ── Presence: incremental leave ────────────────────────────────────────────
+  net.onPresenceLeave = leftPlayers => {
+    const leftIds = new Set(leftPlayers.map(p => p.id));
+    const before  = lobbyRealPlayers.length;
+    lobbyRealPlayers = lobbyRealPlayers.filter(p => !leftIds.has(p.id));
+
+    // If the host disconnected and we're still in lobby, clean up the room
+    const hostLeft = leftPlayers.some(p => p.isHost);
+    if (hostLeft && !isHost && !gameRunning) {
+      dbDeleteRoom();
+    }
+
+    if (lobbyRealPlayers.length !== before) {
+      renderSlots();
+      if (isHost && !isPrivate) {
+        dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+      }
+    }
+  };
+
+  // ── Broadcast hello: redundancy so joiners always appear even if presence lags ──
+  net.onPlayerHello = ({ id, name, isHost: pIsHost }) => {
+    if (id === net.myId) return; // self (broadcast: self=false so shouldn't fire, but guard anyway)
+    if (!lobbyRealPlayers.find(p => p.id === id)) {
+      lobbyRealPlayers.push({ id, name, isHost: pIsHost });
+      renderSlots();
+      if (isHost && !isPrivate) {
+        dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+      }
+    }
+    // Host: resend current AI list so the new joiner sees existing bots
+    if (isHost && lobbyAIPlayers.length > 0) {
+      net.sendAIUpdate(lobbyAIPlayers);
+    }
+  };
+
+  net.onAIUpdate          = ({ aiPlayers }) => { lobbyAIPlayers = aiPlayers ?? []; renderSlots(); };
   net.onGameStart         = handleGameStart;
   net.onPlayerMove        = handlePlayerMove;
   net.onBombPlaced        = handleBombPlaced;
@@ -368,13 +447,13 @@ async function init() {
   // Register public room in database
   if (isHost) await dbRegisterRoom();
 
-  // Immediate presence refresh (sync may have already fired during join)
-  lobbyRealPlayers = net.getPresencePlayers();
+  // Immediate presence refresh (filter out self — we pin ourselves)
+  lobbyRealPlayers = net.getPresencePlayers().filter(p => p.id !== net.myId);
   renderSlots();
 
   // Delayed fallback: presence state sometimes lags one round-trip behind track()
   setTimeout(() => {
-    lobbyRealPlayers = net.getPresencePlayers();
+    lobbyRealPlayers = net.getPresencePlayers().filter(p => p.id !== net.myId);
     renderSlots();
   }, 800);
 }
@@ -418,12 +497,11 @@ $('copy-link-btn').addEventListener('click', async () => {
   } catch { /* ignore */ }
 });
 
-// Clean up room if tab/window closes
+// Clean up room when the page closes — keepalive fetch fires even as JS tears down
 window.addEventListener('beforeunload', () => {
-  if (isHost && !isPrivate) {
-    // Best-effort delete on page unload (may not always fire)
-    navigator.sendBeacon && supabase.from('bomberman_rooms').delete().eq('code', roomCode);
-  }
+  // Any client closing while in the lobby should try to clean up the room
+  // (especially the host, but also non-host clients detect host departure above)
+  if (isHost) dbDeleteRoomBeacon();
 });
 
 init();
