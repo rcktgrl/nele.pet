@@ -24,6 +24,10 @@ const screens = {
   result: $('result-screen'),
 };
 
+// Pre-fill room code when arriving via invite link (?room=CODE)
+const _inviteCode = new URLSearchParams(location.search).get('room');
+if (_inviteCode) $('room-code-input').value = _inviteCode.slice(0, 4).toUpperCase();
+
 function showScreen(name) {
   Object.entries(screens).forEach(([k, el]) => {
     el.classList.toggle('hidden', k !== name);
@@ -76,6 +80,10 @@ async function createRoom() {
   $('room-section').classList.add('hidden');
   $('waiting-section').classList.remove('hidden');
   setStatus('');
+  // Update URL so the host can share the link directly
+  history.pushState({}, '', `?room=${code}`);
+  // Presence sync may have fired during the async join — force refresh the list
+  updateLobbyList(net.getPresencePlayers());
 }
 
 async function joinRoom() {
@@ -91,6 +99,8 @@ async function joinRoom() {
   $('room-section').classList.add('hidden');
   $('waiting-section').classList.remove('hidden');
   setStatus('');
+  history.pushState({}, '', `?room=${code}`);
+  updateLobbyList(net.getPresencePlayers());
 }
 
 // ─── Network callbacks ────────────────────────────────────────────────────────
@@ -146,7 +156,7 @@ function handlePlayerMove({ id, tileX, tileY }) {
 function handleBombPlaced({ bombId, placedBy, tileX, tileY, explodesAt, range }) {
   state.addBomb(bombId, placedBy, tileX, tileY, explodesAt, range);
   const delay = Math.max(0, explodesAt - Date.now());
-  setTimeout(() => triggerExplosion(bombId, placedBy), delay);
+  setTimeout(() => triggerExplosion(bombId), delay);
 }
 
 function handlePlayerDead({ id }) {
@@ -193,32 +203,39 @@ function placeBomb() {
   state.addBomb(bombId, net.myId, tileX, tileY, explodesAt, range);
   net.sendBomb(bombId, tileX, tileY, explodesAt, range);
 
-  setTimeout(() => triggerExplosion(bombId, net.myId), BOMB_FUSE);
+  setTimeout(() => triggerExplosion(bombId), BOMB_FUSE);
 
   bombCooldown = true;
   setTimeout(() => { bombCooldown = false; }, 300);
 }
 
-function triggerExplosion(bombId, placedBy) {
+function triggerExplosion(bombId) {
   const result = state.explodeBomb(bombId);
   if (!result) return;
 
+  // Track whether MY player was alive before this explosion
+  const wasMyPlayerAlive = myPlayer?.alive ?? false;
+
+  // Mark all killed players dead locally (every client does this for
+  // smooth rendering — it's deterministic given the same map + bomb data)
+  for (const [, player] of state.players) {
+    if (!player.alive) continue;
+    if (state.isPlayerInExplosion(player)) player.alive = false;
+  }
+
   updateHUD();
 
-  // Check if any alive player is on explosion tiles
-  for (const [id, player] of state.players) {
-    if (!player.alive) continue;
-    if (state.isPlayerInExplosion(player)) {
-      player.alive = false;
-      updateHUD();
-      net.sendPlayerDead(id);
-      checkGameEnd();
-    }
+  // Each player self-reports only their OWN death to avoid duplicate broadcasts
+  if (myPlayer && wasMyPlayerAlive && !myPlayer.alive) {
+    net.sendPlayerDead(net.myId);
   }
+
+  // Host is the authority on game-end (after updating local state)
+  if (isHost) checkGameEnd();
 }
 
 function checkGameEnd() {
-  if (!isHost) return; // only host determines game end
+  if (!isHost || !gameRunning) return; // only host; guard against duplicate calls
   const alive = state.getAlivePlayers();
   if (alive.length <= 1) {
     const winner = alive[0] ?? null;
@@ -321,5 +338,16 @@ $('room-code-display').addEventListener('click', async () => {
     await navigator.clipboard.writeText(code);
     $('room-code-display').textContent = 'Copied!';
     setTimeout(() => { $('room-code-display').textContent = code; }, 1200);
+  } catch { /* ignore */ }
+});
+
+// Copy full invite link
+$('copy-link-btn').addEventListener('click', async () => {
+  const url = `${location.origin}/games/bomberman/?room=${net.roomCode}`;
+  const btn = $('copy-link-btn');
+  try {
+    await navigator.clipboard.writeText(url);
+    btn.textContent = '✓ Link copied!';
+    setTimeout(() => { btn.textContent = '🔗 Copy invite link'; }, 1800);
   } catch { /* ignore */ }
 });
