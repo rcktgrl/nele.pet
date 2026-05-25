@@ -463,7 +463,7 @@ $('start-btn').addEventListener('click', startGame);
 
 $('back-btn').addEventListener('click', async e => {
   e.preventDefault();
-  await dbDeleteRoom();
+  if (isHost) await dbDeleteRoom();
   await net.leave();
   location.href = 'index.html';
 });

@@ -151,6 +151,7 @@ export class GameState {
     const bomb = this.bombs.get(bombId);
     if (!bomb || bomb.exploded) return null;
     bomb.exploded = true;
+    this.bombs.delete(bombId); // remove so it no longer blocks movement
 
     const center = { x: bomb.tileX, y: bomb.tileY };
     const tiles  = [center];
