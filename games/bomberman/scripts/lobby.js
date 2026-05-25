@@ -1,4 +1,4 @@
-import { GameState, createMap, BOMB_FUSE, BOMB_TYPE, PLAYER_COLORS, COMPLEXITY_GRIDS, GRID_W, GRID_H, TILE } from './game.js';
+import { GameState, createMap, BOMB_FUSE, BOMB_TYPE, PLAYER_COLORS, COMPLEXITY_GRIDS, GRID_W, GRID_H } from './game.js';
 import { Renderer }  from './renderer.js';
 import { Network }   from './network.js';
 import { AIPlayer, BOT_NAMES } from './ai.js';
@@ -29,14 +29,47 @@ let lobbyRealPlayers = [];
 let lobbyAIPlayers   = [];
 let aiInstances      = [];
 
-const keys = {};
 let lastMoveTime = 0;
 const MOVE_COOLDOWN = 130;
 let bombCooldown = false;
 
-// Fixed viewport size (15×13 tiles)
-const VP_W = 15 * 40;
-const VP_H = 13 * 40;
+// ─── Scoring ──────────────────────────────────────────────────────────────────
+// sessionScores persists across "play again" within the same lobby session
+const sessionScores = new Map(); // id → {name, score}
+// gameScores resets each game
+let gameScores = new Map();      // id → score
+// order of deaths within a game (first element = first to die = last place)
+let deathOrder = [];
+
+function awardGameScore(playerId, pts) {
+  if (!playerId || pts <= 0) return;
+  gameScores.set(playerId, (gameScores.get(playerId) || 0) + pts);
+}
+
+function finalizeGameScores(winnerId) {
+  const totalPlayers = state.players.size;
+
+  // Placement bonuses
+  if (winnerId) awardGameScore(winnerId, 100);
+
+  // 2nd place: 50pts (only when more than 2 players)
+  if (totalPlayers > 2 && deathOrder.length >= 1) {
+    awardGameScore(deathOrder[deathOrder.length - 1], 50);
+  }
+
+  // 3rd place: 10pts (only when 4 players)
+  if (totalPlayers >= 4 && deathOrder.length >= 2) {
+    awardGameScore(deathOrder[deathOrder.length - 2], 10);
+  }
+
+  // Merge this game's scores into the session totals
+  for (const [id, pts] of gameScores) {
+    const player = state.players.get(id);
+    const name   = player?.name || id;
+    const prev   = sessionScores.get(id) || { name, score: 0 };
+    sessionScores.set(id, { name, score: prev.score + pts });
+  }
+}
 
 // ─── Sound init on first user gesture ────────────────────────────────────────
 window.addEventListener('keydown',  () => sound.init(), { once: true });
@@ -101,6 +134,105 @@ function dbDeleteRoomBeacon() {
   } catch { /* ignore */ }
 }
 
+// ─── Global leaderboard (Supabase) ───────────────────────────────────────────
+// Requires a table: bomberman_scores (id uuid PK, player_name text UNIQUE, score int, last_updated timestamptz)
+async function saveGlobalScore(name, pts) {
+  if (pts <= 0) return;
+  try {
+    const { data: existing } = await supabase
+      .from('bomberman_scores')
+      .select('id, score')
+      .eq('player_name', name)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('bomberman_scores')
+        .update({ score: existing.score + pts, last_updated: new Date().toISOString() })
+        .eq('id', existing.id);
+    } else {
+      await supabase
+        .from('bomberman_scores')
+        .insert({ player_name: name, score: pts });
+    }
+  } catch (e) {
+    console.warn('Could not save global score:', e);
+  }
+}
+
+async function loadGlobalLeaderboard() {
+  try {
+    const { data, error } = await supabase
+      .from('bomberman_scores')
+      .select('player_name, score')
+      .order('score', { ascending: false })
+      .limit(10);
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.warn('Could not load global leaderboard:', e);
+    return [];
+  }
+}
+
+function renderGlobalLeaderboard(rows) {
+  const el = $('global-lb-content');
+  if (!el) return;
+  if (!rows.length) { el.textContent = 'No scores yet.'; return; }
+  el.innerHTML = '';
+  const table = document.createElement('table');
+  table.className = 'lb-table';
+  const medals = ['🥇', '🥈', '🥉'];
+  rows.forEach((row, i) => {
+    const tr  = document.createElement('tr');
+    const prefix = medals[i] ?? `${i + 1}.`;
+    tr.innerHTML = `<td>${prefix} ${row.player_name}</td><td>${row.score.toLocaleString()} pts</td>`;
+    table.appendChild(tr);
+  });
+  el.appendChild(table);
+}
+
+function renderSessionLeaderboard() {
+  const el    = $('session-lb');
+  const table = $('session-lb-table');
+  if (!el || !table) return;
+
+  const entries = [...sessionScores.values()].sort((a, b) => b.score - a.score);
+  if (!entries.length) { el.classList.add('hidden'); return; }
+
+  el.classList.remove('hidden');
+  table.innerHTML = '';
+  const medals = ['🥇', '🥈', '🥉'];
+  entries.forEach((e, i) => {
+    const tr     = document.createElement('tr');
+    const prefix = medals[i] ?? `${i + 1}.`;
+    tr.innerHTML = `<td>${prefix} ${e.name}</td><td>${e.score.toLocaleString()} pts</td>`;
+    table.appendChild(tr);
+  });
+}
+
+function renderResultScores() {
+  const el = $('result-scores');
+  if (!el) return;
+  const entries = [...gameScores.entries()]
+    .map(([id, score]) => {
+      const p = state.players.get(id);
+      return { name: p?.name || id, score };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  if (!entries.length) { el.innerHTML = ''; return; }
+
+  const medals = ['🥇', '🥈', '🥉'];
+  let html = '<table class="lb-table">';
+  entries.forEach((e, i) => {
+    const prefix = medals[i] ?? `${i + 1}.`;
+    html += `<tr><td>${prefix} ${e.name}</td><td>${e.score.toLocaleString()} pts</td></tr>`;
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
 // ─── Lobby UI ─────────────────────────────────────────────────────────────────
 function el(tag, cls, text = '') {
   const e = document.createElement(tag);
@@ -135,7 +267,6 @@ function renderSlots() {
           rm.addEventListener('click', e => { e.stopPropagation(); removeAI(p.id); });
           slot.appendChild(rm);
         } else if (p.id !== net.myId) {
-          // Kick real player
           const kick = el('button', 'slot-remove', '✕ Kick');
           kick.title = 'Kick player';
           kick.addEventListener('click', e => { e.stopPropagation(); kickPlayer(p.id); });
@@ -197,7 +328,7 @@ function kickPlayer(id) {
 async function startGame() {
   const all = allPlayers();
   if (all.length < 2) return;
-  sound.init(); // ensure context alive on this gesture
+  sound.init();
 
   const { w: gridW, h: gridH } = COMPLEXITY_GRIDS[complexity] ?? COMPLEXITY_GRIDS[0];
   const map         = createMap(Date.now(), gridW, gridH);
@@ -219,8 +350,15 @@ function beginGame(map, playerOrder, gridW = GRID_W, gridH = GRID_H) {
   gameRunning  = true;
   lastMoveTime = 0;
   bombCooldown = false;
+
+  // Reset per-game scoring state
+  gameScores = new Map();
+  deathOrder = [];
+  for (const [id] of state.players) gameScores.set(id, 0);
+
   showSection('game');
   updateHUD();
+  sound.setBricksDestroyed(0); // reset BPM to 100 before start()
   sound.start();
   requestAnimationFrame(gameLoop);
 }
@@ -253,30 +391,50 @@ function handlePowerupCollected({ playerId, tileX, tileY }) {
 }
 
 function handleGameEnd({ winnerId }) {
+  if (!gameRunning) return; // guard against double-calls
   gameRunning = false;
   sound.stop();
+
+  // Compute placement bonuses and merge into session scores
+  finalizeGameScores(winnerId);
+
+  // Update leaderboards
+  renderSessionLeaderboard();
+  const myScore = gameScores.get(net.myId) || 0;
+  saveGlobalScore(playerName, myScore); // async, non-blocking
+
   const winner = winnerId ? state.players.get(winnerId) : null;
   $('result-title').textContent    = winner ? `${winner.name} wins! 🎉` : "It's a draw! 💥";
   $('result-subtitle').textContent = winner
     ? `${winner.name} was the last one standing.`
     : 'Everyone eliminated at the same time.';
+
+  renderResultScores();
   showSection('result');
 }
 
 // ─── Explosion & death ────────────────────────────────────────────────────────
 function triggerExplosion(bombId) {
   if (!state.bombs.has(bombId)) return;
+
+  // Capture owner before explodeBomb deletes the bomb entry
+  const bomb        = state.bombs.get(bombId);
+  const bombOwner   = bomb?.placedBy ?? null;
+
   const result = state.explodeBomb(bombId);
   if (!result) return;
 
-  // Sound
   sound.playExplosion();
-  // Update music tempo
   sound.setBricksDestroyed(state.bricksDestroyed);
+
+  // 1pt per brick destroyed (not awarded for box bombs which create bricks)
+  if (!result.isBox && bombOwner) {
+    awardGameScore(bombOwner, result.destroyedBricks.length);
+  }
 
   // Napalm: schedule fire spread
   if (result.isNapalm) {
-    const tiles = [...result.tiles];
+    const tiles      = [...result.tiles];
     const spreadDieAt = Date.now() + 2000;
     setTimeout(() => { if (gameRunning) state.spreadNapalm(tiles, spreadDieAt); }, 600);
   }
@@ -289,6 +447,14 @@ function triggerExplosion(bombId) {
     if (state.isPlayerInExplosion(player) || state.isPlayerInFire(player)) {
       player.alive = false;
       justKilled.add(id);
+      deathOrder.push(id); // track order for placement scoring
+    }
+  }
+
+  // 20pts per player killed, but not for self-kills
+  if (bombOwner) {
+    for (const killedId of justKilled) {
+      if (killedId !== bombOwner) awardGameScore(bombOwner, 20);
     }
   }
 
@@ -310,6 +476,7 @@ function checkNapalmDeaths() {
     if (state.isPlayerInFire(player)) {
       player.alive = false;
       justKilled.add(id);
+      deathOrder.push(id);
     }
   }
   if (justKilled.size === 0) return;
@@ -350,46 +517,27 @@ function updateCamera() {
   renderer.cameraY = camY;
 }
 
-// ─── Input ────────────────────────────────────────────────────────────────────
-window.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (!gameRunning) return;
-  if (e.code === 'Space' || e.code === 'KeyF') { e.preventDefault(); placeBomb(); }
-  if (e.code === 'KeyQ') { e.preventDefault(); placeSpecialBomb(); }
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
-});
-window.addEventListener('keyup', e => { keys[e.code] = false; });
-
-function handleMovement(now) {
+// ─── Movement (one tile per press) ───────────────────────────────────────────
+function doMove(dx, dy, now) {
   if (!myPlayer?.alive) return;
-  if (now - lastMoveTime < MOVE_COOLDOWN) return;
-
-  let dx = 0, dy = 0;
-  if      (keys['ArrowUp']    || keys['KeyW']) dy = -1;
-  else if (keys['ArrowDown']  || keys['KeyS']) dy =  1;
-  else if (keys['ArrowLeft']  || keys['KeyA']) dx = -1;
-  else if (keys['ArrowRight'] || keys['KeyD']) dx =  1;
-  if (dx === 0 && dy === 0) return;
 
   const nx = myPlayer.tileX + dx;
   const ny = myPlayer.tileY + dy;
 
-  // ── Bomb kick ──────────────────────────────────────────────────────────────
+  // Bomb kick
   const bombAtTarget = state.getBombAt(nx, ny);
   if (bombAtTarget) {
     const kickResult = state.kickBomb(bombAtTarget.id, dx, dy);
     if (kickResult) {
       net.sendBombKick(bombAtTarget.id, kickResult.newTileX, kickResult.newTileY);
       sound.playKick();
-      // Player steps onto the bomb's vacated tile
       myPlayer.startMove(nx, ny, now);
       lastMoveTime = now;
       net.sendMove(nx, ny);
       const pu = state.collectPowerup(net.myId, nx, ny);
       if (pu) { net.sendPowerupCollected(nx, ny); sound.playPowerup(); updateHUD(); }
     } else {
-      // Bomb can't slide (wall behind it) — movement blocked
-      lastMoveTime = now;
+      lastMoveTime = now; // blocked — still consume cooldown
     }
     return;
   }
@@ -403,6 +551,66 @@ function handleMovement(now) {
   }
 }
 
+// ─── Keyboard input (one tile per keydown, ignores held-key repeat) ───────────
+window.addEventListener('keydown', e => {
+  if (!gameRunning) return;
+  if (e.repeat) return; // ignore held-key auto-repeat — one tile per physical press
+
+  if (e.code === 'Space' || e.code === 'KeyF') { e.preventDefault(); placeBomb(); return; }
+  if (e.code === 'KeyQ') { e.preventDefault(); placeSpecialBomb(); return; }
+
+  let dx = 0, dy = 0;
+  if      (e.code === 'ArrowUp'    || e.code === 'KeyW') { dy = -1; e.preventDefault(); }
+  else if (e.code === 'ArrowDown'  || e.code === 'KeyS') { dy =  1; e.preventDefault(); }
+  else if (e.code === 'ArrowLeft'  || e.code === 'KeyA') { dx = -1; e.preventDefault(); }
+  else if (e.code === 'ArrowRight' || e.code === 'KeyD') { dx =  1; e.preventDefault(); }
+  else return; // not a game key
+
+  const now = Date.now();
+  if (now - lastMoveTime >= MOVE_COOLDOWN) doMove(dx, dy, now);
+});
+
+// ─── Touch Controls ───────────────────────────────────────────────────────────
+function setupTouchControls() {
+  const addDirBtn = (id, dx, dy) => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (!gameRunning) return;
+      sound.init();
+      const now = Date.now();
+      if (now - lastMoveTime >= MOVE_COOLDOWN) doMove(dx, dy, now);
+    });
+  };
+
+  addDirBtn('touch-up',    0, -1);
+  addDirBtn('touch-down',  0,  1);
+  addDirBtn('touch-left', -1,  0);
+  addDirBtn('touch-right', 1,  0);
+
+  const bombBtn = $('touch-bomb');
+  if (bombBtn) {
+    bombBtn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (!gameRunning) return;
+      sound.init();
+      placeBomb();
+    });
+  }
+
+  const specialBtn = $('touch-special');
+  if (specialBtn) {
+    specialBtn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (!gameRunning) return;
+      sound.init();
+      placeSpecialBomb();
+    });
+  }
+}
+
+// ─── Bomb placement ───────────────────────────────────────────────────────────
 function placeBomb() {
   if (!myPlayer?.alive || myPlayer.activeBombs >= myPlayer.maxBombs || bombCooldown) return;
   const { tileX, tileY } = myPlayer;
@@ -427,6 +635,9 @@ function placeSpecialBomb() {
   myPlayer.specialBomb = null; // consume
   updateHUD();
 
+  // 10pts for using a special bomb
+  awardGameScore(net.myId, 10);
+
   const bombId     = crypto.randomUUID();
   const explodesAt = Date.now() + BOMB_FUSE;
   state.addBomb(bombId, net.myId, tileX, tileY, explodesAt, myPlayer.bombRange, bombTypeStr);
@@ -450,7 +661,6 @@ function gameLoop() {
     }
   }
 
-  handleMovement(now);
   checkNapalmDeaths();
   updateCamera();
 
@@ -465,15 +675,16 @@ function updateHUD() {
   const hudEl = $('player-stats');
   hudEl.innerHTML = '';
   let i = 0;
-  for (const [, p] of state.players) {
+  for (const [id, p] of state.players) {
     const chip = document.createElement('div');
     chip.className = `stat-chip${p.alive ? '' : ' dead'}`;
     chip.style.setProperty('--player-color', PLAYER_COLORS[i++]);
     const sIcon = p.specialBomb === 'napalm' ? ' 🌋' : p.specialBomb === 'box' ? ' 📦' : '';
+    const pts   = gameScores.get(id) || 0;
     chip.innerHTML = `
       <span class="chip-dot"></span>
       <span class="chip-name">${p.name}</span>
-      <span class="chip-info">🔥${p.bombRange} 💣${p.maxBombs}${sIcon}</span>
+      <span class="chip-info">🔥${p.bombRange} 💣${p.maxBombs}${sIcon} ⭐${pts}</span>
     `;
     hudEl.appendChild(chip);
   }
@@ -484,6 +695,10 @@ async function init() {
   updateRoomDisplay();
   showSection('lobby');
   renderSlots();
+  setupTouchControls();
+
+  // Load global leaderboard in background
+  loadGlobalLeaderboard().then(rows => renderGlobalLeaderboard(rows));
 
   // Show complexity selector for host only
   if (isHost) {
@@ -599,6 +814,9 @@ $('play-again-btn').addEventListener('click', () => {
   sound.stop();
   showSection('lobby');
   renderSlots();
+  renderSessionLeaderboard();
+  // Refresh global leaderboard
+  loadGlobalLeaderboard().then(rows => renderGlobalLeaderboard(rows));
   if (isHost) {
     net.sendAIUpdate(lobbyAIPlayers);
     if (!isPrivate) dbRegisterRoom();

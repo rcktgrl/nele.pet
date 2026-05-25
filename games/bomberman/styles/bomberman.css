@@ -363,11 +363,135 @@ input[type="text"]::placeholder { color: #4e4a72; }
 
 .controls-hint { font-size: 0.7rem; color: #4e4a72; text-align: center; letter-spacing: 0.03em; }
 
+/* ─── Leaderboards (lobby section) ─────────────────────────────────────────── */
+.leaderboard {
+  width: 100%;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(167,139,250,0.14);
+  border-radius: 12px;
+  padding: 0.7rem 1rem;
+}
+
+.lb-title {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #5e5a82;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.lb-table tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+.lb-table tr:last-child { border-bottom: none; }
+.lb-table td { padding: 0.27rem 0.3rem; color: #c8c4e8; }
+.lb-table td:last-child {
+  text-align: right;
+  color: #a78bfa;
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* Gold for 1st, silver for 2nd */
+.lb-table tr:first-child td { color: #ffd700; }
+.lb-table tr:nth-child(2) td { color: #c0c0c0; }
+.lb-table tr:first-child td:last-child { color: #ffd700; }
+
+.lb-loading { text-align: center; font-size: 0.78rem; color: #4e4a72; padding: 0.35rem; }
+
+/* ─── Touch controls (game section) ────────────────────────────────────────── */
+#touch-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  width: 100%;
+  max-width: 600px;
+  padding: 0.6rem 0.25rem 0;
+  gap: 1rem;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.touch-dpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.dpad-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.dpad-center {
+  width: 60px;
+  height: 60px;
+}
+
+.touch-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  border: 2px solid rgba(167,139,250,0.4);
+  background: rgba(167,139,250,0.1);
+  color: #c8c4e8;
+  font-size: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transition: background 0.08s, transform 0.05s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  font-family: inherit;
+}
+
+.touch-btn:active { background: rgba(167,139,250,0.32); transform: scale(0.92); }
+
+.touch-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.action-btn { font-size: 1.5rem; }
+
+.touch-label {
+  display: block;
+  font-size: 0.48rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7c78a8;
+  line-height: 1;
+}
+
+.bomb-btn {
+  background: rgba(255,160,0,0.1);
+  border-color: rgba(255,160,0,0.4);
+}
+.bomb-btn:active { background: rgba(255,160,0,0.32); }
+
+.special-btn {
+  background: rgba(105,255,71,0.08);
+  border-color: rgba(105,255,71,0.35);
+}
+.special-btn:active { background: rgba(105,255,71,0.28); }
+
 /* ─── Result screen ────────────────────────────────────────────────────────── */
 #result-section {
   max-width: 380px;
   padding: 3rem 2rem;
   text-align: center;
+  gap: 0.75rem;
 }
 
 #result-title {
@@ -379,4 +503,18 @@ input[type="text"]::placeholder { color: #4e4a72; }
 }
 
 #result-subtitle { color: #7c78a8; font-size: 0.88rem; }
-#result-section .btn { min-width: 160px; }
+
+.result-scores {
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto;
+}
+
+.result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: center;
+  width: 100%;
+}
+.result-actions .btn { min-width: 160px; }
