@@ -292,6 +292,30 @@ input[type="text"]::placeholder { color: #4e4a72; }
 
 .slot-empty-label { color: #2e2c4a; font-size: 1rem; }
 
+/* Complexity selector */
+.complexity-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.82rem;
+  color: #7c78a8;
+  width: 100%;
+}
+.complexity-label { flex-shrink: 0; }
+.complexity-select {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(167,139,250,0.3);
+  border-radius: 6px;
+  padding: 0.28rem 0.6rem;
+  color: #c8c4e8;
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.complexity-select:focus { border-color: #a78bfa; }
+
 .lobby-msg { font-size: 0.82rem; color: #5e5a82; text-align: center; min-height: 1.2em; }
 
 .lobby-actions {
