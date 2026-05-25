@@ -47,6 +47,18 @@
       <button id="start-btn" class="btn primary" disabled>▶ Start Game</button>
     </div>
 
+    <!-- Session leaderboard — hidden until at least one game is played -->
+    <div id="session-lb" class="leaderboard hidden">
+      <div class="lb-title">🏆 Session Scores</div>
+      <table id="session-lb-table" class="lb-table"></table>
+    </div>
+
+    <!-- Global leaderboard — loaded from Supabase -->
+    <div id="global-lb" class="leaderboard">
+      <div class="lb-title">🌐 Global Leaderboard</div>
+      <div id="global-lb-content" class="lb-loading">Loading…</div>
+    </div>
+
   </div>
 
   <!-- ── Game ───────────────────────────────────────────────────────────────── -->
@@ -55,11 +67,32 @@
       <div id="player-stats"></div>
     </div>
     <canvas id="game-canvas"></canvas>
+
+    <!-- Touch controls (works for both touch screens and mouse) -->
+    <div id="touch-controls">
+      <div class="touch-dpad">
+        <div class="dpad-row">
+          <button class="touch-btn dpad-btn" id="touch-up">▲</button>
+        </div>
+        <div class="dpad-row">
+          <button class="touch-btn dpad-btn" id="touch-left">◀</button>
+          <div class="dpad-center"></div>
+          <button class="touch-btn dpad-btn" id="touch-right">▶</button>
+        </div>
+        <div class="dpad-row">
+          <button class="touch-btn dpad-btn" id="touch-down">▼</button>
+        </div>
+      </div>
+      <div class="touch-actions">
+        <button class="touch-btn action-btn special-btn" id="touch-special">⚡<span class="touch-label">Special</span></button>
+        <button class="touch-btn action-btn bomb-btn" id="touch-bomb">💣<span class="touch-label">Bomb</span></button>
+      </div>
+    </div>
+
     <p class="controls-hint">
-      WASD / Arrows — move &nbsp;·&nbsp;
+      WASD / Arrows — 1 tile per press &nbsp;·&nbsp;
       Space / F — bomb &nbsp;·&nbsp;
-      Q — special bomb &nbsp;·&nbsp;
-      walk into a bomb to kick it
+      Q — special bomb
     </p>
   </div>
 
@@ -67,8 +100,11 @@
   <div id="result-section" class="screen hidden">
     <h2 id="result-title"></h2>
     <p id="result-subtitle"></p>
-    <button id="play-again-btn" class="btn primary">Play Again</button>
-    <a href="/games/" class="btn">← Back to Arcade</a>
+    <div id="result-scores" class="result-scores"></div>
+    <div class="result-actions">
+      <button id="play-again-btn" class="btn primary">Play Again</button>
+      <a href="/games/" class="btn">← Back to Arcade</a>
+    </div>
   </div>
 
   <script type="module" src="scripts/lobby.js"></script>

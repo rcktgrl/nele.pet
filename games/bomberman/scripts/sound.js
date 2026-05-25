@@ -45,6 +45,7 @@ export class SoundSystem {
     const ctx = this._ensureCtx();
     if (this._running) return;
     this._running  = true;
+    this._bpm      = 100; // always reset tempo for a new game
     this._step     = 0;
     this._nextStep = ctx.currentTime + 0.05;
     this._schedule();
