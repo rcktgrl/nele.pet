@@ -12,27 +12,41 @@
     <h1>💣 Bomber</h1>
     <p class="subtitle">Online Multiplayer · 2–4 Players</p>
 
-    <!-- Shown when an arcade account is detected -->
-    <div id="account-row" class="hidden account-row">
-      <p class="account-label">Playing as</p>
-      <p class="account-name" id="account-display"></p>
+    <!-- Logged-in account display -->
+    <div id="account-display" class="account-display hidden">
+      Playing as <strong id="account-name"></strong>
     </div>
 
-    <!-- Shown when no arcade account is found -->
-    <div id="guest-row">
-      <input id="guest-name-input" type="text" placeholder="Your name" maxlength="16" autocomplete="off">
+    <!-- Shown when no arcade account detected -->
+    <div id="login-prompt" class="login-prompt hidden">
+      <p>Log in to the <a href="/games/">Arcade</a> to play.</p>
     </div>
 
+    <!-- Create / join -->
     <div class="room-actions">
-      <button id="create-btn" class="btn primary">Create Room</button>
-      <div class="divider">— or join an existing one —</div>
+      <div class="create-row">
+        <button id="create-btn" class="btn primary" disabled>Create Room</button>
+        <label class="private-label">
+          <input type="checkbox" id="private-toggle">
+          <span>Private</span>
+        </label>
+      </div>
+      <div class="divider">— or join with a code —</div>
       <div class="join-row">
         <input id="room-code-input" type="text" placeholder="XXXX" maxlength="4" autocomplete="off">
-        <button id="join-btn" class="btn">Join</button>
+        <button id="join-btn" class="btn" disabled>Join</button>
       </div>
     </div>
 
     <p id="status-msg"></p>
+
+    <!-- Open rooms list -->
+    <div class="rooms-section">
+      <h3 class="rooms-title">Open Rooms</h3>
+      <div id="room-list" class="room-list">
+        <p class="rooms-empty">Loading…</p>
+      </div>
+    </div>
 
     <p class="subtitle">WASD / ↑↓←→ to move &nbsp;·&nbsp; Space or F to place bomb</p>
     <a href="/games/" class="btn">← Back to Arcade</a>

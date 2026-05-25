@@ -17,6 +17,7 @@
         <div class="room-code-block">
           <span class="room-label">Room</span>
           <span id="room-code-display" class="room-code" title="Click to copy"></span>
+          <span id="private-badge" class="private-badge hidden">Private</span>
         </div>
         <button id="copy-link-btn" class="btn small">🔗 Copy link</button>
       </div>
@@ -33,8 +34,9 @@
 
     <div class="lobby-actions">
       <button id="back-btn" class="btn">← Back</button>
-      <button id="start-btn" class="btn primary hidden">▶ Start Game</button>
+      <button id="start-btn" class="btn primary" disabled>▶ Start Game</button>
     </div>
+
   </div>
 
   <!-- ── Game ───────────────────────────────────────────────────────────────── -->
