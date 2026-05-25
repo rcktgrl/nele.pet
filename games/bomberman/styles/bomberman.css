@@ -14,17 +14,11 @@ body {
 
 /* ─── Screens ──────────────────────────────────────────────────────────────── */
 .screen { display: none; width: 100%; }
-.screen.active, .screen:not(.hidden) { display: flex; flex-direction: column; align-items: center; }
+.screen.active { display: flex; flex-direction: column; align-items: center; gap: 1.1rem; }
 .screen.hidden { display: none !important; }
 
-/* ─── Lobby ────────────────────────────────────────────────────────────────── */
-#lobby {
-  max-width: 440px;
-  padding: 2.5rem 2rem;
-  gap: 1.2rem;
-}
-
-#lobby h1 {
+/* ─── Shared elements ──────────────────────────────────────────────────────── */
+h1 {
   font-size: 2.6rem;
   letter-spacing: 0.04em;
   background: linear-gradient(135deg, #a78bfa, #60a5fa, #34d399);
@@ -72,6 +66,7 @@ input[type="text"]::placeholder { color: #4e4a72; }
   cursor: pointer;
   text-decoration: none;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
 }
 .btn:hover { background: rgba(167,139,250,0.12); border-color: #a78bfa; }
 .btn.primary {
@@ -81,93 +76,182 @@ input[type="text"]::placeholder { color: #4e4a72; }
   font-weight: 700;
 }
 .btn.primary:hover { box-shadow: 0 0 18px rgba(124,58,237,0.5); }
+.btn.small { padding: 0.35rem 0.9rem; font-size: 0.82rem; }
 .btn.hidden { display: none !important; }
 
-#name-section { width: 100%; }
+/* ─── Home screen ──────────────────────────────────────────────────────────── */
+#home-section {
+  max-width: 420px;
+  padding: 2.5rem 2rem;
+}
 
-#room-section { width: 100%; display: flex; flex-direction: column; gap: 0.75rem; }
+/* Arcade account display */
+.account-row { text-align: center; }
+.account-label { font-size: 0.78rem; color: #7c78a8; letter-spacing: 0.05em; }
+.account-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #a78bfa;
+  margin-top: 0.15rem;
+}
+
+.hidden { display: none !important; }
+
+/* Room actions */
+.room-actions { width: 100%; display: flex; flex-direction: column; gap: 0.75rem; }
 
 .divider {
   text-align: center;
   color: #4e4a72;
   font-size: 0.8rem;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
 }
 
 .join-row { display: flex; gap: 0.5rem; }
 .join-row input { flex: 1; text-transform: uppercase; letter-spacing: 0.15em; }
-.join-row .btn { white-space: nowrap; }
 
-/* Waiting section */
-#waiting-section {
-  width: 100%;
+#status-msg { min-height: 1.2em; font-size: 0.85rem; text-align: center; color: #aaa8cc; }
+
+/* ─── Lobby screen ─────────────────────────────────────────────────────────── */
+#lobby-section {
+  max-width: 500px;
+  padding: 2rem 1.5rem;
+}
+
+.lobby-top { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 0.8rem; }
+
+/* Room header */
+.room-header {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(167,139,250,0.2);
   border-radius: 12px;
-  padding: 1.2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-}
-#waiting-section.hidden { display: none; }
-
-#room-display {
-  text-align: center;
-  font-size: 0.85rem;
-  color: #7c78a8;
-  letter-spacing: 0.04em;
+  padding: 0.6rem 1rem;
+  width: 100%;
 }
 
-#room-code-display {
-  display: inline-block;
-  font-size: 1.8rem;
+.room-code-block { display: flex; align-items: baseline; gap: 0.5rem; flex: 1; }
+.room-label { font-size: 0.75rem; color: #7c78a8; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.room-code {
+  font-size: 1.6rem;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.18em;
   color: #a78bfa;
   cursor: pointer;
-  padding: 0.1em 0.4em;
-  border-radius: 6px;
+  border-radius: 4px;
+  padding: 0 0.2em;
   transition: background 0.15s;
 }
-#room-code-display:hover { background: rgba(167,139,250,0.12); }
+.room-code:hover { background: rgba(167,139,250,0.12); }
 
-#player-list { display: flex; flex-direction: column; gap: 0.4rem; min-height: 2rem; }
+/* Player slots */
+.player-slots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
 
-.player-entry {
+.slot {
+  height: 62px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.9rem;
-  padding: 0.3rem 0.5rem;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.04);
+  padding: 0 0.9rem;
+  transition: background 0.15s, border-color 0.15s;
+  position: relative;
+  overflow: hidden;
 }
-.player-dot {
-  width: 10px; height: 10px;
+
+.slot-filled {
+  background: rgba(255,255,255,0.05);
+  border: 1.5px solid var(--color, #a78bfa);
+  box-shadow: 0 0 12px -4px var(--color, #a78bfa);
+}
+
+.slot-empty {
+  border: 2px dashed rgba(167,139,250,0.35);
+  background: rgba(167,139,250,0.03);
+  justify-content: center;
+  cursor: pointer;
+}
+.slot-empty:hover { background: rgba(167,139,250,0.08); border-color: #a78bfa; }
+
+.slot-passive {
+  border: 2px dashed rgba(255,255,255,0.08);
+  justify-content: center;
+}
+
+.slot-dot {
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
+  background: var(--color, #888);
+  box-shadow: 0 0 6px var(--color, #888);
   flex-shrink: 0;
-  box-shadow: 0 0 6px currentColor;
 }
 
-#waiting-msg { text-align: center; font-size: 0.8rem; color: #5e5a82; }
+.slot-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #e2dff8;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-#status-msg { min-height: 1.2em; font-size: 0.85rem; text-align: center; }
+.slot-remove {
+  background: rgba(255,70,70,0.15);
+  border: 1px solid rgba(255,70,70,0.3);
+  color: #ff7070;
+  border-radius: 6px;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.slot-remove:hover { background: rgba(255,70,70,0.3); }
+
+.slot-add-btn {
+  background: none;
+  border: none;
+  color: #7c78a8;
+  font-family: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: color 0.15s;
+}
+.slot-empty:hover .slot-add-btn { color: #a78bfa; }
+
+.slot-empty-label { color: #3a3860; font-size: 1rem; }
+
+/* Lobby footer */
+.lobby-msg { font-size: 0.82rem; color: #5e5a82; text-align: center; min-height: 1.2em; }
+
+.lobby-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  width: 100%;
+}
+.lobby-actions .btn { flex: 1; }
 
 /* ─── Game screen ──────────────────────────────────────────────────────────── */
-#game-screen {
+#game-section {
   flex-direction: column;
   align-items: center;
   gap: 0.6rem;
   padding: 1rem;
 }
 
-#game-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
-  width: 100%;
-}
+#game-header { display: flex; justify-content: center; width: 100%; }
 
 #player-stats {
   display: flex;
@@ -182,23 +266,19 @@ input[type="text"]::placeholder { color: #4e4a72; }
   gap: 0.35rem;
   padding: 0.25rem 0.6rem;
   border-radius: 20px;
-  border: 1px solid var(--player-color);
+  border: 1px solid var(--player-color, #888);
   font-size: 0.78rem;
   background: rgba(255,255,255,0.04);
   transition: opacity 0.3s;
 }
-.stat-chip.dead {
-  opacity: 0.35;
-  text-decoration: line-through;
-  filter: grayscale(0.7);
-}
+.stat-chip.dead { opacity: 0.3; text-decoration: line-through; filter: grayscale(0.8); }
 .chip-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: var(--player-color);
-  box-shadow: 0 0 5px var(--player-color);
+  background: var(--player-color, #888);
+  box-shadow: 0 0 5px var(--player-color, #888);
 }
-.chip-name { font-weight: 700; color: var(--player-color); }
+.chip-name { font-weight: 700; color: var(--player-color, #fff); }
 .chip-info { color: #7c78a8; font-size: 0.72rem; }
 
 #game-canvas {
@@ -209,18 +289,12 @@ input[type="text"]::placeholder { color: #4e4a72; }
   max-width: 100%;
 }
 
-.controls-hint {
-  font-size: 0.72rem;
-  color: #4e4a72;
-  text-align: center;
-  letter-spacing: 0.03em;
-}
+.controls-hint { font-size: 0.72rem; color: #4e4a72; text-align: center; letter-spacing: 0.03em; }
 
 /* ─── Result screen ────────────────────────────────────────────────────────── */
-#result-screen {
+#result-section {
   max-width: 380px;
   padding: 3rem 2rem;
-  gap: 1rem;
   text-align: center;
 }
 
@@ -233,5 +307,4 @@ input[type="text"]::placeholder { color: #4e4a72; }
 }
 
 #result-subtitle { color: #7c78a8; font-size: 0.9rem; }
-
-#result-screen .btn { min-width: 160px; }
+#result-section .btn { min-width: 160px; }

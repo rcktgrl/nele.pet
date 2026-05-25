@@ -6,18 +6,15 @@ export class Network {
     this.myId     = crypto.randomUUID();
     this.roomCode = null;
 
-    // Callbacks (set by main.js before joining)
+    // Callbacks — set before joinRoom()
     this.onPresenceUpdate    = null;
+    this.onAIUpdate          = null;   // { aiPlayers }
     this.onGameStart         = null;
     this.onPlayerMove        = null;
     this.onBombPlaced        = null;
     this.onPlayerDead        = null;
     this.onPowerupCollected  = null;
     this.onGameEnd           = null;
-  }
-
-  generateRoomCode() {
-    return Math.random().toString(36).slice(2, 6).toUpperCase();
   }
 
   async joinRoom(roomCode, playerName, isHost) {
@@ -30,19 +27,19 @@ export class Network {
       },
     });
 
-    // Presence ─ track who's in the lobby
+    // Presence — lobby player list
     this.channel.on('presence', { event: 'sync' }, () => {
       if (this.onPresenceUpdate) {
-        const state   = this.channel.presenceState();
-        const players = Object.values(state).flat();
+        const players = Object.values(this.channel.presenceState()).flat();
         this.onPresenceUpdate(players);
       }
     });
 
-    // Broadcast events ─ game messages
+    // Broadcast events
     const on = (event, cb) =>
-      this.channel.on('broadcast', { event }, ({ payload }) => cb && cb(payload));
+      this.channel.on('broadcast', { event }, ({ payload }) => cb?.(payload));
 
+    on('ai_update',         p => this.onAIUpdate?.(p));
     on('game_start',        p => this.onGameStart?.(p));
     on('player_move',       p => this.onPlayerMove?.(p));
     on('bomb_placed',       p => this.onBombPlaced?.(p));
@@ -61,11 +58,18 @@ export class Network {
     });
   }
 
-  // ── Senders ────────────────────────────────────────────────────────────────
+  // ── Private send helper ────────────────────────────────────────────────────
   #send(event, payload) {
     return this.channel?.send({ type: 'broadcast', event, payload });
   }
 
+  // ── Lobby ──────────────────────────────────────────────────────────────────
+  /** Host broadcasts current AI player list to sync all lobby UIs */
+  sendAIUpdate(aiPlayers) {
+    return this.#send('ai_update', { aiPlayers });
+  }
+
+  // ── Game — my own player ───────────────────────────────────────────────────
   sendGameStart(map, playerOrder) {
     return this.#send('game_start', { map, playerOrder });
   }
@@ -90,6 +94,23 @@ export class Network {
     return this.#send('game_end', { winnerId });
   }
 
+  // ── Game — AI / any player (host only) ────────────────────────────────────
+  /** Broadcast a move on behalf of any player id (used for AI) */
+  sendAnyMove(id, tileX, tileY) {
+    return this.#send('player_move', { id, tileX, tileY });
+  }
+
+  /** Broadcast a bomb placement on behalf of any player id (used for AI) */
+  sendAnyBomb(bombId, placedBy, tileX, tileY, explodesAt, range) {
+    return this.#send('bomb_placed', { bombId, placedBy, tileX, tileY, explodesAt, range });
+  }
+
+  /** Broadcast death on behalf of any player id (used for AI) */
+  sendAnyPlayerDead(id) {
+    return this.#send('player_dead', { id });
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
   getPresencePlayers() {
     if (!this.channel) return [];
     return Object.values(this.channel.presenceState()).flat();
