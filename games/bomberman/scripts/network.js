@@ -7,17 +7,19 @@ export class Network {
     this.roomCode = null;
 
     // Callbacks — set before joinRoom()
-    this.onPresenceUpdate    = null;   // full-state refresh (sync event)
-    this.onPresenceJoin      = null;   // incremental: array of new presences
-    this.onPresenceLeave     = null;   // incremental: array of left presences
-    this.onPlayerHello       = null;   // broadcast-based hello (redundancy)
+    this.onPresenceUpdate    = null;
+    this.onPresenceJoin      = null;
+    this.onPresenceLeave     = null;
+    this.onPlayerHello       = null;
     this.onAIUpdate          = null;
     this.onGameStart         = null;
     this.onPlayerMove        = null;
     this.onBombPlaced        = null;
+    this.onBombKick          = null;
     this.onPlayerDead        = null;
     this.onPowerupCollected  = null;
     this.onGameEnd           = null;
+    this.onPlayerKick        = null;
   }
 
   async joinRoom(roomCode, playerName, isHost) {
@@ -31,16 +33,13 @@ export class Network {
     });
 
     // ── Presence ──────────────────────────────────────────────────────────────
-    // sync: full state snapshot (e.g. after reconnect)
     this.channel.on('presence', { event: 'sync' }, () => {
       if (!this.onPresenceUpdate) return;
       const players = Object.values(this.channel.presenceState()).flat();
       this.onPresenceUpdate(players);
     });
 
-    // join: use newPresences directly — more reliable than re-reading presenceState()
-    // which may not yet include the new entry at callback time
-    this.channel.on('presence', { event: 'join' }, ({ key, newPresences }) => {
+    this.channel.on('presence', { event: 'join' }, ({ newPresences }) => {
       const joined = newPresences.flat();
       if (this.onPresenceJoin) {
         this.onPresenceJoin(joined);
@@ -50,8 +49,7 @@ export class Network {
       }
     });
 
-    // leave: use leftPresences directly
-    this.channel.on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+    this.channel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
       const left = leftPresences.flat();
       if (this.onPresenceLeave) {
         this.onPresenceLeave(left);
@@ -70,9 +68,11 @@ export class Network {
     on('game_start',        p => this.onGameStart?.(p));
     on('player_move',       p => this.onPlayerMove?.(p));
     on('bomb_placed',       p => this.onBombPlaced?.(p));
+    on('bomb_kick',         p => this.onBombKick?.(p));
     on('player_dead',       p => this.onPlayerDead?.(p));
     on('powerup_collected', p => this.onPowerupCollected?.(p));
     on('game_end',          p => this.onGameEnd?.(p));
+    on('player_kick',       p => this.onPlayerKick?.(p));
 
     // ── Subscribe then track presence ──────────────────────────────────────────
     await new Promise((resolve, reject) => {
@@ -83,7 +83,6 @@ export class Network {
           } catch (e) {
             console.warn('presence track failed:', e);
           }
-          // Also announce via broadcast — presence can lag, this is instant
           this.#send('player_hello', { id: this.myId, name: playerName, isHost });
           resolve();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -93,7 +92,6 @@ export class Network {
     });
   }
 
-  // ── Private send helper ──────────────────────────────────────────────────────
   #send(event, payload) {
     return this.channel?.send({ type: 'broadcast', event, payload });
   }
@@ -103,17 +101,25 @@ export class Network {
     return this.#send('ai_update', { aiPlayers });
   }
 
-  // ── Game — my own player ─────────────────────────────────────────────────────
-  sendGameStart(map, playerOrder) {
-    return this.#send('game_start', { map, playerOrder });
+  sendPlayerKick(targetId) {
+    return this.#send('player_kick', { targetId });
+  }
+
+  // ── Game ─────────────────────────────────────────────────────────────────────
+  sendGameStart(map, playerOrder, gridW, gridH) {
+    return this.#send('game_start', { map, playerOrder, gridW, gridH });
   }
 
   sendMove(tileX, tileY) {
     return this.#send('player_move', { id: this.myId, tileX, tileY });
   }
 
-  sendBomb(bombId, tileX, tileY, explodesAt, range) {
-    return this.#send('bomb_placed', { bombId, placedBy: this.myId, tileX, tileY, explodesAt, range });
+  sendBomb(bombId, tileX, tileY, explodesAt, range, type = 'normal') {
+    return this.#send('bomb_placed', { bombId, placedBy: this.myId, tileX, tileY, explodesAt, range, type });
+  }
+
+  sendBombKick(bombId, newTileX, newTileY) {
+    return this.#send('bomb_kick', { bombId, newTileX, newTileY });
   }
 
   sendPlayerDead(id) {
@@ -128,13 +134,13 @@ export class Network {
     return this.#send('game_end', { winnerId });
   }
 
-  // ── Game — AI / any player (host only) ───────────────────────────────────────
+  // ── Host-only (AI / any player) ───────────────────────────────────────────────
   sendAnyMove(id, tileX, tileY) {
     return this.#send('player_move', { id, tileX, tileY });
   }
 
-  sendAnyBomb(bombId, placedBy, tileX, tileY, explodesAt, range) {
-    return this.#send('bomb_placed', { bombId, placedBy, tileX, tileY, explodesAt, range });
+  sendAnyBomb(bombId, placedBy, tileX, tileY, explodesAt, range, type = 'normal') {
+    return this.#send('bomb_placed', { bombId, placedBy, tileX, tileY, explodesAt, range, type });
   }
 
   sendAnyPlayerDead(id) {

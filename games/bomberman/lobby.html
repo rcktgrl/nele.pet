@@ -30,6 +30,16 @@
       <div class="slot" id="slot-3"></div>
     </div>
 
+    <!-- Complexity selector — shown only to host via JS -->
+    <div id="complexity-row" class="complexity-row hidden">
+      <span class="complexity-label">🗺 Map size:</span>
+      <select id="complexity-select" class="complexity-select">
+        <option value="0">Normal · 15×13</option>
+        <option value="1">Large · 21×17</option>
+        <option value="2">Huge · 27×21</option>
+      </select>
+    </div>
+
     <p id="lobby-msg" class="lobby-msg"></p>
 
     <div class="lobby-actions">
@@ -45,7 +55,12 @@
       <div id="player-stats"></div>
     </div>
     <canvas id="game-canvas"></canvas>
-    <p class="controls-hint">WASD / Arrows — move &nbsp;·&nbsp; Space / F — bomb</p>
+    <p class="controls-hint">
+      WASD / Arrows — move &nbsp;·&nbsp;
+      Space / F — bomb &nbsp;·&nbsp;
+      Q — special bomb &nbsp;·&nbsp;
+      walk into a bomb to kick it
+    </p>
   </div>
 
   <!-- ── Result ─────────────────────────────────────────────────────────────── -->

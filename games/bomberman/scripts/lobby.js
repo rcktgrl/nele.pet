@@ -1,7 +1,8 @@
-import { GameState, createMap, BOMB_FUSE, PLAYER_COLORS } from './game.js';
+import { GameState, createMap, BOMB_FUSE, BOMB_TYPE, PLAYER_COLORS, COMPLEXITY_GRIDS, GRID_W, GRID_H, TILE } from './game.js';
 import { Renderer }  from './renderer.js';
 import { Network }   from './network.js';
 import { AIPlayer, BOT_NAMES } from './ai.js';
+import { SoundSystem } from './sound.js';
 import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase.js';
 
 // ─── URL params ───────────────────────────────────────────────────────────────
@@ -16,11 +17,14 @@ if (!roomCode || !playerName) location.replace('index.html');
 // ─── Core objects ─────────────────────────────────────────────────────────────
 const net   = new Network();
 const state = new GameState();
+const sound = new SoundSystem();
 let renderer    = null;
 let myPlayer    = null;
 let gameRunning = false;
 
-// lobbyRealPlayers = other real humans (self is always pinned separately)
+// Complexity (host only): 0=Normal, 1=Large, 2=Huge
+let complexity = 0;
+
 let lobbyRealPlayers = [];
 let lobbyAIPlayers   = [];
 let aiInstances      = [];
@@ -29,6 +33,15 @@ const keys = {};
 let lastMoveTime = 0;
 const MOVE_COOLDOWN = 130;
 let bombCooldown = false;
+
+// Fixed viewport size (15×13 tiles)
+const VP_W = 15 * 40;
+const VP_H = 13 * 40;
+
+// ─── Sound init on first user gesture ────────────────────────────────────────
+window.addEventListener('keydown',  () => sound.init(), { once: true });
+window.addEventListener('click',    () => sound.init(), { once: true });
+window.addEventListener('touchend', () => sound.init(), { once: true });
 
 // ─── DOM helpers ──────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -41,18 +54,16 @@ function showSection(name) {
 }
 
 // ─── Player list helpers ──────────────────────────────────────────────────────
-// Self is always slot 0 — built from URL params, not from presence.
 function selfEntry() {
   return { id: net.myId, name: playerName, isHost, isAI: false };
 }
 
-// Full ordered list: [self, ...other humans, ...bots]
 function allPlayers() {
   const others = lobbyRealPlayers.filter(p => p.id !== net.myId);
   return [selfEntry(), ...others, ...lobbyAIPlayers];
 }
 
-// ─── Room database helpers (public rooms only) ────────────────────────────────
+// ─── Room database helpers ────────────────────────────────────────────────────
 async function dbRegisterRoom() {
   if (!isHost || isPrivate) return;
   await supabase.from('bomberman_rooms').upsert(
@@ -76,21 +87,17 @@ async function dbDeleteRoom() {
   await supabase.from('bomberman_rooms').delete().eq('code', roomCode);
 }
 
-// keepalive DELETE — fires reliably on page unload even if JS engine is tearing down
 function dbDeleteRoomBeacon() {
   if (isPrivate) return;
   try {
-    fetch(
-      `${SUPABASE_URL}/rest/v1/bomberman_rooms?code=eq.${roomCode}`,
-      {
-        method: 'DELETE',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        keepalive: true,
-      }
-    );
+    fetch(`${SUPABASE_URL}/rest/v1/bomberman_rooms?code=eq.${roomCode}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      keepalive: true,
+    });
   } catch { /* ignore */ }
 }
 
@@ -121,11 +128,19 @@ function renderSlots() {
         (p.isAI ? '🤖 ' : '') + p.name + (!p.isAI && p.isHost ? ' 👑' : ''));
       slot.append(dot, label);
 
-      if (p.isAI && isHost) {
-        const rm = el('button', 'slot-remove', '✕');
-        rm.title = 'Remove bot';
-        rm.addEventListener('click', e => { e.stopPropagation(); removeAI(p.id); });
-        slot.appendChild(rm);
+      if (isHost) {
+        if (p.isAI) {
+          const rm = el('button', 'slot-remove', '✕');
+          rm.title = 'Remove bot';
+          rm.addEventListener('click', e => { e.stopPropagation(); removeAI(p.id); });
+          slot.appendChild(rm);
+        } else if (p.id !== net.myId) {
+          // Kick real player
+          const kick = el('button', 'slot-remove', '✕ Kick');
+          kick.title = 'Kick player';
+          kick.addEventListener('click', e => { e.stopPropagation(); kickPlayer(p.id); });
+          slot.appendChild(kick);
+        }
       }
     } else if (isHost && all.length < 4) {
       slot.classList.add('slot-empty');
@@ -140,7 +155,6 @@ function renderSlots() {
 
   const total    = all.length;
   const canStart = isHost && total >= 2;
-
   $('start-btn').disabled = !canStart;
   $('lobby-msg').textContent = isHost
     ? (total >= 2 ? `${total} players ready!` : 'Add 1 more player or bot to start.')
@@ -172,32 +186,42 @@ function removeAI(id) {
   renderSlots();
 }
 
+function kickPlayer(id) {
+  net.sendPlayerKick(id);
+  lobbyRealPlayers = lobbyRealPlayers.filter(p => p.id !== id);
+  renderSlots();
+  if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+}
+
 // ─── Game start ───────────────────────────────────────────────────────────────
 async function startGame() {
   const all = allPlayers();
   if (all.length < 2) return;
+  sound.init(); // ensure context alive on this gesture
 
-  const map         = createMap(Date.now());
+  const { w: gridW, h: gridH } = COMPLEXITY_GRIDS[complexity] ?? COMPLEXITY_GRIDS[0];
+  const map         = createMap(Date.now(), gridW, gridH);
   const playerOrder = all.map(p => ({ id: p.id, name: p.name, isAI: !!p.isAI }));
 
   await dbMarkStarted();
-  beginGame(map, playerOrder);
-  await net.sendGameStart(map, playerOrder);
+  beginGame(map, playerOrder, gridW, gridH);
+  await net.sendGameStart(map, playerOrder, gridW, gridH);
 }
 
-function handleGameStart({ map, playerOrder }) {
-  beginGame(map, playerOrder);
+function handleGameStart({ map, playerOrder, gridW, gridH }) {
+  beginGame(map, playerOrder, gridW ?? GRID_W, gridH ?? GRID_H);
 }
 
-function beginGame(map, playerOrder) {
-  state.init(map, playerOrder);
-  myPlayer = state.players.get(net.myId);
-  renderer = new Renderer($('game-canvas'));
+function beginGame(map, playerOrder, gridW = GRID_W, gridH = GRID_H) {
+  state.init(map, playerOrder, gridW, gridH);
+  myPlayer     = state.players.get(net.myId);
+  renderer     = new Renderer($('game-canvas'), gridW, gridH);
   gameRunning  = true;
   lastMoveTime = 0;
   bombCooldown = false;
   showSection('game');
   updateHUD();
+  sound.start();
   requestAnimationFrame(gameLoop);
 }
 
@@ -207,10 +231,14 @@ function handlePlayerMove({ id, tileX, tileY }) {
   if (p && id !== net.myId) p.startMove(tileX, tileY, Date.now());
 }
 
-function handleBombPlaced({ bombId, placedBy, tileX, tileY, explodesAt, range }) {
-  state.addBomb(bombId, placedBy, tileX, tileY, explodesAt, range);
+function handleBombPlaced({ bombId, placedBy, tileX, tileY, explodesAt, range, type }) {
+  state.addBomb(bombId, placedBy, tileX, tileY, explodesAt, range, type ?? 'normal');
   const delay = Math.max(0, explodesAt - Date.now());
   setTimeout(() => triggerExplosion(bombId), delay);
+}
+
+function handleBombKick({ bombId, newTileX, newTileY }) {
+  state.moveBomb(bombId, newTileX, newTileY);
 }
 
 function handlePlayerDead({ id }) {
@@ -226,6 +254,7 @@ function handlePowerupCollected({ playerId, tileX, tileY }) {
 
 function handleGameEnd({ winnerId }) {
   gameRunning = false;
+  sound.stop();
   const winner = winnerId ? state.players.get(winnerId) : null;
   $('result-title').textContent    = winner ? `${winner.name} wins! 🎉` : "It's a draw! 💥";
   $('result-subtitle').textContent = winner
@@ -240,21 +269,52 @@ function triggerExplosion(bombId) {
   const result = state.explodeBomb(bombId);
   if (!result) return;
 
+  // Sound
+  sound.playExplosion();
+  // Update music tempo
+  sound.setBricksDestroyed(state.bricksDestroyed);
+
+  // Napalm: schedule fire spread
+  if (result.isNapalm) {
+    const tiles = [...result.tiles];
+    const spreadDieAt = Date.now() + 2000;
+    setTimeout(() => { if (gameRunning) state.spreadNapalm(tiles, spreadDieAt); }, 600);
+  }
+
   const wasMyPlayerAlive = myPlayer?.alive ?? false;
   const justKilled = new Set();
 
   for (const [id, player] of state.players) {
     if (!player.alive) continue;
-    if (state.isPlayerInExplosion(player)) {
+    if (state.isPlayerInExplosion(player) || state.isPlayerInFire(player)) {
       player.alive = false;
       justKilled.add(id);
     }
   }
 
   updateHUD();
-
   if (myPlayer && wasMyPlayerAlive && !myPlayer.alive) net.sendPlayerDead(net.myId);
+  if (isHost) {
+    for (const id of justKilled) {
+      if (id.startsWith('ai-')) net.sendAnyPlayerDead(id);
+    }
+    checkGameEnd();
+  }
+}
 
+/** Continuously check if players walk into napalm fire. */
+function checkNapalmDeaths() {
+  const justKilled = new Set();
+  for (const [id, player] of state.players) {
+    if (!player.alive) continue;
+    if (state.isPlayerInFire(player)) {
+      player.alive = false;
+      justKilled.add(id);
+    }
+  }
+  if (justKilled.size === 0) return;
+  updateHUD();
+  if (myPlayer && justKilled.has(net.myId)) net.sendPlayerDead(net.myId);
   if (isHost) {
     for (const id of justKilled) {
       if (id.startsWith('ai-')) net.sendAnyPlayerDead(id);
@@ -273,16 +333,30 @@ function checkGameEnd() {
   }
 }
 
+// ─── Camera ───────────────────────────────────────────────────────────────────
+function updateCamera() {
+  if (!renderer || !myPlayer) return;
+  const mapPixW = state.gridW * 40;
+  const mapPixH = state.gridH * 40;
+  const vpW     = renderer.canvas.width;
+  const vpH     = renderer.canvas.height;
+
+  let camX = myPlayer.renderX + 20 - vpW / 2;
+  let camY = myPlayer.renderY + 20 - vpH / 2;
+  camX = Math.max(0, Math.min(mapPixW - vpW, camX));
+  camY = Math.max(0, Math.min(mapPixH - vpH, camY));
+
+  renderer.cameraX = camX;
+  renderer.cameraY = camY;
+}
+
 // ─── Input ────────────────────────────────────────────────────────────────────
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
-  if ((e.code === 'Space' || e.code === 'KeyF') && gameRunning) {
-    e.preventDefault();
-    placeBomb();
-  }
-  if (gameRunning && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) {
-    e.preventDefault();
-  }
+  if (!gameRunning) return;
+  if (e.code === 'Space' || e.code === 'KeyF') { e.preventDefault(); placeBomb(); }
+  if (e.code === 'KeyQ') { e.preventDefault(); placeSpecialBomb(); }
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 
@@ -299,28 +373,68 @@ function handleMovement(now) {
 
   const nx = myPlayer.tileX + dx;
   const ny = myPlayer.tileY + dy;
+
+  // ── Bomb kick ──────────────────────────────────────────────────────────────
+  const bombAtTarget = state.getBombAt(nx, ny);
+  if (bombAtTarget) {
+    const kickResult = state.kickBomb(bombAtTarget.id, dx, dy);
+    if (kickResult) {
+      net.sendBombKick(bombAtTarget.id, kickResult.newTileX, kickResult.newTileY);
+      sound.playKick();
+      // Player steps onto the bomb's vacated tile
+      myPlayer.startMove(nx, ny, now);
+      lastMoveTime = now;
+      net.sendMove(nx, ny);
+      const pu = state.collectPowerup(net.myId, nx, ny);
+      if (pu) { net.sendPowerupCollected(nx, ny); sound.playPowerup(); updateHUD(); }
+    } else {
+      // Bomb can't slide (wall behind it) — movement blocked
+      lastMoveTime = now;
+    }
+    return;
+  }
+
   if (state.canMoveTo(nx, ny, net.myId)) {
     myPlayer.startMove(nx, ny, now);
     lastMoveTime = now;
     net.sendMove(nx, ny);
-    const type = state.collectPowerup(net.myId, nx, ny);
-    if (type) { net.sendPowerupCollected(nx, ny); updateHUD(); }
+    const pu = state.collectPowerup(net.myId, nx, ny);
+    if (pu) { net.sendPowerupCollected(nx, ny); sound.playPowerup(); updateHUD(); }
   }
 }
 
 function placeBomb() {
   if (!myPlayer?.alive || myPlayer.activeBombs >= myPlayer.maxBombs || bombCooldown) return;
   const { tileX, tileY } = myPlayer;
-  for (const [, b] of state.bombs) {
-    if (b.tileX === tileX && b.tileY === tileY) return;
-  }
+  if (state.getBombAt(tileX, tileY)) return;
   const bombId     = crypto.randomUUID();
   const explodesAt = Date.now() + BOMB_FUSE;
-  state.addBomb(bombId, net.myId, tileX, tileY, explodesAt, myPlayer.bombRange);
-  net.sendBomb(bombId, tileX, tileY, explodesAt, myPlayer.bombRange);
+  state.addBomb(bombId, net.myId, tileX, tileY, explodesAt, myPlayer.bombRange, BOMB_TYPE.NORMAL);
+  net.sendBomb(bombId, tileX, tileY, explodesAt, myPlayer.bombRange, BOMB_TYPE.NORMAL);
   setTimeout(() => triggerExplosion(bombId), BOMB_FUSE);
   bombCooldown = true;
   setTimeout(() => { bombCooldown = false; }, 300);
+  sound.playBombPlace();
+}
+
+function placeSpecialBomb() {
+  if (!myPlayer?.alive || !myPlayer.specialBomb) return;
+  if (myPlayer.activeBombs >= myPlayer.maxBombs || bombCooldown) return;
+  const { tileX, tileY } = myPlayer;
+  if (state.getBombAt(tileX, tileY)) return;
+
+  const bombTypeStr = myPlayer.specialBomb === 'napalm' ? BOMB_TYPE.NAPALM : BOMB_TYPE.BOX;
+  myPlayer.specialBomb = null; // consume
+  updateHUD();
+
+  const bombId     = crypto.randomUUID();
+  const explodesAt = Date.now() + BOMB_FUSE;
+  state.addBomb(bombId, net.myId, tileX, tileY, explodesAt, myPlayer.bombRange, bombTypeStr);
+  net.sendBomb(bombId, tileX, tileY, explodesAt, myPlayer.bombRange, bombTypeStr);
+  setTimeout(() => triggerExplosion(bombId), BOMB_FUSE);
+  bombCooldown = true;
+  setTimeout(() => { bombCooldown = false; }, 300);
+  sound.playBombPlace();
 }
 
 // ─── Game loop ────────────────────────────────────────────────────────────────
@@ -337,6 +451,9 @@ function gameLoop() {
   }
 
   handleMovement(now);
+  checkNapalmDeaths();
+  updateCamera();
+
   for (const [, p] of state.players) p.updateRender(now);
   state.update();
   renderer.render(state);
@@ -352,10 +469,11 @@ function updateHUD() {
     const chip = document.createElement('div');
     chip.className = `stat-chip${p.alive ? '' : ' dead'}`;
     chip.style.setProperty('--player-color', PLAYER_COLORS[i++]);
+    const sIcon = p.specialBomb === 'napalm' ? ' 🌋' : p.specialBomb === 'box' ? ' 📦' : '';
     chip.innerHTML = `
       <span class="chip-dot"></span>
       <span class="chip-name">${p.name}</span>
-      <span class="chip-info">🔥${p.bombRange} 💣${p.maxBombs}</span>
+      <span class="chip-info">🔥${p.bombRange} 💣${p.maxBombs}${sIcon}</span>
     `;
     hudEl.appendChild(chip);
   }
@@ -365,74 +483,73 @@ function updateHUD() {
 async function init() {
   updateRoomDisplay();
   showSection('lobby');
-  renderSlots(); // self is always shown immediately
+  renderSlots();
 
-  // ── Presence: full sync (e.g. after reconnect) ─────────────────────────────
+  // Show complexity selector for host only
+  if (isHost) {
+    $('complexity-row').classList.remove('hidden');
+    $('complexity-select').addEventListener('change', e => {
+      complexity = parseInt(e.target.value, 10);
+    });
+  }
+
+  // ── Presence handlers ─────────────────────────────────────────────────────
   net.onPresenceUpdate = players => {
     lobbyRealPlayers = players.filter(p => p.id !== net.myId);
     renderSlots();
-    if (isHost && !isPrivate) {
-      dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-    }
+    if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
   };
 
-  // ── Presence: incremental join — newPresences is more reliable than presenceState() ──
   net.onPresenceJoin = newPlayers => {
     let changed = false;
     for (const p of newPlayers) {
       if (p.id !== net.myId && !lobbyRealPlayers.find(r => r.id === p.id)) {
-        lobbyRealPlayers.push(p);
-        changed = true;
+        lobbyRealPlayers.push(p); changed = true;
       }
     }
     if (changed) {
       renderSlots();
-      if (isHost && !isPrivate) {
-        dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-      }
+      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
     }
   };
 
-  // ── Presence: incremental leave ────────────────────────────────────────────
   net.onPresenceLeave = leftPlayers => {
     const leftIds = new Set(leftPlayers.map(p => p.id));
     const before  = lobbyRealPlayers.length;
     lobbyRealPlayers = lobbyRealPlayers.filter(p => !leftIds.has(p.id));
-
-    // If the host disconnected and we're still in lobby, clean up the room
     const hostLeft = leftPlayers.some(p => p.isHost);
-    if (hostLeft && !isHost && !gameRunning) {
-      dbDeleteRoom();
-    }
-
+    if (hostLeft && !isHost && !gameRunning) dbDeleteRoom();
     if (lobbyRealPlayers.length !== before) {
       renderSlots();
-      if (isHost && !isPrivate) {
-        dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-      }
+      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
     }
   };
 
-  // ── Broadcast hello: redundancy so joiners always appear even if presence lags ──
   net.onPlayerHello = ({ id, name, isHost: pIsHost }) => {
-    if (id === net.myId) return; // self (broadcast: self=false so shouldn't fire, but guard anyway)
+    if (id === net.myId) return;
     if (!lobbyRealPlayers.find(p => p.id === id)) {
       lobbyRealPlayers.push({ id, name, isHost: pIsHost });
       renderSlots();
-      if (isHost && !isPrivate) {
-        dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-      }
+      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
     }
-    // Host: resend current AI list so the new joiner sees existing bots
-    if (isHost && lobbyAIPlayers.length > 0) {
-      net.sendAIUpdate(lobbyAIPlayers);
+    if (isHost && lobbyAIPlayers.length > 0) net.sendAIUpdate(lobbyAIPlayers);
+  };
+
+  net.onPlayerKick = ({ targetId }) => {
+    if (targetId === net.myId) {
+      alert('You were kicked from the lobby.');
+      location.href = 'index.html';
+      return;
     }
+    lobbyRealPlayers = lobbyRealPlayers.filter(p => p.id !== targetId);
+    renderSlots();
   };
 
   net.onAIUpdate          = ({ aiPlayers }) => { lobbyAIPlayers = aiPlayers ?? []; renderSlots(); };
   net.onGameStart         = handleGameStart;
   net.onPlayerMove        = handlePlayerMove;
   net.onBombPlaced        = handleBombPlaced;
+  net.onBombKick          = handleBombKick;
   net.onPlayerDead        = handlePlayerDead;
   net.onPowerupCollected  = handlePowerupCollected;
   net.onGameEnd           = handleGameEnd;
@@ -444,18 +561,27 @@ async function init() {
     return;
   }
 
-  // Register public room in database
   if (isHost) await dbRegisterRoom();
 
-  // Immediate presence refresh (filter out self — we pin ourselves)
   lobbyRealPlayers = net.getPresencePlayers().filter(p => p.id !== net.myId);
   renderSlots();
 
-  // Delayed fallback: presence state sometimes lags one round-trip behind track()
   setTimeout(() => {
     lobbyRealPlayers = net.getPresencePlayers().filter(p => p.id !== net.myId);
     renderSlots();
   }, 800);
+
+  // Periodic presence refresh to catch missed leave events
+  setInterval(() => {
+    if (gameRunning) return;
+    const freshIds = new Set(net.getPresencePlayers().map(p => p.id));
+    const before   = lobbyRealPlayers.length;
+    lobbyRealPlayers = lobbyRealPlayers.filter(p => freshIds.has(p.id));
+    if (lobbyRealPlayers.length !== before) {
+      renderSlots();
+      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+    }
+  }, 4000);
 }
 
 // ─── Button wiring ────────────────────────────────────────────────────────────
@@ -470,11 +596,11 @@ $('back-btn').addEventListener('click', async e => {
 
 $('play-again-btn').addEventListener('click', () => {
   gameRunning = false;
+  sound.stop();
   showSection('lobby');
   renderSlots();
   if (isHost) {
     net.sendAIUpdate(lobbyAIPlayers);
-    // Re-open room in database if public
     if (!isPrivate) dbRegisterRoom();
   }
 });
@@ -497,10 +623,7 @@ $('copy-link-btn').addEventListener('click', async () => {
   } catch { /* ignore */ }
 });
 
-// Clean up room when the page closes — keepalive fetch fires even as JS tears down
 window.addEventListener('beforeunload', () => {
-  // Any client closing while in the lobby should try to clean up the room
-  // (especially the host, but also non-host clients detect host departure above)
   if (isHost) dbDeleteRoomBeacon();
 });
 
