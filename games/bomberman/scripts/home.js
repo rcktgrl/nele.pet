@@ -1,4 +1,4 @@
-import { supabase } from './supabase.js';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase.js';
 
 // ─── Arcade account lookup ────────────────────────────────────────────────────
 async function getArcadeUser() {
@@ -36,13 +36,33 @@ function goToLobby(roomCode, playerName, host = false, isPrivate = false) {
   location.href = `lobby.html?${p}`;
 }
 
+// ─── Stale room cleanup ───────────────────────────────────────────────────────
+// Runs on every home-page load. Any room older than 10 min is considered
+// abandoned (host closed tab, connection dropped, etc.) and deleted.
+// Uses keepalive fetch so it fires even if the page is being torn down.
+function cleanupStaleRooms() {
+  const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  fetch(
+    `${SUPABASE_URL}/rest/v1/bomberman_rooms?created_at=lt.${encodeURIComponent(cutoff)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Prefer': 'return=minimal',
+      },
+      keepalive: true,
+    }
+  ).catch(() => { /* best-effort */ });
+}
+
 // ─── Public rooms list ────────────────────────────────────────────────────────
 async function loadRooms() {
   const { data, error } = await supabase
     .from('bomberman_rooms')
     .select('*')
     .eq('status', 'waiting')
-    .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()) // max 30 min old
+    .gte('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString()) // max 10 min old
     .order('created_at', { ascending: false })
     .limit(6);
 
@@ -116,7 +136,8 @@ function subscribeRooms() {
   const inviteRoom = new URLSearchParams(location.search).get('room');
   if (inviteRoom) $('room-code-input').value = inviteRoom.slice(0, 4).toUpperCase();
 
-  // Load public rooms
+  // Sweep for abandoned rooms, then load the fresh list
+  cleanupStaleRooms();
   await loadRooms();
   subscribeRooms();
 })();
