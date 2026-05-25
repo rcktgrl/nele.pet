@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bomber — Arcade</title>
+  <link rel="stylesheet" href="styles/bomberman.css">
+</head>
+<body>
+
+  <!-- ── Lobby ─────────────────────────────────────────────────────────────── -->
+  <div id="lobby" class="screen active">
+    <h1>💣 Bomber</h1>
+    <p class="subtitle">Online Multiplayer · 2–4 Players</p>
+
+    <div id="name-section">
+      <input id="username-input" type="text" placeholder="Your name" maxlength="16" autocomplete="off">
+    </div>
+
+    <div id="room-section">
+      <button id="create-btn" class="btn primary">Create Room</button>
+      <div class="divider">— or join an existing one —</div>
+      <div class="join-row">
+        <input id="room-code-input" type="text" placeholder="XXXX" maxlength="4" autocomplete="off">
+        <button id="join-btn" class="btn">Join Room</button>
+      </div>
+    </div>
+
+    <div id="waiting-section" class="hidden">
+      <div id="room-display">
+        Room code — click to copy:<br>
+        <span id="room-code-display" title="Click to copy"></span>
+      </div>
+      <div id="player-list"></div>
+      <button id="start-btn" class="btn primary hidden">▶ Start Game</button>
+      <p id="waiting-msg"></p>
+    </div>
+
+    <p id="status-msg"></p>
+
+    <p class="subtitle" style="margin-top:0.5rem">
+      WASD / ↑↓←→ to move &nbsp;·&nbsp; Space or F to place bomb
+    </p>
+    <a href="/games/" class="btn" style="margin-top:0.5rem">← Back to Arcade</a>
+  </div>
+
+  <!-- ── Game ──────────────────────────────────────────────────────────────── -->
+  <div id="game-screen" class="screen hidden">
+    <div id="game-header">
+      <div id="player-stats"></div>
+    </div>
+    <canvas id="game-canvas"></canvas>
+    <p class="controls-hint">WASD / Arrows — move &nbsp;·&nbsp; Space / F — bomb</p>
+  </div>
+
+  <!-- ── Result ─────────────────────────────────────────────────────────────── -->
+  <div id="result-screen" class="screen hidden">
+    <h2 id="result-title"></h2>
+    <p id="result-subtitle"></p>
+    <button id="play-again-btn" class="btn primary">Play Again</button>
+    <a href="/games/" class="btn">← Back to Arcade</a>
+  </div>
+
+  <script type="module" src="scripts/main.js"></script>
+</body>
+</html>
