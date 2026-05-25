@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(git push *)",
+            "prompt": "A git push just ran. Use Bash to get the current branch: `git rev-parse --abbrev-ref HEAD`. Then use mcp__github__list_pull_requests (owner: rcktgrl, repo: nele.pet, state: open, head: <branch>) to check whether an open PR already exists for that branch. If one exists, do nothing. If none exists, use mcp__github__create_pull_request to open a PR from that branch into main for owner rcktgrl, repo nele.pet. Use the output of `git log origin/main..HEAD --oneline` to write a concise title and a brief bullet-point body summarising the commits.",
+            "timeout": 60,
+            "statusMessage": "Creating PR…"
+          }
+        ]
+      }
+    ]
+  }
+}
