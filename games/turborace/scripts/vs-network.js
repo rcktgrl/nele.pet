@@ -2,8 +2,9 @@
 import { supabase } from './supabase.js';
 
 /**
- * VsNetwork — real-time 2-player VS racing via Supabase channels.
- * Follows the same presence + broadcast pattern as Bomber's network.js.
+ * VsNetwork — real-time racing via Supabase channels.
+ * Supports up to 4 players (real + AI) using the same
+ * presence + broadcast pattern as Bomber.
  */
 export class VsNetwork {
   constructor() {
@@ -13,16 +14,16 @@ export class VsNetwork {
     this.isHost   = false;
 
     // Callbacks — assign before joinRoom()
-    this.onPresenceUpdate  = null;  // (players[]) called on any join/leave/sync
-    this.onGameConfig      = null;  // ({trackId, carIdx, hostName}) host config pushed to guest
-    this.onGuestReady      = null;  // ({carIdx, guestName}) guest signals ready
-    this.onGameStart       = null;  // () race is starting
+    this.onPresenceUpdate  = null;  // (players[]) any join/leave/sync
+    this.onAIUpdate        = null;  // ({aiPlayers}) host pushed AI list
+    this.onGameConfig      = null;  // ({trackId, hostCarIdx}) host config
+    this.onGuestReady      = null;  // ({id, carIdx}) guest car selection
+    this.onGameStart       = null;  // ({slots, trackId}) race starting
     this.onPosUpdate       = null;  // ({id, x, z, hdg, spd, lap, totalProg})
     this.onPlayerFinished  = null;  // ({id, finTime})
-    this.onPlayerLeft      = null;  // ({id})
+    this.onPlayerKick      = null;  // ({targetId})
   }
 
-  // ── Join / leave ──────────────────────────────────────────────────────────
   async joinRoom(roomCode, playerName, isHost) {
     this.roomCode = roomCode;
     this.isHost   = isHost;
@@ -34,7 +35,6 @@ export class VsNetwork {
       },
     });
 
-    // Presence: who is in the room
     const _presenceChanged = () => {
       if (!this.onPresenceUpdate) return;
       const players = Object.values(this.channel.presenceState()).flat();
@@ -42,23 +42,19 @@ export class VsNetwork {
     };
     this.channel.on('presence', { event: 'sync' },  _presenceChanged);
     this.channel.on('presence', { event: 'join' },  _presenceChanged);
-    this.channel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
-      const left = leftPresences.flat();
-      for (const p of left) this.onPlayerLeft?.({ id: p.id });
-      _presenceChanged();
-    });
+    this.channel.on('presence', { event: 'leave' }, _presenceChanged);
 
-    // Broadcast events
     const on = (event, cb) =>
       this.channel.on('broadcast', { event }, ({ payload }) => cb?.(payload));
 
+    on('ai_update',       p => this.onAIUpdate?.(p));
     on('game_config',     p => this.onGameConfig?.(p));
     on('guest_ready',     p => this.onGuestReady?.(p));
     on('game_start',      p => this.onGameStart?.(p));
     on('pos_update',      p => this.onPosUpdate?.(p));
     on('player_finished', p => this.onPlayerFinished?.(p));
+    on('player_kick',     p => this.onPlayerKick?.(p));
 
-    // Subscribe and track presence
     await new Promise((resolve, reject) => {
       this.channel.subscribe(async status => {
         if (status === 'SUBSCRIBED') {
@@ -82,7 +78,6 @@ export class VsNetwork {
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   getPresencePlayers() {
     if (!this.channel) return [];
     return Object.values(this.channel.presenceState()).flat();
@@ -92,38 +87,49 @@ export class VsNetwork {
     return this.channel?.send({ type: 'broadcast', event, payload });
   }
 
-  // ── Lobby messages ────────────────────────────────────────────────────────
-  /** Host → guest: selected track + car index */
-  sendGameConfig(trackId, carIdx, hostName) {
-    return this.#send('game_config', { trackId, carIdx, hostName });
+  // ── Lobby ────────────────────────────────────────────────────────────────────
+  /** Host → all: updated AI player list */
+  sendAIUpdate(aiPlayers) {
+    return this.#send('ai_update', { aiPlayers });
   }
 
-  /** Guest → host: selected car + ready */
-  sendGuestReady(carIdx, guestName) {
-    return this.#send('guest_ready', { carIdx, guestName });
+  /** Host → guest: current track + host car selection */
+  sendGameConfig(trackId, hostCarIdx) {
+    return this.#send('game_config', { trackId, hostCarIdx });
   }
 
-  /** Host → all: race is starting NOW */
-  sendGameStart() {
-    return this.#send('game_start', {});
+  /** Guest → host: car selection */
+  sendGuestReady(carIdx) {
+    return this.#send('guest_ready', { id: this.myId, carIdx });
   }
 
-  // ── In-race messages ──────────────────────────────────────────────────────
-  /** Frequent position snapshot (~20 Hz) */
-  sendPosUpdate(x, z, hdg, spd, lap, totalProg) {
-    return this.#send('pos_update', {
-      id: this.myId, x, z, hdg, spd, lap, totalProg,
-    });
+  /** Host → all: race start with full slot list */
+  sendGameStart(slots, trackId) {
+    return this.#send('game_start', { slots, trackId });
   }
 
-  /** One-shot: player crossed the finish line */
-  sendPlayerFinished(finTime) {
-    return this.#send('player_finished', { id: this.myId, finTime });
+  /** Host → all: kick a real player */
+  sendPlayerKick(targetId) {
+    return this.#send('player_kick', { targetId });
+  }
+
+  // ── In-race ──────────────────────────────────────────────────────────────────
+  /** Any player (or host for AI) → all: position snapshot ~20 Hz */
+  sendPosUpdate(id, x, z, hdg, spd, lap, totalProg) {
+    return this.#send('pos_update', { id, x, z, hdg, spd, lap, totalProg });
+  }
+
+  /** One-shot: a car finished the race */
+  sendPlayerFinished(id, finTime) {
+    return this.#send('player_finished', { id, finTime });
   }
 }
 
-/** Generate a random 4-character uppercase room code */
+/** Random 4-char uppercase room code */
 export function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   return Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
+
+/** AI bot names */
+export const BOT_NAMES = ['Bot Alpha', 'Bot Beta', 'Bot Gamma', 'Bot Delta'];

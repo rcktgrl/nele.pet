@@ -309,7 +309,7 @@ class Car {
   }
 }
 
-function buildRaceGrid(trackPoints){
+export function buildRaceGrid(trackPoints){
   const n=trackPoints.length;
   if(!n)return Array(5).fill({pos:new THREE.Vector3(0,0,0),hdg:0});
   const grid=[];

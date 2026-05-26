@@ -11,10 +11,11 @@ import {
 } from './leaderboard.js';
 import { clearGhostVisual } from './ghost.js';
 import {
-  getAllTracks, loadEditorTracks, syncEditorTracksFromCloud,
-  loadTracksFromFolder, makeEditableTrackFromGameTrack
+  loadEditorTracks, syncEditorTracksFromCloud,
+  loadTracksFromFolder
 } from './editor.js';
-import { VsNetwork, generateRoomCode } from './vs-network.js';
+import { VsNetwork, generateRoomCode, BOT_NAMES } from './vs-network.js';
+import { getArcadeUser } from './user.js';
 
 // ═══════════════════════════════════════════════════════
 //  SETTINGS
@@ -22,13 +23,12 @@ import { VsNetwork, generateRoomCode } from './vs-network.js';
 export function showSettings(){
   document.getElementById('settingsModal').style.display='block';
 }
-
 export function closeSettings(){
   document.getElementById('settingsModal').style.display='none';
 }
 
 // ═══════════════════════════════════════════════════════
-//  MENU SCREENS
+//  SHARED MENU HELPERS
 // ═══════════════════════════════════════════════════════
 export function showIntro(){
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
@@ -57,20 +57,18 @@ export function showMain(){
   document.getElementById('settingsModal').style.display='none';
   dc.style.display='none';
   const epb=document.getElementById('editorPreviewBanner'); if(epb)epb.style.display='none';
-  const epbtn=document.getElementById('editorPreviewBtn'); if(epbtn)epbtn.textContent='3D PREVIEW';
   stopAudio(); stopMusic();
   disposeCarCardPreviews();
   clearGhostVisual();
-  if(audioReady)startMusic();
-  for(const c of state.allCars)scene.remove(c.mesh);
+  if(audioReady) startMusic();
+  for(const c of state.allCars) scene.remove(c.mesh);
   state.allCars=[]; state.aiCars=[]; state.pCar=null;
   state.vsMode=false;
-  // Clean up VS network if we have one
   if(state.vsNetwork){ state.vsNetwork.leave().catch(()=>{}); state.vsNetwork=null; }
 }
 
 // ═══════════════════════════════════════════════════════
-//  CAR SELECTION
+//  CAR CARD PREVIEWS
 // ═══════════════════════════════════════════════════════
 export function disposeCarCardPreviews(){
   if(state.carCardPreviewRaf){ cancelAnimationFrame(state.carCardPreviewRaf); state.carCardPreviewRaf=0; }
@@ -97,7 +95,7 @@ function renderCarCardPreviews(ts){
   const now=ts||performance.now();
   const dt=Math.min(0.05,Math.max(0.001,(now-state.carCardPreviewLastTime||16)/1000));
   state.carCardPreviewLastTime=now;
-  const scene=state.carCardPreviewScene;
+  const sc=state.carCardPreviewScene;
   const camera=state.carCardPreviewCamera;
   for(const item of state.carCardPreviews){
     if(!item.host.isConnected) continue;
@@ -106,15 +104,15 @@ function renderCarCardPreviews(ts){
     item.spinSpeed+=(((item.selected||item.hovered)?1.9:0)-item.spinSpeed)*Math.min(1,dt*8);
     item.angle+=item.spinSpeed*dt;
     item.model.rotation.y=item.baseYaw+item.angle;
-    const w=Math.max(96,Math.floor(rect.width));
-    const h=Math.max(72,Math.floor(rect.height));
+    const w=Math.max(64,Math.floor(rect.width));
+    const h=Math.max(48,Math.floor(rect.height));
     if(item.canvas.width!==w||item.canvas.height!==h){ item.canvas.width=w; item.canvas.height=h; }
     item.renderer.setSize(w,h,false);
     camera.aspect=w/h;
     camera.updateProjectionMatrix();
-    scene.add(item.model);
-    item.renderer.render(scene,camera);
-    scene.remove(item.model);
+    sc.add(item.model);
+    item.renderer.render(sc,camera);
+    sc.remove(item.model);
   }
   state.carCardPreviewRaf=requestAnimationFrame(renderCarCardPreviews);
 }
@@ -125,6 +123,9 @@ function startCarCardPreviews(){
   state.carCardPreviewRaf=requestAnimationFrame(renderCarCardPreviews);
 }
 
+// ═══════════════════════════════════════════════════════
+//  CAR SELECTION (full-screen)
+// ═══════════════════════════════════════════════════════
 export function showCarSel(){
   if(state.selTrk==null){ showTrkSel(); return; }
   if(state.aiDifficulty==null){ showDiffSel(); return; }
@@ -140,23 +141,19 @@ export function showCarSel(){
   CARS.forEach((c,i)=>{
     const d=document.createElement('div'); d.className='card'+(state.selCar===i?' sel':'');
     const topSpeedKph=Math.round(c.maxSpd*3.6);
-    const topSpeedBarPct=pctForRange(topSpeedKph,speedMinKph,speedMaxKph);
-    const accelBarPct=pctForRange(c.accel,accelMin,accelMax);
-    const handlingPct=Math.round(c.hdl*100);
-    const brakeStat=Math.min(100,Math.round(c.brake*4));
     d.innerHTML=`<canvas class="carCardCanvas" aria-hidden="true"></canvas>
       <h3>${c.name}</h3><p>${c.desc}</p>
-      <div class="stat"><span class="sl">SPEED</span><div class="st"><div class="sf" style="width:${topSpeedBarPct}%"></div></div><span class="sv">${topSpeedKph}</span></div>
-      <div class="stat"><span class="sl">ACCEL</span><div class="st"><div class="sf" style="width:${accelBarPct}%"></div></div><span class="sv">${c.accel.toFixed(1)}</span></div>
-      <div class="stat"><span class="sl">GRIP</span><div class="st"><div class="sf" style="width:${handlingPct}%"></div></div><span class="sv">${handlingPct}%</span></div>
-      <div class="stat"><span class="sl">BRAKES</span><div class="st"><div class="sf" style="width:${brakeStat}%"></div></div><span class="sv">${c.brake}</span></div>
-`;
+      <div class="stat"><span class="sl">SPEED</span><div class="st"><div class="sf" style="width:${pctForRange(topSpeedKph,speedMinKph,speedMaxKph)}%"></div></div><span class="sv">${topSpeedKph}</span></div>
+      <div class="stat"><span class="sl">ACCEL</span><div class="st"><div class="sf" style="width:${pctForRange(c.accel,accelMin,accelMax)}%"></div></div><span class="sv">${c.accel.toFixed(1)}</span></div>
+      <div class="stat"><span class="sl">GRIP</span><div class="st"><div class="sf" style="width:${Math.round(c.hdl*100)}%"></div></div><span class="sv">${Math.round(c.hdl*100)}%</span></div>
+      <div class="stat"><span class="sl">BRAKES</span><div class="st"><div class="sf" style="width:${Math.min(100,Math.round(c.brake*4))}%"></div></div><span class="sv">${c.brake}</span></div>`;
     const canvas=d.querySelector('.carCardCanvas');
     const visual=createCarVisual(c);
     visual.mesh.scale.setScalar(0.72);
     visual.mesh.rotation.x=-0.1;
     visual.mesh.position.set(0,-0.2,0);
-    const preview={host:d,canvas,model:visual.mesh,hovered:false,selected:state.selCar===i,angle:0,spinSpeed:0,baseYaw:-0.55,renderer:new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'low-power'})};
+    const preview={host:d,canvas,model:visual.mesh,hovered:false,selected:state.selCar===i,angle:0,spinSpeed:0,baseYaw:-0.55,
+      renderer:new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'low-power'})};
     preview.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));
     preview.renderer.outputColorSpace=THREE.SRGBColorSpace;
     state.carCardPreviews.push(preview);
@@ -223,7 +220,7 @@ export function drawTrackPreview(canvas,track,color){
   ctx.fillText('S/F',sfx+12,sfz+4);
 }
 
-function buildTrackCards(tracks, container, nextBtnId){
+function buildTrackCards(tracks,container,nextBtnId){
   const COLORS=['#4488ff','#44cc66','#ffaa22','#ff4488','#22ddaa','#dd66ff','#66bbff'];
   container.innerHTML='';
   if(!tracks.length){
@@ -232,20 +229,13 @@ function buildTrackCards(tracks, container, nextBtnId){
   }
   tracks.forEach((t,i)=>{
     const card=document.createElement('div'); card.className='tcard'+(String(state.selTrk)===String(t.id)?' sel':'');
-    const canvas=document.createElement('canvas'); canvas.width=280; canvas.height=230;
-    canvas.style.borderRadius='6px';
+    const canvas=document.createElement('canvas'); canvas.width=280; canvas.height=230; canvas.style.borderRadius='6px';
     const h3=document.createElement('h3'); h3.textContent=t.name;
     const p=document.createElement('p'); p.textContent=t.desc+' · '+t.rw+'m wide'+(t.builtin?'':' · Custom');
     const best=document.createElement('p'); best.className='trackBest'; best.dataset.trackBest=normaliseTrackId(t.id,t.name); best.textContent='Best: loading...';
-    const leaderboardBtn=document.createElement('button');
-    leaderboardBtn.className='btn btn-s trackLbBtn';
-    leaderboardBtn.type='button';
-    leaderboardBtn.textContent='LEADERBOARD';
-    leaderboardBtn.addEventListener('click',async(e)=>{
-      e.stopPropagation();
-      await openTrackLeaderboardModal(t.id,t.name);
-    });
-    card.appendChild(canvas); card.appendChild(h3); card.appendChild(p); card.appendChild(best); card.appendChild(leaderboardBtn);
+    const lb=document.createElement('button'); lb.className='btn btn-s trackLbBtn'; lb.type='button'; lb.textContent='LEADERBOARD';
+    lb.addEventListener('click',async(e)=>{ e.stopPropagation(); await openTrackLeaderboardModal(t.id,t.name); });
+    card.appendChild(canvas); card.appendChild(h3); card.appendChild(p); card.appendChild(best); card.appendChild(lb);
     card.onclick=()=>{
       container.querySelectorAll('.tcard').forEach(x=>x.classList.remove('sel'));
       card.classList.add('sel'); state.selTrk=t.id; document.getElementById(nextBtnId).disabled=false;
@@ -263,10 +253,8 @@ export async function showTrkSel(){
   await loadTracksFromFolder().catch(()=>{});
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sTrk').style.display='flex';
-  document.getElementById('btnNxt').style.display='';
   document.getElementById('btnNxt').disabled=(state.selTrk==null);
-  const tracks=state.folderTracks;
-  await buildTrackCards(tracks,document.getElementById('trkCards'),'btnNxt');
+  await buildTrackCards(state.folderTracks,document.getElementById('trkCards'),'btnNxt');
 }
 
 export function showDiffSel(){
@@ -274,25 +262,13 @@ export function showDiffSel(){
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('sDiff').style.display='flex';
   state.gState='diffSel';
-
-  // Sync difficulty cards with state
   document.querySelectorAll('#diffCards .diffCard').forEach(card=>{
     card.classList.toggle('sel', card.dataset.diff===state.aiDifficulty);
-    card.onclick=()=>{
-      document.querySelectorAll('#diffCards .diffCard').forEach(c=>c.classList.remove('sel'));
-      card.classList.add('sel');
-      state.aiDifficulty=card.dataset.diff;
-    };
+    card.onclick=()=>{ document.querySelectorAll('#diffCards .diffCard').forEach(c=>c.classList.remove('sel')); card.classList.add('sel'); state.aiDifficulty=card.dataset.diff; };
   });
-
-  // Sync opponent mode cards with state
   document.querySelectorAll('#oppCards .diffCard').forEach(card=>{
     card.classList.toggle('sel', card.dataset.opp===state.opponentMode);
-    card.onclick=()=>{
-      document.querySelectorAll('#oppCards .diffCard').forEach(c=>c.classList.remove('sel'));
-      card.classList.add('sel');
-      state.opponentMode=card.dataset.opp;
-    };
+    card.onclick=()=>{ document.querySelectorAll('#oppCards .diffCard').forEach(c=>c.classList.remove('sel')); card.classList.add('sel'); state.opponentMode=card.dataset.opp; };
   });
 }
 
@@ -312,18 +288,87 @@ export async function showOnlineTrkSel(){
 //  VS MODE LOBBY
 // ═══════════════════════════════════════════════════════
 
-let _vsCarPreviews = [];
+// PLAYER COLORS matching Bomber's 4-player palette
+const VS_COLORS=['#ff9a3c','#4af','#f44','#4f4'];
 
-function _disposeVsCarPreviews(){
-  if(state.carCardPreviewRaf){ cancelAnimationFrame(state.carCardPreviewRaf); state.carCardPreviewRaf=0; }
-  state.carCardPreviews.forEach(item=>{ if(item.renderer) item.renderer.dispose(); });
-  state.carCardPreviews.length=0;
-  _vsCarPreviews=[];
+/** All players (real + AI) in slot order */
+function _allVsSlots(){
+  return [...state.vsLobbyPlayers, ...state.vsLobbyAIs];
 }
 
-/** Build the compact car-select row inside the VS lobby */
-function _buildVsCarRow(container, onSelect){
-  _disposeVsCarPreviews();
+/** Build and rebuild the 4-slot player grid */
+function _renderVsSlots(){
+  const all=_allVsSlots();
+  const isHost=state.vsIsHost;
+  const net=state.vsNetwork;
+
+  for(let i=0;i<4;i++){
+    const slotEl=document.getElementById(`vsSlot${i}`);
+    if(!slotEl) continue;
+    slotEl.innerHTML='';
+    slotEl.className='vsSlot';
+
+    if(i<all.length){
+      const p=all[i];
+      slotEl.classList.add('vsSlot-filled');
+      slotEl.style.setProperty('--sc',VS_COLORS[i]);
+
+      const dot=document.createElement('span'); dot.className='vsSlotDot';
+      const nm=document.createElement('span'); nm.className='vsSlotName';
+      nm.textContent=(p.isAI?'🤖 ':'')+p.name+(p.isHost?' 👑':'');
+
+      slotEl.appendChild(dot); slotEl.appendChild(nm);
+
+      if(isHost){
+        if(p.isAI){
+          const rm=document.createElement('button'); rm.className='vsSlotRemove'; rm.textContent='✕';
+          rm.title='Remove bot'; rm.onclick=e=>{ e.stopPropagation(); _vsRemoveAI(p.id); };
+          slotEl.appendChild(rm);
+        } else if(p.id!==net?.myId){
+          const kick=document.createElement('button'); kick.className='vsSlotRemove'; kick.textContent='✕ Kick';
+          kick.title='Kick player'; kick.onclick=e=>{ e.stopPropagation(); _vsKickPlayer(p.id); };
+          slotEl.appendChild(kick);
+        }
+      }
+    } else if(isHost&&all.length<4){
+      slotEl.classList.add('vsSlot-empty');
+      const btn=document.createElement('button'); btn.className='vsAddBotBtn'; btn.textContent='+ Add AI';
+      btn.onclick=_vsAddAI;
+      slotEl.appendChild(btn);
+    } else {
+      slotEl.classList.add('vsSlot-passive');
+      const dash=document.createElement('span'); dash.className='vsSlotEmpty'; dash.textContent='—';
+      slotEl.appendChild(dash);
+    }
+  }
+
+  // Start button / status
+  const total=all.length;
+  const canStart=isHost&&total>=2;
+  const startBtn=document.getElementById('vsStartBtn');
+  const statusEl=document.getElementById('vsStatusMsg');
+  if(startBtn) startBtn.disabled=!canStart||state.selTrk==null;
+  if(statusEl){
+    if(isHost){
+      if(state.selTrk==null) statusEl.textContent='Pick a track first.';
+      else if(total<2)       statusEl.textContent='Add 1 more player or AI to start.';
+      else                   statusEl.textContent=`${total} player${total>1?'s':''} ready!`;
+    } else {
+      statusEl.textContent='Waiting for host to start the race…';
+    }
+  }
+}
+
+/** Build compact inline car selector (used inside the lobby) */
+function _buildVsCarRow(containerId, onSelect){
+  const container=document.getElementById(containerId);
+  if(!container) return;
+  // Clean up old previews for this container
+  const old=state.carCardPreviews.filter(p=>p._vsContainer===containerId);
+  old.forEach(p=>{ p.renderer.dispose(); });
+  state.carCardPreviews=state.carCardPreviews.filter(p=>p._vsContainer!==containerId);
+  if(state.carCardPreviewRaf){ cancelAnimationFrame(state.carCardPreviewRaf); state.carCardPreviewRaf=0; }
+
   ensureCarCardPreviewRenderer();
   container.innerHTML='';
   if(state.selCar==null) state.selCar=0;
@@ -332,22 +377,20 @@ function _buildVsCarRow(container, onSelect){
     const d=document.createElement('div');
     d.className='vsCarChip'+(state.selCar===i?' sel':'');
     d.title=c.name;
-    const cvs=document.createElement('canvas');
-    cvs.className='vsCarCanvas';
-    const nameEl=document.createElement('span');
-    nameEl.textContent=c.name;
-    d.appendChild(cvs); d.appendChild(nameEl);
+    const cvs=document.createElement('canvas'); cvs.className='vsCarCanvas';
+    const nm=document.createElement('span'); nm.textContent=c.name;
+    d.appendChild(cvs); d.appendChild(nm);
 
     const visual=createCarVisual(c);
     visual.mesh.scale.setScalar(0.72);
     visual.mesh.rotation.x=-0.1;
     visual.mesh.position.set(0,-0.2,0);
-    const preview={host:d,canvas:cvs,model:visual.mesh,hovered:false,selected:state.selCar===i,angle:0,spinSpeed:0,baseYaw:-0.55,
+    const preview={host:d,canvas:cvs,model:visual.mesh,hovered:false,selected:state.selCar===i,
+      angle:0,spinSpeed:0,baseYaw:-0.55,_vsContainer:containerId,
       renderer:new THREE.WebGLRenderer({canvas:cvs,alpha:true,antialias:true,powerPreference:'low-power'})};
-    preview.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));
+    preview.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));
     preview.renderer.outputColorSpace=THREE.SRGBColorSpace;
     state.carCardPreviews.push(preview);
-    _vsCarPreviews.push(preview);
 
     d.onmouseenter=()=>{ preview.hovered=true; startCarCardPreviews(); };
     d.onmouseleave=()=>{ preview.hovered=false; };
@@ -363,148 +406,7 @@ function _buildVsCarRow(container, onSelect){
   startCarCardPreviews();
 }
 
-/** Rebuild the player list section of the VS lobby */
-function _renderVsPlayerList(){
-  const listEl=document.getElementById('vsPlayerList');
-  if(!listEl) return;
-  const players=state.vsLobbyPlayers||[];
-  listEl.innerHTML='';
-  for(const p of players){
-    const row=document.createElement('div');
-    row.className='vsPlayerRow';
-    const dot=document.createElement('span'); dot.className='vsPlayerDot';
-    dot.style.background=p.isHost?'#fa4':'#4af';
-    const nm=document.createElement('span'); nm.className='vsPlayerName';
-    nm.textContent=(p.name||'Player')+(p.isHost?' 👑':'');
-    row.appendChild(dot); row.appendChild(nm);
-    listEl.appendChild(row);
-  }
-  // Waiting slot
-  if(players.length<2){
-    const row=document.createElement('div'); row.className='vsPlayerRow vsWaiting';
-    row.textContent='Waiting for opponent...';
-    listEl.appendChild(row);
-  }
-}
-
-export async function showVsLobby(){
-  // Clean up any previous VS network
-  if(state.vsNetwork){ await state.vsNetwork.leave().catch(()=>{}); state.vsNetwork=null; }
-  state.vsMode=false;
-  state.vsLobbyPlayers=[];
-
-  await loadTracksFromFolder().catch(()=>{});
-
-  document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
-  document.getElementById('sVsLobby').style.display='flex';
-  state.gState='vsLobby';
-  updateTouchControlsVisibility(state.gState);
-
-  // Reset to join/create panel
-  document.getElementById('vsJoinPanel').style.display='flex';
-  document.getElementById('vsRoomPanel').style.display='none';
-  document.getElementById('vsStatusMsg').textContent='';
-  document.getElementById('vsNameInput').value=state.vsMyName||'';
-}
-
-/** Called when CREATE ROOM is clicked */
-export async function vsCreateRoom(){
-  const nameInput=document.getElementById('vsNameInput');
-  const name=(nameInput.value||'').trim()||'Player 1';
-  state.vsMyName=name;
-
-  const code=generateRoomCode();
-  state.vsRoomCode=code;
-  state.vsIsHost=true;
-  state.selCar=state.selCar??0;
-
-  const net=new VsNetwork();
-  state.vsNetwork=net;
-
-  _setVsStatus('Connecting…');
-  try{
-    await net.joinRoom(code, name, true);
-  }catch(e){
-    _setVsStatus('❌ Failed to connect: '+e.message);
-    return;
-  }
-
-  _attachVsNetworkHandlers(net);
-  _showVsRoomPanel(true);
-}
-
-/** Called when JOIN ROOM is clicked */
-export async function vsJoinRoom(){
-  const nameInput=document.getElementById('vsNameInput');
-  const codeInput=document.getElementById('vsCodeInput');
-  const name=(nameInput.value||'').trim()||'Player 2';
-  const code=(codeInput.value||'').trim().toUpperCase();
-  if(!code||code.length!==4){ _setVsStatus('❌ Enter a 4-character room code'); return; }
-
-  state.vsMyName=name;
-  state.vsRoomCode=code;
-  state.vsIsHost=false;
-  state.selCar=state.selCar??0;
-
-  const net=new VsNetwork();
-  state.vsNetwork=net;
-
-  _setVsStatus('Joining room…');
-  try{
-    await net.joinRoom(code, name, false);
-  }catch(e){
-    _setVsStatus('❌ Failed to join: '+e.message);
-    return;
-  }
-
-  _attachVsNetworkHandlers(net);
-  _showVsRoomPanel(false);
-
-  // Guest: send ready immediately with selected car
-  net.sendGuestReady(state.selCar??0, name);
-}
-
-function _setVsStatus(msg){
-  const el=document.getElementById('vsStatusMsg');
-  if(el) el.textContent=msg;
-}
-
-function _showVsRoomPanel(isHost){
-  document.getElementById('vsJoinPanel').style.display='none';
-  document.getElementById('vsRoomPanel').style.display='flex';
-
-  document.getElementById('vsRoomCodeDisplay').textContent=state.vsRoomCode;
-
-  // Host controls visibility
-  const hostControls=document.getElementById('vsHostControls');
-  const guestControls=document.getElementById('vsGuestControls');
-  if(hostControls) hostControls.style.display=isHost?'flex':'none';
-  if(guestControls) guestControls.style.display=isHost?'none':'flex';
-
-  _renderVsPlayerList();
-
-  if(isHost){
-    // Host: build track selector
-    _buildVsTrkCards();
-    // Host: build car selector
-    const carRow=document.getElementById('vsHostCarRow');
-    if(carRow) _buildVsCarRow(carRow, (carIdx)=>{
-      // Broadcast config whenever host changes car
-      if(state.vsNetwork&&state.selTrk!=null){
-        state.vsNetwork.sendGameConfig(state.selTrk, carIdx, state.vsMyName);
-      }
-    });
-  } else {
-    // Guest: just show car selector
-    const carRow=document.getElementById('vsGuestCarRow');
-    if(carRow) _buildVsCarRow(carRow, (carIdx)=>{
-      if(state.vsNetwork){
-        state.vsNetwork.sendGuestReady(carIdx, state.vsMyName);
-      }
-    });
-  }
-}
-
+/** Build compact track cards inline in the lobby (host only) */
 function _buildVsTrkCards(){
   const container=document.getElementById('vsTrackCards');
   if(!container) return;
@@ -517,93 +419,240 @@ function _buildVsTrkCards(){
     const cvs=document.createElement('canvas'); cvs.width=160; cvs.height=120;
     const nm=document.createElement('span'); nm.textContent=t.name;
     card.appendChild(cvs); card.appendChild(nm);
-    drawTrackPreview(cvs, t, t.previewColor||COLORS[i%COLORS.length]);
+    drawTrackPreview(cvs,t,t.previewColor||COLORS[i%COLORS.length]);
     card.onclick=()=>{
       container.querySelectorAll('.vsTrackCard').forEach(x=>x.classList.remove('sel'));
       card.classList.add('sel'); state.selTrk=t.id;
-      // Broadcast updated config to guest
-      if(state.vsNetwork){
-        state.vsNetwork.sendGameConfig(state.selTrk, state.selCar??0, state.vsMyName);
-      }
-      const startBtn=document.getElementById('vsStartBtn');
-      if(startBtn) startBtn.disabled=false;
+      if(state.vsNetwork) state.vsNetwork.sendGameConfig(state.selTrk,state.selCar??0);
+      _renderVsSlots(); // refresh start button / status
     };
     container.appendChild(card);
   });
 }
 
-function _attachVsNetworkHandlers(net){
+// ── VS lobby actions ──────────────────────────────────────────────────────────
+
+function _vsAddAI(){
+  if(_allVsSlots().length>=4) return;
+  const usedNames=state.vsLobbyAIs.map(a=>a.name);
+  const name=BOT_NAMES.find(n=>!usedNames.includes(n))||`Bot ${state.vsLobbyAIs.length+1}`;
+  const ai={id:`ai-${crypto.randomUUID()}`,name,isAI:true,carIdx:Math.floor(Math.random()*CARS.length)};
+  state.vsLobbyAIs.push(ai);
+  state.vsNetwork?.sendAIUpdate(state.vsLobbyAIs);
+  _renderVsSlots();
+}
+
+function _vsRemoveAI(id){
+  state.vsLobbyAIs=state.vsLobbyAIs.filter(a=>a.id!==id);
+  state.vsNetwork?.sendAIUpdate(state.vsLobbyAIs);
+  _renderVsSlots();
+}
+
+function _vsKickPlayer(targetId){
+  state.vsNetwork?.sendPlayerKick(targetId);
+  _renderVsSlots();
+}
+
+function _vsSetStatus(msg){
+  const el=document.getElementById('vsStatusMsg');
+  if(el) el.textContent=msg;
+}
+
+// ── Show / connect ────────────────────────────────────────────────────────────
+
+export async function showVsLobby(){
+  if(state.vsNetwork){ await state.vsNetwork.leave().catch(()=>{}); state.vsNetwork=null; }
+  state.vsMode=false;
+  state.vsLobbyPlayers=[];
+  state.vsLobbyAIs=[];
+  state.vsGuestCars={};
+
+  await loadTracksFromFolder().catch(()=>{});
+
+  document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
+  document.getElementById('sVsLobby').style.display='flex';
+  state.gState='vsLobby';
+  updateTouchControlsVisibility(state.gState);
+
+  document.getElementById('vsJoinPanel').style.display='flex';
+  document.getElementById('vsRoomPanel').style.display='none';
+  _vsSetStatus('');
+
+  // Show the player's arcade name as a read-only label
+  const user=getArcadeUser();
+  const nameLbl=document.getElementById('vsMyNameLabel');
+  if(nameLbl) nameLbl.textContent=user.name||'Anonymous';
+}
+
+export async function vsCreateRoom(){
+  const user=getArcadeUser();
+  const name=user.name||'Anonymous';
+
+  const code=generateRoomCode();
+  state.vsRoomCode=code;
+  state.vsIsHost=true;
+  state.vsLobbyAIs=[];
+  if(state.selCar==null) state.selCar=0;
+
+  const net=new VsNetwork();
+  state.vsNetwork=net;
+
+  _vsSetStatus('Connecting…');
+  try{ await net.joinRoom(code, name, true); }
+  catch(e){ _vsSetStatus('❌ Failed: '+e.message); return; }
+
+  state.vsMyId=net.myId;
+  _attachVsHandlers(net, true);
+  _showVsRoomPanel(true);
+}
+
+export async function vsJoinRoom(){
+  const user=getArcadeUser();
+  const name=user.name||'Anonymous';
+  const code=(document.getElementById('vsCodeInput')?.value||'').trim().toUpperCase();
+  if(!code||code.length!==4){ _vsSetStatus('❌ Enter a 4-letter room code'); return; }
+
+  state.vsRoomCode=code;
+  state.vsIsHost=false;
+  state.vsLobbyAIs=[];
+  if(state.selCar==null) state.selCar=0;
+
+  const net=new VsNetwork();
+  state.vsNetwork=net;
+
+  _vsSetStatus('Joining…');
+  try{ await net.joinRoom(code, name, false); }
+  catch(e){ _vsSetStatus('❌ Failed: '+e.message); return; }
+
+  state.vsMyId=net.myId;
+  _attachVsHandlers(net, false);
+  _showVsRoomPanel(false);
+
+  // Guest announces their car choice
+  net.sendGuestReady(state.selCar??0);
+}
+
+function _showVsRoomPanel(isHost){
+  document.getElementById('vsJoinPanel').style.display='none';
+  document.getElementById('vsRoomPanel').style.display='flex';
+  document.getElementById('vsRoomCodeDisplay').textContent=state.vsRoomCode;
+
+  document.getElementById('vsHostSection').style.display=isHost?'flex':'none';
+  document.getElementById('vsGuestSection').style.display=isHost?'none':'flex';
+
+  _renderVsSlots();
+
+  if(isHost){
+    _buildVsTrkCards();
+    _buildVsCarRow('vsHostCarRow', carIdx=>{
+      if(state.vsNetwork&&state.selTrk!=null) state.vsNetwork.sendGameConfig(state.selTrk,carIdx);
+    });
+  } else {
+    _buildVsCarRow('vsGuestCarRow', carIdx=>{
+      state.vsNetwork?.sendGuestReady(carIdx);
+    });
+  }
+}
+
+function _attachVsHandlers(net, isHost){
   net.onPresenceUpdate=(players)=>{
     state.vsLobbyPlayers=players;
-    _renderVsPlayerList();
-  };
-
-  net.onPlayerLeft=({id})=>{
-    if(state.gState==='vsLobby'){
-      _setVsStatus('⚠️ Opponent left the lobby');
-    } else if(state.gState==='racing'||state.gState==='cooldown'){
-      // notify in-race — use the notify module
-      import('./notify.js').then(m=>m.notify('Opponent disconnected'));
+    _renderVsSlots();
+    // When a new guest joins, host re-broadcasts current config
+    if(isHost&&state.selTrk!=null){
+      net.sendGameConfig(state.selTrk, state.selCar??0);
+      net.sendAIUpdate(state.vsLobbyAIs);
     }
   };
 
-  net.onGameConfig=({trackId, carIdx, hostName})=>{
-    // Guest receives host config
+  net.onAIUpdate=({aiPlayers})=>{
+    // Guest receives AI list update from host
+    state.vsLobbyAIs=aiPlayers||[];
+    _renderVsSlots();
+  };
+
+  net.onGameConfig=({trackId, hostCarIdx})=>{
+    // Guest: update to host's selections
     state.selTrk=trackId;
-    state.vsOpponentCarIdx=carIdx;
-    state.vsOpponentName=hostName||'Host';
-    _setVsStatus('Track set by host. Pick your car and wait…');
-    // Re-send guest ready with our current car
-    net.sendGuestReady(state.selCar??0, state.vsMyName);
+    // Re-send our car selection so host has it
+    net.sendGuestReady(state.selCar??0);
+    _renderVsSlots();
+    _vsSetStatus('Track updated by host. Waiting to start…');
   };
 
-  net.onGuestReady=({carIdx, guestName})=>{
-    // Host receives guest config
-    state.vsOpponentCarIdx=carIdx;
-    state.vsOpponentName=guestName||'Guest';
-    _renderVsPlayerList();
-    _setVsStatus('✅ Opponent ready! You can start the race.');
-    const startBtn=document.getElementById('vsStartBtn');
-    if(startBtn&&state.selTrk!=null) startBtn.disabled=false;
+  net.onGuestReady=({id, carIdx})=>{
+    // Host: store guest car choice
+    state.vsGuestCars[id]=carIdx;
+    _renderVsSlots();
+    _vsSetStatus('');
   };
 
-  net.onGameStart=()=>{
-    // Guest receives start signal
-    _launchVsRace();
+  net.onGameStart=({slots, trackId})=>{
+    // All clients: launch the race
+    _launchVsRace(slots, trackId);
   };
 
   net.onPosUpdate=(data)=>{
-    // In-race: store latest opponent state for interpolation
-    state.vsOpponentState=data;
+    // In-race: buffer snapshot
+    if(data.id&&data.id!==state.vsMyId){
+      state.vsCarStates[data.id]=data;
+    }
   };
 
   net.onPlayerFinished=({id, finTime})=>{
-    if(id!==net.myId){
-      state.vsOpponentFinished=true;
-      state.vsOpponentFinTime=finTime;
+    state.vsFinished[id]=finTime;
+  };
+
+  net.onPlayerKick=({targetId})=>{
+    if(targetId===net.myId){
+      _vsSetStatus('You were kicked from the lobby.');
+      vsLeaveLobby();
     }
   };
 }
 
-function _launchVsRace(){
+function _buildSlots(){
+  const net=state.vsNetwork;
+  const user=getArcadeUser();
+  const presence=state.vsLobbyPlayers;
+
+  // Slot 0 = host, then other real players, then AIs
+  const realSlots=presence.map(p=>({
+    id:p.id,
+    name:p.name||'Player',
+    isAI:false,
+    carIdx:(p.id===net.myId)?(state.selCar??0):(state.vsGuestCars[p.id]??0)
+  }));
+  const aiSlots=state.vsLobbyAIs.map(a=>({
+    id:a.id,
+    name:a.name,
+    isAI:true,
+    carIdx:a.carIdx??0
+  }));
+  return [...realSlots,...aiSlots];
+}
+
+function _launchVsRace(slots, trackId){
   state.vsMode=true;
-  _disposeVsCarPreviews();
+  disposeCarCardPreviews();
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
-  import('./race.js').then(m=>m.startRace());
+  import('./race.js').then(m=>m.initVsRace(slots, trackId));
 }
 
 export function vsStartRace(){
   if(!state.vsNetwork) return;
-  if(state.selTrk==null){ _setVsStatus('❌ Pick a track first'); return; }
-  // Send final config then start
-  state.vsNetwork.sendGameConfig(state.selTrk, state.selCar??0, state.vsMyName);
-  state.vsNetwork.sendGameStart();
-  _launchVsRace();
+  if(state.selTrk==null){ _vsSetStatus('❌ Pick a track first'); return; }
+  if(_allVsSlots().length<2){ _vsSetStatus('❌ Need at least 2 players/AIs'); return; }
+
+  const slots=_buildSlots();
+  state.vsNetwork.sendGameConfig(state.selTrk, state.selCar??0);
+  state.vsNetwork.sendGameStart(slots, state.selTrk);
+  _launchVsRace(slots, state.selTrk);
 }
 
 export function vsLeaveLobby(){
   if(state.vsNetwork){ state.vsNetwork.leave().catch(()=>{}); state.vsNetwork=null; }
   state.vsMode=false;
-  _disposeVsCarPreviews();
+  disposeCarCardPreviews();
   showMain();
 }

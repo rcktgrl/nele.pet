@@ -63,18 +63,25 @@ export const state = {
     renderer: null,
 
     // ── VS Mode ──────────────────────────────────────────────────────────────
-    vsMode: false,           // true when in a vs race
+    vsMode: false,           // true when in a vs race/lobby
     vsNetwork: null,         // VsNetwork instance
     vsIsHost: false,
-    vsMyName: '',
+
+    // Lobby state
     vsRoomCode: '',
-    vsLobbyPlayers: [],      // presence array
-    vsOpponentCar: null,     // remote Car instance (mesh only, no physics)
-    vsOpponentName: '',
-    vsOpponentFinished: false,
-    vsOpponentFinTime: 0,
-    vsOpponentCarIdx: 0,
-    vsOpponentState: null,   // latest received {x,z,hdg,spd,lap,totalProg}
-    vsPosSendTimer: 0,       // countdown to next position broadcast
+    vsLobbyPlayers: [],      // real players from presence [{id, name, isHost}]
+    vsLobbyAIs: [],          // AI bots added by host [{id, name, carIdx}]
+    vsGuestCars: {},         // id → carIdx (guest selections received by host)
+
+    // Race state (populated when race starts)
+    vsMyId: '',              // this client's network id (= vsNetwork.myId)
+    vsSlots: [],             // [{id, name, isAI, carIdx}] ordered slot list
+    vsCarsById: {},          // id → Car instance
+    vsCarStates: {},         // id → latest received {x,z,hdg,spd,lap,totalProg}
+    vsFinished: {},          // id → finTime
+    vsAIControllers: [],     // [{ai, slotId}] — host only
+
+    // Broadcast throttle
+    vsPosSendTimer: 0,
     vsPosSendInterval: 0.05, // 20 Hz
 };

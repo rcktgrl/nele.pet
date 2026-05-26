@@ -95,54 +95,32 @@ function closeTrackEditor(){
 }
 
 // ═══════════════════════════════════════════════════════
-//  VS OPPONENT INTERPOLATION
+//  VS REMOTE CAR INTERPOLATION
 // ═══════════════════════════════════════════════════════
-/** Smoothly move the remote opponent car towards the latest network snapshot */
-function _updateVsOpponent(dt){
-  const opp=state.vsOpponentCar;
-  const snap=state.vsOpponentState;
-  if(!opp||!snap) return;
-
-  // Simple lerp towards the received snapshot (handles network jitter gently)
-  const lerpFactor=Math.min(1, dt*15);
-  opp.pos.x += (snap.x - opp.pos.x)*lerpFactor;
-  opp.pos.z += (snap.z - opp.pos.z)*lerpFactor;
-  // Angle lerp (wrap-safe)
-  let dh=snap.hdg - opp.hdg;
-  if(dh > Math.PI) dh-=Math.PI*2;
-  if(dh < -Math.PI) dh+=Math.PI*2;
-  opp.hdg += dh * lerpFactor;
-
-  opp.pos.y=opp.groundY();
-  opp.mesh.position.copy(opp.pos);
-  opp.mesh.rotation.y=opp.hdg;
-
-  // Track progress / speed for HUD and collisions
-  if(snap.totalProg!=null) opp.totalProg=snap.totalProg;
-  if(snap.lap!=null) opp.lap=snap.lap;
-  if(snap.spd!=null) opp.spd=snap.spd;
-
-  // Update VS opponent tag position
-  const vsTag=document.getElementById('vsOpponentTag');
-  if(vsTag&&vsTag.style.display!=='none'){
-    // Simple: project 3D position to screen
-    const cam=state.activeCam;
-    if(cam){
-      const p=opp.pos.clone().add(new THREE.Vector3(0,3,0));
-      p.project(cam);
-      if(p.z<1){
-        const hw=window.innerWidth/2, hh=window.innerHeight/2;
-        vsTag.style.left=Math.round(p.x*hw+hw)+'px';
-        vsTag.style.top=Math.round(-p.y*hh+hh)+'px';
-        vsTag.style.display='block';
-      } else {
-        vsTag.style.display='none';
-      }
-    }
+/** Lerp every remote VS car towards its latest network snapshot */
+function _updateRemoteCars(dt){
+  const lerpFactor=Math.min(1,dt*15);
+  for(const slot of state.vsSlots){
+    if(slot.id===state.vsMyId) continue;
+    const car=state.vsCarsById[slot.id];
+    const snap=state.vsCarStates[slot.id];
+    if(!car||!snap) continue;
+    car.pos.x+=(snap.x-car.pos.x)*lerpFactor;
+    car.pos.z+=(snap.z-car.pos.z)*lerpFactor;
+    let dh=snap.hdg-car.hdg;
+    if(dh>Math.PI)dh-=Math.PI*2;
+    if(dh<-Math.PI)dh+=Math.PI*2;
+    car.hdg+=dh*lerpFactor;
+    car.pos.y=car.groundY();
+    car.mesh.position.copy(car.pos);
+    car.mesh.rotation.y=car.hdg;
+    if(snap.totalProg!=null)car.totalProg=snap.totalProg;
+    if(snap.lap!=null)car.lap=snap.lap;
+    if(snap.spd!=null)car.spd=snap.spd;
   }
 }
 
-/** Broadcast our car position to opponent (throttled to vsPosSendInterval) */
+/** Broadcast our position ~20 Hz; host also broadcasts AI car positions each tick */
 function _broadcastVsPos(dt){
   if(!state.vsMode||!state.vsNetwork||!state.pCar) return;
   state.vsPosSendTimer-=dt;
@@ -150,6 +128,7 @@ function _broadcastVsPos(dt){
   state.vsPosSendTimer=state.vsPosSendInterval;
   const c=state.pCar;
   state.vsNetwork.sendPosUpdate(
+    state.vsMyId,
     Math.round(c.pos.x*100)/100,
     Math.round(c.pos.z*100)/100,
     Math.round(c.hdg*1000)/1000,
@@ -157,6 +136,22 @@ function _broadcastVsPos(dt){
     c.lap,
     Math.round(c.totalProg*100)/100
   );
+  // Host: broadcast AI car positions so guests can see them
+  if(state.vsIsHost){
+    for(const {slotId} of state.vsAIControllers){
+      const ac=state.vsCarsById[slotId];
+      if(!ac) continue;
+      state.vsNetwork.sendPosUpdate(
+        slotId,
+        Math.round(ac.pos.x*100)/100,
+        Math.round(ac.pos.z*100)/100,
+        Math.round(ac.hdg*1000)/1000,
+        Math.round(ac.spd*10)/10,
+        ac.lap,
+        Math.round(ac.totalProg*100)/100
+      );
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -179,8 +174,8 @@ function updateFrame(dt){
     state.pCar.update({thr,brk,str},dt);
     sampleGhostFrame();
     for(const ai of state.aiControllers)ai.update(dt);
-    // VS: update opponent position from network
-    if(state.vsMode){ _updateVsOpponent(dt); _broadcastVsPos(dt); }
+    // VS: lerp remote cars + broadcast our position
+    if(state.vsMode){ _updateRemoteCars(dt); _broadcastVsPos(dt); }
     resolveCarCollisions(state.allCars);
     for(const car of state.allCars) car.checkGravel();
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&state.aiCars[i])aiSounds[i].update(state.aiCars[i],state.pCar);}
@@ -190,7 +185,7 @@ function updateFrame(dt){
     state.raceTime+=dt;
     state.pCar.update({thr:0,brk:0.3,str:0},dt);
     for(const ai of state.aiControllers){if(!ai.car.finished)ai.update(dt);}
-    if(state.vsMode){ _updateVsOpponent(dt); _broadcastVsPos(dt); }
+    if(state.vsMode){ _updateRemoteCars(dt); _broadcastVsPos(dt); }
     resolveCarCollisions(state.allCars);
     for(const car of state.allCars) car.checkGravel();
     for(let i=0;i<aiSounds.length;i++){if(aiSounds[i]&&state.aiCars[i])aiSounds[i].update(state.aiCars[i],state.pCar);}
@@ -207,7 +202,7 @@ function updateFrame(dt){
     if(state.gState==='finished'){
       state.raceTime+=dt;
       for(const ai of state.aiControllers){if(!ai.car.finished)ai.update(dt);}
-      if(state.vsMode) _updateVsOpponent(dt);
+      if(state.vsMode) _updateRemoteCars(dt);
       resolveCarCollisions(state.allCars);
       for(const car of state.allCars) car.checkGravel();
       updateHUD(); drawMinimap();
