@@ -712,21 +712,50 @@ async function init() {
     });
   }
 
+  // ── Presence merge helper ─────────────────────────────────────────────────
+  // Applies a list of incoming presence players to lobbyRealPlayers.
+  // • Skips self.
+  // • If the same *name* already exists with a different *id*, the player
+  //   reconnected (page refresh) — reclaim their slot and transfer scores.
+  // • Never removes players; onPresenceLeave + the 4-s interval handle that,
+  //   so a stale sync can't accidentally wipe someone who just joined.
+  function mergePresencePlayers(incoming) {
+    let changed = false;
+    for (const p of incoming) {
+      if (p.id === net.myId) continue;
+      const existingById   = lobbyRealPlayers.find(r => r.id   === p.id);
+      const existingByName = !existingById && lobbyRealPlayers.find(r => r.name === p.name);
+      if (existingByName) {
+        // Same name, new ID → reconnect; keep their slot position
+        const idx   = lobbyRealPlayers.indexOf(existingByName);
+        const oldId = existingByName.id;
+        lobbyRealPlayers[idx] = { ...existingByName, id: p.id };
+        if (sessionScores.has(oldId)) {
+          sessionScores.set(p.id, sessionScores.get(oldId));
+          sessionScores.delete(oldId);
+        }
+        changed = true;
+      } else if (!existingById) {
+        lobbyRealPlayers.push(p);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
   // ── Presence handlers ─────────────────────────────────────────────────────
-  net.onPresenceUpdate = players => {
-    lobbyRealPlayers = players.filter(p => p.id !== net.myId);
-    renderSlots();
-    if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+  // Sync events give us the full authoritative state; we merge-add so that a
+  // late or out-of-order sync can't remove a player that onPresenceJoin just
+  // added (fixes the "appears for a split second then disappears" flicker).
+  net.onPresenceUpdate = freshPlayers => {
+    if (mergePresencePlayers(freshPlayers)) {
+      renderSlots();
+      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+    }
   };
 
   net.onPresenceJoin = newPlayers => {
-    let changed = false;
-    for (const p of newPlayers) {
-      if (p.id !== net.myId && !lobbyRealPlayers.find(r => r.id === p.id)) {
-        lobbyRealPlayers.push(p); changed = true;
-      }
-    }
-    if (changed) {
+    if (mergePresencePlayers(newPlayers)) {
       renderSlots();
       if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
     }
@@ -746,8 +775,8 @@ async function init() {
 
   net.onPlayerHello = ({ id, name, isHost: pIsHost }) => {
     if (id === net.myId) return;
-    if (!lobbyRealPlayers.find(p => p.id === id)) {
-      lobbyRealPlayers.push({ id, name, isHost: pIsHost });
+    // Reuse mergePresencePlayers so reconnects are handled identically
+    if (mergePresencePlayers([{ id, name, isHost: pIsHost }])) {
       renderSlots();
       if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
     }
@@ -782,20 +811,24 @@ async function init() {
 
   if (isHost) await dbRegisterRoom();
 
-  lobbyRealPlayers = net.getPresencePlayers().filter(p => p.id !== net.myId);
+  // Initial population from the snapshot returned by joinRoom.
+  // We do a merge-add here too (via the helper) so any players already present
+  // get their duplicate-name check on first load.
+  mergePresencePlayers(net.getPresencePlayers());
   renderSlots();
 
-  setTimeout(() => {
-    lobbyRealPlayers = net.getPresencePlayers().filter(p => p.id !== net.myId);
-    renderSlots();
-  }, 800);
-
-  // Periodic presence refresh to catch missed leave events
+  // Periodic presence refresh — removes players whose presence truly expired
+  // and catches any missed leave events.  Also merges any new arrivals we
+  // might have missed.
   setInterval(() => {
     if (gameRunning) return;
-    const freshIds = new Set(net.getPresencePlayers().map(p => p.id));
+    const fresh    = net.getPresencePlayers();
+    const freshIds = new Set(fresh.map(p => p.id));
     const before   = lobbyRealPlayers.length;
+    // Remove stale entries (not in live presence state)
     lobbyRealPlayers = lobbyRealPlayers.filter(p => freshIds.has(p.id));
+    // Merge-add any we might have missed
+    mergePresencePlayers(fresh);
     if (lobbyRealPlayers.length !== before) {
       renderSlots();
       if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
