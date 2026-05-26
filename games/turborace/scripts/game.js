@@ -48,7 +48,8 @@ import {
 import {
   showMain, showIntro, showTrkSel, showCarSel,
   showDiffSel, showOnlineTrkSel, showSettings, closeSettings,
-  showVsLobby, vsCreateRoom, vsJoinRoom, vsStartRace, vsLeaveLobby
+  showVsLobby, vsCreateRoom, vsJoinRoom, vsStartRace, vsLeaveLobby,
+  vsCopyCode, vsCopyInviteLink
 } from './menu.js';
 import {
   closeTrackLeaderboardModal
@@ -292,6 +293,8 @@ document.getElementById('vsJoinBtn').addEventListener('click', vsJoinRoom);
 document.getElementById('vsStartBtn').addEventListener('click', vsStartRace);
 document.getElementById('vsLeaveLobbyBtn').addEventListener('click', vsLeaveLobby);
 document.getElementById('vsLobbyBackBtn').addEventListener('click', vsLeaveLobby);
+document.getElementById('vsCopyCodeBtn').addEventListener('click', vsCopyCode);
+document.getElementById('vsCopyInviteBtn').addEventListener('click', vsCopyInviteLink);
 
 // ═══════════════════════════════════════════════════════
 //  BOOT

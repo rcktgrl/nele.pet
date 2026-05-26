@@ -482,6 +482,50 @@ export async function showVsLobby(){
   const user=getArcadeUser();
   const nameLbl=document.getElementById('vsMyNameLabel');
   if(nameLbl) nameLbl.textContent=user.name||'Anonymous';
+
+  // Auto-fill room code if ?room=XXXX is in the URL
+  const urlRoom=new URLSearchParams(window.location.search).get('room');
+  if(urlRoom&&urlRoom.length===4){
+    const inp=document.getElementById('vsCodeInput');
+    if(inp) inp.value=urlRoom.trim().toUpperCase();
+  }
+}
+
+// ── Copy helpers ──────────────────────────────────────────────────────────────
+
+function _vsCopyFeedback(msg){
+  const el=document.getElementById('vsCopyFeedback');
+  if(!el) return;
+  el.textContent=msg;
+  el.style.opacity='1';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{ el.style.opacity='0'; },1800);
+}
+
+export function vsCopyCode(){
+  const code=state.vsRoomCode;
+  if(!code) return;
+  navigator.clipboard.writeText(code).then(()=>{
+    const btn=document.getElementById('vsCopyCodeBtn');
+    if(btn){ const orig=btn.textContent; btn.textContent='✓'; btn.classList.add('vsCopied');
+      setTimeout(()=>{ btn.textContent=orig; btn.classList.remove('vsCopied'); },1600); }
+    _vsCopyFeedback('Room code copied!');
+  }).catch(()=>_vsCopyFeedback('Could not copy'));
+}
+
+export function vsCopyInviteLink(){
+  const code=state.vsRoomCode;
+  if(!code) return;
+  const url=new URL(window.location.href);
+  url.searchParams.set('room',code);
+  // Strip any hash so it opens cleanly
+  url.hash='';
+  navigator.clipboard.writeText(url.toString()).then(()=>{
+    const btn=document.getElementById('vsCopyInviteBtn');
+    if(btn){ const orig=btn.textContent; btn.textContent='✓ COPIED!'; btn.classList.add('vsCopied');
+      setTimeout(()=>{ btn.textContent=orig; btn.classList.remove('vsCopied'); },1600); }
+    _vsCopyFeedback('Invite link copied!');
+  }).catch(()=>_vsCopyFeedback('Could not copy'));
 }
 
 export async function vsCreateRoom(){
