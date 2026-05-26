@@ -4,8 +4,6 @@ import { state, scene, dc, editorCam, camEditor } from './state.js';
 import { buildTrack } from './track-gen.js';
 import { instantiateRaceCars, Car } from './car.js';
 import { AI } from './ai-script.js';
-import { NeuralAI } from './neural-ai.js';
-import { GeneticTrainer, buildTrainingGrid, resetCarForTraining, computeGenomeSize } from './trainer.js';
 import { setupLights } from './lighting.js';
 import {
   initAudio, initAiSounds, clearAiSounds,
@@ -45,14 +43,19 @@ export async function initRace(){
 
   let corridors=state.cityCorridors;
 
-  const ghostModeEnabled=state.opponentMode==='ghost';
+  const ghostModeEnabled = state.opponentMode==='ghost' && !state.vsMode;
+
   // Keep the ghost module in sync so replay loading works correctly
   if(ghostModeEnabled!==onlineGhostEnabled) setOnlineGhostToggle(ghostModeEnabled);
+
+  // In VS mode: no AI, no ghost — just the player car
+  const aiCount = state.vsMode ? 0 : (ghostModeEnabled ? 0 : 4);
+
   const raceCars=instantiateRaceCars({
     trackPoints: state.trkPts,
     cars: CARS,
     selectedCarIndex: state.selCar,
-    aiCount: ghostModeEnabled?0:4,
+    aiCount,
     scene: scene,
     createAIController: (aiCar,i)=>{
       const ctx=()=>({
@@ -63,8 +66,6 @@ export async function initRace(){
         trackData: state.trkData,
         playerCar: state.pCar
       });
-      if(state.aiDifficulty==='neural')
-        return new NeuralAI(aiCar,.044+i*.010,ctx,state.neuralModelGenome||null,state.neuralModelLayers||null);
       return new AI(aiCar,.044+i*.010,ctx);
     }
   });
@@ -72,6 +73,24 @@ export async function initRace(){
   state.aiCars=raceCars.aiCars;
   state.aiControllers=raceCars.aiControllers;
   state.allCars=raceCars.allCars;
+
+  // ── VS mode: spawn a remote car for the opponent ──────────────────────────
+  if(state.vsMode){
+    // Remove previous opponent car if any
+    if(state.vsOpponentCar) scene.remove(state.vsOpponentCar.mesh);
+    const oppCarData=CARS[state.vsOpponentCarIdx ?? 0];
+    // Spawn slightly offset from the player start so they don't overlap
+    const startPos={x:state.pCar.pos.x + 4, y:state.pCar.pos.y, z:state.pCar.pos.z + 4};
+    state.vsOpponentCar=new Car(oppCarData, startPos, state.pCar.hdg, false, scene);
+    state.vsOpponentState=null;
+    state.vsOpponentFinished=false;
+    state.vsOpponentFinTime=0;
+    state.vsPosSendTimer=0;
+    state.allCars.push(state.vsOpponentCar);
+  } else {
+    state.vsOpponentCar=null;
+  }
+
   await setupGhostReplayFromTrack(state.trkData&&state.trkData.id);
 
   state.raceTime=0; state.gState='countdown';
@@ -85,6 +104,16 @@ export async function initRace(){
   document.getElementById('gearBox').style.display='block';
   startGhostRecording();
   if(ghostModeEnabled&&ghostVisuals.length===0)notify('Ghost mode enabled: no matching ghost data for this track yet.');
+
+  // Show VS opponent name in HUD
+  if(state.vsMode){
+    const vsTag=document.getElementById('vsOpponentTag');
+    if(vsTag){ vsTag.textContent=state.vsOpponentName||'Opponent'; vsTag.style.display='block'; }
+  } else {
+    const vsTag=document.getElementById('vsOpponentTag');
+    if(vsTag) vsTag.style.display='none';
+  }
+
   doCountdown();
 }
 
@@ -135,6 +164,12 @@ export async function endRace(){
   });
   const pos=all.indexOf(state.pCar)+1;
   state.gState='cooldown';
+
+  // VS: broadcast finish time
+  if(state.vsMode&&state.vsNetwork){
+    state.vsNetwork.sendPlayerFinished(state.pCar.finTime||state.raceTime);
+  }
+
   if(pos===1){
     playVictoryJingle();
     announce('Checkered flag! You win!');
@@ -142,25 +177,31 @@ export async function endRace(){
     playLossSound();
     announce('Race finished! P'+pos+'!');
   }
-  const ghostPayload=await finalizeGhostRecording();
+  const ghostPayload=state.vsMode?null:await finalizeGhostRecording();
   setTimeout(()=>showResults(ghostPayload),1200);
 }
 globalThis.endRace=endRace;
 
 export function showResults(ghostPayload){
   updateResultsUI();
-  handlePostRaceLeaderboard(notify,ghostPayload);
+  if(!state.vsMode) handlePostRaceLeaderboard(notify,ghostPayload);
   document.getElementById('results').style.display='flex';
   document.getElementById('hud').style.display='none';
   document.getElementById('touchControls').style.display='none';
   for(const visual of ghostVisuals){
     if(visual.tagEl)visual.tagEl.style.display='none';
   }
+  const vsTag=document.getElementById('vsOpponentTag');
+  if(vsTag) vsTag.style.display='none';
   releaseAllTouchControls();
   dc.style.display='none';
 }
 
 export function updateResultsUI(){
+  if(state.vsMode){
+    _updateVsResultsUI();
+    return;
+  }
   const all=[state.pCar,...state.aiCars].sort((a,b)=>{
     if(a.finished&&b.finished)return a.finTime-b.finTime;
     if(a.finished)return-1; if(b.finished)return 1; return b.totalProg-a.totalProg;
@@ -186,6 +227,42 @@ export function updateResultsUI(){
   renderResultsLeaderboard(cached?cached.entries:[]);
 }
 
+function _updateVsResultsUI(){
+  const myTime=state.pCar?state.pCar.finTime||state.raceTime:0;
+  const oppTime=state.vsOpponentFinished?state.vsOpponentFinTime:null;
+  const myFinished=!!(state.pCar&&state.pCar.finished);
+  let win=false;
+  if(myFinished&&oppTime!==null) win=myTime<=oppTime;
+  else if(myFinished&&oppTime===null) win=true;
+
+  document.getElementById('rTitle').textContent=win?'🏆 VICTORY!':'RACE OVER';
+  document.getElementById('rTitle').style.color=win?'#ffd700':'#ff5500';
+  const pods=document.getElementById('podium'); pods.innerHTML='';
+
+  const entries=[
+    {name:'⭐ YOU', time:myTime, finished:myFinished},
+    {name:state.vsOpponentName||'Opponent', time:oppTime??state.raceTime, finished:!!oppTime},
+  ].sort((a,b)=>{
+    if(a.finished&&b.finished)return a.time-b.time;
+    if(a.finished)return -1; if(b.finished)return 1; return 0;
+  });
+
+  const medals=['🥇','🥈'];
+  entries.forEach((e,i)=>{
+    const d=document.createElement('div'); d.className='pi';
+    d.innerHTML=`<div class="pm">${medals[i]}</div>
+      <div class="pn" style="color:${e.name.startsWith('⭐')?'#ffd700':'#aaa'}">${e.name}</div>
+      <div class="pt">${e.finished?fmtT(e.time):'still racing...'}</div>`;
+    pods.appendChild(d);
+  });
+
+  document.getElementById('ptime').textContent=`Your time: ${fmtT(myTime)}`;
+  document.getElementById('runCar').textContent=`VS Race · Room: ${state.vsRoomCode}`;
+  document.getElementById('resultsLeaderboard').innerHTML='';
+  const h3=document.querySelector('#resultsLbWrap h3');
+  if(h3) h3.textContent='';
+}
+
 export function startRace(){
   document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
   void initRace();
@@ -196,176 +273,10 @@ export function restartRace(){
   document.getElementById('settingsModal').style.display='none';
   releaseAllTouchControls();
   document.getElementById('results').style.display='none';
+  // In VS mode, go back to main menu — the VS session is over
+  if(state.vsMode){
+    import('./menu.js').then(m=>m.showMain());
+    return;
+  }
   void initRace();
-}
-
-// ═══════════════════════════════════════════════════════
-//  TRAINING MODE
-// ═══════════════════════════════════════════════════════
-let _trainLapsBackup = null;
-
-// Number of independent parallel simulations per generation (configurable via trainNumSims)
-
-export async function initTraining({preserveGen=0, preservedGenome=null, forceRandom=false}={}){
-  // Clean up any prior race / training
-  for(const ctrl of state.aiControllers)if(ctrl.destroy)ctrl.destroy();
-  for(const c of state.allCars) scene.remove(c.mesh);
-  state.allCars=[]; state.aiCars=[]; state.aiControllers=[]; state.pCar=null;
-  state.trainGroups=[];
-  clearAiSounds(); clearGhostVisual();
-
-  // Build track geometry
-  state.trkData=getTrackById(state.selTrk);
-  try{ buildTrack(state.trkData); }catch(e){ console.error('buildTrack error:',e); }
-  setupLights();
-
-  // Prevent cars from "finishing" during training
-  _trainLapsBackup=state.trkData.laps;
-  state.trkData.laps=999;
-
-  const carsPerSim=Math.max(1,state.trainPopSize||8);
-
-  // Build network architecture from settings
-  const hiddenLayers=Math.max(1,Math.min(100,state.trainHiddenLayers||1));
-  const hiddenSize=Math.max(3,Math.min(100,state.trainHiddenSize||5));
-  const layers=[29,...Array(hiddenLayers).fill(hiddenSize),4];
-
-  // Only use saved genome if it matches the current architecture; prefer preserved genome from track switch.
-  // When forceRandom is true (Reset AI), skip all saved/default genomes entirely.
-  const rawSaved=forceRandom?null:(preservedGenome||GeneticTrainer.loadFromLocalStorage());
-  const savedGenome=(rawSaved&&rawSaved.length===computeGenomeSize(layers))?rawSaved:null;
-
-  // Shared context function (same track for all sims)
-  const contextFn=()=>({
-    trackPoints:state.trkPts,
-    trackCurvature:state.trkCurv,
-    cityAiPoints:state.cityAiPts,
-    corridors:state.cityCorridors,
-    trackData:state.trkData,
-    playerCar:null,
-  });
-
-  const nSims=Math.max(1,state.trainNumSims||8);
-  // In single-car mode, pick one model for ALL sims in this generation
-  const globalCarData=state.trainSingleCarModel?CARS[Math.floor(Math.random()*CARS.length)]:null;
-  // Create nSims independent simulations, each with their own trainer and cars
-  for(let s=0;s<nSims;s++){
-    const trainer=new GeneticTrainer({popSize:carsPerSim,genDuration:state.trainGenDuration||35,layers});
-    trainer.initPopulation(savedGenome, forceRandom);
-    if(preserveGen>0) trainer.generation=preserveGen;
-    const grid=buildTrainingGrid(state.trkPts,carsPerSim);
-    const cars=[], controllers=[];
-    for(let i=0;i<carsPerSim;i++){
-      const g=grid[i];
-      const carData=globalCarData||CARS[Math.floor(Math.random()*CARS.length)];
-      const car=new Car(carData,g.pos,g.hdg,false,scene);
-      car.aiAgg=1.0;
-      const ai=new NeuralAI(car,0.044+i*0.001,contextFn,trainer.population[i].genome,layers);
-      cars.push(car); controllers.push(ai);
-    }
-    state.trainGroups.push({cars,controllers,trainer,grid});
-  }
-
-  // Flatten for legacy global state used by HUD viz etc.
-  state.allCars=state.trainGroups.flatMap(g=>g.cars);
-  state.aiCars=state.allCars;
-  state.aiControllers=state.trainGroups.flatMap(g=>g.controllers);
-  state.pCar=null;
-  // Keep state.trainer pointing to first group for any legacy code
-  state.trainer=state.trainGroups[0].trainer;
-  state.trainGrid=state.trainGroups[0].grid;
-
-  // Only show group 0's cars initially; rest run hidden
-  for(let s=0;s<state.trainGroups.length;s++)
-    for(const car of state.trainGroups[s].cars) car.mesh.visible=(s===0);
-  state._trainVisibleGroup=0;
-  // Global best genome shared across all simulations
-  state.trainGlobalBestGenome=null;
-  state.trainGlobalBestFitness=-Infinity;
-  // Auto-follow best car with camera (reset on each training init)
-  state._trainAutoFollow=true;
-
-  // Single top-down orthographic camera showing all simulations at once
-  {
-    const xs=state.trkPts.map(p=>p.x), zs=state.trkPts.map(p=>p.z);
-    const minX=xs.length?Math.min(...xs):-200, maxX=xs.length?Math.max(...xs):200;
-    const minZ=zs.length?Math.min(...zs):-200, maxZ=zs.length?Math.max(...zs):200;
-    const tcx=(minX+maxX)/2, tcz=(minZ+maxZ)/2;
-    const span=Math.max(maxX-minX,maxZ-minZ)*0.6+80;
-    const aspect=window.innerWidth/window.innerHeight;
-    const topDownCam=new THREE.OrthographicCamera(-span*aspect,span*aspect,span,-span,1,2000);
-    topDownCam._span=span;
-    topDownCam.up.set(0,0,-1);
-    topDownCam.position.set(tcx,800,tcz);
-    topDownCam.lookAt(tcx,0,tcz);
-    state.trainSplitCams=[topDownCam];
-  }
-
-  document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
-  document.getElementById('hud').style.display='none';
-  document.getElementById('hint').style.display='none';
-  document.getElementById('trainHud').style.display='flex';
-  updateTouchControlsVisibility('training');
-  dc.style.display='none';
-  stopAudio(); stopMusic();
-  state.gState='training';
-}
-
-export async function switchTrainingTrack(newTrkId){
-  // Preserve generation count and best genome across track switch
-  const bestTrainer=state.trainGroups.length>0
-    ?state.trainGroups.reduce((b,g)=>g.trainer.bestFitness>b.trainer.bestFitness?g:b,state.trainGroups[0]).trainer
-    :null;
-  const preserveGen=bestTrainer?bestTrainer.generation:0;
-  const preservedGenome=bestTrainer?bestTrainer.bestGenome:null;
-  state.selTrk=newTrkId;
-  await initTraining({preserveGen,preservedGenome});
-}
-
-// ─── Best-car position marker ───────────────────────────────────────────────
-let _bestMarker=null;
-
-export function placeBestCarMarker(x,y,z){
-  if(!_bestMarker){
-    const ring=new THREE.Mesh(
-      new THREE.TorusGeometry(3.5,0.35,8,32),
-      new THREE.MeshBasicMaterial({color:0xffcc00,transparent:true,opacity:0.9})
-    );
-    ring.rotation.x=Math.PI/2;
-    const beam=new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18,0.18,18,8),
-      new THREE.MeshBasicMaterial({color:0xffcc00,transparent:true,opacity:0.55})
-    );
-    beam.position.y=9;
-    const group=new THREE.Group();
-    group.add(ring);
-    group.add(beam);
-    scene.add(group);
-    _bestMarker=group;
-  }
-  _bestMarker.position.set(x,y+0.2,z);
-}
-
-export function clearBestCarMarker(){
-  if(_bestMarker){ scene.remove(_bestMarker); _bestMarker=null; }
-  state.trainBestCarPos=null;
-  state._trainFollowCar=null;
-}
-
-export function stopTraining(){
-  if(_trainLapsBackup!==null&&state.trkData){
-    state.trkData.laps=_trainLapsBackup;
-    _trainLapsBackup=null;
-  }
-  if(_bestMarker){ scene.remove(_bestMarker); _bestMarker=null; }
-  state.trainBestCarPos=null;
-  state._trainVisibleGroup=0;
-  state._trainFollowCar=null;
-  state.trainGlobalBestGenome=null;
-  state.trainGlobalBestFitness=-Infinity;
-  document.getElementById('trainHud').style.display='none';
-  state.trainer=null;
-  state.trainGrid=[];
-  state.trainGroups=[];
-  state.trainSplitCams=[];
 }

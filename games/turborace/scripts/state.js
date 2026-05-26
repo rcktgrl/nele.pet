@@ -24,9 +24,7 @@ export const state = {
     gState: 'menu',
     selCar: null,
     selTrk: null,
-    aiDifficulty: 'medium',  // 'easy' | 'medium' | 'hard' | 'neural'
-    neuralModelGenome: null, // genome array for neural AI race (null = use default)
-    neuralModelLayers: null, // layer spec for neural AI race (null = infer from genome)
+    aiDifficulty: 'medium',  // 'easy' | 'medium' | 'hard'
     opponentMode: 'ai',      // 'ai' | 'ghost'
     carCardPreviewScene: null,
     carCardPreviewCamera: null,
@@ -59,33 +57,24 @@ export const state = {
     trkEdgeRight: [],
     sceneryExclusionZones: [],
     aiControllers: [],
-    cityCorridors: null, // For city tracks: array of {x,z,hw,hd} axis-aligned driveable rectangles
-    cityAiPts: null,    // For city tracks: dense waypoints following grid roads exactly
-    gravelProfile: null, // Runoff profile used for gravel physics detection
+    cityCorridors: null,
+    cityAiPts: null,
+    gravelProfile: null,
     renderer: null,
-    trainer: null,       // GeneticTrainer instance, active only during training
-    trainGrid: [],       // Array of {pos,hdg} start positions for training cars
-    trainNumSims: 8,     // Number of parallel independent simulations (read by initTraining)
-    trainPopSize: 8,     // Population size (read by initTraining)
-    trainFF: 1,          // Fast-forward multiplier (1–10 physics substeps per frame)
-    trainGenDuration: 35,// Generation duration in seconds
-    trainHiddenLayers: 1,// Number of hidden layers (takes effect next run)
-    trainHiddenSize: 5,  // Nodes per hidden layer (takes effect next run)
-    trainOnTrackRewardRate: 0.10,
-    trainStuckPenaltyRate: 5,
-    trainGravelPenaltyBase: 0.5,
-    trainGravelGrowth: 0.30,
-    trainOffTrackMult: 10,
-    trainOffTrackDQTime: 3,
-    trainDQPenalty: 200,
-    trainMutRate: 0.15,
-    trainMutStrength: 0.35,
-    trainBestCarPos: null, // {x,z} of the best car's peak position from previous generation
-    trainSplitCams: [],  // PerspectiveCamera array for split-screen training view
-    trainGroups: [],     // [{cars, controllers, trainer, grid}] — one per simulation
-    trainEliteCloneMode: false, // when true: all sims run full duration, then best car is cloned with mutations
-    trainMode: 'timed',         // 'timed' | 'lap' — training objective mode
-    trainLapBonus: 1000,        // Max fitness points awarded for a perfect (instant) lap in lap mode
-    trainSingleCarModel: false, // when true: all AIs in a generation use the same randomly chosen car model
-    _trainAutoFollow: true,     // auto-follow best car with camera (false when user manually pans)
+
+    // ── VS Mode ──────────────────────────────────────────────────────────────
+    vsMode: false,           // true when in a vs race
+    vsNetwork: null,         // VsNetwork instance
+    vsIsHost: false,
+    vsMyName: '',
+    vsRoomCode: '',
+    vsLobbyPlayers: [],      // presence array
+    vsOpponentCar: null,     // remote Car instance (mesh only, no physics)
+    vsOpponentName: '',
+    vsOpponentFinished: false,
+    vsOpponentFinTime: 0,
+    vsOpponentCarIdx: 0,
+    vsOpponentState: null,   // latest received {x,z,hdg,spd,lap,totalProg}
+    vsPosSendTimer: 0,       // countdown to next position broadcast
+    vsPosSendInterval: 0.05, // 20 Hz
 };

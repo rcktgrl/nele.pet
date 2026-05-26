@@ -14,6 +14,7 @@ import {
   getAllTracks, loadEditorTracks, syncEditorTracksFromCloud,
   loadTracksFromFolder, makeEditableTrackFromGameTrack
 } from './editor.js';
+import { VsNetwork, generateRoomCode } from './vs-network.js';
 
 // ═══════════════════════════════════════════════════════
 //  SETTINGS
@@ -63,6 +64,9 @@ export function showMain(){
   if(audioReady)startMusic();
   for(const c of state.allCars)scene.remove(c.mesh);
   state.allCars=[]; state.aiCars=[]; state.pCar=null;
+  state.vsMode=false;
+  // Clean up VS network if we have one
+  if(state.vsNetwork){ state.vsNetwork.leave().catch(()=>{}); state.vsNetwork=null; }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -89,7 +93,7 @@ function ensureCarCardPreviewRenderer(){
 }
 
 function renderCarCardPreviews(ts){
-  if(state.gState!=='carSel'||!state.carCardPreviews.length){ state.carCardPreviewRaf=0; return; }
+  if((state.gState!=='carSel'&&state.gState!=='vsLobby')||!state.carCardPreviews.length){ state.carCardPreviewRaf=0; return; }
   const now=ts||performance.now();
   const dt=Math.min(0.05,Math.max(0.001,(now-state.carCardPreviewLastTime||16)/1000));
   state.carCardPreviewLastTime=now;
@@ -245,7 +249,6 @@ function buildTrackCards(tracks, container, nextBtnId){
     card.onclick=()=>{
       container.querySelectorAll('.tcard').forEach(x=>x.classList.remove('sel'));
       card.classList.add('sel'); state.selTrk=t.id; document.getElementById(nextBtnId).disabled=false;
-      const trainBtn=document.getElementById('btnTrainStart'); if(trainBtn) trainBtn.disabled=false;
     };
     container.appendChild(card);
     drawTrackPreview(canvas,t,t.previewColor||COLORS[i%COLORS.length]);
@@ -262,133 +265,9 @@ export async function showTrkSel(){
   document.getElementById('sTrk').style.display='flex';
   document.getElementById('btnNxt').style.display='';
   document.getElementById('btnNxt').disabled=(state.selTrk==null);
-  const trainBtn=document.getElementById('btnTrainStart'); if(trainBtn){ trainBtn.style.display='none'; trainBtn.disabled=true; }
   const tracks=state.folderTracks;
   await buildTrackCards(tracks,document.getElementById('trkCards'),'btnNxt');
 }
-
-// Opens the track selection screen in "train" mode (TRAIN button is the CTA).
-// Reuses the same screen; btnTrainStart is the only CTA (Next is hidden).
-export async function showTrainTrkSel(){
-  await showTrkSel();
-  document.getElementById('btnNxt').style.display='none';
-  const trainBtn=document.getElementById('btnTrainStart');
-  if(trainBtn){
-    trainBtn.style.display='';
-    trainBtn.disabled=(state.selTrk==null);
-    trainBtn.scrollIntoView({behavior:'smooth',block:'nearest'});
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-//  AI TRAINING SETUP
-// ═══════════════════════════════════════════════════════
-let _trainSetupGenome=null;
-let _trainSetupForceRandom=false;
-
-export async function showTrainSetup(){
-  document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
-  document.getElementById('sTrainSetup').style.display='flex';
-
-  _trainSetupGenome=null;
-  _trainSetupForceRandom=false;
-
-  // Sync training mode cards with current state
-  document.querySelectorAll('#trainModeCards .diffCard').forEach(card=>{
-    card.classList.toggle('sel', card.dataset.trainmode===(state.trainMode||'timed'));
-    card.onclick=()=>{
-      document.querySelectorAll('#trainModeCards .diffCard').forEach(c=>c.classList.remove('sel'));
-      card.classList.add('sel');
-      state.trainMode=card.dataset.trainmode;
-    };
-  });
-
-  // Sync arch sliders with current state
-  const h=state.trainHiddenLayers||1, n=state.trainHiddenSize||5;
-  document.getElementById('trainSetupHiddenSlider').value=h;
-  document.getElementById('trainSetupHiddenVal').textContent=h;
-  document.getElementById('trainSetupNodesSlider').value=n;
-  document.getElementById('trainSetupNodesVal').textContent=n;
-
-  const container=document.getElementById('trainSetupModelCards');
-  container.innerHTML='<div style="color:#556;font-size:.8rem;align-self:center;">Loading models…</div>';
-
-  const models=[];
-
-  // Load repo models from /models/index.json
-  try{
-    const idx=await fetch('./models/index.json').then(r=>r.json());
-    for(const id of (idx.models||[])){
-      try{
-        const filename=id.endsWith('.json')?id:`${id}.json`;
-        const m=await fetch(`./models/${filename}`).then(r=>r.json());
-        if(Array.isArray(m.genome)&&m.genome.length){
-          models.push({label:m.name||id,desc:`Built-in · gen ${m.generation||'?'}`,genome:m.genome,icon:'🧠',layers:m.layers||null});
-        }
-      }catch(_){}
-    }
-  }catch(_){}
-
-  // Check localStorage for a saved model
-  const saved=localStorage.getItem('turborace_nn_weights');
-  if(saved){
-    try{
-      const genome=JSON.parse(saved);
-      const savedName=localStorage.getItem('turborace_nn_name')||'Saved Model';
-      const savedLayers=localStorage.getItem('turborace_nn_layers');
-      const layers=savedLayers?JSON.parse(savedLayers):null;
-      models.push({label:savedName,desc:'Saved in browser',genome,icon:'💾',layers});
-    }catch(_){}
-  }
-
-  // Fresh random start
-  models.push({label:'Fresh Start',desc:'Fully random initialisation',genome:null,icon:'✨',layers:null,forceRandom:true});
-
-  // Default select: first model
-  _trainSetupGenome=models[0].genome;
-  let selectedIdx=0;
-
-  function _applyModelSelection(m){
-    _trainSetupGenome=m.genome;
-    _trainSetupForceRandom=!!m.forceRandom;
-    const archSection=document.getElementById('trainSetupArchSection');
-    // Only hide sliders for models compatible with the training format (15 inputs, 3 outputs)
-    const compatible=m.layers&&m.layers.length>=3&&m.layers[0]===15&&m.layers[m.layers.length-1]===3;
-    if(compatible){
-      // Model has known architecture — use it, hide sliders
-      const hl=m.layers.length-2, nl=m.layers[1]||5;
-      document.getElementById('trainSetupHiddenSlider').value=hl;
-      document.getElementById('trainSetupHiddenVal').textContent=hl;
-      document.getElementById('trainSetupNodesSlider').value=nl;
-      document.getElementById('trainSetupNodesVal').textContent=nl;
-      state.trainHiddenLayers=hl; state.trainHiddenSize=nl;
-      if(archSection) archSection.style.display='none';
-    } else {
-      // Fresh start or incompatible model — show sliders
-      if(archSection) archSection.style.display='';
-    }
-  }
-
-  // Apply initial selection
-  _applyModelSelection(models[0]);
-
-  container.innerHTML='';
-  models.forEach((m,i)=>{
-    const card=document.createElement('div');
-    card.className='diffCard'+(i===0?' sel':'');
-    card.innerHTML=`<div class="diffIcon">${m.icon}</div><div class="diffName">${m.label}</div><div class="diffDesc">${m.desc}</div>`;
-    card.onclick=()=>{
-      container.querySelectorAll('.diffCard').forEach(c=>c.classList.remove('sel'));
-      card.classList.add('sel');
-      selectedIdx=i;
-      _applyModelSelection(m);
-    };
-    container.appendChild(card);
-  });
-}
-
-export function getTrainSetupGenome(){ return _trainSetupGenome; }
-export function getTrainSetupForceRandom(){ return _trainSetupForceRandom; }
 
 export function showDiffSel(){
   if(state.selTrk==null){ showTrkSel(); return; }
@@ -417,57 +296,6 @@ export function showDiffSel(){
   });
 }
 
-export async function showNeuralModelSel(){
-  document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
-  document.getElementById('sNeuralModel').style.display='flex';
-  state.gState='neuralModelSel';
-
-  const container=document.getElementById('neuralModelCards');
-  container.innerHTML='<div style="color:#556;font-size:.8rem;align-self:center;">Loading models…</div>';
-
-  const models=[];
-  try{
-    const idx=await fetch('./models/index.json').then(r=>r.json());
-    for(const id of (idx.models||[])){
-      try{
-        const filename=id.endsWith('.json')?id:`${id}.json`;
-        const m=await fetch(`./models/${filename}`).then(r=>r.json());
-        if(Array.isArray(m.genome)&&m.genome.length){
-          models.push({label:m.name||id,desc:`Built-in · gen ${m.generation||'?'}`,genome:m.genome,layers:m.layers||null,icon:'🧠'});
-        }
-      }catch(_){}
-    }
-  }catch(_){}
-  const saved=localStorage.getItem('turborace_nn_weights');
-  if(saved){
-    try{
-      const genome=JSON.parse(saved);
-      const savedName=localStorage.getItem('turborace_nn_name')||'Saved Model';
-      models.push({label:savedName,desc:'Saved in browser',genome,icon:'💾'});
-    }catch(_){}
-  }
-  models.push({label:'Default',desc:'Built-in hand-designed weights',genome:null,icon:'⚙️'});
-
-  // Pre-select first model (or keep current if still in list)
-  let initIdx=0;
-  state.neuralModelGenome=models[0].genome;
-  state.neuralModelLayers=models[0].layers||null;
-
-  container.innerHTML='';
-  models.forEach((m,i)=>{
-    const card=document.createElement('div');
-    card.className='diffCard'+(i===initIdx?' sel':'');
-    card.innerHTML=`<div class="diffIcon">${m.icon}</div><div class="diffName">${m.label}</div><div class="diffDesc">${m.desc}</div>`;
-    card.onclick=()=>{
-      container.querySelectorAll('.diffCard').forEach(c=>c.classList.remove('sel'));
-      card.classList.add('sel');
-      state.neuralModelGenome=m.genome;
-      state.neuralModelLayers=m.layers||null;
-    };
-    container.appendChild(card);
-  });
-}
-
 export async function showOnlineTrkSel(){
   loadEditorTracks();
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
@@ -478,4 +306,304 @@ export async function showOnlineTrkSel(){
   await syncEditorTracksFromCloud().catch(()=>{});
   document.getElementById('btnOnlineNxt').disabled=(state.selTrk==null||!state.editorTracks.some(t=>String(t.id)===String(state.selTrk)));
   await buildTrackCards(state.editorTracks,container,'btnOnlineNxt');
+}
+
+// ═══════════════════════════════════════════════════════
+//  VS MODE LOBBY
+// ═══════════════════════════════════════════════════════
+
+let _vsCarPreviews = [];
+
+function _disposeVsCarPreviews(){
+  if(state.carCardPreviewRaf){ cancelAnimationFrame(state.carCardPreviewRaf); state.carCardPreviewRaf=0; }
+  state.carCardPreviews.forEach(item=>{ if(item.renderer) item.renderer.dispose(); });
+  state.carCardPreviews.length=0;
+  _vsCarPreviews=[];
+}
+
+/** Build the compact car-select row inside the VS lobby */
+function _buildVsCarRow(container, onSelect){
+  _disposeVsCarPreviews();
+  ensureCarCardPreviewRenderer();
+  container.innerHTML='';
+  if(state.selCar==null) state.selCar=0;
+
+  CARS.forEach((c,i)=>{
+    const d=document.createElement('div');
+    d.className='vsCarChip'+(state.selCar===i?' sel':'');
+    d.title=c.name;
+    const cvs=document.createElement('canvas');
+    cvs.className='vsCarCanvas';
+    const nameEl=document.createElement('span');
+    nameEl.textContent=c.name;
+    d.appendChild(cvs); d.appendChild(nameEl);
+
+    const visual=createCarVisual(c);
+    visual.mesh.scale.setScalar(0.72);
+    visual.mesh.rotation.x=-0.1;
+    visual.mesh.position.set(0,-0.2,0);
+    const preview={host:d,canvas:cvs,model:visual.mesh,hovered:false,selected:state.selCar===i,angle:0,spinSpeed:0,baseYaw:-0.55,
+      renderer:new THREE.WebGLRenderer({canvas:cvs,alpha:true,antialias:true,powerPreference:'low-power'})};
+    preview.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));
+    preview.renderer.outputColorSpace=THREE.SRGBColorSpace;
+    state.carCardPreviews.push(preview);
+    _vsCarPreviews.push(preview);
+
+    d.onmouseenter=()=>{ preview.hovered=true; startCarCardPreviews(); };
+    d.onmouseleave=()=>{ preview.hovered=false; };
+    d.onclick=()=>{
+      container.querySelectorAll('.vsCarChip').forEach(x=>x.classList.remove('sel'));
+      d.classList.add('sel'); state.selCar=i;
+      state.carCardPreviews.forEach(item=>{ item.selected=item.host===d; });
+      startCarCardPreviews();
+      onSelect(i);
+    };
+    container.appendChild(d);
+  });
+  startCarCardPreviews();
+}
+
+/** Rebuild the player list section of the VS lobby */
+function _renderVsPlayerList(){
+  const listEl=document.getElementById('vsPlayerList');
+  if(!listEl) return;
+  const players=state.vsLobbyPlayers||[];
+  listEl.innerHTML='';
+  for(const p of players){
+    const row=document.createElement('div');
+    row.className='vsPlayerRow';
+    const dot=document.createElement('span'); dot.className='vsPlayerDot';
+    dot.style.background=p.isHost?'#fa4':'#4af';
+    const nm=document.createElement('span'); nm.className='vsPlayerName';
+    nm.textContent=(p.name||'Player')+(p.isHost?' 👑':'');
+    row.appendChild(dot); row.appendChild(nm);
+    listEl.appendChild(row);
+  }
+  // Waiting slot
+  if(players.length<2){
+    const row=document.createElement('div'); row.className='vsPlayerRow vsWaiting';
+    row.textContent='Waiting for opponent...';
+    listEl.appendChild(row);
+  }
+}
+
+export async function showVsLobby(){
+  // Clean up any previous VS network
+  if(state.vsNetwork){ await state.vsNetwork.leave().catch(()=>{}); state.vsNetwork=null; }
+  state.vsMode=false;
+  state.vsLobbyPlayers=[];
+
+  await loadTracksFromFolder().catch(()=>{});
+
+  document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
+  document.getElementById('sVsLobby').style.display='flex';
+  state.gState='vsLobby';
+  updateTouchControlsVisibility(state.gState);
+
+  // Reset to join/create panel
+  document.getElementById('vsJoinPanel').style.display='flex';
+  document.getElementById('vsRoomPanel').style.display='none';
+  document.getElementById('vsStatusMsg').textContent='';
+  document.getElementById('vsNameInput').value=state.vsMyName||'';
+}
+
+/** Called when CREATE ROOM is clicked */
+export async function vsCreateRoom(){
+  const nameInput=document.getElementById('vsNameInput');
+  const name=(nameInput.value||'').trim()||'Player 1';
+  state.vsMyName=name;
+
+  const code=generateRoomCode();
+  state.vsRoomCode=code;
+  state.vsIsHost=true;
+  state.selCar=state.selCar??0;
+
+  const net=new VsNetwork();
+  state.vsNetwork=net;
+
+  _setVsStatus('Connecting…');
+  try{
+    await net.joinRoom(code, name, true);
+  }catch(e){
+    _setVsStatus('❌ Failed to connect: '+e.message);
+    return;
+  }
+
+  _attachVsNetworkHandlers(net);
+  _showVsRoomPanel(true);
+}
+
+/** Called when JOIN ROOM is clicked */
+export async function vsJoinRoom(){
+  const nameInput=document.getElementById('vsNameInput');
+  const codeInput=document.getElementById('vsCodeInput');
+  const name=(nameInput.value||'').trim()||'Player 2';
+  const code=(codeInput.value||'').trim().toUpperCase();
+  if(!code||code.length!==4){ _setVsStatus('❌ Enter a 4-character room code'); return; }
+
+  state.vsMyName=name;
+  state.vsRoomCode=code;
+  state.vsIsHost=false;
+  state.selCar=state.selCar??0;
+
+  const net=new VsNetwork();
+  state.vsNetwork=net;
+
+  _setVsStatus('Joining room…');
+  try{
+    await net.joinRoom(code, name, false);
+  }catch(e){
+    _setVsStatus('❌ Failed to join: '+e.message);
+    return;
+  }
+
+  _attachVsNetworkHandlers(net);
+  _showVsRoomPanel(false);
+
+  // Guest: send ready immediately with selected car
+  net.sendGuestReady(state.selCar??0, name);
+}
+
+function _setVsStatus(msg){
+  const el=document.getElementById('vsStatusMsg');
+  if(el) el.textContent=msg;
+}
+
+function _showVsRoomPanel(isHost){
+  document.getElementById('vsJoinPanel').style.display='none';
+  document.getElementById('vsRoomPanel').style.display='flex';
+
+  document.getElementById('vsRoomCodeDisplay').textContent=state.vsRoomCode;
+
+  // Host controls visibility
+  const hostControls=document.getElementById('vsHostControls');
+  const guestControls=document.getElementById('vsGuestControls');
+  if(hostControls) hostControls.style.display=isHost?'flex':'none';
+  if(guestControls) guestControls.style.display=isHost?'none':'flex';
+
+  _renderVsPlayerList();
+
+  if(isHost){
+    // Host: build track selector
+    _buildVsTrkCards();
+    // Host: build car selector
+    const carRow=document.getElementById('vsHostCarRow');
+    if(carRow) _buildVsCarRow(carRow, (carIdx)=>{
+      // Broadcast config whenever host changes car
+      if(state.vsNetwork&&state.selTrk!=null){
+        state.vsNetwork.sendGameConfig(state.selTrk, carIdx, state.vsMyName);
+      }
+    });
+  } else {
+    // Guest: just show car selector
+    const carRow=document.getElementById('vsGuestCarRow');
+    if(carRow) _buildVsCarRow(carRow, (carIdx)=>{
+      if(state.vsNetwork){
+        state.vsNetwork.sendGuestReady(carIdx, state.vsMyName);
+      }
+    });
+  }
+}
+
+function _buildVsTrkCards(){
+  const container=document.getElementById('vsTrackCards');
+  if(!container) return;
+  const tracks=state.folderTracks||[];
+  const COLORS=['#4488ff','#44cc66','#ffaa22','#ff4488','#22ddaa','#dd66ff','#66bbff'];
+  container.innerHTML='';
+  tracks.forEach((t,i)=>{
+    const card=document.createElement('div');
+    card.className='vsTrackCard'+(String(state.selTrk)===String(t.id)?' sel':'');
+    const cvs=document.createElement('canvas'); cvs.width=160; cvs.height=120;
+    const nm=document.createElement('span'); nm.textContent=t.name;
+    card.appendChild(cvs); card.appendChild(nm);
+    drawTrackPreview(cvs, t, t.previewColor||COLORS[i%COLORS.length]);
+    card.onclick=()=>{
+      container.querySelectorAll('.vsTrackCard').forEach(x=>x.classList.remove('sel'));
+      card.classList.add('sel'); state.selTrk=t.id;
+      // Broadcast updated config to guest
+      if(state.vsNetwork){
+        state.vsNetwork.sendGameConfig(state.selTrk, state.selCar??0, state.vsMyName);
+      }
+      const startBtn=document.getElementById('vsStartBtn');
+      if(startBtn) startBtn.disabled=false;
+    };
+    container.appendChild(card);
+  });
+}
+
+function _attachVsNetworkHandlers(net){
+  net.onPresenceUpdate=(players)=>{
+    state.vsLobbyPlayers=players;
+    _renderVsPlayerList();
+  };
+
+  net.onPlayerLeft=({id})=>{
+    if(state.gState==='vsLobby'){
+      _setVsStatus('⚠️ Opponent left the lobby');
+    } else if(state.gState==='racing'||state.gState==='cooldown'){
+      // notify in-race — use the notify module
+      import('./notify.js').then(m=>m.notify('Opponent disconnected'));
+    }
+  };
+
+  net.onGameConfig=({trackId, carIdx, hostName})=>{
+    // Guest receives host config
+    state.selTrk=trackId;
+    state.vsOpponentCarIdx=carIdx;
+    state.vsOpponentName=hostName||'Host';
+    _setVsStatus('Track set by host. Pick your car and wait…');
+    // Re-send guest ready with our current car
+    net.sendGuestReady(state.selCar??0, state.vsMyName);
+  };
+
+  net.onGuestReady=({carIdx, guestName})=>{
+    // Host receives guest config
+    state.vsOpponentCarIdx=carIdx;
+    state.vsOpponentName=guestName||'Guest';
+    _renderVsPlayerList();
+    _setVsStatus('✅ Opponent ready! You can start the race.');
+    const startBtn=document.getElementById('vsStartBtn');
+    if(startBtn&&state.selTrk!=null) startBtn.disabled=false;
+  };
+
+  net.onGameStart=()=>{
+    // Guest receives start signal
+    _launchVsRace();
+  };
+
+  net.onPosUpdate=(data)=>{
+    // In-race: store latest opponent state for interpolation
+    state.vsOpponentState=data;
+  };
+
+  net.onPlayerFinished=({id, finTime})=>{
+    if(id!==net.myId){
+      state.vsOpponentFinished=true;
+      state.vsOpponentFinTime=finTime;
+    }
+  };
+}
+
+function _launchVsRace(){
+  state.vsMode=true;
+  _disposeVsCarPreviews();
+  document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
+  import('./race.js').then(m=>m.startRace());
+}
+
+export function vsStartRace(){
+  if(!state.vsNetwork) return;
+  if(state.selTrk==null){ _setVsStatus('❌ Pick a track first'); return; }
+  // Send final config then start
+  state.vsNetwork.sendGameConfig(state.selTrk, state.selCar??0, state.vsMyName);
+  state.vsNetwork.sendGameStart();
+  _launchVsRace();
+}
+
+export function vsLeaveLobby(){
+  if(state.vsNetwork){ state.vsNetwork.leave().catch(()=>{}); state.vsNetwork=null; }
+  state.vsMode=false;
+  _disposeVsCarPreviews();
+  showMain();
 }
