@@ -132,12 +132,16 @@ export class AIPlayer {
     return false;
   }
 
-  #doMove(state, me, nx, ny, now, net, dir) {
+  #doMove(state, me, nx, ny, now, net) {
     me.startMove(nx, ny, now);
     net.sendAnyMove(this.id, nx, ny);
+    // Collect any power-up sitting on the destination tile
+    const pu = state.collectPowerup(this.id, nx, ny);
+    if (pu) net.sendAnyPowerupCollected(this.id, nx, ny);
   }
 
-  update(state, now, net, scheduleBombExplosion) {
+  // awardScore is an optional (playerId, pts) callback provided by the host
+  update(state, now, net, scheduleBombExplosion, awardScore = null) {
     const me = state.players.get(this.id);
     if (!me || !me.alive) return;
 
@@ -165,7 +169,7 @@ export class AIPlayer {
       }
     }
 
-    const inDanger  = dangerSet.has(`${me.tileX},${me.tileY}`);
+    const inDanger = dangerSet.has(`${me.tileX},${me.tileY}`);
 
     if (
       !inDanger &&
@@ -173,10 +177,18 @@ export class AIPlayer {
       now - this.lastBombTime > this.bombCooldown &&
       this.#hasAdjacentTarget(state, me)
     ) {
+      // Use special bomb if the bot has one, otherwise normal
+      let bombType = 'normal';
+      if (me.specialBomb) {
+        bombType = me.specialBomb === 'napalm' ? 'napalm' : 'box';
+        me.specialBomb = null; // consume the power-up
+        if (awardScore) awardScore(this.id, 10); // 10pts for using a special bomb
+      }
+
       const bombId     = crypto.randomUUID();
       const explodesAt = Date.now() + BOMB_FUSE;
-      state.addBomb(bombId, this.id, me.tileX, me.tileY, explodesAt, me.bombRange);
-      net.sendAnyBomb(bombId, this.id, me.tileX, me.tileY, explodesAt, me.bombRange);
+      state.addBomb(bombId, this.id, me.tileX, me.tileY, explodesAt, me.bombRange, bombType);
+      net.sendAnyBomb(bombId, this.id, me.tileX, me.tileY, explodesAt, me.bombRange, bombType);
       scheduleBombExplosion(bombId, BOMB_FUSE);
       this.lastBombTime = now;
       dangerSet.add(`${me.tileX},${me.tileY}`);

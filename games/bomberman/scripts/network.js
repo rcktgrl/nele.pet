@@ -147,6 +147,10 @@ export class Network {
     return this.#send('player_dead', { id });
   }
 
+  sendAnyPowerupCollected(playerId, tileX, tileY) {
+    return this.#send('powerup_collected', { playerId, tileX, tileY });
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
   getPresencePlayers() {
     if (!this.channel) return [];
