@@ -762,15 +762,26 @@ async function init() {
   };
 
   net.onPresenceLeave = leftPlayers => {
-    const leftIds = new Set(leftPlayers.map(p => p.id));
-    const before  = lobbyRealPlayers.length;
-    lobbyRealPlayers = lobbyRealPlayers.filter(p => !leftIds.has(p.id));
+    const leftIds  = new Set(leftPlayers.map(p => p.id));
     const hostLeft = leftPlayers.some(p => p.isHost);
+    // Handle host-left immediately — this is time-sensitive
     if (hostLeft && !isHost && !gameRunning) dbDeleteRoom();
-    if (lobbyRealPlayers.length !== before) {
-      renderSlots();
-      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-    }
+
+    // Delay the actual removal to guard against spurious leave events that
+    // Supabase fires during WebSocket reconnections (a leave+join pair for the
+    // same player).  Re-check presence state before removing.
+    setTimeout(() => {
+      if (gameRunning) return;
+      const stillPresent = new Set(net.getPresencePlayers().map(p => p.id));
+      const before = lobbyRealPlayers.length;
+      lobbyRealPlayers = lobbyRealPlayers.filter(
+        p => !leftIds.has(p.id) || stillPresent.has(p.id)
+      );
+      if (lobbyRealPlayers.length !== before) {
+        renderSlots();
+        if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+      }
+    }, 2500);
   };
 
   net.onPlayerHello = ({ id, name, isHost: pIsHost }) => {
@@ -817,23 +828,35 @@ async function init() {
   mergePresencePlayers(net.getPresencePlayers());
   renderSlots();
 
-  // Periodic presence refresh — removes players whose presence truly expired
-  // and catches any missed leave events.  Also merges any new arrivals we
-  // might have missed.
+  // Fast interval — only ADDS players we might have missed (e.g. player_hello
+  // arrived before presence state propagated).  No pruning here: removing
+  // players is handled exclusively by onPresenceLeave so we never accidentally
+  // evict a player whose presence hasn't fully propagated yet.
   setInterval(() => {
     if (gameRunning) return;
-    const fresh    = net.getPresencePlayers();
-    const freshIds = new Set(fresh.map(p => p.id));
-    const before   = lobbyRealPlayers.length;
-    // Remove stale entries (not in live presence state)
-    lobbyRealPlayers = lobbyRealPlayers.filter(p => freshIds.has(p.id));
-    // Merge-add any we might have missed
+    const fresh  = net.getPresencePlayers();
+    const before = lobbyRealPlayers.length;
     mergePresencePlayers(fresh);
     if (lobbyRealPlayers.length !== before) {
       renderSlots();
       if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
     }
   }, 4000);
+
+  // Slow safety-net — prunes genuinely stale entries in case a leave event
+  // was missed (e.g. hard browser close with no WebSocket teardown).
+  // 30 s gives Supabase plenty of time to surface any reconnect join.
+  setInterval(() => {
+    if (gameRunning) return;
+    const fresh    = net.getPresencePlayers();
+    const freshIds = new Set(fresh.map(p => p.id));
+    const before   = lobbyRealPlayers.length;
+    lobbyRealPlayers = lobbyRealPlayers.filter(p => freshIds.has(p.id));
+    if (lobbyRealPlayers.length !== before) {
+      renderSlots();
+      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+    }
+  }, 30000);
 }
 
 // ─── Button wiring ────────────────────────────────────────────────────────────
