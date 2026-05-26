@@ -502,6 +502,8 @@ export async function vsCreateRoom(){
   catch(e){ _vsSetStatus('❌ Failed: '+e.message); return; }
 
   state.vsMyId=net.myId;
+  // Pre-seed our own slot so the grid isn't empty while we wait for the first presence sync
+  state.vsLobbyPlayers=[{id:net.myId, name, isHost:true}];
   _attachVsHandlers(net, true);
   _showVsRoomPanel(true);
 }
@@ -525,6 +527,8 @@ export async function vsJoinRoom(){
   catch(e){ _vsSetStatus('❌ Failed: '+e.message); return; }
 
   state.vsMyId=net.myId;
+  // Pre-seed our own slot so the grid isn't empty while we wait for the first presence sync
+  state.vsLobbyPlayers=[{id:net.myId, name, isHost:false}];
   _attachVsHandlers(net, false);
   _showVsRoomPanel(false);
 
