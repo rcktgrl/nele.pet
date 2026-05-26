@@ -249,5 +249,20 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .vsTrackCard:hover,.vsTrackCard.sel{border-color:#4af;background:rgba(68,170,255,.08);color:#8dd;transform:translateY(-2px);box-shadow:0 4px 16px rgba(68,170,255,.15);}
 .vsTrackCard canvas{border-radius:5px;}
 
+/* VS 4-slot player grid */
+.vsSlotGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;width:100%;max-width:500px;}
+@media(min-width:560px){.vsSlotGrid{grid-template-columns:repeat(4,1fr);}}
+.vsSlot{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:2px solid #1a2535;background:rgba(255,255,255,.02);min-height:48px;transition:border-color .15s,background .15s;box-sizing:border-box;}
+.vsSlot-filled{border-color:var(--sc,#4af);background:rgba(68,170,255,.04);}
+.vsSlot-empty{border-color:#1a2535;border-style:dashed;justify-content:center;}
+.vsSlot-passive{border-color:#1a2535;justify-content:center;opacity:.4;}
+.vsSlotDot{width:10px;height:10px;border-radius:50%;background:var(--sc,#4af);flex-shrink:0;box-shadow:0 0 6px var(--sc,#4af);}
+.vsSlotName{font-family:'Orbitron',monospace;font-size:9px;color:#dde;letter-spacing:.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.vsSlotRemove{background:none;border:none;color:#445;cursor:pointer;font-size:11px;padding:2px 4px;margin-left:auto;border-radius:4px;transition:color .1s;flex-shrink:0;}
+.vsSlotRemove:hover{color:#f44;}
+.vsAddBotBtn{background:none;border:none;color:#4af;cursor:pointer;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;padding:4px 8px;border-radius:4px;transition:color .1s,background .1s;white-space:nowrap;}
+.vsAddBotBtn:hover{color:#8df;background:rgba(68,170,255,.1);}
+.vsSlotEmpty{color:#223;font-size:18px;}
+
 #sVsLobby{gap:20px;}
 #vsRoomPanel{gap:16px;}

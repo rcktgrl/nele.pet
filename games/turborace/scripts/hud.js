@@ -24,8 +24,8 @@ export function updateHUD(){
   }else{
     lapTimesEl.textContent='';
   }
-  const opponents=state.vsMode&&state.vsOpponentCar
-    ?[state.vsOpponentCar]
+  const opponents=state.vsMode
+    ?state.vsSlots.filter(s=>s.id!==state.vsMyId).map(s=>state.vsCarsById[s.id]).filter(Boolean)
     :state.aiCars;
   const all=[state.pCar,...opponents].sort((a,b)=>b.totalProg-a.totalProg);
   const p=all.indexOf(state.pCar)+1;
@@ -134,7 +134,9 @@ export function drawMinimap(){
   for(const p of state.trkPts){const[px,pz]=toM(p.x,p.z);ctx.lineTo(px,pz);}
   ctx.closePath(); ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=5; ctx.stroke();
   ctx.strokeStyle='#1a1a2e'; ctx.lineWidth=2; ctx.stroke();
-  const mmOpponents=state.vsMode&&state.vsOpponentCar?[state.vsOpponentCar]:state.aiCars;
+  const mmOpponents=state.vsMode
+    ?state.vsSlots.filter(s=>s.id!==state.vsMyId).map(s=>state.vsCarsById[s.id]).filter(Boolean)
+    :state.aiCars;
   for(const c of mmOpponents){
     const[ex,ez]=toM(c.pos.x,c.pos.z);
     ctx.beginPath(); ctx.arc(ex,ez,3.5,0,Math.PI*2);

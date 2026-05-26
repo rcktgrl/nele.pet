@@ -2,6 +2,8 @@ import { supabase } from "./supabase.js";
 
 let currentArcadeUser={ user_id:null, name:'Anonymous' };
 
+export function getArcadeUser(){ return currentArcadeUser; }
+
 export function sanitizeUserId(raw){
   const value=String(raw||'').trim();
   return value||null;

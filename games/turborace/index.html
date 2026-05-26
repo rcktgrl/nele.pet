@@ -228,12 +228,15 @@
 <!-- VS MODE LOBBY -->
 <div class="screen" id="sVsLobby" style="display:none">
   <h2>⚔️ VS Mode</h2>
-  <div class="sub">Race a friend online — real-time, head to head</div>
+  <div class="sub">Race friends online — up to 4 players &amp; AI</div>
   <div id="vsStatusMsg" style="color:#fa4;font-size:.8rem;min-height:1.2em;text-align:center;width:100%;max-width:600px;"></div>
 
   <!-- Join/Create panel -->
   <div id="vsJoinPanel" style="display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:420px;">
-    <input id="vsNameInput" class="vsInput" type="text" maxlength="20" placeholder="Your name" autocomplete="off">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="color:#556;font-size:.75rem;font-family:Orbitron,monospace;letter-spacing:1px;">PLAYING AS</span>
+      <span id="vsMyNameLabel" style="color:#ffd700;font-family:Orbitron,monospace;font-size:.9rem;font-weight:700;letter-spacing:1px;"></span>
+    </div>
     <button id="vsCreateBtn" class="btn btn-p" style="width:100%">CREATE ROOM</button>
     <div class="vsDivider"><span>— or join —</span></div>
     <div style="display:flex;gap:10px;width:100%;">
@@ -246,17 +249,22 @@
 
   <!-- Room panel (shown after connecting) -->
   <div id="vsRoomPanel" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%;max-width:700px;">
-    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;">
-      <div style="text-align:center;">
-        <div style="color:#556;font-size:.65rem;font-family:Orbitron,monospace;letter-spacing:2px;">ROOM CODE</div>
-        <div id="vsRoomCodeDisplay" style="font-size:2.2rem;font-family:Orbitron,monospace;color:#4af;letter-spacing:8px;font-weight:700;"></div>
-        <div style="color:#556;font-size:.7rem;">Share this with your opponent</div>
-      </div>
-      <div id="vsPlayerList" style="display:flex;flex-direction:column;gap:6px;min-width:180px;"></div>
+    <div style="text-align:center;">
+      <div style="color:#556;font-size:.65rem;font-family:Orbitron,monospace;letter-spacing:2px;">ROOM CODE</div>
+      <div id="vsRoomCodeDisplay" style="font-size:2.2rem;font-family:Orbitron,monospace;color:#4af;letter-spacing:8px;font-weight:700;"></div>
+      <div style="color:#556;font-size:.7rem;">Share this with your friends</div>
+    </div>
+
+    <!-- 4-slot player grid -->
+    <div class="vsSlotGrid">
+      <div id="vsSlot0" class="vsSlot"></div>
+      <div id="vsSlot1" class="vsSlot"></div>
+      <div id="vsSlot2" class="vsSlot"></div>
+      <div id="vsSlot3" class="vsSlot"></div>
     </div>
 
     <!-- Host controls -->
-    <div id="vsHostControls" style="display:none;flex-direction:column;align-items:center;gap:14px;width:100%;">
+    <div id="vsHostSection" style="display:none;flex-direction:column;align-items:center;gap:14px;width:100%;">
       <div class="vsSection">
         <div class="vsLabel">Pick a Track</div>
         <div id="vsTrackCards" class="vsTrackList"></div>
@@ -269,12 +277,11 @@
     </div>
 
     <!-- Guest controls -->
-    <div id="vsGuestControls" style="display:none;flex-direction:column;align-items:center;gap:14px;width:100%;">
+    <div id="vsGuestSection" style="display:none;flex-direction:column;align-items:center;gap:14px;width:100%;">
       <div class="vsSection">
         <div class="vsLabel">Your Car</div>
         <div id="vsGuestCarRow" class="vsCarRow"></div>
       </div>
-      <div style="color:#556;font-size:.8rem;text-align:center;">Waiting for host to start the race…</div>
     </div>
 
     <button id="vsLeaveLobbyBtn" class="btn btn-s">LEAVE LOBBY</button>
