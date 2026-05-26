@@ -540,17 +540,19 @@ export async function vsCreateRoom(){
 
   const net=new VsNetwork();
   state.vsNetwork=net;
+  state.vsMyId=net.myId;
+  // Pre-seed our own slot so the grid isn't empty while we wait for presence sync
+  state.vsLobbyPlayers=[{id:net.myId, name, isHost:true}];
+  // Attach handlers BEFORE joinRoom so the initial presence 'sync' that fires
+  // inside joinRoom (while track() is being awaited) is handled correctly.
+  _attachVsHandlers(net, true);
 
   _vsSetStatus('Connecting…');
   try{ await net.joinRoom(code, name, true); }
   catch(e){ _vsSetStatus('❌ Failed: '+e.message); return; }
 
-  state.vsMyId=net.myId;
-  // Pre-seed our own slot so the grid isn't empty while we wait for presence sync
-  state.vsLobbyPlayers=[{id:net.myId, name, isHost:true}];
-  _attachVsHandlers(net, true);
-  // Force an immediate sync — the Supabase presence 'sync' event fires inside
-  // joinRoom() (before onPresenceUpdate is assigned) so we replay it now.
+  // Belt-and-suspenders: replay snapshot in case presenceState was populated
+  // during joinRoom but onPresenceUpdate fired before track() completed.
   const snapHost=net.getPresencePlayers();
   if(snapHost.length) net.onPresenceUpdate(snapHost);
   _showVsRoomPanel(true);
@@ -569,19 +571,20 @@ export async function vsJoinRoom(){
 
   const net=new VsNetwork();
   state.vsNetwork=net;
+  state.vsMyId=net.myId;
+  // Pre-seed our own slot so the grid isn't empty while we wait for presence sync
+  state.vsLobbyPlayers=[{id:net.myId, name, isHost:false}];
+  // Attach handlers BEFORE joinRoom so the initial presence 'sync' that fires
+  // inside joinRoom (while track() is being awaited) is handled correctly —
+  // this ensures the guest sees the host immediately without needing a second event.
+  _attachVsHandlers(net, false);
 
   _vsSetStatus('Joining…');
   try{ await net.joinRoom(code, name, false); }
   catch(e){ _vsSetStatus('❌ Failed: '+e.message); return; }
 
-  state.vsMyId=net.myId;
-  // Pre-seed our own slot so the grid isn't empty while we wait for presence sync
-  state.vsLobbyPlayers=[{id:net.myId, name, isHost:false}];
-  _attachVsHandlers(net, false);
-  // Force an immediate sync — the initial presence 'sync' (which includes the
-  // host who was already in the channel) fires inside joinRoom() before
-  // onPresenceUpdate is assigned, so we replay it now so the guest can see
-  // the host and any other players who joined earlier.
+  // Belt-and-suspenders: replay snapshot in case presenceState was populated
+  // during joinRoom but the 'sync' callback fired before onPresenceUpdate was live.
   const snapGuest=net.getPresencePlayers();
   if(snapGuest.length) net.onPresenceUpdate(snapGuest);
   _showVsRoomPanel(false);
@@ -614,6 +617,9 @@ function _showVsRoomPanel(isHost){
 
 function _attachVsHandlers(net, isHost){
   net.onPresenceUpdate=(players)=>{
+    // Guard: an empty snapshot means Supabase hasn't synced yet — don't wipe
+    // the pre-seeded entry.
+    if(!players.length) return;
     // Deduplicate by name so a reconnecting player (new UUID, same display name)
     // never gets a second slot.  Last-write-wins: if old + new IDs briefly
     // coexist in presenceState, the newer entry (appended last by Supabase)
