@@ -12,6 +12,7 @@ export class Network {
     this.onPresenceLeave     = null;
     this.onPlayerHello       = null;
     this.onAIUpdate          = null;
+    this.onPlayAgain         = null;
     this.onGameStart         = null;
     this.onPlayerMove        = null;
     this.onBombPlaced        = null;
@@ -65,6 +66,7 @@ export class Network {
 
     on('player_hello',      p => this.onPlayerHello?.(p));
     on('ai_update',         p => this.onAIUpdate?.(p));
+    on('play_again',        p => this.onPlayAgain?.(p));
     on('game_start',        p => this.onGameStart?.(p));
     on('player_move',       p => this.onPlayerMove?.(p));
     on('bomb_placed',       p => this.onBombPlaced?.(p));
@@ -99,6 +101,10 @@ export class Network {
   // ── Lobby ────────────────────────────────────────────────────────────────────
   sendAIUpdate(aiPlayers) {
     return this.#send('ai_update', { aiPlayers });
+  }
+
+  sendPlayAgain() {
+    return this.#send('play_again', {});
   }
 
   sendPlayerKick(targetId) {

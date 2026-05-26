@@ -29,6 +29,11 @@ let lobbyRealPlayers = [];
 let lobbyAIPlayers   = [];
 let aiInstances      = [];
 
+// Tracks which section is currently visible: 'lobby' | 'game' | 'result'
+// Used to guard presence pruning — we only want to remove disconnected players
+// while we're actually in the lobby, not during gameplay or the result screen.
+let activeSection = 'lobby';
+
 let lastMoveTime = 0;
 const MOVE_COOLDOWN = 130;
 let bombCooldown = false;
@@ -80,6 +85,7 @@ window.addEventListener('touchend', () => sound.init(), { once: true });
 const $ = id => document.getElementById(id);
 
 function showSection(name) {
+  activeSection = name;
   ['lobby', 'game', 'result'].forEach(s => {
     $(`${s}-section`).classList.toggle('hidden', s !== name);
     $(`${s}-section`).classList.toggle('active', s === name);
@@ -770,8 +776,11 @@ async function init() {
     // Delay the actual removal to guard against spurious leave events that
     // Supabase fires during WebSocket reconnections (a leave+join pair for the
     // same player).  Re-check presence state before removing.
+    // Only prune while in the lobby — not during the game or result screen.
+    // (gameRunning is already false on the result screen, so checking only
+    // gameRunning would cause players to be pruned prematurely.)
     setTimeout(() => {
-      if (gameRunning) return;
+      if (activeSection !== 'lobby') return;
       const stillPresent = new Set(net.getPresencePlayers().map(p => p.id));
       const before = lobbyRealPlayers.length;
       lobbyRealPlayers = lobbyRealPlayers.filter(
@@ -804,7 +813,22 @@ async function init() {
     renderSlots();
   };
 
-  net.onAIUpdate          = ({ aiPlayers }) => { lobbyAIPlayers = aiPlayers ?? []; renderSlots(); };
+  net.onAIUpdate  = ({ aiPlayers }) => { lobbyAIPlayers = aiPlayers ?? []; renderSlots(); };
+
+  // Host broadcasts play_again when they click "Play Again".  Non-host
+  // clients receive this and transition back to the lobby automatically —
+  // no page refresh needed, so player IDs and session scores are preserved.
+  net.onPlayAgain = () => {
+    if (isHost) return; // host already handled this locally
+    gameRunning = false;
+    // Rebuild player list from current presence so we start fresh.
+    lobbyRealPlayers = net.getPresencePlayers().filter(p => p.id !== net.myId);
+    showSection('lobby'); // sets activeSection = 'lobby'
+    renderSlots();
+    renderSessionLeaderboard();
+    loadGlobalLeaderboard().then(rows => renderGlobalLeaderboard(rows));
+  };
+
   net.onGameStart         = handleGameStart;
   net.onPlayerMove        = handlePlayerMove;
   net.onBombPlaced        = handleBombPlaced;
@@ -833,7 +857,7 @@ async function init() {
   // players is handled exclusively by onPresenceLeave so we never accidentally
   // evict a player whose presence hasn't fully propagated yet.
   setInterval(() => {
-    if (gameRunning) return;
+    if (activeSection !== 'lobby') return;
     const fresh  = net.getPresencePlayers();
     const before = lobbyRealPlayers.length;
     mergePresencePlayers(fresh);
@@ -847,7 +871,7 @@ async function init() {
   // was missed (e.g. hard browser close with no WebSocket teardown).
   // 30 s gives Supabase plenty of time to surface any reconnect join.
   setInterval(() => {
-    if (gameRunning) return;
+    if (activeSection !== 'lobby') return;
     const fresh    = net.getPresencePlayers();
     const freshIds = new Set(fresh.map(p => p.id));
     const before   = lobbyRealPlayers.length;
@@ -872,12 +896,20 @@ $('back-btn').addEventListener('click', async e => {
 $('play-again-btn').addEventListener('click', () => {
   gameRunning = false;
   sound.stop();
-  showSection('lobby');
+  // Rebuild the real-player list directly from the current presence snapshot so
+  // we don't inherit any stale pruning that happened during the game or on the
+  // result screen (activeSection was not 'lobby' then, so the leave-event
+  // timeouts were suppressed, but any that slipped through can't hurt us here).
+  lobbyRealPlayers = net.getPresencePlayers().filter(p => p.id !== net.myId);
+  showSection('lobby');   // also sets activeSection = 'lobby'
   renderSlots();
   renderSessionLeaderboard();
   // Refresh global leaderboard
   loadGlobalLeaderboard().then(rows => renderGlobalLeaderboard(rows));
   if (isHost) {
+    // Tell non-host players to return to the lobby too, so they don't have
+    // to manually refresh (which would give them a new ID and lose scores).
+    net.sendPlayAgain();
     net.sendAIUpdate(lobbyAIPlayers);
     if (!isPrivate) dbRegisterRoom();
   }
