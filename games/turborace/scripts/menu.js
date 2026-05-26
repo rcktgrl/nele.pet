@@ -556,7 +556,13 @@ function _showVsRoomPanel(isHost){
 
 function _attachVsHandlers(net, isHost){
   net.onPresenceUpdate=(players)=>{
-    state.vsLobbyPlayers=players;
+    // Deduplicate by name so a reconnecting player (new UUID, same display name)
+    // never gets a second slot.  Last-write-wins: if old + new IDs briefly
+    // coexist in presenceState, the newer entry (appended last by Supabase)
+    // overwrites the stale one.
+    const seen=new Map(); // name → player
+    for(const p of players) seen.set(p.name, p);
+    state.vsLobbyPlayers=[...seen.values()];
     _renderVsSlots();
     // When a new guest joins, host re-broadcasts current config
     if(isHost&&state.selTrk!=null){
