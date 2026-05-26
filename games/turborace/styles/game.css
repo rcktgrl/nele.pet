@@ -264,5 +264,11 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .vsAddBotBtn:hover{color:#8df;background:rgba(68,170,255,.1);}
 .vsSlotEmpty{color:#223;font-size:18px;}
 
+/* VS copy / invite buttons */
+.vsCopyBtn{background:none;border:1px solid #2a3d55;color:#4af;cursor:pointer;font-family:'Orbitron',monospace;font-size:12px;letter-spacing:1px;padding:5px 10px;border-radius:6px;transition:all .15s;line-height:1;}
+.vsCopyBtn:hover{background:rgba(68,170,255,.12);border-color:#4af;}
+.vsCopyBtn.vsCopied{color:#4f9;border-color:#4f9;background:rgba(68,255,153,.08);}
+.vsInviteBtn{margin-top:6px;font-size:10px;letter-spacing:1.5px;}
+
 #sVsLobby{gap:20px;}
 #vsRoomPanel{gap:16px;}

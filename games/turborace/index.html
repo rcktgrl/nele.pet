@@ -251,8 +251,12 @@
   <div id="vsRoomPanel" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%;max-width:700px;">
     <div style="text-align:center;">
       <div style="color:#556;font-size:.65rem;font-family:Orbitron,monospace;letter-spacing:2px;">ROOM CODE</div>
-      <div id="vsRoomCodeDisplay" style="font-size:2.2rem;font-family:Orbitron,monospace;color:#4af;letter-spacing:8px;font-weight:700;"></div>
-      <div style="color:#556;font-size:.7rem;">Share this with your friends</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin:4px 0;">
+        <div id="vsRoomCodeDisplay" style="font-size:2.2rem;font-family:Orbitron,monospace;color:#4af;letter-spacing:8px;font-weight:700;"></div>
+        <button id="vsCopyCodeBtn" class="vsCopyBtn" title="Copy room code">⧉</button>
+      </div>
+      <button id="vsCopyInviteBtn" class="vsCopyBtn vsInviteBtn">🔗 COPY INVITE LINK</button>
+      <div id="vsCopyFeedback" style="color:#4f9;font-size:.7rem;min-height:1em;margin-top:4px;opacity:0;transition:opacity .2s;"></div>
     </div>
 
     <!-- 4-slot player grid -->

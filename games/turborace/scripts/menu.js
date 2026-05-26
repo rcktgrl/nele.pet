@@ -482,6 +482,50 @@ export async function showVsLobby(){
   const user=getArcadeUser();
   const nameLbl=document.getElementById('vsMyNameLabel');
   if(nameLbl) nameLbl.textContent=user.name||'Anonymous';
+
+  // Auto-fill room code if ?room=XXXX is in the URL
+  const urlRoom=new URLSearchParams(window.location.search).get('room');
+  if(urlRoom&&urlRoom.length===4){
+    const inp=document.getElementById('vsCodeInput');
+    if(inp) inp.value=urlRoom.trim().toUpperCase();
+  }
+}
+
+// ── Copy helpers ──────────────────────────────────────────────────────────────
+
+function _vsCopyFeedback(msg){
+  const el=document.getElementById('vsCopyFeedback');
+  if(!el) return;
+  el.textContent=msg;
+  el.style.opacity='1';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{ el.style.opacity='0'; },1800);
+}
+
+export function vsCopyCode(){
+  const code=state.vsRoomCode;
+  if(!code) return;
+  navigator.clipboard.writeText(code).then(()=>{
+    const btn=document.getElementById('vsCopyCodeBtn');
+    if(btn){ const orig=btn.textContent; btn.textContent='✓'; btn.classList.add('vsCopied');
+      setTimeout(()=>{ btn.textContent=orig; btn.classList.remove('vsCopied'); },1600); }
+    _vsCopyFeedback('Room code copied!');
+  }).catch(()=>_vsCopyFeedback('Could not copy'));
+}
+
+export function vsCopyInviteLink(){
+  const code=state.vsRoomCode;
+  if(!code) return;
+  const url=new URL(window.location.href);
+  url.searchParams.set('room',code);
+  // Strip any hash so it opens cleanly
+  url.hash='';
+  navigator.clipboard.writeText(url.toString()).then(()=>{
+    const btn=document.getElementById('vsCopyInviteBtn');
+    if(btn){ const orig=btn.textContent; btn.textContent='✓ COPIED!'; btn.classList.add('vsCopied');
+      setTimeout(()=>{ btn.textContent=orig; btn.classList.remove('vsCopied'); },1600); }
+    _vsCopyFeedback('Invite link copied!');
+  }).catch(()=>_vsCopyFeedback('Could not copy'));
 }
 
 export async function vsCreateRoom(){
@@ -502,9 +546,13 @@ export async function vsCreateRoom(){
   catch(e){ _vsSetStatus('❌ Failed: '+e.message); return; }
 
   state.vsMyId=net.myId;
-  // Pre-seed our own slot so the grid isn't empty while we wait for the first presence sync
+  // Pre-seed our own slot so the grid isn't empty while we wait for presence sync
   state.vsLobbyPlayers=[{id:net.myId, name, isHost:true}];
   _attachVsHandlers(net, true);
+  // Force an immediate sync — the Supabase presence 'sync' event fires inside
+  // joinRoom() (before onPresenceUpdate is assigned) so we replay it now.
+  const snapHost=net.getPresencePlayers();
+  if(snapHost.length) net.onPresenceUpdate(snapHost);
   _showVsRoomPanel(true);
 }
 
@@ -527,9 +575,15 @@ export async function vsJoinRoom(){
   catch(e){ _vsSetStatus('❌ Failed: '+e.message); return; }
 
   state.vsMyId=net.myId;
-  // Pre-seed our own slot so the grid isn't empty while we wait for the first presence sync
+  // Pre-seed our own slot so the grid isn't empty while we wait for presence sync
   state.vsLobbyPlayers=[{id:net.myId, name, isHost:false}];
   _attachVsHandlers(net, false);
+  // Force an immediate sync — the initial presence 'sync' (which includes the
+  // host who was already in the channel) fires inside joinRoom() before
+  // onPresenceUpdate is assigned, so we replay it now so the guest can see
+  // the host and any other players who joined earlier.
+  const snapGuest=net.getPresencePlayers();
+  if(snapGuest.length) net.onPresenceUpdate(snapGuest);
   _showVsRoomPanel(false);
 
   // Guest announces their car choice
@@ -566,7 +620,8 @@ function _attachVsHandlers(net, isHost){
     // overwrites the stale one.
     const seen=new Map(); // name → player
     for(const p of players) seen.set(p.name, p);
-    state.vsLobbyPlayers=[...seen.values()];
+    // Always put the host in slot 0, then guests in order of arrival
+    state.vsLobbyPlayers=[...seen.values()].sort((a,b)=>(b.isHost?1:0)-(a.isHost?1:0));
     _renderVsSlots();
     // When a new guest joins, host re-broadcasts current config
     if(isHost&&state.selTrk!=null){
@@ -593,7 +648,13 @@ function _attachVsHandlers(net, isHost){
   net.onGuestReady=({id, carIdx})=>{
     // Host: store guest car choice
     state.vsGuestCars[id]=carIdx;
-    _renderVsSlots();
+    // Re-sync the presence list now that a guest has announced themselves.
+    // This is a fallback for the case where the presence 'join' event was
+    // delayed or missed — the guest's sendGuestReady broadcast is always
+    // delivered, so we use it as a reliable signal to refresh.
+    const fresh=net.getPresencePlayers();
+    if(fresh.length) net.onPresenceUpdate(fresh);
+    else _renderVsSlots();
     _vsSetStatus('');
   };
 
