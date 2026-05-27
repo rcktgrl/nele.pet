@@ -768,29 +768,27 @@ async function init() {
   };
 
   net.onPresenceLeave = leftPlayers => {
-    const leftIds  = new Set(leftPlayers.map(p => p.id));
+    // Only handle the time-sensitive host-left case immediately.
+    // We deliberately do NOT prune real players here because Supabase fires
+    // spurious leave+join pairs during WebSocket reconnections — removing a
+    // player on every leave event causes false disappearances.
+    // Intentional leaves are signalled via the player_leave broadcast (handled
+    // by onPlayerLeave below), and the 30-second interval cleans up true
+    // disconnects reliably.
     const hostLeft = leftPlayers.some(p => p.isHost);
-    // Handle host-left immediately — this is time-sensitive
     if (hostLeft && !isHost && !gameRunning) dbDeleteRoom();
+  };
 
-    // Delay the actual removal to guard against spurious leave events that
-    // Supabase fires during WebSocket reconnections (a leave+join pair for the
-    // same player).  Re-check presence state before removing.
-    // Only prune while in the lobby — not during the game or result screen.
-    // (gameRunning is already false on the result screen, so checking only
-    // gameRunning would cause players to be pruned prematurely.)
-    setTimeout(() => {
-      if (activeSection !== 'lobby') return;
-      const stillPresent = new Set(net.getPresencePlayers().map(p => p.id));
-      const before = lobbyRealPlayers.length;
-      lobbyRealPlayers = lobbyRealPlayers.filter(
-        p => !leftIds.has(p.id) || stillPresent.has(p.id)
-      );
-      if (lobbyRealPlayers.length !== before) {
-        renderSlots();
-        if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-      }
-    }, 2500);
+  // Intentional leave: player clicked "leave" / back button and broadcast before
+  // disconnecting.  Remove them immediately so the slot opens up right away.
+  net.onPlayerLeave = ({ id }) => {
+    if (id === net.myId) return;
+    const before = lobbyRealPlayers.length;
+    lobbyRealPlayers = lobbyRealPlayers.filter(p => p.id !== id);
+    if (lobbyRealPlayers.length !== before) {
+      renderSlots();
+      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+    }
   };
 
   net.onPlayerHello = ({ id, name, isHost: pIsHost }) => {
@@ -888,6 +886,9 @@ $('start-btn').addEventListener('click', startGame);
 
 $('back-btn').addEventListener('click', async e => {
   e.preventDefault();
+  // Broadcast intentional leave so other clients can remove us immediately
+  // (before net.leave() disconnects us from the channel).
+  net.sendPlayerLeave(net.myId);
   if (isHost) await dbDeleteRoom();
   await net.leave();
   location.href = 'index.html';

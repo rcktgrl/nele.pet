@@ -14,7 +14,9 @@ export class VsNetwork {
     this.isHost   = false;
 
     // Callbacks — assign before joinRoom()
-    this.onPresenceUpdate  = null;  // (players[]) any join/leave/sync
+    this.onPresenceUpdate  = null;  // (players[]) join/sync events — merge-add only
+    this.onPresenceLeave   = null;  // (leftPlayers[]) raw leave event — informational
+    this.onPlayerLeave     = null;  // ({id}) intentional leave broadcast
     this.onAIUpdate        = null;  // ({aiPlayers}) host pushed AI list
     this.onGameConfig      = null;  // ({trackId, hostCarIdx}) host config
     this.onGuestReady      = null;  // ({id, carIdx}) guest car selection
@@ -35,18 +37,32 @@ export class VsNetwork {
       },
     });
 
+    // sync and join fire onPresenceUpdate (merge-add, never remove).
+    // leave fires the separate onPresenceLeave so the lobby can decide
+    // whether to prune — by default we ignore it to prevent spurious removals
+    // during WebSocket reconnections.
     const _presenceChanged = () => {
       if (!this.onPresenceUpdate) return;
       const players = Object.values(this.channel.presenceState()).flat();
       this.onPresenceUpdate(players);
     };
-    this.channel.on('presence', { event: 'sync' },  _presenceChanged);
-    this.channel.on('presence', { event: 'join' },  _presenceChanged);
-    this.channel.on('presence', { event: 'leave' }, _presenceChanged);
+    this.channel.on('presence', { event: 'sync' }, _presenceChanged);
+    this.channel.on('presence', { event: 'join' }, _presenceChanged);
+    this.channel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
+      const left = leftPresences.flat();
+      if (this.onPresenceLeave) {
+        this.onPresenceLeave(left);
+      }
+      // Do NOT call _presenceChanged here — the full presenceState() snapshot
+      // from which _presenceChanged builds the player list will already have
+      // removed the leaver, causing immediate (and potentially false) removal
+      // during Supabase WebSocket reconnections.
+    });
 
     const on = (event, cb) =>
       this.channel.on('broadcast', { event }, ({ payload }) => cb?.(payload));
 
+    on('player_leave',    p => this.onPlayerLeave?.(p));
     on('ai_update',       p => this.onAIUpdate?.(p));
     on('game_config',     p => this.onGameConfig?.(p));
     on('guest_ready',     p => this.onGuestReady?.(p));
@@ -88,6 +104,11 @@ export class VsNetwork {
   }
 
   // ── Lobby ────────────────────────────────────────────────────────────────────
+  /** Broadcast intentional leave so others remove this slot immediately. */
+  sendPlayerLeave(id) {
+    return this.#send('player_leave', { id });
+  }
+
   /** Host → all: updated AI player list */
   sendAIUpdate(aiPlayers) {
     return this.#send('ai_update', { aiPlayers });
