@@ -291,6 +291,37 @@ export async function showOnlineTrkSel(){
 // PLAYER COLORS matching Bomber's 4-player palette
 const VS_COLORS=['#ff9a3c','#4af','#f44','#4f4'];
 
+// Interval handle for the 30-second presence safety-net prune.
+// Cleared in vsLeaveLobby() so it doesn't run after the lobby is torn down.
+let _vsLobbyPruneInterval=null;
+
+/**
+ * Merge-add incoming presence players into state.vsLobbyPlayers.
+ * Like Bomber's mergePresencePlayers: only ever ADDS or UPDATES slots,
+ * never removes — removal is handled exclusively by intentional broadcasts
+ * (player_leave / player_kick) and the 30-second safety-net interval.
+ * Returns true if the list changed.
+ */
+function _mergeVsPresencePlayers(incoming){
+  let changed=false;
+  for(const p of incoming){
+    const byId=state.vsLobbyPlayers.find(r=>r.id===p.id);
+    const byName=!byId&&state.vsLobbyPlayers.find(r=>r.name===p.name);
+    if(byName){
+      // Same name, new ID → reconnect; reclaim their slot
+      const idx=state.vsLobbyPlayers.indexOf(byName);
+      state.vsLobbyPlayers[idx]={...byName,id:p.id};
+      changed=true;
+    }else if(!byId){
+      state.vsLobbyPlayers.push(p);
+      changed=true;
+    }
+  }
+  // Keep host in slot 0, then guests in arrival order
+  state.vsLobbyPlayers.sort((a,b)=>(b.isHost?1:0)-(a.isHost?1:0));
+  return changed;
+}
+
 /** All players (real + AI) in slot order */
 function _allVsSlots(){
   return [...state.vsLobbyPlayers, ...state.vsLobbyAIs];
@@ -450,6 +481,8 @@ function _vsRemoveAI(id){
 
 function _vsKickPlayer(targetId){
   state.vsNetwork?.sendPlayerKick(targetId);
+  // Remove locally so the host's slot grid updates immediately
+  state.vsLobbyPlayers=state.vsLobbyPlayers.filter(p=>p.id!==targetId);
   _renderVsSlots();
 }
 
@@ -616,24 +649,38 @@ function _showVsRoomPanel(isHost){
 }
 
 function _attachVsHandlers(net, isHost){
+  // ── Presence join/sync: merge-add only, never remove ──────────────────────
+  // Using _mergeVsPresencePlayers means a brief Supabase WebSocket reconnection
+  // (which fires leave→join) can never cause a slot to disappear and reappear.
   net.onPresenceUpdate=(players)=>{
-    // Guard: an empty snapshot means Supabase hasn't synced yet — don't wipe
-    // the pre-seeded entry.
-    if(!players.length) return;
-    // Deduplicate by name so a reconnecting player (new UUID, same display name)
-    // never gets a second slot.  Last-write-wins: if old + new IDs briefly
-    // coexist in presenceState, the newer entry (appended last by Supabase)
-    // overwrites the stale one.
-    const seen=new Map(); // name → player
-    for(const p of players) seen.set(p.name, p);
-    // Always put the host in slot 0, then guests in order of arrival
-    state.vsLobbyPlayers=[...seen.values()].sort((a,b)=>(b.isHost?1:0)-(a.isHost?1:0));
-    _renderVsSlots();
+    if(!players.length) return; // empty snapshot = not yet synced; keep pre-seeded entry
+    if(_mergeVsPresencePlayers(players)){
+      _renderVsSlots();
+    }
     // When a new guest joins, host re-broadcasts current config
     if(isHost&&state.selTrk!=null){
       net.sendGameConfig(state.selTrk, state.selCar??0);
       net.sendAIUpdate(state.vsLobbyAIs);
     }
+  };
+
+  // ── Presence leave: intentionally ignored for pruning ─────────────────────
+  // Supabase fires spurious leave events during WebSocket reconnections.
+  // Pruning is handled only by onPlayerLeave (intentional) and the 30-second
+  // safety-net interval (true disconnects).
+  net.onPresenceLeave=(_leftPlayers)=>{
+    // Nothing to do here for lobby slots.
+    // (Host departure detection could go here if needed.)
+  };
+
+  // ── Intentional leave broadcast ────────────────────────────────────────────
+  // A player who clicks "leave" broadcasts player_leave before disconnecting.
+  // Remove them immediately so the slot opens up without waiting 30 seconds.
+  net.onPlayerLeave=({id})=>{
+    if(id===net.myId) return;
+    const before=state.vsLobbyPlayers.length;
+    state.vsLobbyPlayers=state.vsLobbyPlayers.filter(p=>p.id!==id);
+    if(state.vsLobbyPlayers.length!==before) _renderVsSlots();
   };
 
   net.onAIUpdate=({aiPlayers})=>{
@@ -684,8 +731,27 @@ function _attachVsHandlers(net, isHost){
     if(targetId===net.myId){
       _vsSetStatus('You were kicked from the lobby.');
       vsLeaveLobby();
+    } else {
+      // Host already updated local state in _vsKickPlayer; guests need to remove too
+      const before=state.vsLobbyPlayers.length;
+      state.vsLobbyPlayers=state.vsLobbyPlayers.filter(p=>p.id!==targetId);
+      if(state.vsLobbyPlayers.length!==before) _renderVsSlots();
     }
   };
+
+  // ── 30-second safety-net: prune truly disconnected players ────────────────
+  // This is the ONLY mechanism that removes players due to disconnection.
+  // Running every 30s gives Supabase plenty of time to re-establish presence
+  // after a reconnect before we ever prune.
+  if(_vsLobbyPruneInterval) clearInterval(_vsLobbyPruneInterval);
+  _vsLobbyPruneInterval=setInterval(()=>{
+    if(state.gState!=='vsLobby') return;
+    const fresh=net.getPresencePlayers();
+    const freshIds=new Set(fresh.map(p=>p.id));
+    const before=state.vsLobbyPlayers.length;
+    state.vsLobbyPlayers=state.vsLobbyPlayers.filter(p=>freshIds.has(p.id));
+    if(state.vsLobbyPlayers.length!==before) _renderVsSlots();
+  }, 30000);
 }
 
 function _buildSlots(){
@@ -728,7 +794,15 @@ export function vsStartRace(){
 }
 
 export function vsLeaveLobby(){
-  if(state.vsNetwork){ state.vsNetwork.leave().catch(()=>{}); state.vsNetwork=null; }
+  // Clear the safety-net prune interval before tearing down
+  if(_vsLobbyPruneInterval){ clearInterval(_vsLobbyPruneInterval); _vsLobbyPruneInterval=null; }
+  if(state.vsNetwork){
+    // Broadcast intentional leave so other clients remove us immediately
+    // (before unsubscribe disconnects us from the channel).
+    state.vsNetwork.sendPlayerLeave(state.vsMyId||state.vsNetwork.myId);
+    state.vsNetwork.leave().catch(()=>{});
+    state.vsNetwork=null;
+  }
   state.vsMode=false;
   disposeCarCardPreviews();
   showMain();

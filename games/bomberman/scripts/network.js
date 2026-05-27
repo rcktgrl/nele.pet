@@ -11,6 +11,7 @@ export class Network {
     this.onPresenceJoin      = null;
     this.onPresenceLeave     = null;
     this.onPlayerHello       = null;
+    this.onPlayerLeave       = null;  // intentional leave broadcast
     this.onAIUpdate          = null;
     this.onPlayAgain         = null;
     this.onGameStart         = null;
@@ -65,6 +66,7 @@ export class Network {
       this.channel.on('broadcast', { event }, ({ payload }) => cb?.(payload));
 
     on('player_hello',      p => this.onPlayerHello?.(p));
+    on('player_leave',      p => this.onPlayerLeave?.(p));
     on('ai_update',         p => this.onAIUpdate?.(p));
     on('play_again',        p => this.onPlayAgain?.(p));
     on('game_start',        p => this.onGameStart?.(p));
@@ -99,6 +101,10 @@ export class Network {
   }
 
   // ── Lobby ────────────────────────────────────────────────────────────────────
+  sendPlayerLeave(id) {
+    return this.#send('player_leave', { id });
+  }
+
   sendAIUpdate(aiPlayers) {
     return this.#send('ai_update', { aiPlayers });
   }
