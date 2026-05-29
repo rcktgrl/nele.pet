@@ -102,53 +102,13 @@ function realPlayerCount() {
   return roster.filter(e => !e.isAI).length;
 }
 
-// Host: rebuild the roster from live presence + AI entries.
-// Fixes the timing race by always ensuring the host themselves is present.
-function hostRebuildRoster() {
-  const presence = net.getPresencePlayers();
-
-  // Guard against the async presence-state race: ensure the host is always in
-  // the list even if the presence sync hasn't arrived back yet.
-  if (!presence.find(p => p.id === net.myId)) {
-    presence.push({ id: net.myId, name: playerName, isHost: true });
-  }
-
-  const presentIds = new Set(presence.map(p => p.id));
-
-  // Reconnect detection — run before pruning so we can match the stale id.
-  for (const p of presence) {
-    if (roster.find(e => e.id === p.id)) continue;
-    const stale = roster.find(e => !e.isAI && e.name === p.name && !presentIds.has(e.id));
-    if (stale) {
-      const oldId = stale.id;
-      stale.id     = p.id;
-      stale.isHost = !!p.isHost;
-      if (sessionScores.has(oldId)) {
-        sessionScores.set(p.id, sessionScores.get(oldId));
-        sessionScores.delete(oldId);
-      }
-    }
-  }
-
-  // Drop real players who are no longer present (AI are kept regardless).
-  roster = roster.filter(e => e.isAI || presentIds.has(e.id));
-
-  // Append brand-new real players.
-  for (const p of presence) {
-    if (!roster.find(e => e.id === p.id)) {
-      roster.push({ id: p.id, name: p.name, isAI: false, isHost: !!p.isHost, inGame: false });
-    }
-  }
-
-  // Refresh the in-game markers.
-  const partIds = new Set(gameParticipants.map(p => p.id));
-  for (const e of roster) e.inGame = roomGameRunning && partIds.has(e.id);
-}
-
-// Host: rebuild, broadcast to all clients, update local UI + room player count.
+// Host: refresh in-game markers, broadcast current roster, update UI.
+// Does NOT rebuild from presence — roster membership is managed exclusively via
+// player_hello (joins) and onPresenceLeave / onPlayerLeave (leaves).
 function hostSyncRoster() {
   if (!isHost) return;
-  hostRebuildRoster();
+  const partIds = new Set(gameParticipants.map(p => p.id));
+  for (const e of roster) e.inGame = roomGameRunning && partIds.has(e.id);
   net.sendLobbyState(roster, roomGameRunning);
   renderRoster();
   if (!isPrivate) dbUpdatePlayerCount(realPlayerCount());
@@ -493,12 +453,16 @@ function handlePlayerMove({ id, tileX, tileY }) {
 function handleBombPlaced({ bombId, placedBy, tileX, tileY, explodesAt, range, type }) {
   if (!gameRunning) return;
   if (isHost) {
-    // Guard against double-apply (AI bombs are added to state directly by ai.js,
-    // then broadcast; the host won't receive self-broadcasts, but be explicit).
     if (globalSim.state.bombs.has(bombId)) return;
-    globalSim.applyBombPlace(bombId, placedBy, tileX, tileY, explodesAt, range, type);
+    // Always use the host's clock so all clients share the same explodesAt.
+    // For host-placed bombs (placedBy === net.myId) the host's own timestamp is
+    // already correct; for remote players, recalculate from now.
+    const authExplodesAt = (placedBy === net.myId) ? explodesAt : Date.now() + BOMB_FUSE;
+    globalSim.applyBombPlace(bombId, placedBy, tileX, tileY, authExplodesAt, range, type);
+    if (placedBy !== net.myId) {
+      net.sendBombAck(bombId, authExplodesAt);
+    }
   } else {
-    // Non-host: bomb exists in local state; explosion comes via bomb_exploded
     localSim.applyBombPlace(bombId, placedBy, tileX, tileY, explodesAt, range, type);
   }
 }
@@ -807,9 +771,12 @@ async function init() {
       if (hostLeft && !gameRunning && !roomGameRunning) dbDeleteRoom();
       return;
     }
-    const presentIds = new Set(net.getPresencePlayers().map(p => p.id));
-    presentIds.add(net.myId); // always keep host even if presence lags
-    roster = roster.filter(e => e.isAI || presentIds.has(e.id));
+    // Remove only the specific players who left — never rebuild from presence
+    // here, because presenceState() can be stale or empty right after a join.
+    const leftIds = new Set(leftPlayers.map(p => p.id));
+    leftIds.delete(net.myId); // never remove ourselves
+    if (!leftIds.size) return;
+    roster = roster.filter(e => e.isAI || !leftIds.has(e.id));
     net.sendLobbyState(roster, roomGameRunning);
     renderRoster();
     if (!isPrivate) dbUpdatePlayerCount(realPlayerCount());
@@ -877,6 +844,10 @@ async function init() {
   net.onBombKick         = handleBombKick;
   net.onBombExploded     = handleBombExploded;
   net.onNapalmSpread     = handleNapalmSpread;
+  net.onBombAck          = ({ bombId, explodesAt }) => {
+    if (!gameRunning || !localSim) return;
+    localSim.applyBombAck(bombId, explodesAt);
+  };
   net.onPowerupCollected = handlePowerupCollected;
   net.onGameEnd          = handleGameEnd;
 
@@ -891,8 +862,18 @@ async function init() {
     await dbRegisterRoom();
     // Broadcast roster (host only so far) to any clients already in the channel.
     net.sendLobbyState(roster, roomGameRunning);
-    // Periodic presence-based reconciliation as a safety net.
-    setInterval(() => hostSyncRoster(), 5000);
+    // Periodic reconciliation: re-broadcast roster and use presence to catch
+    // any disconnects that didn't fire a clean leave event.
+    setInterval(() => {
+      if (!isHost) return;
+      const presence = net.getPresencePlayers();
+      if (presence.length > 0) {
+        const presentIds = new Set(presence.map(p => p.id));
+        presentIds.add(net.myId);
+        roster = roster.filter(e => e.isAI || presentIds.has(e.id));
+      }
+      hostSyncRoster();
+    }, 5000);
   }
 }
 
