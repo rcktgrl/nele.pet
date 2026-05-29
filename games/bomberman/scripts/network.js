@@ -12,8 +12,8 @@ export class Network {
     this.onPresenceLeave     = null;
     this.onPlayerHello       = null;
     this.onPlayerLeave       = null;  // intentional leave broadcast
-    this.onAIUpdate          = null;
-    this.onPlayAgain         = null;
+    this.onLobbyState        = null;  // host-authoritative roster broadcast
+    this.onReturnLobby       = null;  // host sent everyone back to the lobby
     this.onGameStart         = null;
     this.onPlayerMove        = null;
     this.onBombPlaced        = null;
@@ -67,8 +67,8 @@ export class Network {
 
     on('player_hello',      p => this.onPlayerHello?.(p));
     on('player_leave',      p => this.onPlayerLeave?.(p));
-    on('ai_update',         p => this.onAIUpdate?.(p));
-    on('play_again',        p => this.onPlayAgain?.(p));
+    on('lobby_state',       p => this.onLobbyState?.(p));
+    on('return_lobby',      p => this.onReturnLobby?.(p));
     on('game_start',        p => this.onGameStart?.(p));
     on('player_move',       p => this.onPlayerMove?.(p));
     on('bomb_placed',       p => this.onBombPlaced?.(p));
@@ -105,12 +105,17 @@ export class Network {
     return this.#send('player_leave', { id });
   }
 
-  sendAIUpdate(aiPlayers) {
-    return this.#send('ai_update', { aiPlayers });
+  // Host broadcasts the full, ordered roster so every client renders an
+  // identical lobby view. `roster` is an array of
+  // { id, name, isAI, isHost, inGame }; `gameRunning` flags whether a round
+  // is currently in progress in the room.
+  sendLobbyState(roster, gameRunning) {
+    return this.#send('lobby_state', { roster, gameRunning });
   }
 
-  sendPlayAgain() {
-    return this.#send('play_again', {});
+  // Host tells everyone to drop back to the lobby after a game.
+  sendReturnLobby() {
+    return this.#send('return_lobby', {});
   }
 
   sendPlayerKick(targetId) {
