@@ -21,14 +21,10 @@ function shuffle(arr) {
 // ─── Danger map ───────────────────────────────────────────────────────────────
 function buildDangerSet(state) {
   const s = new Set();
-  // Active explosion tiles
   for (const exp of state.explosions) {
     for (const t of exp.tiles) s.add(`${t.x},${t.y}`);
   }
-  // Active napalm fire
   for (const [key] of state.napalmFires) s.add(key);
-
-  // Predicted blast zones of live bombs
   for (const [, bomb] of state.bombs) {
     if (bomb.exploded) continue;
     s.add(`${bomb.tileX},${bomb.tileY}`);
@@ -55,14 +51,12 @@ export class AIPlayer {
 
     this.lastMoveTime = 0;
     this.lastBombTime = 0;
-    this.moveInterval  = 310 + Math.random() * 120;  // ~300–430 ms
-    this.bombCooldown  = 2200 + Math.random() * 900; // ~2.2–3.1 s
+    this.moveInterval  = 155 + Math.random() * 60;  // ~150–215 ms (2x faster)
+    this.bombCooldown  = 2200 + Math.random() * 900;
 
     this.preferredDir = DIRS[Math.floor(Math.random() * 4)];
     this.stickCount   = 0;
 
-    // Tracks tiles that recently exploded; value is the timestamp after which
-    // the tile is considered safe again (explosion end + 100–500 ms randomised).
     this.recentlyExplodedTiles = new Map(); // 'x,y' → safeAt (ms)
   }
 
@@ -90,37 +84,154 @@ export class AIPlayer {
     return false;
   }
 
-  #tryMove(state, me, now, net, dangerSet, allowDangerous = false) {
-    const dirs = shuffle(DIRS);
+  // BFS to find the first-step direction toward the nearest safe tile.
+  // Traverses through dangerous tiles (to find a path out) but not walls/bricks.
+  #findEscapeDir(state, startX, startY, dangerSet) {
+    const visited = new Set([`${startX},${startY}`]);
+    const queue = [];
 
-    if (dangerSet.has(`${me.tileX},${me.tileY}`)) {
-      for (const d of dirs) {
-        const nx = me.tileX + d.dx, ny = me.tileY + d.dy;
-        if (this.#isTileWalkable(state, nx, ny, dangerSet)) {
-          this.#doMove(state, me, nx, ny, now, net, d); return true;
-        }
+    for (const d of DIRS) {
+      const nx = startX + d.dx, ny = startY + d.dy;
+      if (!this.#isTileWalkable(state, nx, ny, dangerSet, true)) continue;
+      const key = `${nx},${ny}`;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      queue.push({ x: nx, y: ny, firstDir: d });
+    }
+
+    while (queue.length > 0) {
+      const { x, y, firstDir } = queue.shift();
+      if (!dangerSet.has(`${x},${y}`)) return firstDir; // reached safety
+
+      for (const d of DIRS) {
+        const nx = x + d.dx, ny = y + d.dy;
+        if (!this.#isTileWalkable(state, nx, ny, dangerSet, true)) continue;
+        const key = `${nx},${ny}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        queue.push({ x: nx, y: ny, firstDir });
       }
+    }
+    return null; // definitely dead — no escape exists
+  }
+
+  // BFS to find the first-step direction toward the nearest reachable power-up.
+  // Never walks through danger.
+  #findPowerupDir(state, startX, startY, dangerSet) {
+    if (!state.powerups || state.powerups.size === 0) return null;
+
+    const visited = new Set([`${startX},${startY}`]);
+    const queue = [{ x: startX, y: startY, firstDir: null }];
+
+    while (queue.length > 0) {
+      const { x, y, firstDir } = queue.shift();
+
+      for (const d of DIRS) {
+        const nx = x + d.dx, ny = y + d.dy;
+        if (!this.#isTileWalkable(state, nx, ny, dangerSet)) continue;
+        const key = `${nx},${ny}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+
+        const dir = firstDir ?? d;
+        if (state.powerups.has(key)) return dir;
+        queue.push({ x: nx, y: ny, firstDir: dir });
+      }
+    }
+    return null;
+  }
+
+  // Returns true if placing a bomb at (bx, by) with bombRange still leaves an
+  // escape route from the AI's current position.
+  #canEscapeAfterPlacingBomb(state, me, bx, by, bombRange) {
+    // Build hypothetical danger set that includes the new bomb's blast
+    const hypoD = buildDangerSet(state);
+    hypoD.add(`${bx},${by}`);
+    for (const { dx, dy } of DIRS) {
+      for (let r = 1; r <= bombRange; r++) {
+        const nx = bx + dx * r, ny = by + dy * r;
+        if (nx < 0 || nx >= state.gridW || ny < 0 || ny >= state.gridH) break;
+        const t = state.map[ny][nx];
+        if (t === TILE.WALL) break;
+        hypoD.add(`${nx},${ny}`);
+        if (t === TILE.BRICK) break;
+      }
+    }
+
+    // BFS from current position, treating the new bomb tile as impassable,
+    // looking for any tile not in the hypothetical danger set.
+    const visited = new Set([`${me.tileX},${me.tileY}`]);
+    const queue   = [{ x: me.tileX, y: me.tileY }];
+
+    while (queue.length > 0) {
+      const { x, y } = queue.shift();
+      if (!hypoD.has(`${x},${y}`)) return true;
+
+      for (const { dx, dy } of DIRS) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || nx >= state.gridW || ny < 0 || ny >= state.gridH) continue;
+        const t = state.map[ny][nx];
+        if (t === TILE.WALL || t === TILE.BRICK) continue;
+        // New bomb blocks the tile it sits on
+        if (nx === bx && ny === by) continue;
+        let hasBomb = false;
+        for (const [, bomb] of state.bombs) {
+          if (!bomb.exploded && bomb.tileX === nx && bomb.tileY === ny) { hasBomb = true; break; }
+        }
+        if (hasBomb) continue;
+        const key = `${nx},${ny}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        queue.push({ x: nx, y: ny });
+      }
+    }
+    return false; // definitely trapped
+  }
+
+  #tryMove(state, me, now, net, dangerSet, allowDangerous = false) {
+    if (dangerSet.has(`${me.tileX},${me.tileY}`)) {
+      // Use BFS to find the optimal escape direction
+      const escapeDir = this.#findEscapeDir(state, me.tileX, me.tileY, dangerSet);
+      if (escapeDir) {
+        const nx = me.tileX + escapeDir.dx, ny = me.tileY + escapeDir.dy;
+        this.#doMove(state, me, nx, ny, now, net);
+        return true;
+      }
+      // Definitely dead — no safe path exists. Try any passable tile as last resort.
       if (allowDangerous) {
-        for (const d of dirs) {
+        for (const d of shuffle(DIRS)) {
           const nx = me.tileX + d.dx, ny = me.tileY + d.dy;
           if (this.#isTileWalkable(state, nx, ny, dangerSet, true)) {
-            this.#doMove(state, me, nx, ny, now, net, d); return true;
+            this.#doMove(state, me, nx, ny, now, net);
+            return true;
           }
         }
       }
       return false;
     }
 
+    // Not in danger — seek power-ups first via BFS
+    const puDir = this.#findPowerupDir(state, me.tileX, me.tileY, dangerSet);
+    if (puDir) {
+      const nx = me.tileX + puDir.dx, ny = me.tileY + puDir.dy;
+      if (this.#isTileWalkable(state, nx, ny, dangerSet)) {
+        this.#doMove(state, me, nx, ny, now, net);
+        this.preferredDir = puDir;
+        this.stickCount   = 0;
+        return true;
+      }
+    }
+
     if (this.stickCount > 0) {
       const nx = me.tileX + this.preferredDir.dx;
       const ny = me.tileY + this.preferredDir.dy;
       if (this.#isTileWalkable(state, nx, ny, dangerSet)) {
-        this.#doMove(state, me, nx, ny, now, net, this.preferredDir);
+        this.#doMove(state, me, nx, ny, now, net);
         this.stickCount--; return true;
       }
     }
 
-    for (const d of dirs) {
+    for (const d of shuffle(DIRS)) {
       const nx = me.tileX + d.dx, ny = me.tileY + d.dy;
       if (this.#isTileWalkable(state, nx, ny, dangerSet)) {
         this.#doMove(state, me, nx, ny, now, net, d);
@@ -135,22 +246,17 @@ export class AIPlayer {
   #doMove(state, me, nx, ny, now, net) {
     me.startMove(nx, ny, now);
     net.sendAnyMove(this.id, nx, ny);
-    // Collect any power-up sitting on the destination tile
     const pu = state.collectPowerup(this.id, nx, ny);
     if (pu) net.sendAnyPowerupCollected(this.id, nx, ny);
   }
 
-  // awardScore is an optional (playerId, pts) callback provided by the host
   update(state, now, net, scheduleBombExplosion, awardScore = null) {
     const me = state.players.get(this.id);
     if (!me || !me.alive) return;
 
     const dangerSet = buildDangerSet(state);
 
-    // ── Post-explosion cooldown ──────────────────────────────────────────────
-    // For every active explosion tile, register a randomised cool-down window
-    // that starts when the explosion visual ends (dieAt) and lasts an extra
-    // 100–500 ms so the AI doesn't immediately walk back through hot tiles.
+    // Post-explosion cooldown
     for (const exp of state.explosions) {
       for (const t of exp.tiles) {
         const key = `${t.x},${t.y}`;
@@ -160,7 +266,6 @@ export class AIPlayer {
         }
       }
     }
-    // Purge expired entries; keep still-cooling tiles in the danger set.
     for (const [key, safeAt] of this.recentlyExplodedTiles) {
       if (safeAt <= now) {
         this.recentlyExplodedTiles.delete(key);
@@ -175,14 +280,14 @@ export class AIPlayer {
       !inDanger &&
       me.activeBombs < me.maxBombs &&
       now - this.lastBombTime > this.bombCooldown &&
-      this.#hasAdjacentTarget(state, me)
+      this.#hasAdjacentTarget(state, me) &&
+      this.#canEscapeAfterPlacingBomb(state, me, me.tileX, me.tileY, me.bombRange)
     ) {
-      // Use special bomb if the bot has one, otherwise normal
       let bombType = 'normal';
       if (me.specialBomb) {
         bombType = me.specialBomb === 'napalm' ? 'napalm' : 'box';
-        me.specialBomb = null; // consume the power-up
-        if (awardScore) awardScore(this.id, 10); // 10pts for using a special bomb
+        me.specialBomb = null;
+        if (awardScore) awardScore(this.id, 10);
       }
 
       const bombId     = crypto.randomUUID();
