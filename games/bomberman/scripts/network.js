@@ -24,6 +24,7 @@ export class Network {
     this.onPlayerKick        = null;
     this.onBombExploded      = null;  // host-authoritative explosion result
     this.onNapalmSpread      = null;  // host-authoritative napalm spread
+    this.onBombAck           = null;  // host → all: authoritative explodesAt for non-host bombs
   }
 
   async joinRoom(roomCode, playerName, isHost) {
@@ -81,6 +82,7 @@ export class Network {
     on('player_kick',       p => this.onPlayerKick?.(p));
     on('bomb_exploded',     p => this.onBombExploded?.(p));
     on('napalm_spread',     p => this.onNapalmSpread?.(p));
+    on('bomb_ack',          p => this.onBombAck?.(p));
 
     // ── Subscribe then track presence ──────────────────────────────────────────
     await new Promise((resolve, reject) => {
@@ -173,6 +175,11 @@ export class Network {
   // Host → all: napalm spread + any players killed by it
   sendNapalmSpread(tiles, dieAt, killedIds) {
     return this.#send('napalm_spread', { tiles, dieAt, killedIds: killedIds ?? [] });
+  }
+
+  // Host → all: authoritative explodesAt for a non-host-placed bomb
+  sendBombAck(bombId, explodesAt) {
+    return this.#send('bomb_ack', { bombId, explodesAt });
   }
 
   // ── Host-only (AI / any player) ───────────────────────────────────────────────

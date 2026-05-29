@@ -123,4 +123,10 @@ export class LocalSimulation {
   applyPowerupCollect(playerId, tileX, tileY) {
     return this.state.collectPowerup(playerId, tileX, tileY);
   }
+
+  // Reconcile a bomb's explodesAt with the host's authoritative value.
+  applyBombAck(bombId, explodesAt) {
+    const bomb = this.state.bombs.get(bombId);
+    if (bomb) bomb.explodesAt = explodesAt;
+  }
 }
