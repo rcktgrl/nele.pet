@@ -796,24 +796,58 @@ async function init() {
     });
   }
 
-  // ── Presence handlers ─────────────────────────────────────────────────────
-  const onPresenceChanged = () => { if (isHost) hostSyncRoster(); };
-  net.onPresenceUpdate = onPresenceChanged;
-  net.onPresenceJoin   = onPresenceChanged;
+  // ── Add self immediately so UI is populated before any network round-trip ─
+  roster = [{ id: net.myId, name: playerName, isAI: false, isHost: !!isHost, inGame: false }];
+  renderRoster();
 
+  // ── Presence: only for disconnect detection, NOT for join discovery ───────
   net.onPresenceLeave = leftPlayers => {
-    if (isHost) { hostSyncRoster(); return; }
-    const hostLeft = leftPlayers.some(p => p.isHost);
-    if (hostLeft && !gameRunning && !roomGameRunning) dbDeleteRoom();
+    if (!isHost) {
+      const hostLeft = leftPlayers.some(p => p.isHost);
+      if (hostLeft && !gameRunning && !roomGameRunning) dbDeleteRoom();
+      return;
+    }
+    const presentIds = new Set(net.getPresencePlayers().map(p => p.id));
+    presentIds.add(net.myId); // always keep host even if presence lags
+    roster = roster.filter(e => e.isAI || presentIds.has(e.id));
+    net.sendLobbyState(roster, roomGameRunning);
+    renderRoster();
+    if (!isPrivate) dbUpdatePlayerCount(realPlayerCount());
   };
 
   net.onPlayerLeave = ({ id }) => {
     if (!isHost || id === net.myId) return;
     roster = roster.filter(e => e.id !== id);
-    hostSyncRoster();
+    net.sendLobbyState(roster, roomGameRunning);
+    renderRoster();
+    if (!isPrivate) dbUpdatePlayerCount(realPlayerCount());
   };
 
-  net.onPlayerHello = () => { if (isHost) hostSyncRoster(); };
+  // ── Join: use player_hello payload directly (bypasses presence timing race) ─
+  net.onPlayerHello = ({ id, name, isHost: playerIsHost }) => {
+    if (!isHost) return;
+    if (roster.find(e => e.id === id)) {
+      // Already present — just resync the roster to them (handles page refresh)
+      net.sendLobbyState(roster, roomGameRunning);
+      return;
+    }
+    // Reconnect detection: same name, new id
+    const stale = roster.find(e => !e.isAI && e.name === name && e.id !== id);
+    if (stale) {
+      const oldId = stale.id;
+      stale.id     = id;
+      stale.isHost = !!playerIsHost;
+      if (sessionScores.has(oldId)) {
+        sessionScores.set(id, sessionScores.get(oldId));
+        sessionScores.delete(oldId);
+      }
+    } else {
+      roster.push({ id, name, isAI: false, isHost: !!playerIsHost, inGame: false });
+    }
+    net.sendLobbyState(roster, roomGameRunning);
+    renderRoster();
+    if (!isPrivate) dbUpdatePlayerCount(realPlayerCount());
+  };
 
   net.onLobbyState = ({ roster: r, gameRunning: gr }) => {
     if (isHost) return;
@@ -855,7 +889,9 @@ async function init() {
 
   if (isHost) {
     await dbRegisterRoom();
-    hostSyncRoster();
+    // Broadcast roster (host only so far) to any clients already in the channel.
+    net.sendLobbyState(roster, roomGameRunning);
+    // Periodic presence-based reconciliation as a safety net.
     setInterval(() => hostSyncRoster(), 5000);
   }
 }
