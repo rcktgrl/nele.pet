@@ -22,6 +22,8 @@ export class Network {
     this.onPowerupCollected  = null;
     this.onGameEnd           = null;
     this.onPlayerKick        = null;
+    this.onBombExploded      = null;  // host-authoritative explosion result
+    this.onNapalmSpread      = null;  // host-authoritative napalm spread
   }
 
   async joinRoom(roomCode, playerName, isHost) {
@@ -77,6 +79,8 @@ export class Network {
     on('powerup_collected', p => this.onPowerupCollected?.(p));
     on('game_end',          p => this.onGameEnd?.(p));
     on('player_kick',       p => this.onPlayerKick?.(p));
+    on('bomb_exploded',     p => this.onBombExploded?.(p));
+    on('napalm_spread',     p => this.onNapalmSpread?.(p));
 
     // ── Subscribe then track presence ──────────────────────────────────────────
     await new Promise((resolve, reject) => {
@@ -147,8 +151,28 @@ export class Network {
     return this.#send('powerup_collected', { playerId: this.myId, tileX, tileY });
   }
 
-  sendGameEnd(winnerId) {
-    return this.#send('game_end', { winnerId });
+  // scores: [{id, name, pts}] final game scores (host-authoritative)
+  sendGameEnd(winnerId, scores) {
+    return this.#send('game_end', { winnerId, scores: scores ?? [] });
+  }
+
+  // Host → all: authoritative explosion result
+  sendBombExploded(bombId, result, killedIds, powerups, totalBricksDestroyed) {
+    return this.#send('bomb_exploded', {
+      bombId,
+      tiles:               result.tiles,
+      destroyedBricks:     result.destroyedBricks,
+      powerups:            powerups ?? [],
+      isNapalm:            result.isNapalm,
+      isBox:               result.isBox,
+      killedIds:           killedIds ?? [],
+      totalBricksDestroyed,
+    });
+  }
+
+  // Host → all: napalm spread + any players killed by it
+  sendNapalmSpread(tiles, dieAt, killedIds) {
+    return this.#send('napalm_spread', { tiles, dieAt, killedIds: killedIds ?? [] });
   }
 
   // ── Host-only (AI / any player) ───────────────────────────────────────────────
