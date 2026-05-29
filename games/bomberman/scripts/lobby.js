@@ -25,14 +25,29 @@ let gameRunning = false;
 // Complexity (host only): 0=Normal, 1=Large, 2=Huge
 let complexity = 0;
 
-let lobbyRealPlayers = [];
-let lobbyAIPlayers   = [];
-let aiInstances      = [];
+const MAX_PLAYERS = 4;
 
-// Tracks which section is currently visible: 'lobby' | 'game' | 'result'
-// Used to guard presence pruning — we only want to remove disconnected players
-// while we're actually in the lobby, not during gameplay or the result screen.
-let activeSection = 'lobby';
+// ─── Lobby roster (host-authoritative) ─────────────────────────────────────────
+// The host owns the canonical, ordered roster and broadcasts it to everyone so
+// that every client renders an *identical* lobby view (same order, same colors).
+// Each entry: { id, name, isAI, isHost, inGame }.
+// The roster persists for the entire life of the room — players stay listed even
+// while a game is running (shown with a 🎮 marker); they only leave the roster
+// when they disconnect or get kicked.
+let roster = [];
+
+// AI behaviour instances (host only). The roster holds the AI's lobby entry;
+// aiInstances drive their in-game logic.
+let aiInstances = [];
+
+// Whether a round is currently in progress *in the room* (any client). Distinct
+// from `gameRunning`, which means *this* client is actively playing a round.
+let roomGameRunning = false;
+
+// playerOrder of the current / most-recent round, and whether I'm one of them.
+let gameParticipants = [];
+let amParticipant    = false;
+
 
 let lastMoveTime = 0;
 const MOVE_COOLDOWN = 130;
@@ -85,21 +100,63 @@ window.addEventListener('touchend', () => sound.init(), { once: true });
 const $ = id => document.getElementById(id);
 
 function showSection(name) {
-  activeSection = name;
   ['lobby', 'game', 'result'].forEach(s => {
     $(`${s}-section`).classList.toggle('hidden', s !== name);
     $(`${s}-section`).classList.toggle('active', s === name);
   });
 }
 
-// ─── Player list helpers ──────────────────────────────────────────────────────
-function selfEntry() {
-  return { id: net.myId, name: playerName, isHost, isAI: false };
+// ─── Roster helpers (host-authoritative) ───────────────────────────────────────
+function realPlayerCount() {
+  return roster.filter(e => !e.isAI).length;
 }
 
-function allPlayers() {
-  const others = lobbyRealPlayers.filter(p => p.id !== net.myId);
-  return [selfEntry(), ...others, ...lobbyAIPlayers];
+// Host: rebuild the roster from live presence + AI entries, preserving order.
+// • New real players are appended at the end.
+// • Real players that have disconnected are dropped (AI are always kept).
+// • A reconnecting player (same name, new id) reclaims their slot + session score.
+// • inGame flags are refreshed from the current round's participant list.
+function hostRebuildRoster() {
+  const presence   = net.getPresencePlayers();         // includes self
+  const presentIds = new Set(presence.map(p => p.id));
+
+  // Reconnect detection — must run before pruning so we can match the stale id.
+  for (const p of presence) {
+    if (roster.find(e => e.id === p.id)) continue;
+    const stale = roster.find(e => !e.isAI && e.name === p.name && !presentIds.has(e.id));
+    if (stale) {
+      const oldId = stale.id;
+      stale.id     = p.id;
+      stale.isHost = !!p.isHost;
+      if (sessionScores.has(oldId)) {
+        sessionScores.set(p.id, sessionScores.get(oldId));
+        sessionScores.delete(oldId);
+      }
+    }
+  }
+
+  // Drop real players who are no longer present (AI are kept regardless).
+  roster = roster.filter(e => e.isAI || presentIds.has(e.id));
+
+  // Append brand-new real players.
+  for (const p of presence) {
+    if (!roster.find(e => e.id === p.id)) {
+      roster.push({ id: p.id, name: p.name, isAI: false, isHost: !!p.isHost, inGame: false });
+    }
+  }
+
+  // Refresh the in-game markers.
+  const partIds = new Set(gameParticipants.map(p => p.id));
+  for (const e of roster) e.inGame = roomGameRunning && partIds.has(e.id);
+}
+
+// Host: rebuild, broadcast to all clients, update local UI + room player count.
+function hostSyncRoster() {
+  if (!isHost) return;
+  hostRebuildRoster();
+  net.sendLobbyState(roster, roomGameRunning);
+  renderRoster();
+  if (!isPrivate) dbUpdatePlayerCount(realPlayerCount());
 }
 
 // ─── Room database helpers ────────────────────────────────────────────────────
@@ -247,55 +304,78 @@ function el(tag, cls, text = '') {
   return e;
 }
 
-function renderSlots() {
-  const all = allPlayers();
+function makePlayerSlot(p, idx) {
+  const slot = el('div', 'slot slot-filled');
+  // First MAX_PLAYERS roster positions get a player color; extras are neutral.
+  const color = idx < MAX_PLAYERS ? PLAYER_COLORS[idx] : '#5e5a82';
+  slot.style.setProperty('--color', color);
 
-  for (let i = 0; i < 4; i++) {
-    const slot = $(`slot-${i}`);
-    slot.innerHTML = '';
-    slot.className = 'slot';
-    slot.style.removeProperty('--color');
+  const dot   = el('span', 'slot-dot');
+  let label   = (p.isAI ? '🤖 ' : '') + p.name;
+  if (!p.isAI && p.isHost) label += ' 👑';
+  if (p.inGame)            label += ' 🎮';
+  const nameEl = el('span', 'slot-name', label);
+  slot.append(dot, nameEl);
 
-    if (i < all.length) {
-      const p = all[i];
-      slot.classList.add('slot-filled');
-      slot.style.setProperty('--color', PLAYER_COLORS[i]);
+  if (p.inGame) slot.classList.add('slot-ingame');
 
-      const dot   = el('span', 'slot-dot');
-      const label = el('span', 'slot-name',
-        (p.isAI ? '🤖 ' : '') + p.name + (!p.isAI && p.isHost ? ' 👑' : ''));
-      slot.append(dot, label);
-
-      if (isHost) {
-        if (p.isAI) {
-          const rm = el('button', 'slot-remove', '✕');
-          rm.title = 'Remove bot';
-          rm.addEventListener('click', e => { e.stopPropagation(); removeAI(p.id); });
-          slot.appendChild(rm);
-        } else if (p.id !== net.myId) {
-          const kick = el('button', 'slot-remove', '✕ Kick');
-          kick.title = 'Kick player';
-          kick.addEventListener('click', e => { e.stopPropagation(); kickPlayer(p.id); });
-          slot.appendChild(kick);
-        }
-      }
-    } else if (isHost && all.length < 4) {
-      slot.classList.add('slot-empty');
-      const btn = el('button', 'slot-add-btn', '+ Add Bot');
-      btn.addEventListener('click', addAI);
-      slot.appendChild(btn);
-    } else {
-      slot.classList.add('slot-passive');
-      slot.appendChild(el('span', 'slot-empty-label', '—'));
+  if (isHost) {
+    if (p.isAI) {
+      const rm = el('button', 'slot-remove', '✕');
+      rm.title = 'Remove bot';
+      rm.addEventListener('click', e => { e.stopPropagation(); removeAI(p.id); });
+      slot.appendChild(rm);
+    } else if (p.id !== net.myId) {
+      const kick = el('button', 'slot-remove', '✕ Kick');
+      kick.title = 'Kick player';
+      kick.addEventListener('click', e => { e.stopPropagation(); kickPlayer(p.id); });
+      slot.appendChild(kick);
     }
   }
+  return slot;
+}
 
-  const total    = all.length;
-  const canStart = isHost && total >= 2;
-  $('start-btn').disabled = !canStart;
-  $('lobby-msg').textContent = isHost
-    ? (total >= 2 ? `${total} players ready!` : 'Add 1 more player or bot to start.')
-    : 'Waiting for host to start the game…';
+function renderRoster() {
+  const container = $('player-slots');
+  if (!container) return;
+  container.innerHTML = '';
+
+  roster.forEach((p, i) => container.appendChild(makePlayerSlot(p, i)));
+
+  // "+ Add Bot" slot for the host while a round is not running and there's room.
+  if (isHost && !roomGameRunning && roster.length < MAX_PLAYERS) {
+    const add = el('div', 'slot slot-empty');
+    const btn = el('button', 'slot-add-btn', '+ Add Bot');
+    btn.addEventListener('click', addAI);
+    add.appendChild(btn);
+    container.appendChild(add);
+  }
+
+  // Pad up to a minimum of MAX_PLAYERS cells so the grid stays tidy.
+  for (let i = container.children.length; i < MAX_PLAYERS; i++) {
+    const passive = el('div', 'slot slot-passive');
+    passive.appendChild(el('span', 'slot-empty-label', '—'));
+    container.appendChild(passive);
+  }
+
+  // Start button + status message.
+  const total    = roster.length;
+  const canStart = isHost && !roomGameRunning && total >= 2;
+  const startBtn = $('start-btn');
+  if (startBtn) startBtn.disabled = !canStart;
+
+  const msg = $('lobby-msg');
+  if (msg) {
+    if (roomGameRunning) {
+      msg.textContent = isHost
+        ? 'Game in progress…'
+        : "Game in progress — you'll be able to join the next round.";
+    } else if (isHost) {
+      msg.textContent = total >= 2 ? `${total} players ready!` : 'Add 1 more player or bot to start.';
+    } else {
+      msg.textContent = 'Waiting for host to start the game…';
+    }
+  }
 }
 
 function updateRoomDisplay() {
@@ -304,49 +384,71 @@ function updateRoomDisplay() {
   if (badge) badge.classList.toggle('hidden', !isPrivate);
 }
 
-// ─── AI management ────────────────────────────────────────────────────────────
+// ─── AI management (host only) ──────────────────────────────────────────────────
 function addAI() {
-  if (allPlayers().length >= 4) return;
+  if (!isHost || roomGameRunning || roster.length >= MAX_PLAYERS) return;
   const idx  = aiInstances.length;
   const id   = `ai-${crypto.randomUUID()}`;
   const name = BOT_NAMES[idx % BOT_NAMES.length];
   aiInstances.push(new AIPlayer(id, name));
-  lobbyAIPlayers.push({ id, name, isAI: true });
-  net.sendAIUpdate(lobbyAIPlayers);
-  renderSlots();
+  roster.push({ id, name, isAI: true, isHost: false, inGame: false });
+  hostSyncRoster();
 }
 
 function removeAI(id) {
-  aiInstances    = aiInstances.filter(a => a.id !== id);
-  lobbyAIPlayers = lobbyAIPlayers.filter(p => p.id !== id);
-  net.sendAIUpdate(lobbyAIPlayers);
-  renderSlots();
+  aiInstances = aiInstances.filter(a => a.id !== id);
+  roster      = roster.filter(e => e.id !== id);
+  hostSyncRoster();
 }
 
 function kickPlayer(id) {
   net.sendPlayerKick(id);
-  lobbyRealPlayers = lobbyRealPlayers.filter(p => p.id !== id);
-  renderSlots();
-  if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
+  roster = roster.filter(e => e.id !== id);
+  hostSyncRoster();
 }
 
 // ─── Game start ───────────────────────────────────────────────────────────────
+// Host: start a fresh round from the lobby. The first MAX_PLAYERS roster
+// entries become the participants; anyone beyond that (or who joins mid-game)
+// waits in the lobby for the next round.
 async function startGame() {
-  const all = allPlayers();
-  if (all.length < 2) return;
+  if (!isHost || roomGameRunning || roster.length < 2) return;
   sound.init();
+  await startRound(roster.slice(0, MAX_PLAYERS));
+}
+
+// Host: kick off a round for an explicit participant list (used by both
+// "Start Game" and "Play Again").
+async function startRound(participants) {
+  const order = participants.map(p => ({ id: p.id, name: p.name, isAI: !!p.isAI }));
+  if (order.length < 2) return;
 
   const { w: gridW, h: gridH } = COMPLEXITY_GRIDS[complexity] ?? COMPLEXITY_GRIDS[0];
-  const map         = createMap(Date.now(), gridW, gridH);
-  const playerOrder = all.map(p => ({ id: p.id, name: p.name, isAI: !!p.isAI }));
+  const map = createMap(Date.now(), gridW, gridH);
+
+  gameParticipants = order;
+  roomGameRunning  = true;
+  amParticipant    = order.some(p => p.id === net.myId);
 
   await dbMarkStarted();
-  beginGame(map, playerOrder, gridW, gridH);
-  await net.sendGameStart(map, playerOrder, gridW, gridH);
+  await net.sendGameStart(map, order, gridW, gridH);
+  hostSyncRoster();                    // mark 🎮 + push roster to spectators
+  beginGame(map, order, gridW, gridH); // host is always a participant
 }
 
 function handleGameStart({ map, playerOrder, gridW, gridH }) {
-  beginGame(map, playerOrder, gridW ?? GRID_W, gridH ?? GRID_H);
+  gameParticipants = playerOrder;
+  roomGameRunning  = true;
+  amParticipant    = playerOrder.some(p => p.id === net.myId);
+
+  if (amParticipant) {
+    beginGame(map, playerOrder, gridW ?? GRID_W, gridH ?? GRID_H);
+  } else {
+    // Joined mid-game: stay in the lobby and watch for the next round.
+    gameRunning = false;
+    showSection('lobby');
+    renderRoster();
+  }
 }
 
 function beginGame(map, playerOrder, gridW = GRID_W, gridH = GRID_H) {
@@ -370,12 +472,17 @@ function beginGame(map, playerOrder, gridW = GRID_W, gridH = GRID_H) {
 }
 
 // ─── In-game network events ───────────────────────────────────────────────────
+// These all bail out unless this client is actively playing — spectators and
+// players waiting in the lobby for the next round stay subscribed to the channel
+// but have no initialized game state, so they must ignore in-game traffic.
 function handlePlayerMove({ id, tileX, tileY }) {
+  if (!gameRunning) return;
   const p = state.players.get(id);
   if (p && id !== net.myId) p.startMove(tileX, tileY, Date.now());
 }
 
 function handleBombPlaced({ bombId, placedBy, tileX, tileY, explodesAt, range, type }) {
+  if (!gameRunning) return;
   state.addBomb(bombId, placedBy, tileX, tileY, explodesAt, range, type ?? 'normal');
   const delay = Math.max(0, explodesAt - Date.now());
   setTimeout(() => triggerExplosion(bombId), delay);
@@ -386,23 +493,27 @@ function handleBombPlaced({ bombId, placedBy, tileX, tileY, explodesAt, range, t
 }
 
 function handleBombKick({ bombId, newTileX, newTileY }) {
+  if (!gameRunning) return;
   state.moveBomb(bombId, newTileX, newTileY);
 }
 
 function handlePlayerDead({ id }) {
+  if (!gameRunning) return;
   const p = state.players.get(id);
   if (p) { p.alive = false; updateHUD(); }
   if (isHost) checkGameEnd();
 }
 
 function handlePowerupCollected({ playerId, tileX, tileY }) {
+  if (!gameRunning) return;
   state.collectPowerup(playerId, tileX, tileY);
   updateHUD();
 }
 
 function handleGameEnd({ winnerId }) {
   if (!gameRunning) return; // guard against double-calls
-  gameRunning = false;
+  gameRunning     = false;
+  roomGameRunning = false;
   sound.stop();
 
   // Compute placement bonuses and merge into session scores
@@ -413,6 +524,9 @@ function handleGameEnd({ winnerId }) {
   const myScore = gameScores.get(net.myId) || 0;
   saveGlobalScore(playerName, myScore); // async, non-blocking
 
+  // Host: clear the 🎮 markers and push the refreshed roster to spectators.
+  if (isHost) hostSyncRoster();
+
   const winner = winnerId ? state.players.get(winnerId) : null;
   $('result-title').textContent    = winner ? `${winner.name} wins! 🎉` : "It's a draw! 💥";
   $('result-subtitle').textContent = winner
@@ -420,7 +534,32 @@ function handleGameEnd({ winnerId }) {
     : 'Everyone eliminated at the same time.';
 
   renderResultScores();
+
+  // Host gets two choices (Play Again / Back to Lobby); everyone else only
+  // gets the option to leave to the title screen.
+  $('play-again-btn').classList.toggle('hidden', !isHost);
+  $('back-to-lobby-btn').classList.toggle('hidden', !isHost);
+  $('leave-title-btn').classList.toggle('hidden', isHost);
+
   showSection('result');
+}
+
+// Shared by the host's "Back to Lobby" button and the broadcast receiver.
+function returnToLobby() {
+  gameRunning      = false;
+  roomGameRunning  = false;
+  gameParticipants = [];
+  amParticipant    = false;
+  sound.stop();
+  showSection('lobby');
+  if (isHost) {
+    if (!isPrivate) dbRegisterRoom(); // back to "waiting" so the room re-lists
+    hostSyncRoster();
+  } else {
+    renderRoster();
+  }
+  renderSessionLeaderboard();
+  loadGlobalLeaderboard().then(rows => renderGlobalLeaderboard(rows));
 }
 
 // ─── Explosion & death ────────────────────────────────────────────────────────
@@ -704,7 +843,7 @@ function updateHUD() {
 async function init() {
   updateRoomDisplay();
   showSection('lobby');
-  renderSlots();
+  renderRoster();
   setupTouchControls();
 
   // Load global leaderboard in background
@@ -718,87 +857,47 @@ async function init() {
     });
   }
 
-  // ── Presence merge helper ─────────────────────────────────────────────────
-  // Applies a list of incoming presence players to lobbyRealPlayers.
-  // • Skips self.
-  // • If the same *name* already exists with a different *id*, the player
-  //   reconnected (page refresh) — reclaim their slot and transfer scores.
-  // • Never removes players; onPresenceLeave + the 4-s interval handle that,
-  //   so a stale sync can't accidentally wipe someone who just joined.
-  function mergePresencePlayers(incoming) {
-    let changed = false;
-    for (const p of incoming) {
-      if (p.id === net.myId) continue;
-      const existingById   = lobbyRealPlayers.find(r => r.id   === p.id);
-      const existingByName = !existingById && lobbyRealPlayers.find(r => r.name === p.name);
-      if (existingByName) {
-        // Same name, new ID → reconnect; keep their slot position
-        const idx   = lobbyRealPlayers.indexOf(existingByName);
-        const oldId = existingByName.id;
-        lobbyRealPlayers[idx] = { ...existingByName, id: p.id };
-        if (sessionScores.has(oldId)) {
-          sessionScores.set(p.id, sessionScores.get(oldId));
-          sessionScores.delete(oldId);
-        }
-        changed = true;
-      } else if (!existingById) {
-        lobbyRealPlayers.push(p);
-        changed = true;
-      }
-    }
-    return changed;
-  }
-
   // ── Presence handlers ─────────────────────────────────────────────────────
-  // Sync events give us the full authoritative state; we merge-add so that a
-  // late or out-of-order sync can't remove a player that onPresenceJoin just
-  // added (fixes the "appears for a split second then disappears" flicker).
-  net.onPresenceUpdate = freshPlayers => {
-    if (mergePresencePlayers(freshPlayers)) {
-      renderSlots();
-      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-    }
-  };
+  // Only the host derives the roster from presence; it then broadcasts the
+  // authoritative roster via lobby_state so every client renders the same view.
+  // Non-host clients ignore presence for roster purposes (they just listen for
+  // lobby_state) — except they watch for the host disappearing.
+  const onPresenceChanged = () => { if (isHost) hostSyncRoster(); };
 
-  net.onPresenceJoin = newPlayers => {
-    if (mergePresencePlayers(newPlayers)) {
-      renderSlots();
-      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-    }
-  };
+  net.onPresenceUpdate = onPresenceChanged;
+  net.onPresenceJoin   = onPresenceChanged;
 
   net.onPresenceLeave = leftPlayers => {
-    // Only handle the time-sensitive host-left case immediately.
-    // We deliberately do NOT prune real players here because Supabase fires
-    // spurious leave+join pairs during WebSocket reconnections — removing a
-    // player on every leave event causes false disappearances.
-    // Intentional leaves are signalled via the player_leave broadcast (handled
-    // by onPlayerLeave below), and the 30-second interval cleans up true
-    // disconnects reliably.
+    if (isHost) { hostSyncRoster(); return; }
+    // Non-host: if the host genuinely left while we're idle in the lobby, the
+    // room is effectively dead — clean up the DB entry. (Spurious reconnect
+    // leaves are tolerated: we only act when not mid-game.)
     const hostLeft = leftPlayers.some(p => p.isHost);
-    if (hostLeft && !isHost && !gameRunning) dbDeleteRoom();
+    if (hostLeft && !gameRunning && !roomGameRunning) dbDeleteRoom();
   };
 
-  // Intentional leave: player clicked "leave" / back button and broadcast before
-  // disconnecting.  Remove them immediately so the slot opens up right away.
+  // Intentional leave broadcast — lets the host prune immediately rather than
+  // waiting for the presence-leave event.
   net.onPlayerLeave = ({ id }) => {
-    if (id === net.myId) return;
-    const before = lobbyRealPlayers.length;
-    lobbyRealPlayers = lobbyRealPlayers.filter(p => p.id !== id);
-    if (lobbyRealPlayers.length !== before) {
-      renderSlots();
-      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-    }
+    if (!isHost || id === net.myId) return;
+    roster = roster.filter(e => e.id !== id);
+    hostSyncRoster();
   };
 
-  net.onPlayerHello = ({ id, name, isHost: pIsHost }) => {
-    if (id === net.myId) return;
-    // Reuse mergePresencePlayers so reconnects are handled identically
-    if (mergePresencePlayers([{ id, name, isHost: pIsHost }])) {
-      renderSlots();
-      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-    }
-    if (isHost && lobbyAIPlayers.length > 0) net.sendAIUpdate(lobbyAIPlayers);
+  net.onPlayerHello = () => { if (isHost) hostSyncRoster(); };
+
+  // Non-host clients receive the canonical roster from the host.
+  net.onLobbyState = ({ roster: r, gameRunning: gr }) => {
+    if (isHost) return;
+    roster          = Array.isArray(r) ? r : [];
+    roomGameRunning = !!gr;
+    renderRoster();
+  };
+
+  // Host sent everyone back to the lobby after a round.
+  net.onReturnLobby = () => {
+    if (isHost) return;
+    returnToLobby();
   };
 
   net.onPlayerKick = ({ targetId }) => {
@@ -807,24 +906,10 @@ async function init() {
       location.href = 'index.html';
       return;
     }
-    lobbyRealPlayers = lobbyRealPlayers.filter(p => p.id !== targetId);
-    renderSlots();
-  };
-
-  net.onAIUpdate  = ({ aiPlayers }) => { lobbyAIPlayers = aiPlayers ?? []; renderSlots(); };
-
-  // Host broadcasts play_again when they click "Play Again".  Non-host
-  // clients receive this and transition back to the lobby automatically —
-  // no page refresh needed, so player IDs and session scores are preserved.
-  net.onPlayAgain = () => {
-    if (isHost) return; // host already handled this locally
-    gameRunning = false;
-    // Rebuild player list from current presence so we start fresh.
-    lobbyRealPlayers = net.getPresencePlayers().filter(p => p.id !== net.myId);
-    showSection('lobby'); // sets activeSection = 'lobby'
-    renderSlots();
-    renderSessionLeaderboard();
-    loadGlobalLeaderboard().then(rows => renderGlobalLeaderboard(rows));
+    if (isHost) {
+      roster = roster.filter(e => e.id !== targetId);
+      hostSyncRoster();
+    }
   };
 
   net.onGameStart         = handleGameStart;
@@ -842,43 +927,16 @@ async function init() {
     return;
   }
 
-  if (isHost) await dbRegisterRoom();
+  if (isHost) {
+    await dbRegisterRoom();
+    // Build the initial roster from the join snapshot and publish it.
+    hostSyncRoster();
 
-  // Initial population from the snapshot returned by joinRoom.
-  // We do a merge-add here too (via the helper) so any players already present
-  // get their duplicate-name check on first load.
-  mergePresencePlayers(net.getPresencePlayers());
-  renderSlots();
-
-  // Fast interval — only ADDS players we might have missed (e.g. player_hello
-  // arrived before presence state propagated).  No pruning here: removing
-  // players is handled exclusively by onPresenceLeave so we never accidentally
-  // evict a player whose presence hasn't fully propagated yet.
-  setInterval(() => {
-    if (activeSection !== 'lobby') return;
-    const fresh  = net.getPresencePlayers();
-    const before = lobbyRealPlayers.length;
-    mergePresencePlayers(fresh);
-    if (lobbyRealPlayers.length !== before) {
-      renderSlots();
-      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-    }
-  }, 4000);
-
-  // Slow safety-net — prunes genuinely stale entries in case a leave event
-  // was missed (e.g. hard browser close with no WebSocket teardown).
-  // 30 s gives Supabase plenty of time to surface any reconnect join.
-  setInterval(() => {
-    if (activeSection !== 'lobby') return;
-    const fresh    = net.getPresencePlayers();
-    const freshIds = new Set(fresh.map(p => p.id));
-    const before   = lobbyRealPlayers.length;
-    lobbyRealPlayers = lobbyRealPlayers.filter(p => freshIds.has(p.id));
-    if (lobbyRealPlayers.length !== before) {
-      renderSlots();
-      if (isHost && !isPrivate) dbUpdatePlayerCount(allPlayers().filter(p => !p.isAI).length);
-    }
-  }, 30000);
+    // Safety-net: periodically rebuild + rebroadcast the roster so late joiners
+    // (whose player_hello may have raced ahead of presence propagation) and
+    // genuine disconnects are reconciled even if an event was missed.
+    setInterval(() => hostSyncRoster(), 5000);
+  }
 }
 
 // ─── Button wiring ────────────────────────────────────────────────────────────
@@ -894,26 +952,33 @@ $('back-btn').addEventListener('click', async e => {
   location.href = 'index.html';
 });
 
+// Host only — immediately start a new round with the previous round's players
+// (those still connected), skipping the lobby entirely.
 $('play-again-btn').addEventListener('click', () => {
-  gameRunning = false;
-  sound.stop();
-  // Rebuild the real-player list directly from the current presence snapshot so
-  // we don't inherit any stale pruning that happened during the game or on the
-  // result screen (activeSection was not 'lobby' then, so the leave-event
-  // timeouts were suppressed, but any that slipped through can't hurt us here).
-  lobbyRealPlayers = net.getPresencePlayers().filter(p => p.id !== net.myId);
-  showSection('lobby');   // also sets activeSection = 'lobby'
-  renderSlots();
-  renderSessionLeaderboard();
-  // Refresh global leaderboard
-  loadGlobalLeaderboard().then(rows => renderGlobalLeaderboard(rows));
-  if (isHost) {
-    // Tell non-host players to return to the lobby too, so they don't have
-    // to manually refresh (which would give them a new ID and lose scores).
-    net.sendPlayAgain();
-    net.sendAIUpdate(lobbyAIPlayers);
-    if (!isPrivate) dbRegisterRoom();
+  if (!isHost) return;
+  const presentIds   = new Set(net.getPresencePlayers().map(p => p.id));
+  const participants = gameParticipants.filter(p => p.isAI || presentIds.has(p.id));
+  if (participants.length < 2) {
+    // Not enough of the old players left — fall back to the lobby.
+    returnToLobby();
+    net.sendReturnLobby();
+    return;
   }
+  startRound(participants);
+});
+
+// Host only — return everyone to the lobby.
+$('back-to-lobby-btn').addEventListener('click', () => {
+  if (!isHost) return;
+  returnToLobby();
+  net.sendReturnLobby();
+});
+
+// Non-host only — leave the room and go to the title screen.
+$('leave-title-btn').addEventListener('click', async () => {
+  net.sendPlayerLeave(net.myId);
+  await net.leave();
+  location.href = 'index.html';
 });
 
 $('room-code-display').addEventListener('click', async () => {

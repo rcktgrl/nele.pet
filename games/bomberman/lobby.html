@@ -26,12 +26,8 @@
       </div>
     </div>
 
-    <div id="player-slots" class="player-slots">
-      <div class="slot" id="slot-0"></div>
-      <div class="slot" id="slot-1"></div>
-      <div class="slot" id="slot-2"></div>
-      <div class="slot" id="slot-3"></div>
-    </div>
+    <!-- Player roster — built dynamically from the host-authoritative roster -->
+    <div id="player-slots" class="player-slots"></div>
 
     <!-- Complexity selector — shown only to host via JS -->
     <div id="complexity-row" class="complexity-row hidden">
@@ -105,8 +101,11 @@
     <p id="result-subtitle"></p>
     <div id="result-scores" class="result-scores"></div>
     <div class="result-actions">
-      <button id="play-again-btn" class="btn primary">Play Again</button>
-      <a href="/games/" class="btn">← Back to Arcade</a>
+      <!-- Host-only: start a new round or drop back to the lobby -->
+      <button id="play-again-btn" class="btn primary hidden">▶ Play Again</button>
+      <button id="back-to-lobby-btn" class="btn hidden">← Back to Lobby</button>
+      <!-- Everyone else: only leave to the title screen -->
+      <button id="leave-title-btn" class="btn hidden">← Leave to Title</button>
     </div>
   </div>
 
