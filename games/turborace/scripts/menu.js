@@ -590,11 +590,14 @@ function _attachVsHandlers(net, isHost) {
     else _renderVsSlots();
   };
 
-  // In-race: position snapshot from another player
+  // In-race: push timestamped snapshot into the per-car interpolation buffer
   net.onPosUpdate = (data) => {
-    if (data.id && data.id !== state.vsMyId) {
-      state.vsCarStates[data.id] = data;
-    }
+    if (!data.id || data.id === state.vsMyId) return;
+    state.vsCarStates[data.id] = data; // latest snapshot for HUD/minimap
+    if (!state.vsCarBuffers[data.id]) state.vsCarBuffers[data.id] = [];
+    const buf = state.vsCarBuffers[data.id];
+    buf.push({ ...data, t: performance.now() / 1000 });
+    if (buf.length > 32) buf.shift(); // keep a small sliding window
   };
 
   // In-race: a car finished

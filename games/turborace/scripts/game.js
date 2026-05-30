@@ -98,26 +98,80 @@ function closeTrackEditor(){
 // ═══════════════════════════════════════════════════════
 //  VS REMOTE CAR INTERPOLATION
 // ═══════════════════════════════════════════════════════
-/** Lerp every remote VS car towards its latest network snapshot */
+
+// Render remote cars this many seconds behind the live feed.
+// At 20 Hz (50 ms between packets) a 100 ms buffer nearly always gives
+// two snapshots to interpolate between, producing perfectly smooth motion.
+const VS_INTERP_DELAY = 0.1;
+
+/**
+ * Advance every remote VS car to the interpolated position for the current
+ * frame. Uses a snapshot buffer per car:
+ *   - When renderT falls between two buffered snapshots → linear interpolation.
+ *   - When renderT is past the newest snapshot → dead-reckoning (extrapolated
+ *     forward by speed × elapsed, capped at 200 ms to avoid wild drift).
+ *
+ * Forward direction follows the car physics convention: fwd = (sin(hdg), 0, cos(hdg)).
+ */
 function _updateRemoteCars(dt){
-  const lerpFactor=Math.min(1,dt*15);
+  if(!state.vsSlots) return;
+  const now=performance.now()/1000;
+  const renderT=now-VS_INTERP_DELAY;
+
   for(const slot of state.vsSlots){
     if(slot.id===state.vsMyId) continue;
     const car=state.vsCarsById[slot.id];
-    const snap=state.vsCarStates[slot.id];
-    if(!car||!snap) continue;
-    car.pos.x+=(snap.x-car.pos.x)*lerpFactor;
-    car.pos.z+=(snap.z-car.pos.z)*lerpFactor;
-    let dh=snap.hdg-car.hdg;
-    if(dh>Math.PI)dh-=Math.PI*2;
-    if(dh<-Math.PI)dh+=Math.PI*2;
-    car.hdg+=dh*lerpFactor;
+    if(!car) continue;
+
+    const buf=state.vsCarBuffers?.[slot.id];
+    if(!buf||buf.length===0) continue;
+
+    // Find lo: latest snapshot with t ≤ renderT
+    // Find hi: the one immediately after lo (t > renderT)
+    let lo=null, loIdx=-1;
+    for(let i=0;i<buf.length;i++){
+      if(buf[i].t<=renderT){ lo=buf[i]; loIdx=i; }
+      else break; // buffer is time-ordered oldest→newest
+    }
+    const hi=(loIdx>=0&&loIdx+1<buf.length)?buf[loIdx+1]:null;
+
+    let tx,tz,thdg,tprog,tlap,tspd;
+
+    if(lo&&hi){
+      // ── Interpolate between two known snapshots ──────────────────────────
+      const span=hi.t-lo.t;
+      const alpha=span>0.0001?Math.min(1,(renderT-lo.t)/span):1;
+      tx=lo.x+(hi.x-lo.x)*alpha;
+      tz=lo.z+(hi.z-lo.z)*alpha;
+      let dh=hi.hdg-lo.hdg;
+      if(dh>Math.PI)dh-=Math.PI*2; if(dh<-Math.PI)dh+=Math.PI*2;
+      thdg=lo.hdg+dh*alpha;
+      tprog=lo.totalProg+(hi.totalProg-lo.totalProg)*alpha;
+      tspd=lo.spd+(hi.spd-lo.spd)*alpha;
+      tlap=hi.lap;
+    } else if(lo){
+      // ── Dead-reckon from newest snapshot ─────────────────────────────────
+      // fwd = (sin(hdg), 0, cos(hdg)) — matches car.js physics
+      const age=Math.min(now-lo.t,0.2);
+      tx=lo.x+Math.sin(lo.hdg)*lo.spd*age;
+      tz=lo.z+Math.cos(lo.hdg)*lo.spd*age;
+      thdg=lo.hdg; tprog=lo.totalProg; tspd=lo.spd; tlap=lo.lap;
+    } else {
+      // renderT is before every snapshot: snap to the oldest one
+      const s=buf[0];
+      tx=s.x; tz=s.z; thdg=s.hdg; tprog=s.totalProg; tspd=s.spd; tlap=s.lap;
+    }
+
+    car.pos.x=tx; car.pos.z=tz; car.hdg=thdg;
     car.pos.y=car.groundY();
     car.mesh.position.copy(car.pos);
     car.mesh.rotation.y=car.hdg;
-    if(snap.totalProg!=null)car.totalProg=snap.totalProg;
-    if(snap.lap!=null)car.lap=snap.lap;
-    if(snap.spd!=null)car.spd=snap.spd;
+    if(tprog!=null) car.totalProg=tprog;
+    if(tlap!=null)  car.lap=tlap;
+    if(tspd!=null)  car.spd=tspd;
+
+    // Prune snapshots older than renderT − 0.5 s (keep at least 2)
+    while(buf.length>2&&buf[0].t<renderT-0.5) buf.shift();
   }
 }
 
