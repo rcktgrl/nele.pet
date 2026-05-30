@@ -84,5 +84,5 @@ export const state = {
 
     // Broadcast throttle
     vsPosSendTimer: 0,
-    vsPosSendInterval: 0.05, // 20 Hz
+    vsPosSendInterval: 0.033, // 30 Hz
 };
