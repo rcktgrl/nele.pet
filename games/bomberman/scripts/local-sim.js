@@ -53,7 +53,7 @@ export class LocalSimulation {
   // powerups     – [{x,y,type}] power-ups that appeared
   // isNapalm, isBox – bomb type flags
   // killedIds    – player IDs killed by this explosion
-  applyBombExploded({ bombId, tiles, destroyedBricks, powerups, isNapalm, isBox, killedIds }) {
+  applyBombExploded({ bombId, tiles, destroyedBricks, powerups, isNapalm, isBox, napalmDieAt, killedIds }) {
     // Remove bomb from local state (it may still be "pending" here)
     const bomb = this.state.bombs.get(bombId);
     if (bomb && !bomb.exploded) {
@@ -85,9 +85,9 @@ export class LocalSimulation {
       }
       // Explosion visual
       this.state.explosions.push({ tiles, dieAt: Date.now() + EXPLODE_DUR });
-      // Napalm fire
+      // Napalm fire — use the host's authoritative dieAt so expiry is identical everywhere
       if (isNapalm) {
-        const dieAt = Date.now() + 2000;
+        const dieAt = napalmDieAt ?? Date.now() + 2000;
         for (const { x, y } of tiles) {
           this.state.napalmFires.set(`${x},${y}`, { x, y, dieAt });
         }

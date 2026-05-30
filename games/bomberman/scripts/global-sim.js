@@ -148,6 +148,17 @@ export class GlobalSimulation {
 
     this.onBombExploded?.(bombId, result, killedIds, powerups, this.state.bricksDestroyed);
 
+    // Trigger each chained bomb as its own authoritative explosion event.
+    // Cancel any scheduled timer first so the timeout never fires redundantly.
+    for (const chainId of result.chainIds ?? []) {
+      const t = this._timers.get(chainId);
+      if (t !== undefined) {
+        clearTimeout(t);
+        this._timers.delete(chainId);
+      }
+      this._triggerExplosion(chainId);
+    }
+
     // Schedule napalm spread
     if (result.isNapalm) {
       const spreadTiles = [...result.tiles];
