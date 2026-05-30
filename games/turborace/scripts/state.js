@@ -77,7 +77,8 @@ export const state = {
     vsMyId: '',              // this client's network id (= vsNetwork.myId)
     vsSlots: [],             // [{id, name, isAI, carIdx}] ordered slot list
     vsCarsById: {},          // id → Car instance
-    vsCarStates: {},         // id → latest received {x,z,hdg,spd,lap,totalProg}
+    vsCarStates: {},         // id → latest received snapshot (for HUD/minimap)
+    vsCarBuffers: {},        // id → [{t,x,z,hdg,spd,lap,totalProg}] for interpolation
     vsFinished: {},          // id → finTime
     vsAIControllers: [],     // [{ai, slotId}] — host only
 

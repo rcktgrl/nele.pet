@@ -88,7 +88,7 @@ export async function initVsRace(slots, trackId){
   for(const c of state.allCars)scene.remove(c.mesh);
   state.allCars=[]; state.aiCars=[]; state.aiControllers=[];
   state.pCar=null; state.vsAIControllers=[];
-  state.vsCarsById={}; state.vsCarStates={}; state.vsFinished={};
+  state.vsCarsById={}; state.vsCarStates={}; state.vsCarBuffers={}; state.vsFinished={};
   clearAiSounds(); clearGhostVisual();
 
   state.vsSlots=slots;
