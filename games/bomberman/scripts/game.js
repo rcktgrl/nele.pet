@@ -266,6 +266,8 @@ export class GameState {
       }
     }
 
+    let napalmDieAt = null;
+
     if (isBox) {
       // Create bricks at empty explosion tiles (skip player positions)
       const occupied = new Set();
@@ -282,9 +284,9 @@ export class GameState {
       this.explosions.push({ tiles, dieAt: Date.now() + EXPLODE_DUR });
 
       if (isNapalm) {
-        const dieAt = Date.now() + 2000;
+        napalmDieAt = Date.now() + 2000;
         for (const { x, y } of tiles) {
-          this.napalmFires.set(`${x},${y}`, { x, y, dieAt });
+          this.napalmFires.set(`${x},${y}`, { x, y, dieAt: napalmDieAt });
         }
       }
     }
@@ -292,9 +294,9 @@ export class GameState {
     const owner = this.players.get(bomb.placedBy);
     if (owner) owner.activeBombs = Math.max(0, owner.activeBombs - 1);
 
-    for (const cid of chainIds) this.explodeBomb(cid);
-
-    return { tiles, destroyedBricks, isNapalm, isBox };
+    // Chain IDs are returned so the host can trigger each one as a separate
+    // authoritative event instead of exploding them silently here.
+    return { tiles, destroyedBricks, isNapalm, isBox, chainIds, napalmDieAt };
   }
 
   /** Spread napalm fire to adjacent empty tiles (called ~600ms after explosion). */

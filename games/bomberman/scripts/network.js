@@ -167,6 +167,7 @@ export class Network {
       powerups:            powerups ?? [],
       isNapalm:            result.isNapalm,
       isBox:               result.isBox,
+      napalmDieAt:         result.napalmDieAt ?? null,
       killedIds:           killedIds ?? [],
       totalBricksDestroyed,
     });
