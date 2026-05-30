@@ -288,147 +288,200 @@ export async function showOnlineTrkSel(){
 //  VS MODE LOBBY
 // ═══════════════════════════════════════════════════════
 
-// PLAYER COLORS matching Bomber's 4-player palette
-const VS_COLORS=['#ff9a3c','#4af','#f44','#4f4'];
+// Player colors — matches Bomber's 4-player palette
+const VS_COLORS = ['#ff9a3c', '#4af', '#f44', '#4f4'];
+const MAX_VS_PLAYERS = 4;
 
-// Interval handle for the 30-second presence safety-net prune.
-// Cleared in vsLeaveLobby() so it doesn't run after the lobby is torn down.
-let _vsLobbyPruneInterval=null;
+// Host-authoritative roster. Each entry: { id, name, isAI, isHost, carIdx }
+// Host owns this canonical list and broadcasts it after every change.
+// Non-hosts receive it via lobby_state and render it unchanged.
+let _vsRoster = [];
+let _vsTrackId = null;
+let _vsGameRunning = false;
+let _vsLobbyPruneInterval = null;
 
-/**
- * Merge-add incoming presence players into state.vsLobbyPlayers.
- * Like Bomber's mergePresencePlayers: only ever ADDS or UPDATES slots,
- * never removes — removal is handled exclusively by intentional broadcasts
- * (player_leave / player_kick) and the 30-second safety-net interval.
- * Returns true if the list changed.
- */
-function _mergeVsPresencePlayers(incoming){
-  let changed=false;
-  for(const p of incoming){
-    const byId=state.vsLobbyPlayers.find(r=>r.id===p.id);
-    const byName=!byId&&state.vsLobbyPlayers.find(r=>r.name===p.name);
-    if(byName){
-      // Same name, new ID → reconnect; reclaim their slot
-      const idx=state.vsLobbyPlayers.indexOf(byName);
-      state.vsLobbyPlayers[idx]={...byName,id:p.id};
-      changed=true;
-    }else if(!byId){
-      state.vsLobbyPlayers.push(p);
-      changed=true;
-    }
-  }
-  // Keep host in slot 0, then guests in arrival order
-  state.vsLobbyPlayers.sort((a,b)=>(b.isHost?1:0)-(a.isHost?1:0));
-  return changed;
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+function _vsSetStatus(msg) {
+  const el = document.getElementById('vsStatusMsg');
+  if (el) el.textContent = msg;
 }
 
-/** All players (real + AI) in slot order */
-function _allVsSlots(){
-  return [...state.vsLobbyPlayers, ...state.vsLobbyAIs];
+// Host: broadcast the full roster to all clients, then refresh local UI
+function _hostSyncRoster() {
+  if (!state.vsIsHost || !state.vsNetwork) return;
+  state.vsNetwork.sendLobbyState(_vsRoster, _vsTrackId, _vsGameRunning);
+  _renderVsSlots();
 }
 
-/** Build and rebuild the 4-slot player grid */
-function _renderVsSlots(){
-  const all=_allVsSlots();
-  const isHost=state.vsIsHost;
-  const net=state.vsNetwork;
+function _renderVsSlots() {
+  const isHost = state.vsIsHost;
+  const net = state.vsNetwork;
 
-  for(let i=0;i<4;i++){
-    const slotEl=document.getElementById(`vsSlot${i}`);
-    if(!slotEl) continue;
-    slotEl.innerHTML='';
-    slotEl.className='vsSlot';
+  for (let i = 0; i < MAX_VS_PLAYERS; i++) {
+    const slotEl = document.getElementById(`vsSlot${i}`);
+    if (!slotEl) continue;
+    slotEl.innerHTML = '';
+    slotEl.className = 'vsSlot';
 
-    if(i<all.length){
-      const p=all[i];
+    if (i < _vsRoster.length) {
+      const p = _vsRoster[i];
       slotEl.classList.add('vsSlot-filled');
-      slotEl.style.setProperty('--sc',VS_COLORS[i]);
+      slotEl.style.setProperty('--sc', VS_COLORS[i]);
 
-      const dot=document.createElement('span'); dot.className='vsSlotDot';
-      const nm=document.createElement('span'); nm.className='vsSlotName';
-      nm.textContent=(p.isAI?'🤖 ':'')+p.name+(p.isHost?' 👑':'');
+      const dot = document.createElement('span'); dot.className = 'vsSlotDot';
+      const nm = document.createElement('span'); nm.className = 'vsSlotName';
+      nm.textContent = (p.isAI ? '🤖 ' : '') + p.name + (p.isHost ? ' 👑' : '');
 
-      slotEl.appendChild(dot); slotEl.appendChild(nm);
+      const carLbl = document.createElement('span');
+      carLbl.style.cssText = 'font-size:.68rem;color:#99a;margin-left:auto;flex-shrink:0;';
+      carLbl.textContent = CARS[p.carIdx ?? 0]?.name ?? '';
 
-      if(isHost){
-        if(p.isAI){
-          const rm=document.createElement('button'); rm.className='vsSlotRemove'; rm.textContent='✕';
-          rm.title='Remove bot'; rm.onclick=e=>{ e.stopPropagation(); _vsRemoveAI(p.id); };
+      slotEl.appendChild(dot);
+      slotEl.appendChild(nm);
+      slotEl.appendChild(carLbl);
+
+      if (isHost) {
+        if (p.isAI) {
+          const rm = document.createElement('button'); rm.className = 'vsSlotRemove'; rm.textContent = '✕';
+          rm.title = 'Remove bot'; rm.onclick = e => { e.stopPropagation(); _vsRemoveAI(p.id); };
           slotEl.appendChild(rm);
-        } else if(p.id!==net?.myId){
-          const kick=document.createElement('button'); kick.className='vsSlotRemove'; kick.textContent='✕ Kick';
-          kick.title='Kick player'; kick.onclick=e=>{ e.stopPropagation(); _vsKickPlayer(p.id); };
+        } else if (p.id !== net?.myId) {
+          const kick = document.createElement('button'); kick.className = 'vsSlotRemove'; kick.textContent = '✕ Kick';
+          kick.title = 'Kick player'; kick.onclick = e => { e.stopPropagation(); _vsKickPlayer(p.id); };
           slotEl.appendChild(kick);
         }
       }
-    } else if(isHost&&all.length<4){
+    } else if (isHost && _vsRoster.length < MAX_VS_PLAYERS) {
       slotEl.classList.add('vsSlot-empty');
-      const btn=document.createElement('button'); btn.className='vsAddBotBtn'; btn.textContent='+ Add AI';
-      btn.onclick=_vsAddAI;
+      const btn = document.createElement('button'); btn.className = 'vsAddBotBtn'; btn.textContent = '+ Add AI';
+      btn.onclick = _vsAddAI;
       slotEl.appendChild(btn);
     } else {
       slotEl.classList.add('vsSlot-passive');
-      const dash=document.createElement('span'); dash.className='vsSlotEmpty'; dash.textContent='—';
+      const dash = document.createElement('span'); dash.className = 'vsSlotEmpty'; dash.textContent = '—';
       slotEl.appendChild(dash);
     }
   }
 
-  // Start button / status
-  const total=all.length;
-  const canStart=isHost&&total>=2;
-  const startBtn=document.getElementById('vsStartBtn');
-  const statusEl=document.getElementById('vsStatusMsg');
-  if(startBtn) startBtn.disabled=!canStart||state.selTrk==null;
-  if(statusEl){
-    if(isHost){
-      if(state.selTrk==null) statusEl.textContent='Pick a track first.';
-      else if(total<2)       statusEl.textContent='Add 1 more player or AI to start.';
-      else                   statusEl.textContent=`${total} player${total>1?'s':''} ready!`;
+  const total = _vsRoster.length;
+  const canStart = isHost && total >= 2 && _vsTrackId != null;
+  const startBtn = document.getElementById('vsStartBtn');
+  const statusEl = document.getElementById('vsStatusMsg');
+  if (startBtn) startBtn.disabled = !canStart;
+  if (statusEl) {
+    if (isHost) {
+      if (_vsTrackId == null)  statusEl.textContent = 'Pick a track first.';
+      else if (total < 2)      statusEl.textContent = 'Add 1 more player or AI to start.';
+      else                     statusEl.textContent = `${total} player${total > 1 ? 's' : ''} ready!`;
     } else {
-      statusEl.textContent='Waiting for host to start the race…';
+      const trk = _vsTrackId
+        ? (state.folderTracks.find(t => String(t.id) === String(_vsTrackId))?.name ?? 'selected')
+        : null;
+      statusEl.textContent = trk
+        ? `Track: ${trk} — waiting for host to start…`
+        : 'Waiting for host to start the race…';
     }
   }
 }
 
-/** Build compact inline car selector (used inside the lobby) */
-function _buildVsCarRow(containerId, onSelect){
-  const container=document.getElementById(containerId);
-  if(!container) return;
-  // Clean up old previews for this container
-  const old=state.carCardPreviews.filter(p=>p._vsContainer===containerId);
-  old.forEach(p=>{ p.renderer.dispose(); });
-  state.carCardPreviews=state.carCardPreviews.filter(p=>p._vsContainer!==containerId);
-  if(state.carCardPreviewRaf){ cancelAnimationFrame(state.carCardPreviewRaf); state.carCardPreviewRaf=0; }
+// ── AI management (host only) ─────────────────────────────────────────────────
+
+function _vsAddAI() {
+  if (!state.vsIsHost || _vsRoster.length >= MAX_VS_PLAYERS) return;
+  const usedNames = _vsRoster.filter(e => e.isAI).map(e => e.name);
+  const name = BOT_NAMES.find(n => !usedNames.includes(n)) || `Bot ${_vsRoster.filter(e => e.isAI).length + 1}`;
+  _vsRoster.push({
+    id: `ai-${crypto.randomUUID()}`,
+    name,
+    isAI: true,
+    isHost: false,
+    carIdx: Math.floor(Math.random() * CARS.length),
+  });
+  _hostSyncRoster();
+}
+
+function _vsRemoveAI(id) {
+  if (!state.vsIsHost) return;
+  _vsRoster = _vsRoster.filter(e => e.id !== id);
+  _hostSyncRoster();
+}
+
+function _vsKickPlayer(id) {
+  if (!state.vsIsHost) return;
+  state.vsNetwork.sendPlayerKick(id);
+  _vsRoster = _vsRoster.filter(e => e.id !== id);
+  _hostSyncRoster();
+}
+
+// ── Track cards (host only) ───────────────────────────────────────────────────
+
+function _buildVsTrkCards() {
+  const container = document.getElementById('vsTrackCards');
+  if (!container) return;
+  const tracks = state.folderTracks || [];
+  const COLORS = ['#4488ff', '#44cc66', '#ffaa22', '#ff4488', '#22ddaa', '#dd66ff', '#66bbff'];
+  container.innerHTML = '';
+  tracks.forEach((t, i) => {
+    const card = document.createElement('div');
+    card.className = 'vsTrackCard' + (String(_vsTrackId) === String(t.id) ? ' sel' : '');
+    const cvs = document.createElement('canvas'); cvs.width = 160; cvs.height = 120;
+    const nm = document.createElement('span'); nm.textContent = t.name;
+    card.appendChild(cvs); card.appendChild(nm);
+    drawTrackPreview(cvs, t, t.previewColor || COLORS[i % COLORS.length]);
+    card.onclick = () => {
+      container.querySelectorAll('.vsTrackCard').forEach(x => x.classList.remove('sel'));
+      card.classList.add('sel');
+      _vsTrackId = t.id;
+      state.selTrk = t.id;
+      _hostSyncRoster();
+    };
+    container.appendChild(card);
+  });
+}
+
+// ── Inline car selector ───────────────────────────────────────────────────────
+
+function _buildVsCarRow(containerId, onSelect) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const old = state.carCardPreviews.filter(p => p._vsContainer === containerId);
+  old.forEach(p => { p.renderer.dispose(); });
+  state.carCardPreviews = state.carCardPreviews.filter(p => p._vsContainer !== containerId);
+  if (state.carCardPreviewRaf) { cancelAnimationFrame(state.carCardPreviewRaf); state.carCardPreviewRaf = 0; }
 
   ensureCarCardPreviewRenderer();
-  container.innerHTML='';
-  if(state.selCar==null) state.selCar=0;
+  container.innerHTML = '';
+  if (state.selCar == null) state.selCar = 0;
 
-  CARS.forEach((c,i)=>{
-    const d=document.createElement('div');
-    d.className='vsCarChip'+(state.selCar===i?' sel':'');
-    d.title=c.name;
-    const cvs=document.createElement('canvas'); cvs.className='vsCarCanvas';
-    const nm=document.createElement('span'); nm.textContent=c.name;
+  CARS.forEach((c, i) => {
+    const d = document.createElement('div');
+    d.className = 'vsCarChip' + (state.selCar === i ? ' sel' : '');
+    d.title = c.name;
+    const cvs = document.createElement('canvas'); cvs.className = 'vsCarCanvas';
+    const nm = document.createElement('span'); nm.textContent = c.name;
     d.appendChild(cvs); d.appendChild(nm);
 
-    const visual=createCarVisual(c);
+    const visual = createCarVisual(c);
     visual.mesh.scale.setScalar(0.72);
-    visual.mesh.rotation.x=-0.1;
-    visual.mesh.position.set(0,-0.2,0);
-    const preview={host:d,canvas:cvs,model:visual.mesh,hovered:false,selected:state.selCar===i,
-      angle:0,spinSpeed:0,baseYaw:-0.55,_vsContainer:containerId,
-      renderer:new THREE.WebGLRenderer({canvas:cvs,alpha:true,antialias:true,powerPreference:'low-power'})};
-    preview.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));
-    preview.renderer.outputColorSpace=THREE.SRGBColorSpace;
+    visual.mesh.rotation.x = -0.1;
+    visual.mesh.position.set(0, -0.2, 0);
+    const preview = {
+      host: d, canvas: cvs, model: visual.mesh, hovered: false, selected: state.selCar === i,
+      angle: 0, spinSpeed: 0, baseYaw: -0.55, _vsContainer: containerId,
+      renderer: new THREE.WebGLRenderer({ canvas: cvs, alpha: true, antialias: true, powerPreference: 'low-power' }),
+    };
+    preview.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    preview.renderer.outputColorSpace = THREE.SRGBColorSpace;
     state.carCardPreviews.push(preview);
 
-    d.onmouseenter=()=>{ preview.hovered=true; startCarCardPreviews(); };
-    d.onmouseleave=()=>{ preview.hovered=false; };
-    d.onclick=()=>{
-      container.querySelectorAll('.vsCarChip').forEach(x=>x.classList.remove('sel'));
-      d.classList.add('sel'); state.selCar=i;
-      state.carCardPreviews.forEach(item=>{ item.selected=item.host===d; });
+    d.onmouseenter = () => { preview.hovered = true; startCarCardPreviews(); };
+    d.onmouseleave = () => { preview.hovered = false; };
+    d.onclick = () => {
+      container.querySelectorAll('.vsCarChip').forEach(x => x.classList.remove('sel'));
+      d.classList.add('sel'); state.selCar = i;
+      state.carCardPreviews.forEach(item => { item.selected = item.host === d; });
       startCarCardPreviews();
       onSelect(i);
     };
@@ -437,373 +490,300 @@ function _buildVsCarRow(containerId, onSelect){
   startCarCardPreviews();
 }
 
-/** Build compact track cards inline in the lobby (host only) */
-function _buildVsTrkCards(){
-  const container=document.getElementById('vsTrackCards');
-  if(!container) return;
-  const tracks=state.folderTracks||[];
-  const COLORS=['#4488ff','#44cc66','#ffaa22','#ff4488','#22ddaa','#dd66ff','#66bbff'];
-  container.innerHTML='';
-  tracks.forEach((t,i)=>{
-    const card=document.createElement('div');
-    card.className='vsTrackCard'+(String(state.selTrk)===String(t.id)?' sel':'');
-    const cvs=document.createElement('canvas'); cvs.width=160; cvs.height=120;
-    const nm=document.createElement('span'); nm.textContent=t.name;
-    card.appendChild(cvs); card.appendChild(nm);
-    drawTrackPreview(cvs,t,t.previewColor||COLORS[i%COLORS.length]);
-    card.onclick=()=>{
-      container.querySelectorAll('.vsTrackCard').forEach(x=>x.classList.remove('sel'));
-      card.classList.add('sel'); state.selTrk=t.id;
-      if(state.vsNetwork) state.vsNetwork.sendGameConfig(state.selTrk,state.selCar??0);
-      _renderVsSlots(); // refresh start button / status
-    };
-    container.appendChild(card);
-  });
-}
+// ── Room panel (shown after connect) ─────────────────────────────────────────
 
-// ── VS lobby actions ──────────────────────────────────────────────────────────
+function _showVsRoomPanel(isHost) {
+  document.getElementById('vsJoinPanel').style.display = 'none';
+  document.getElementById('vsRoomPanel').style.display = 'flex';
+  document.getElementById('vsRoomCodeDisplay').textContent = state.vsRoomCode;
 
-function _vsAddAI(){
-  if(_allVsSlots().length>=4) return;
-  const usedNames=state.vsLobbyAIs.map(a=>a.name);
-  const name=BOT_NAMES.find(n=>!usedNames.includes(n))||`Bot ${state.vsLobbyAIs.length+1}`;
-  const ai={id:`ai-${crypto.randomUUID()}`,name,isAI:true,carIdx:Math.floor(Math.random()*CARS.length)};
-  state.vsLobbyAIs.push(ai);
-  state.vsNetwork?.sendAIUpdate(state.vsLobbyAIs);
-  _renderVsSlots();
-}
-
-function _vsRemoveAI(id){
-  state.vsLobbyAIs=state.vsLobbyAIs.filter(a=>a.id!==id);
-  state.vsNetwork?.sendAIUpdate(state.vsLobbyAIs);
-  _renderVsSlots();
-}
-
-function _vsKickPlayer(targetId){
-  state.vsNetwork?.sendPlayerKick(targetId);
-  // Remove locally so the host's slot grid updates immediately
-  state.vsLobbyPlayers=state.vsLobbyPlayers.filter(p=>p.id!==targetId);
-  _renderVsSlots();
-}
-
-function _vsSetStatus(msg){
-  const el=document.getElementById('vsStatusMsg');
-  if(el) el.textContent=msg;
-}
-
-// ── Show / connect ────────────────────────────────────────────────────────────
-
-export async function showVsLobby(){
-  if(state.vsNetwork){ await state.vsNetwork.leave().catch(()=>{}); state.vsNetwork=null; }
-  state.vsMode=false;
-  state.vsLobbyPlayers=[];
-  state.vsLobbyAIs=[];
-  state.vsGuestCars={};
-
-  await loadTracksFromFolder().catch(()=>{});
-
-  document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
-  document.getElementById('sVsLobby').style.display='flex';
-  state.gState='vsLobby';
-  updateTouchControlsVisibility(state.gState);
-
-  document.getElementById('vsJoinPanel').style.display='flex';
-  document.getElementById('vsRoomPanel').style.display='none';
-  _vsSetStatus('');
-
-  // Show the player's arcade name as a read-only label
-  const user=getArcadeUser();
-  const nameLbl=document.getElementById('vsMyNameLabel');
-  if(nameLbl) nameLbl.textContent=user.name||'Anonymous';
-
-  // Auto-fill room code if ?room=XXXX is in the URL
-  const urlRoom=new URLSearchParams(window.location.search).get('room');
-  if(urlRoom&&urlRoom.length===4){
-    const inp=document.getElementById('vsCodeInput');
-    if(inp) inp.value=urlRoom.trim().toUpperCase();
-  }
-}
-
-// ── Copy helpers ──────────────────────────────────────────────────────────────
-
-function _vsCopyFeedback(msg){
-  const el=document.getElementById('vsCopyFeedback');
-  if(!el) return;
-  el.textContent=msg;
-  el.style.opacity='1';
-  clearTimeout(el._t);
-  el._t=setTimeout(()=>{ el.style.opacity='0'; },1800);
-}
-
-export function vsCopyCode(){
-  const code=state.vsRoomCode;
-  if(!code) return;
-  navigator.clipboard.writeText(code).then(()=>{
-    const btn=document.getElementById('vsCopyCodeBtn');
-    if(btn){ const orig=btn.textContent; btn.textContent='✓'; btn.classList.add('vsCopied');
-      setTimeout(()=>{ btn.textContent=orig; btn.classList.remove('vsCopied'); },1600); }
-    _vsCopyFeedback('Room code copied!');
-  }).catch(()=>_vsCopyFeedback('Could not copy'));
-}
-
-export function vsCopyInviteLink(){
-  const code=state.vsRoomCode;
-  if(!code) return;
-  const url=new URL(window.location.href);
-  url.searchParams.set('room',code);
-  // Strip any hash so it opens cleanly
-  url.hash='';
-  navigator.clipboard.writeText(url.toString()).then(()=>{
-    const btn=document.getElementById('vsCopyInviteBtn');
-    if(btn){ const orig=btn.textContent; btn.textContent='✓ COPIED!'; btn.classList.add('vsCopied');
-      setTimeout(()=>{ btn.textContent=orig; btn.classList.remove('vsCopied'); },1600); }
-    _vsCopyFeedback('Invite link copied!');
-  }).catch(()=>_vsCopyFeedback('Could not copy'));
-}
-
-export async function vsCreateRoom(){
-  const user=getArcadeUser();
-  const name=user.name||'Anonymous';
-
-  const code=generateRoomCode();
-  state.vsRoomCode=code;
-  state.vsIsHost=true;
-  state.vsLobbyAIs=[];
-  if(state.selCar==null) state.selCar=0;
-
-  const net=new VsNetwork();
-  state.vsNetwork=net;
-  state.vsMyId=net.myId;
-  // Pre-seed our own slot so the grid isn't empty while we wait for presence sync
-  state.vsLobbyPlayers=[{id:net.myId, name, isHost:true}];
-  // Attach handlers BEFORE joinRoom so the initial presence 'sync' that fires
-  // inside joinRoom (while track() is being awaited) is handled correctly.
-  _attachVsHandlers(net, true);
-
-  _vsSetStatus('Connecting…');
-  try{ await net.joinRoom(code, name, true); }
-  catch(e){ _vsSetStatus('❌ Failed: '+e.message); return; }
-
-  // Belt-and-suspenders: replay snapshot in case presenceState was populated
-  // during joinRoom but onPresenceUpdate fired before track() completed.
-  const snapHost=net.getPresencePlayers();
-  if(snapHost.length) net.onPresenceUpdate(snapHost);
-  _showVsRoomPanel(true);
-}
-
-export async function vsJoinRoom(){
-  const user=getArcadeUser();
-  const name=user.name||'Anonymous';
-  const code=(document.getElementById('vsCodeInput')?.value||'').trim().toUpperCase();
-  if(!code||code.length!==4){ _vsSetStatus('❌ Enter a 4-letter room code'); return; }
-
-  state.vsRoomCode=code;
-  state.vsIsHost=false;
-  state.vsLobbyAIs=[];
-  if(state.selCar==null) state.selCar=0;
-
-  const net=new VsNetwork();
-  state.vsNetwork=net;
-  state.vsMyId=net.myId;
-  // Pre-seed our own slot so the grid isn't empty while we wait for presence sync
-  state.vsLobbyPlayers=[{id:net.myId, name, isHost:false}];
-  // Attach handlers BEFORE joinRoom so the initial presence 'sync' that fires
-  // inside joinRoom (while track() is being awaited) is handled correctly —
-  // this ensures the guest sees the host immediately without needing a second event.
-  _attachVsHandlers(net, false);
-
-  _vsSetStatus('Joining…');
-  try{ await net.joinRoom(code, name, false); }
-  catch(e){ _vsSetStatus('❌ Failed: '+e.message); return; }
-
-  // Belt-and-suspenders: replay snapshot in case presenceState was populated
-  // during joinRoom but the 'sync' callback fired before onPresenceUpdate was live.
-  const snapGuest=net.getPresencePlayers();
-  if(snapGuest.length) net.onPresenceUpdate(snapGuest);
-  _showVsRoomPanel(false);
-
-  // Guest announces their car choice
-  net.sendGuestReady(state.selCar??0);
-}
-
-function _showVsRoomPanel(isHost){
-  document.getElementById('vsJoinPanel').style.display='none';
-  document.getElementById('vsRoomPanel').style.display='flex';
-  document.getElementById('vsRoomCodeDisplay').textContent=state.vsRoomCode;
-
-  document.getElementById('vsHostSection').style.display=isHost?'flex':'none';
-  document.getElementById('vsGuestSection').style.display=isHost?'none':'flex';
+  document.getElementById('vsHostSection').style.display = isHost ? 'flex' : 'none';
+  document.getElementById('vsGuestSection').style.display = isHost ? 'none' : 'flex';
 
   _renderVsSlots();
 
-  if(isHost){
+  if (isHost) {
     _buildVsTrkCards();
-    _buildVsCarRow('vsHostCarRow', carIdx=>{
-      if(state.vsNetwork&&state.selTrk!=null) state.vsNetwork.sendGameConfig(state.selTrk,carIdx);
+    _buildVsCarRow('vsHostCarRow', carIdx => {
+      const me = _vsRoster.find(e => e.id === state.vsNetwork?.myId);
+      if (me) { me.carIdx = carIdx; _hostSyncRoster(); }
     });
   } else {
-    _buildVsCarRow('vsGuestCarRow', carIdx=>{
+    _buildVsCarRow('vsGuestCarRow', carIdx => {
       state.vsNetwork?.sendGuestReady(carIdx);
     });
   }
 }
 
-function _attachVsHandlers(net, isHost){
-  // ── Presence join/sync: merge-add only, never remove ──────────────────────
-  // Using _mergeVsPresencePlayers means a brief Supabase WebSocket reconnection
-  // (which fires leave→join) can never cause a slot to disappear and reappear.
-  net.onPresenceUpdate=(players)=>{
-    if(!players.length) return; // empty snapshot = not yet synced; keep pre-seeded entry
-    if(_mergeVsPresencePlayers(players)){
-      _renderVsSlots();
+// ── Network event wiring ──────────────────────────────────────────────────────
+
+function _attachVsHandlers(net, isHost) {
+  // Presence: fires only for disconnects — handled by 30s safety-net below
+  net.onPresenceLeave = (_left) => { /* pruning handled by interval */ };
+
+  // player_hello: a new player joined the channel
+  net.onPlayerHello = ({ id, name, isHost: playerIsHost, carIdx }) => {
+    if (!isHost) return; // only host manages the roster
+    if (_vsRoster.find(e => e.id === id)) {
+      // Already in roster — resync so the new arrival gets full state
+      _hostSyncRoster();
+      return;
     }
-    // When a new guest joins, host re-broadcasts current config
-    if(isHost&&state.selTrk!=null){
-      net.sendGameConfig(state.selTrk, state.selCar??0);
-      net.sendAIUpdate(state.vsLobbyAIs);
+    // Reconnect detection: same name, new connection id
+    const stale = _vsRoster.find(e => !e.isAI && e.name === name && e.id !== id);
+    if (stale) {
+      stale.id = id;
+      stale.isHost = !!playerIsHost;
+    } else {
+      _vsRoster.push({ id, name, isAI: false, isHost: !!playerIsHost, carIdx: carIdx ?? 0 });
     }
+    _hostSyncRoster();
   };
 
-  // ── Presence leave: intentionally ignored for pruning ─────────────────────
-  // Supabase fires spurious leave events during WebSocket reconnections.
-  // Pruning is handled only by onPlayerLeave (intentional) and the 30-second
-  // safety-net interval (true disconnects).
-  net.onPresenceLeave=(_leftPlayers)=>{
-    // Nothing to do here for lobby slots.
-    // (Host departure detection could go here if needed.)
-  };
-
-  // ── Intentional leave broadcast ────────────────────────────────────────────
-  // A player who clicks "leave" broadcasts player_leave before disconnecting.
-  // Remove them immediately so the slot opens up without waiting 30 seconds.
-  net.onPlayerLeave=({id})=>{
-    if(id===net.myId) return;
-    const before=state.vsLobbyPlayers.length;
-    state.vsLobbyPlayers=state.vsLobbyPlayers.filter(p=>p.id!==id);
-    if(state.vsLobbyPlayers.length!==before) _renderVsSlots();
-  };
-
-  net.onAIUpdate=({aiPlayers})=>{
-    // Guest receives AI list update from host
-    state.vsLobbyAIs=aiPlayers||[];
-    _renderVsSlots();
-  };
-
-  net.onGameConfig=({trackId, hostCarIdx})=>{
-    // Guest: update to host's selections
-    state.selTrk=trackId;
-    // Re-send our car selection so host has it
-    net.sendGuestReady(state.selCar??0);
-    _renderVsSlots();
-    _vsSetStatus('Track updated by host. Waiting to start…');
-  };
-
-  net.onGuestReady=({id, carIdx})=>{
-    // Host: store guest car choice
-    state.vsGuestCars[id]=carIdx;
-    // Re-sync the presence list now that a guest has announced themselves.
-    // This is a fallback for the case where the presence 'join' event was
-    // delayed or missed — the guest's sendGuestReady broadcast is always
-    // delivered, so we use it as a reliable signal to refresh.
-    const fresh=net.getPresencePlayers();
-    if(fresh.length) net.onPresenceUpdate(fresh);
+  // player_leave: intentional departure — remove immediately
+  net.onPlayerLeave = ({ id }) => {
+    if (id === net.myId) return;
+    _vsRoster = _vsRoster.filter(e => e.id !== id);
+    if (isHost) _hostSyncRoster();
     else _renderVsSlots();
-    _vsSetStatus('');
   };
 
-  net.onGameStart=({slots, trackId})=>{
-    // All clients: launch the race
+  // guest_ready: guest changed car selection — host updates roster entry
+  net.onGuestReady = ({ id, carIdx }) => {
+    if (!isHost) return;
+    const entry = _vsRoster.find(e => e.id === id);
+    if (entry) { entry.carIdx = carIdx; _hostSyncRoster(); }
+  };
+
+  // lobby_state: host-authoritative snapshot (guests apply, host ignores)
+  net.onLobbyState = ({ roster, trackId, gameRunning }) => {
+    if (isHost) return;
+    _vsRoster = Array.isArray(roster) ? roster : [];
+    _vsTrackId = trackId ?? null;
+    _vsGameRunning = !!gameRunning;
+    state.selTrk = trackId ?? null;
+    _renderVsSlots();
+  };
+
+  // return_lobby: host sent everyone back after a race
+  net.onReturnLobby = () => {
+    if (!isHost) {
+      _vsGameRunning = false;
+      _showVsRoomPanel(false);
+    }
+  };
+
+  // game_start: all clients launch the race
+  net.onGameStart = ({ slots, trackId }) => {
     _launchVsRace(slots, trackId);
   };
 
-  net.onPosUpdate=(data)=>{
-    // In-race: buffer snapshot
-    if(data.id&&data.id!==state.vsMyId){
-      state.vsCarStates[data.id]=data;
-    }
-  };
-
-  net.onPlayerFinished=({id, finTime})=>{
-    state.vsFinished[id]=finTime;
-  };
-
-  net.onPlayerKick=({targetId})=>{
-    if(targetId===net.myId){
-      _vsSetStatus('You were kicked from the lobby.');
+  // player_kick
+  net.onPlayerKick = ({ targetId }) => {
+    if (targetId === net.myId) {
+      alert('You were kicked from the lobby.');
       vsLeaveLobby();
-    } else {
-      // Host already updated local state in _vsKickPlayer; guests need to remove too
-      const before=state.vsLobbyPlayers.length;
-      state.vsLobbyPlayers=state.vsLobbyPlayers.filter(p=>p.id!==targetId);
-      if(state.vsLobbyPlayers.length!==before) _renderVsSlots();
+      return;
+    }
+    _vsRoster = _vsRoster.filter(e => e.id !== targetId);
+    if (isHost) _hostSyncRoster();
+    else _renderVsSlots();
+  };
+
+  // In-race: position snapshot from another player
+  net.onPosUpdate = (data) => {
+    if (data.id && data.id !== state.vsMyId) {
+      state.vsCarStates[data.id] = data;
     }
   };
 
-  // ── 30-second safety-net: prune truly disconnected players ────────────────
-  // This is the ONLY mechanism that removes players due to disconnection.
-  // Running every 30s gives Supabase plenty of time to re-establish presence
-  // after a reconnect before we ever prune.
-  if(_vsLobbyPruneInterval) clearInterval(_vsLobbyPruneInterval);
-  _vsLobbyPruneInterval=setInterval(()=>{
-    if(state.gState!=='vsLobby') return;
-    const fresh=net.getPresencePlayers();
-    const freshIds=new Set(fresh.map(p=>p.id));
-    const before=state.vsLobbyPlayers.length;
-    state.vsLobbyPlayers=state.vsLobbyPlayers.filter(p=>freshIds.has(p.id));
-    if(state.vsLobbyPlayers.length!==before) _renderVsSlots();
+  // In-race: a car finished
+  net.onPlayerFinished = ({ id, finTime }) => {
+    state.vsFinished[id] = finTime;
+  };
+
+  // 30-second safety-net: prune truly disconnected players (host only)
+  if (_vsLobbyPruneInterval) clearInterval(_vsLobbyPruneInterval);
+  _vsLobbyPruneInterval = setInterval(() => {
+    if (state.gState !== 'vsLobby' || !isHost) return;
+    const fresh = net.getPresencePlayers();
+    if (!fresh.length) return; // presence not yet synced — don't prune
+    const freshIds = new Set(fresh.map(p => p.id));
+    freshIds.add(net.myId); // never remove ourselves
+    const before = _vsRoster.length;
+    _vsRoster = _vsRoster.filter(e => e.isAI || freshIds.has(e.id));
+    if (_vsRoster.length !== before) _hostSyncRoster();
   }, 30000);
 }
 
-function _buildSlots(){
-  const net=state.vsNetwork;
-  const user=getArcadeUser();
-  const presence=state.vsLobbyPlayers;
+// ── Race launch ───────────────────────────────────────────────────────────────
 
-  // Slot 0 = host, then other real players, then AIs
-  const realSlots=presence.map(p=>({
-    id:p.id,
-    name:p.name||'Player',
-    isAI:false,
-    carIdx:(p.id===net.myId)?(state.selCar??0):(state.vsGuestCars[p.id]??0)
-  }));
-  const aiSlots=state.vsLobbyAIs.map(a=>({
-    id:a.id,
-    name:a.name,
-    isAI:true,
-    carIdx:a.carIdx??0
-  }));
-  return [...realSlots,...aiSlots];
-}
-
-function _launchVsRace(slots, trackId){
-  state.vsMode=true;
+function _launchVsRace(slots, trackId) {
+  state.vsMode = true;
+  if (_vsLobbyPruneInterval) { clearInterval(_vsLobbyPruneInterval); _vsLobbyPruneInterval = null; }
   disposeCarCardPreviews();
-  document.querySelectorAll('.screen,#results').forEach(s=>s.style.display='none');
-  import('./race.js').then(m=>m.initVsRace(slots, trackId));
+  document.querySelectorAll('.screen,#results').forEach(s => s.style.display = 'none');
+  import('./race.js').then(m => m.initVsRace(slots, trackId));
 }
 
-export function vsStartRace(){
-  if(!state.vsNetwork) return;
-  if(state.selTrk==null){ _vsSetStatus('❌ Pick a track first'); return; }
-  if(_allVsSlots().length<2){ _vsSetStatus('❌ Need at least 2 players/AIs'); return; }
+// ── Copy helpers ──────────────────────────────────────────────────────────────
 
-  const slots=_buildSlots();
-  state.vsNetwork.sendGameConfig(state.selTrk, state.selCar??0);
-  state.vsNetwork.sendGameStart(slots, state.selTrk);
-  _launchVsRace(slots, state.selTrk);
+function _vsCopyFeedback(msg) {
+  const el = document.getElementById('vsCopyFeedback');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 1800);
 }
 
-export function vsLeaveLobby(){
-  // Clear the safety-net prune interval before tearing down
-  if(_vsLobbyPruneInterval){ clearInterval(_vsLobbyPruneInterval); _vsLobbyPruneInterval=null; }
-  if(state.vsNetwork){
-    // Broadcast intentional leave so other clients remove us immediately
-    // (before unsubscribe disconnects us from the channel).
-    state.vsNetwork.sendPlayerLeave(state.vsMyId||state.vsNetwork.myId);
-    state.vsNetwork.leave().catch(()=>{});
-    state.vsNetwork=null;
+// ── Public API ────────────────────────────────────────────────────────────────
+
+export function showVsLobby() {
+  if (state.vsNetwork) { state.vsNetwork.leave().catch(() => {}); state.vsNetwork = null; }
+  state.vsMode = false;
+  _vsRoster = [];
+  _vsTrackId = null;
+  _vsGameRunning = false;
+  if (_vsLobbyPruneInterval) { clearInterval(_vsLobbyPruneInterval); _vsLobbyPruneInterval = null; }
+
+  loadTracksFromFolder().catch(() => {});
+
+  document.querySelectorAll('.screen,#results').forEach(s => s.style.display = 'none');
+  document.getElementById('sVsLobby').style.display = 'flex';
+  state.gState = 'vsLobby';
+  updateTouchControlsVisibility(state.gState);
+
+  document.getElementById('vsJoinPanel').style.display = 'flex';
+  document.getElementById('vsRoomPanel').style.display = 'none';
+  _vsSetStatus('');
+
+  const user = getArcadeUser();
+  const nameLbl = document.getElementById('vsMyNameLabel');
+  if (nameLbl) nameLbl.textContent = user.name || 'Anonymous';
+
+  const urlRoom = new URLSearchParams(window.location.search).get('room');
+  if (urlRoom && urlRoom.length === 4) {
+    const inp = document.getElementById('vsCodeInput');
+    if (inp) inp.value = urlRoom.trim().toUpperCase();
   }
-  state.vsMode=false;
+}
+
+export async function vsCreateRoom() {
+  const user = getArcadeUser();
+  const name = user.name || 'Anonymous';
+  if (state.selCar == null) state.selCar = 0;
+
+  const code = generateRoomCode();
+  state.vsRoomCode = code;
+  state.vsIsHost = true;
+  _vsTrackId = null;
+  _vsGameRunning = false;
+
+  const net = new VsNetwork();
+  state.vsNetwork = net;
+  state.vsMyId = net.myId;
+
+  // Pre-seed own slot so the UI isn't empty while connecting
+  _vsRoster = [{ id: net.myId, name, isAI: false, isHost: true, carIdx: state.selCar }];
+
+  _attachVsHandlers(net, true);
+
+  _vsSetStatus('Connecting…');
+  try {
+    await net.joinRoom(code, name, true, state.selCar);
+  } catch (e) {
+    _vsSetStatus('❌ Connection failed: ' + e.message);
+    return;
+  }
+
+  _showVsRoomPanel(true);
+  // Push initial state to any clients already in the channel
+  _hostSyncRoster();
+}
+
+export async function vsJoinRoom() {
+  const user = getArcadeUser();
+  const name = user.name || 'Anonymous';
+  const code = (document.getElementById('vsCodeInput')?.value || '').trim().toUpperCase();
+  if (!code || code.length !== 4) { _vsSetStatus('❌ Enter a 4-letter room code'); return; }
+  if (state.selCar == null) state.selCar = 0;
+
+  state.vsRoomCode = code;
+  state.vsIsHost = false;
+  _vsTrackId = null;
+  _vsGameRunning = false;
+
+  const net = new VsNetwork();
+  state.vsNetwork = net;
+  state.vsMyId = net.myId;
+
+  // Pre-seed own slot so the UI isn't empty while connecting
+  _vsRoster = [{ id: net.myId, name, isAI: false, isHost: false, carIdx: state.selCar }];
+
+  _attachVsHandlers(net, false);
+
+  _vsSetStatus('Joining…');
+  try {
+    await net.joinRoom(code, name, false, state.selCar);
+  } catch (e) {
+    _vsSetStatus('❌ Connection failed: ' + e.message);
+    return;
+  }
+
+  _showVsRoomPanel(false);
+}
+
+export function vsStartRace() {
+  if (!state.vsIsHost || !state.vsNetwork) return;
+  if (_vsTrackId == null) { _vsSetStatus('❌ Pick a track first'); return; }
+  if (_vsRoster.length < 2) { _vsSetStatus('❌ Need at least 2 players/AIs'); return; }
+
+  _vsGameRunning = true;
+  const slots = _vsRoster.map(p => ({ id: p.id, name: p.name, isAI: p.isAI, carIdx: p.carIdx ?? 0 }));
+  state.vsNetwork.sendGameStart(slots, _vsTrackId);
+  _launchVsRace(slots, _vsTrackId);
+}
+
+export function vsLeaveLobby() {
+  if (_vsLobbyPruneInterval) { clearInterval(_vsLobbyPruneInterval); _vsLobbyPruneInterval = null; }
+  if (state.vsNetwork) {
+    state.vsNetwork.sendPlayerLeave(state.vsMyId || state.vsNetwork.myId);
+    state.vsNetwork.leave().catch(() => {});
+    state.vsNetwork = null;
+  }
+  state.vsMode = false;
   disposeCarCardPreviews();
   showMain();
+}
+
+export function vsCopyCode() {
+  const code = state.vsRoomCode;
+  if (!code) return;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.getElementById('vsCopyCodeBtn');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✓'; btn.classList.add('vsCopied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('vsCopied'); }, 1600);
+    }
+    _vsCopyFeedback('Room code copied!');
+  }).catch(() => _vsCopyFeedback('Could not copy'));
+}
+
+export function vsCopyInviteLink() {
+  const code = state.vsRoomCode;
+  if (!code) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('room', code);
+  url.hash = '';
+  navigator.clipboard.writeText(url.toString()).then(() => {
+    const btn = document.getElementById('vsCopyInviteBtn');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✓ COPIED!'; btn.classList.add('vsCopied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('vsCopied'); }, 1600);
+    }
+    _vsCopyFeedback('Invite link copied!');
+  }).catch(() => _vsCopyFeedback('Could not copy'));
 }
