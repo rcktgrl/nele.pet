@@ -16,7 +16,7 @@
   <div class="menuActions">
     <button id="introStartBtn" class="btn btn-p">START GAME</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.130</div>
+  <div class="menuVersion" aria-label="Game version">v0.131</div>
 </div>
 <div id="hud" role="status" aria-live="polite">
   <div id="raceTop">
@@ -146,13 +146,18 @@
     <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
     <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.130</div>
+  <div class="menuVersion" aria-label="Game version">v0.131</div>
 </div>
 
 <!-- CAR SELECT -->
 <div class="screen" id="sCar" style="display:none">
   <h2>Select Your Car</h2>
   <div class="cards" id="carCards"></div>
+  <div class="carColorRow">
+    <span class="carColorLabel">Car Colour</span>
+    <input id="carColorPicker" type="color" class="carColorInput" value="#ff2222">
+    <button id="carColorResetBtn" class="btn btn-s btn-tight">DEFAULT</button>
+  </div>
   <div class="menuActions menuActions-inline">
     <button id="showTrkSelBtn" class="btn btn-s">BACK</button>
     <button id="btnGo" class="btn btn-p" disabled>RACE!</button>
@@ -272,10 +277,17 @@
       <div class="vsSection">
         <div class="vsLabel">Pick a Track</div>
         <div id="vsTrackCards" class="vsTrackList"></div>
+        <div style="text-align:center;margin-top:10px;">
+          <button id="vsLoadOnlineTracksBtn" class="btn btn-s btn-tight">LOAD ONLINE TRACKS</button>
+        </div>
       </div>
       <div class="vsSection">
         <div class="vsLabel">Your Car</div>
         <div id="vsHostCarRow" class="vsCarRow"></div>
+        <div class="vsColorRow">
+          <span class="carColorLabel">Colour</span>
+          <input id="vsHostColor" type="color" class="carColorInput" value="#ff2222">
+        </div>
       </div>
       <button id="vsStartBtn" class="btn btn-p" disabled style="min-width:200px;font-size:1rem;">START RACE</button>
     </div>
@@ -285,6 +297,10 @@
       <div class="vsSection">
         <div class="vsLabel">Your Car</div>
         <div id="vsGuestCarRow" class="vsCarRow"></div>
+        <div class="vsColorRow">
+          <span class="carColorLabel">Colour</span>
+          <input id="vsGuestColor" type="color" class="carColorInput" value="#ff2222">
+        </div>
       </div>
     </div>
 

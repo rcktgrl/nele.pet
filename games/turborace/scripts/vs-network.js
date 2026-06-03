@@ -25,7 +25,7 @@ export class VsNetwork {
     this.onPlayerFinished = null;  // ({id, finTime})
   }
 
-  async joinRoom(roomCode, playerName, isHost, carIdx = 0) {
+  async joinRoom(roomCode, playerName, isHost, carIdx = 0, color = null) {
     this.roomCode = roomCode;
 
     this.channel = supabase.channel(`turborace-vs:${roomCode}`, {
@@ -61,7 +61,7 @@ export class VsNetwork {
           } catch (e) {
             console.warn('[vs-network] presence track failed:', e);
           }
-          this.#send('player_hello', { id: this.myId, name: playerName, isHost, carIdx });
+          this.#send('player_hello', { id: this.myId, name: playerName, isHost, carIdx, color });
           resolve();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           reject(new Error(`Channel ${status}`));
@@ -77,7 +77,7 @@ export class VsNetwork {
   // ── Lobby ─────────────────────────────────────────────────────────────────────
   sendPlayerLeave(id) { return this.#send('player_leave', { id }); }
 
-  sendGuestReady(carIdx) { return this.#send('guest_ready', { id: this.myId, carIdx }); }
+  sendGuestReady(carIdx, color = null) { return this.#send('guest_ready', { id: this.myId, carIdx, color }); }
 
   // Host broadcasts the full ordered roster so every client renders identical UI.
   // roster: [{id, name, isAI, isHost, carIdx}]; trackId: string|null; gameRunning: bool
@@ -90,7 +90,7 @@ export class VsNetwork {
   sendPlayerKick(targetId) { return this.#send('player_kick', { targetId }); }
 
   // ── Race ──────────────────────────────────────────────────────────────────────
-  sendGameStart(slots, trackId) { return this.#send('game_start', { slots, trackId }); }
+  sendGameStart(slots, trackId, trackData = null) { return this.#send('game_start', { slots, trackId, trackData }); }
 
   sendPosUpdate(id, x, z, hdg, spd, lap, totalProg) {
     return this.#send('pos_update', { id, x, z, hdg, spd, lap, totalProg });

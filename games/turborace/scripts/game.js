@@ -49,7 +49,8 @@ import {
   showMain, showIntro, showTrkSel, showCarSel,
   showDiffSel, showOnlineTrkSel, showSettings, closeSettings,
   showVsLobby, vsCreateRoom, vsJoinRoom, vsStartRace, vsLeaveLobby,
-  vsCopyCode, vsCopyInviteLink
+  vsCopyCode, vsCopyInviteLink, vsLoadOnlineTracks,
+  onCarColorInput, resetCarColor, onVsColorInput
 } from './menu.js';
 import {
   closeTrackLeaderboardModal
@@ -279,6 +280,8 @@ document.getElementById('mainSettingsBtn').addEventListener('click',function(){t
 document.getElementById('backToSelectionBtn').addEventListener('click',()=>{ window.location.href='../index.html'; });
 document.getElementById('showTrkSelBtn').addEventListener('click',showDiffSel);
 document.getElementById('btnGo').addEventListener('click',startRace);
+document.getElementById('carColorPicker').addEventListener('input',e=>onCarColorInput(e.target.value));
+document.getElementById('carColorResetBtn').addEventListener('click',resetCarColor);
 document.getElementById('trkSelBackBtn').addEventListener('click',showMain);
 document.getElementById('loadOnlineTracksBtn').addEventListener('click',showOnlineTrkSel);
 document.getElementById('onlineTrkBackBtn').addEventListener('click',showTrkSel);
@@ -336,6 +339,9 @@ document.getElementById('vsLeaveLobbyBtn').addEventListener('click', vsLeaveLobb
 document.getElementById('vsLobbyBackBtn').addEventListener('click', vsLeaveLobby);
 document.getElementById('vsCopyCodeBtn').addEventListener('click', vsCopyCode);
 document.getElementById('vsCopyInviteBtn').addEventListener('click', vsCopyInviteLink);
+document.getElementById('vsLoadOnlineTracksBtn').addEventListener('click', vsLoadOnlineTracks);
+document.getElementById('vsHostColor').addEventListener('input', e=>onVsColorInput(e.target.value));
+document.getElementById('vsGuestColor').addEventListener('input', e=>onVsColorInput(e.target.value));
 
 // ═══════════════════════════════════════════════════════
 //  BOOT

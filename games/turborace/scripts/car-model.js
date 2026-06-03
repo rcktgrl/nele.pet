@@ -12,15 +12,16 @@ export function getOpponentCarModels(cars, selectedCarIndex, count=4){
   return models;
 }
 
-export function createCarVisual(data){
-  const builder=new CarModelBuilder(data);
+export function createCarVisual(data, colorOverride){
+  const builder=new CarModelBuilder(data, colorOverride);
   const mesh=builder.buildMesh();
   return { mesh, tailLights:builder.tl, wheels:builder.wh };
 }
 
 class CarModelBuilder{
-  constructor(data){
+  constructor(data, colorOverride){
     this.data=data;
+    this.bodyCol=(colorOverride!=null)?colorOverride:data.col;
     this.tl=[];
     this.wh=[];
   }
@@ -35,7 +36,7 @@ default: return this.buildSportsMesh();
 
   // ── Existing sports coupe (Thunder V8) ──────────────
   buildSportsMesh(){
-    const g=new THREE.Group(), C=this.data.col;
+    const g=new THREE.Group(), C=this.bodyCol;
     const Bm=mat(C), Dm=mat(0x111111), Gm=matT(0x7799bb,.55), Wm=mat(0x111111), Rm=mat(0x777777);
     const Lm=matE(0xffee88,0x443300), TLm=matE(0xee1100,0x220000);
     addB(g,1.8,.48,4.0,0,.44,0,Bm); addB(g,1.38,.48,1.78,0,.93,.08,Bm);
@@ -51,7 +52,7 @@ default: return this.buildSportsMesh();
 
   // ── Lamborghini-style low wedge (Viper GT) ──────────
   buildWedgeMesh(){
-    const g=new THREE.Group(), C=this.data.col;
+    const g=new THREE.Group(), C=this.bodyCol;
     const Bm=mat(C), Dm=mat(0x0e0e0e), Gm=matT(0x66aacc,.50), Wm=mat(0x0e0e0e), Rm=mat(0x666666);
     const Lm=matE(0xffffaa,0x554400), TLm=matE(0xff1100,0x330000);
     // Splitter / nosecone (very low)
@@ -99,7 +100,7 @@ default: return this.buildSportsMesh();
 
   // ── Jeep / off-road (Rally Storm) ───────────────────
   buildJeepMesh(){
-    const g=new THREE.Group(), C=this.data.col;
+    const g=new THREE.Group(), C=this.bodyCol;
     const Bm=mat(C), Dm=mat(0x181818), Gm=matT(0x88aacc,.52), Wm=mat(0x181818), Rm=mat(0x555555);
     const Lm=matE(0xffffcc,0x443300), TLm=matE(0xff2200,0x330000);
     // High chassis body
@@ -147,7 +148,7 @@ default: return this.buildSportsMesh();
 
   // ── Hatchback (Flash Hatch) ─────────────────────────
   buildHatchMesh(){
-    const g=new THREE.Group(), C=this.data.col;
+    const g=new THREE.Group(), C=this.bodyCol;
     const Bm=mat(C), Dm=mat(0x111111), Gm=matT(0x7799bb,.55), Wm=mat(0x111111), Rm=mat(0x666666);
     const Lm=matE(0xffee88,0x443300);
     // Main body — compact, short
