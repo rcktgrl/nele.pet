@@ -243,6 +243,14 @@ body{background:#000;overflow:hidden;font-family:'Rajdhani',sans-serif;color:#ff
 .vsCarChip:hover,.vsCarChip.sel{border-color:#c44aff;background:rgba(196,74,255,.08);color:#d88eff;transform:translateY(-2px);box-shadow:0 4px 16px rgba(196,74,255,.2);}
 .vsCarCanvas{display:block;width:80px;height:56px;border-radius:6px;background:radial-gradient(circle at 50% 65%,rgba(255,255,255,.06),transparent 70%);}
 
+/* Car colour pickers (car-select + VS lobby) */
+.carColorRow{display:flex;align-items:center;justify-content:center;gap:12px;margin:14px 0 4px;}
+.vsColorRow{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:12px;}
+.carColorLabel{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:3px;color:#445;text-transform:uppercase;}
+.carColorInput{width:46px;height:34px;padding:2px;border:2px solid rgba(255,255,255,.12);border-radius:8px;background:rgba(255,255,255,.03);cursor:pointer;}
+.carColorInput::-webkit-color-swatch{border:none;border-radius:5px;}
+.carColorInput::-moz-color-swatch{border:none;border-radius:5px;}
+
 /* VS track cards */
 .vsTrackList{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
 .vsTrackCard{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;border-radius:8px;border:2px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02);cursor:pointer;transition:all .12s;font-size:10px;color:#778;font-family:'Orbitron',monospace;letter-spacing:1px;text-align:center;}

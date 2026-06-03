@@ -12,7 +12,7 @@ import {
 import { clearGhostVisual } from './ghost.js';
 import {
   loadEditorTracks, syncEditorTracksFromCloud,
-  loadTracksFromFolder
+  loadTracksFromFolder, getAllTracks, hexNumToCss, cssToHexNum
 } from './editor.js';
 import { VsNetwork, generateRoomCode, BOT_NAMES } from './vs-network.js';
 import { getArcadeUser } from './user.js';
@@ -148,11 +148,12 @@ export function showCarSel(){
       <div class="stat"><span class="sl">GRIP</span><div class="st"><div class="sf" style="width:${Math.round(c.hdl*100)}%"></div></div><span class="sv">${Math.round(c.hdl*100)}%</span></div>
       <div class="stat"><span class="sl">BRAKES</span><div class="st"><div class="sf" style="width:${Math.min(100,Math.round(c.brake*4))}%"></div></div><span class="sv">${c.brake}</span></div>`;
     const canvas=d.querySelector('.carCardCanvas');
-    const visual=createCarVisual(c);
+    const useColor=(state.selCar===i&&state.carColor!=null)?state.carColor:null;
+    const visual=createCarVisual(c,useColor);
     visual.mesh.scale.setScalar(0.72);
     visual.mesh.rotation.x=-0.1;
     visual.mesh.position.set(0,-0.2,0);
-    const preview={host:d,canvas,model:visual.mesh,hovered:false,selected:state.selCar===i,angle:0,spinSpeed:0,baseYaw:-0.55,
+    const preview={host:d,canvas,model:visual.mesh,hovered:false,selected:state.selCar===i,carIdx:i,angle:0,spinSpeed:0,baseYaw:-0.55,
       renderer:new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'low-power'})};
     preview.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));
     preview.renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -161,6 +162,8 @@ export function showCarSel(){
       document.querySelectorAll('#carCards .card').forEach(x=>x.classList.remove('sel'));
       d.classList.add('sel'); state.selCar=i; document.getElementById('btnGo').disabled=false;
       state.carCardPreviews.forEach(item=>{ item.selected=item.host===d; });
+      _syncCarColorPicker();
+      _refreshSpCarColors();
       startCarCardPreviews();
     };
     d.onmouseenter=()=>{ preview.hovered=true; startCarCardPreviews(); };
@@ -168,6 +171,47 @@ export function showCarSel(){
     d.onclick=setSel;
     ct.appendChild(d);
   });
+  _syncCarColorPicker();
+  startCarCardPreviews();
+}
+
+// Rebuild a preview's 3D model with an optional body-colour override.
+function _recolorPreviewModel(preview,colorNum){
+  if(preview.carIdx==null) return;
+  const visual=createCarVisual(CARS[preview.carIdx],colorNum);
+  visual.mesh.scale.setScalar(0.72);
+  visual.mesh.rotation.x=-0.1;
+  visual.mesh.position.set(0,-0.2,0);
+  preview.model=visual.mesh;
+}
+
+// Single-player car cards: selected card shows the chosen colour, others stay default.
+function _refreshSpCarColors(){
+  state.carCardPreviews.filter(p=>!p._vsContainer).forEach(p=>{
+    _recolorPreviewModel(p,(p.selected&&state.carColor!=null)?state.carColor:null);
+  });
+}
+
+// Point the colour <input> at the current selection's colour (custom or car default).
+function _syncCarColorPicker(){
+  const cp=document.getElementById('carColorPicker');
+  if(!cp) return;
+  const def=CARS[state.selCar??0]?.hex||'#ffffff';
+  cp.value=state.carColor!=null?hexNumToCss(state.carColor):def;
+}
+
+// Wired from the car-select colour <input>.
+export function onCarColorInput(css){
+  state.carColor=cssToHexNum(css);
+  _refreshSpCarColors();
+  startCarCardPreviews();
+}
+
+// Wired from the "default" button — revert to the car's stock colour.
+export function resetCarColor(){
+  state.carColor=null;
+  _syncCarColorPicker();
+  _refreshSpCarColors();
   startCarCardPreviews();
 }
 
@@ -299,6 +343,7 @@ let _vsRoster = [];
 let _vsTrackId = null;
 let _vsGameRunning = false;
 let _vsLobbyPruneInterval = null;
+let _vsShowOnline = false;   // host loaded online (custom/cloud) tracks into the picker
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -376,7 +421,7 @@ function _renderVsSlots() {
       else                     statusEl.textContent = `${total} player${total > 1 ? 's' : ''} ready!`;
     } else {
       const trk = _vsTrackId
-        ? (state.folderTracks.find(t => String(t.id) === String(_vsTrackId))?.name ?? 'selected')
+        ? (getAllTracks().find(t => String(t.id) === String(_vsTrackId))?.name ?? 'selected')
         : null;
       statusEl.textContent = trk
         ? `Track: ${trk} — waiting for host to start…`
@@ -419,7 +464,7 @@ function _vsKickPlayer(id) {
 function _buildVsTrkCards() {
   const container = document.getElementById('vsTrackCards');
   if (!container) return;
-  const tracks = state.folderTracks || [];
+  const tracks = _vsShowOnline ? getAllTracks() : (state.folderTracks || []);
   const COLORS = ['#4488ff', '#44cc66', '#ffaa22', '#ff4488', '#22ddaa', '#dd66ff', '#66bbff'];
   container.innerHTML = '';
   tracks.forEach((t, i) => {
@@ -438,6 +483,18 @@ function _buildVsTrkCards() {
     };
     container.appendChild(card);
   });
+}
+
+// Host: pull custom/cloud tracks into the VS picker (mirrors single-player "load online tracks")
+export async function vsLoadOnlineTracks() {
+  if (!state.vsIsHost) return;
+  const btn = document.getElementById('vsLoadOnlineTracksBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'LOADING…'; }
+  loadEditorTracks();
+  await syncEditorTracksFromCloud().catch(() => {});
+  _vsShowOnline = true;
+  _buildVsTrkCards();
+  if (btn) { btn.disabled = false; btn.textContent = '✓ ONLINE TRACKS LOADED'; }
 }
 
 // ── Inline car selector ───────────────────────────────────────────────────────
@@ -463,12 +520,13 @@ function _buildVsCarRow(containerId, onSelect) {
     const nm = document.createElement('span'); nm.textContent = c.name;
     d.appendChild(cvs); d.appendChild(nm);
 
-    const visual = createCarVisual(c);
+    const useColor = (state.selCar === i && state.carColor != null) ? state.carColor : null;
+    const visual = createCarVisual(c, useColor);
     visual.mesh.scale.setScalar(0.72);
     visual.mesh.rotation.x = -0.1;
     visual.mesh.position.set(0, -0.2, 0);
     const preview = {
-      host: d, canvas: cvs, model: visual.mesh, hovered: false, selected: state.selCar === i,
+      host: d, canvas: cvs, model: visual.mesh, hovered: false, selected: state.selCar === i, carIdx: i,
       angle: 0, spinSpeed: 0, baseYaw: -0.55, _vsContainer: containerId,
       renderer: new THREE.WebGLRenderer({ canvas: cvs, alpha: true, antialias: true, powerPreference: 'low-power' }),
     };
@@ -482,12 +540,45 @@ function _buildVsCarRow(containerId, onSelect) {
       container.querySelectorAll('.vsCarChip').forEach(x => x.classList.remove('sel'));
       d.classList.add('sel'); state.selCar = i;
       state.carCardPreviews.forEach(item => { item.selected = item.host === d; });
+      _refreshVsCarColors(containerId);
       startCarCardPreviews();
       onSelect(i);
     };
     container.appendChild(d);
   });
+  _refreshVsCarColors(containerId);
   startCarCardPreviews();
+}
+
+// VS car chips: selected chip shows the chosen colour, others stay default.
+function _refreshVsCarColors(containerId) {
+  state.carCardPreviews.filter(p => p._vsContainer === containerId).forEach(p => {
+    _recolorPreviewModel(p, (p.selected && state.carColor != null) ? state.carColor : null);
+  });
+}
+
+// Wired from the VS car-colour <input> (host + guest share one element id each).
+export function onVsColorInput(css) {
+  state.carColor = cssToHexNum(css);
+  if (state.vsIsHost) {
+    const me = _vsRoster.find(e => e.id === state.vsNetwork?.myId);
+    if (me) { me.color = state.carColor; _hostSyncRoster(); }
+    _refreshVsCarColors('vsHostCarRow');
+  } else {
+    state.vsNetwork?.sendGuestReady(state.selCar ?? 0, state.carColor);
+    _refreshVsCarColors('vsGuestCarRow');
+  }
+  startCarCardPreviews();
+}
+
+// Point the VS colour inputs at the current chosen colour (custom or car default).
+function _syncVsColorPickers() {
+  const def = CARS[state.selCar ?? 0]?.hex || '#ffffff';
+  const val = state.carColor != null ? hexNumToCss(state.carColor) : def;
+  ['vsHostColor', 'vsGuestColor'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  });
 }
 
 // ── Room panel (shown after connect) ─────────────────────────────────────────
@@ -501,16 +592,22 @@ function _showVsRoomPanel(isHost) {
   document.getElementById('vsGuestSection').style.display = isHost ? 'none' : 'flex';
 
   _renderVsSlots();
+  _syncVsColorPickers();
 
   if (isHost) {
+    const onlineBtn = document.getElementById('vsLoadOnlineTracksBtn');
+    if (onlineBtn) {
+      onlineBtn.disabled = false;
+      onlineBtn.textContent = _vsShowOnline ? '✓ ONLINE TRACKS LOADED' : 'LOAD ONLINE TRACKS';
+    }
     _buildVsTrkCards();
     _buildVsCarRow('vsHostCarRow', carIdx => {
       const me = _vsRoster.find(e => e.id === state.vsNetwork?.myId);
-      if (me) { me.carIdx = carIdx; _hostSyncRoster(); }
+      if (me) { me.carIdx = carIdx; me.color = state.carColor; _hostSyncRoster(); }
     });
   } else {
     _buildVsCarRow('vsGuestCarRow', carIdx => {
-      state.vsNetwork?.sendGuestReady(carIdx);
+      state.vsNetwork?.sendGuestReady(carIdx, state.carColor);
     });
   }
 }
@@ -522,7 +619,7 @@ function _attachVsHandlers(net, isHost) {
   net.onPresenceLeave = (_left) => { /* pruning handled by interval */ };
 
   // player_hello: a new player joined the channel
-  net.onPlayerHello = ({ id, name, isHost: playerIsHost, carIdx }) => {
+  net.onPlayerHello = ({ id, name, isHost: playerIsHost, carIdx, color }) => {
     if (!isHost) return; // only host manages the roster
     if (_vsRoster.find(e => e.id === id)) {
       // Already in roster — resync so the new arrival gets full state
@@ -535,7 +632,7 @@ function _attachVsHandlers(net, isHost) {
       stale.id = id;
       stale.isHost = !!playerIsHost;
     } else {
-      _vsRoster.push({ id, name, isAI: false, isHost: !!playerIsHost, carIdx: carIdx ?? 0 });
+      _vsRoster.push({ id, name, isAI: false, isHost: !!playerIsHost, carIdx: carIdx ?? 0, color: color ?? null });
     }
     _hostSyncRoster();
   };
@@ -549,10 +646,10 @@ function _attachVsHandlers(net, isHost) {
   };
 
   // guest_ready: guest changed car selection — host updates roster entry
-  net.onGuestReady = ({ id, carIdx }) => {
+  net.onGuestReady = ({ id, carIdx, color }) => {
     if (!isHost) return;
     const entry = _vsRoster.find(e => e.id === id);
-    if (entry) { entry.carIdx = carIdx; _hostSyncRoster(); }
+    if (entry) { entry.carIdx = carIdx; if (color !== undefined) entry.color = color; _hostSyncRoster(); }
   };
 
   // lobby_state: host-authoritative snapshot (guests apply, host ignores)
@@ -567,15 +664,12 @@ function _attachVsHandlers(net, isHost) {
 
   // return_lobby: host sent everyone back after a race
   net.onReturnLobby = () => {
-    if (!isHost) {
-      _vsGameRunning = false;
-      _showVsRoomPanel(false);
-    }
+    if (!isHost) _enterVsLobbyRoom();
   };
 
   // game_start: all clients launch the race
-  net.onGameStart = ({ slots, trackId }) => {
-    _launchVsRace(slots, trackId);
+  net.onGameStart = ({ slots, trackId, trackData }) => {
+    _launchVsRace(slots, trackId, trackData);
   };
 
   // player_kick
@@ -606,9 +700,14 @@ function _attachVsHandlers(net, isHost) {
   };
 
   // 30-second safety-net: prune truly disconnected players (host only)
+  if (isHost) _startVsLobbyPrune(net);
+}
+
+// Host-only safety-net interval that drops players who vanished from presence.
+function _startVsLobbyPrune(net) {
   if (_vsLobbyPruneInterval) clearInterval(_vsLobbyPruneInterval);
   _vsLobbyPruneInterval = setInterval(() => {
-    if (state.gState !== 'vsLobby' || !isHost) return;
+    if (state.gState !== 'vsLobby' || !state.vsIsHost) return;
     const fresh = net.getPresencePlayers();
     if (!fresh.length) return; // presence not yet synced — don't prune
     const freshIds = new Set(fresh.map(p => p.id));
@@ -621,12 +720,46 @@ function _attachVsHandlers(net, isHost) {
 
 // ── Race launch ───────────────────────────────────────────────────────────────
 
-function _launchVsRace(slots, trackId) {
+function _launchVsRace(slots, trackId, trackData) {
   state.vsMode = true;
+  _vsGameRunning = true;
   if (_vsLobbyPruneInterval) { clearInterval(_vsLobbyPruneInterval); _vsLobbyPruneInterval = null; }
   disposeCarCardPreviews();
   document.querySelectorAll('.screen,#results').forEach(s => s.style.display = 'none');
-  import('./race.js').then(m => m.initVsRace(slots, trackId));
+  import('./race.js').then(m => m.initVsRace(slots, trackId, trackData));
+}
+
+// Bring everyone back to the lobby room panel after a race (keeps the network/roster alive).
+// Host broadcasts return_lobby; guests get here via net.onReturnLobby.
+export function vsReturnToLobby() {
+  if (!state.vsNetwork) { showMain(); return; }
+  if (state.vsIsHost) state.vsNetwork.sendReturnLobby();
+  _enterVsLobbyRoom();
+}
+
+function _enterVsLobbyRoom() {
+  state.vsMode = false;
+  _vsGameRunning = false;
+  // Tear down the finished race scene (keep the network/roster alive)
+  stopAudio();
+  for (const c of state.allCars) scene.remove(c.mesh);
+  state.allCars = []; state.aiCars = []; state.pCar = null;
+  state.vsCarsById = {}; state.vsCarStates = {}; state.vsCarBuffers = {}; state.vsFinished = {};
+  clearGhostVisual();
+  document.querySelectorAll('.screen,#results').forEach(s => s.style.display = 'none');
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('hint').style.display = 'none';
+  document.getElementById('pauseMenu').style.display = 'none';
+  document.getElementById('touchControls').style.display = 'none';
+  dc.style.display = 'none';
+  document.getElementById('sVsLobby').style.display = 'flex';
+  document.getElementById('vsJoinPanel').style.display = 'none';
+  state.gState = 'vsLobby';
+  updateTouchControlsVisibility(state.gState);
+  releaseAllTouchControls();
+  if (audioReady) startMusic();
+  if (state.vsIsHost && state.vsNetwork) _startVsLobbyPrune(state.vsNetwork);
+  _showVsRoomPanel(state.vsIsHost);
 }
 
 // ── Copy helpers ──────────────────────────────────────────────────────────────
@@ -648,9 +781,14 @@ export function showVsLobby() {
   _vsRoster = [];
   _vsTrackId = null;
   _vsGameRunning = false;
+  _vsShowOnline = false;
   if (_vsLobbyPruneInterval) { clearInterval(_vsLobbyPruneInterval); _vsLobbyPruneInterval = null; }
 
   loadTracksFromFolder().catch(() => {});
+  // Pre-load custom/cloud tracks on every client so guests can resolve an online
+  // track the host might pick (the host also gets them via the LOAD ONLINE button).
+  loadEditorTracks();
+  syncEditorTracksFromCloud().catch(() => {});
 
   document.querySelectorAll('.screen,#results').forEach(s => s.style.display = 'none');
   document.getElementById('sVsLobby').style.display = 'flex';
@@ -688,13 +826,13 @@ export async function vsCreateRoom() {
   state.vsMyId = net.myId;
 
   // Pre-seed own slot so the UI isn't empty while connecting
-  _vsRoster = [{ id: net.myId, name, isAI: false, isHost: true, carIdx: state.selCar }];
+  _vsRoster = [{ id: net.myId, name, isAI: false, isHost: true, carIdx: state.selCar, color: state.carColor }];
 
   _attachVsHandlers(net, true);
 
   _vsSetStatus('Connecting…');
   try {
-    await net.joinRoom(code, name, true, state.selCar);
+    await net.joinRoom(code, name, true, state.selCar, state.carColor);
   } catch (e) {
     _vsSetStatus('❌ Connection failed: ' + e.message);
     return;
@@ -722,13 +860,13 @@ export async function vsJoinRoom() {
   state.vsMyId = net.myId;
 
   // Pre-seed own slot so the UI isn't empty while connecting
-  _vsRoster = [{ id: net.myId, name, isAI: false, isHost: false, carIdx: state.selCar }];
+  _vsRoster = [{ id: net.myId, name, isAI: false, isHost: false, carIdx: state.selCar, color: state.carColor }];
 
   _attachVsHandlers(net, false);
 
   _vsSetStatus('Joining…');
   try {
-    await net.joinRoom(code, name, false, state.selCar);
+    await net.joinRoom(code, name, false, state.selCar, state.carColor);
   } catch (e) {
     _vsSetStatus('❌ Connection failed: ' + e.message);
     return;
@@ -743,9 +881,10 @@ export function vsStartRace() {
   if (_vsRoster.length < 2) { _vsSetStatus('❌ Need at least 2 players/AIs'); return; }
 
   _vsGameRunning = true;
-  const slots = _vsRoster.map(p => ({ id: p.id, name: p.name, isAI: p.isAI, carIdx: p.carIdx ?? 0 }));
-  state.vsNetwork.sendGameStart(slots, _vsTrackId);
-  _launchVsRace(slots, _vsTrackId);
+  const slots = _vsRoster.map(p => ({ id: p.id, name: p.name, isAI: p.isAI, carIdx: p.carIdx ?? 0, color: p.color ?? null }));
+  const trackData = getAllTracks().find(t => String(t.id) === String(_vsTrackId)) || null;
+  state.vsNetwork.sendGameStart(slots, _vsTrackId, trackData);
+  _launchVsRace(slots, _vsTrackId, trackData);
 }
 
 export function vsLeaveLobby() {

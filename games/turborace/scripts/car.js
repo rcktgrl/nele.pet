@@ -30,8 +30,9 @@ function nearestWallPoint(px,pz,walls){
 }
 
 class Car {
-  constructor(data, pos, hdg, isPlayer, scene) {
+  constructor(data, pos, hdg, isPlayer, scene, colorOverride) {
     this.data = data; this.isPlayer = isPlayer;
+    this.colorOverride = colorOverride;
     this.pos = new THREE.Vector3(pos.x, pos.y, pos.z);
     this.hdg = hdg; this.spd = 0; this.gear = 1;
     this.gearbox = buildGearboxForCar(this.data);
@@ -46,7 +47,7 @@ class Car {
     this.stuckTimer = 0;               // for boundary recovery
     this.isReversing = false; this.revSpd = 0; this.reverseTimer = 0;
     this.onGravel = false;
-    const visual = createCarVisual(this.data);
+    const visual = createCarVisual(this.data, this.colorOverride);
     this.mesh = visual.mesh; this.tl = visual.tailLights; this.wh = visual.wheels;
     this.mesh.position.copy(this.pos); this.mesh.rotation.y = this.hdg;
     scene.add(this.mesh);
@@ -331,7 +332,7 @@ export function buildRaceGrid(trackPoints){
 
 export function instantiateRaceCars({ trackPoints, cars, selectedCarIndex, scene, createAIController, aiCount=4 }){
   const grid=buildRaceGrid(trackPoints);
-  const playerCar=new Car(getPlayerCarModel(cars, selectedCarIndex),grid[0].pos,grid[0].hdg,true,scene);
+  const playerCar=new Car(getPlayerCarModel(cars, selectedCarIndex),grid[0].pos,grid[0].hdg,true,scene,state.carColor);
 
   const aiCars=[];
   const aiControllers=[];

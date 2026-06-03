@@ -82,7 +82,7 @@ export async function initRace(){
  * @param {Array} slots   [{id, name, isAI, carIdx}] ordered by grid position
  * @param {string} trackId
  */
-export async function initVsRace(slots, trackId){
+export async function initVsRace(slots, trackId, trackData){
   // Clean up previous race
   for(const ctrl of state.aiControllers)if(ctrl.destroy)ctrl.destroy();
   for(const c of state.allCars)scene.remove(c.mesh);
@@ -93,7 +93,8 @@ export async function initVsRace(slots, trackId){
 
   state.vsSlots=slots;
   state.selTrk=trackId;
-  state.trkData=getTrackById(trackId);
+  // Prefer the track data sent by the host (covers online tracks a guest hasn't synced yet)
+  state.trkData=trackData||getTrackById(trackId);
   try{ buildTrack(state.trkData); }catch(e){ console.error('buildTrack VS error:',e); }
   setupLights();
 
@@ -105,7 +106,7 @@ export async function initVsRace(slots, trackId){
     const carData=CARS[slot.carIdx??0];
     const gp=grid[i]||grid[grid.length-1];
     const isMe=slot.id===state.vsMyId;
-    const car=new Car(carData, gp.pos, gp.hdg, isMe, scene);
+    const car=new Car(carData, gp.pos, gp.hdg, isMe, scene, slot.color);
     car.aiAgg=0.88+i*0.03;
     state.vsCarsById[slot.id]=car;
     state.allCars.push(car);
@@ -320,8 +321,8 @@ export function restartRace(){
   releaseAllTouchControls();
   document.getElementById('results').style.display='none';
   if(state.vsMode){
-    // Go back to main menu — VS session ends after one race
-    import('./menu.js').then(m=>m.showMain());
+    // Return everyone to the VS lobby so they can pick a new track/car
+    import('./menu.js').then(m=>m.vsReturnToLobby());
     return;
   }
   void initRace();
