@@ -50,6 +50,7 @@ let cfg = {
   epochs: 6,
   minibatch: 256,
   hiddenSize: 64,        // restart required
+  hiddenLayers: 1,       // restart required
   // reward shaping
   progressReward: 0.2,   // per metre of forward progress along the centerline
   gravelPenalty: 1.0,    // per second on gravel
@@ -575,9 +576,11 @@ let lsM = null, lsV = null; // Adam moments for logStd
 let lsT = 0;
 
 function initAgent(modelOverride) {
-  const h = cfg.hiddenSize;
-  actor  = new Net([OBS_DIM, h, ACT_DIM], 0.01); // small final layer → near-zero initial actions
-  critic = new Net([OBS_DIM, h, 1], 1);
+  const h = cfg.hiddenSize, nl = Math.max(1, cfg.hiddenLayers | 0);
+  const actSizes  = [OBS_DIM, ...Array(nl).fill(h), ACT_DIM];
+  const critSizes = [OBS_DIM, ...Array(nl).fill(h), 1];
+  actor  = new Net(actSizes,  0.01);
+  critic = new Net(critSizes, 1);
   logStd = new Float64Array(ACT_DIM).fill(-0.5);
   lsM = new Float64Array(ACT_DIM);
   lsV = new Float64Array(ACT_DIM);
@@ -802,27 +805,29 @@ function stepOnce(dt) {
     }
   }
 
-  // ── PPO update when enough transitions are collected ──
-  if (agentSteps >= cfg.horizon * cfg.numEnvs) {
-    ppoUpdate();
+  // ── Trigger async PPO update when the rollout buffer is full ──
+  if (agentSteps >= cfg.horizon * cfg.numEnvs && !_ppoRunning) {
+    _ppoRunning = true;
+    const batch = _flushBatch();   // sync: GAE + clear env bufs
+    agentSteps = 0;
+    if (batch.N >= 8) _runPPO(batch); else _ppoRunning = false;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  PPO update — GAE + clipped surrogate, minibatch Adam
+//  PPO batch preparation (synchronous — runs once per horizon fill)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ppoUpdate() {
-  // Flush any open repeat windows so chains end cleanly, and force a fresh
-  // decision on the next tick (the flushed action's window is over)
+let _ppoRunning = false;
+
+function _flushBatch() {
+  // Close any open repeat windows; envs get fresh decisions next tick.
   for (const env of envs) { commitTransition(env, false); env.repCount = 0; }
 
-  // Gather all transitions; compute GAE per env chain
   const OBS = [], ACT = [], LOGP = [], ADV = [], RET = [];
   for (const env of envs) {
     const b = env.buf, T = b.obs.length;
     if (!T) continue;
-    // bootstrap with the value of the env's current state unless terminal
     let nextVal = 0;
     if (!b.done[T - 1]) {
       const obs = new Float64Array(OBS_DIM);
@@ -845,9 +850,18 @@ function ppoUpdate() {
     b.obs.length = 0; b.act.length = 0; b.logp.length = 0;
     b.val.length = 0; b.rew.length = 0; b.done.length = 0;
   }
-  agentSteps = 0;
+  return { OBS, ACT, LOGP, ADV, RET, N: OBS.length };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PPO gradient update — runs asynchronously, yielding after every epoch so
+//  the sim loop can keep ticking while the policy is being updated.
+//  The simulation is never frozen during gradient updates.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function _runPPO(batch) {
+  const { OBS, ACT, LOGP, ADV, RET } = batch;
   const N = OBS.length;
-  if (N < 8) return;
 
   // Normalize advantages
   let mean = 0; for (const a of ADV) mean += a; mean /= N;
@@ -888,7 +902,6 @@ function ppoUpdate() {
         const clipped = Math.max(1 - cfg.clip, Math.min(1 + cfg.clip, ratio));
         const surr1 = ratio * A, surr2 = clipped * A;
         mbPi += -Math.min(surr1, surr2);
-        // gradient flows only through the unclipped branch when it's the min
         const coef = surr1 <= surr2 ? -A * ratio : 0;
         if (coef !== 0) {
           const dMu = new Float64Array(ACT_DIM);
@@ -899,7 +912,6 @@ function ppoUpdate() {
           }
           actor.backward(aCache, dMu);
         }
-        // entropy bonus: H = Σ(logσ + ½log(2πe)) → dH/dlogσ = 1
         for (let d = 0; d < ACT_DIM; d++) {
           gLs[d] += -cfg.entropyCoef;
           mbEnt += logStd[d] + 0.5 * (LOG_2PI + 1);
@@ -915,7 +927,6 @@ function ppoUpdate() {
 
       actor.adamStep(cfg.lr, 1 / bs);
       critic.adamStep(cfg.lr, 1 / bs);
-      // Adam step for logStd
       lsT++;
       const b1 = 0.9, b2 = 0.999, eps = 1e-8;
       const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
@@ -929,10 +940,15 @@ function ppoUpdate() {
 
       sumPi += mbPi / bs; sumV += mbV / bs; sumEnt += mbEnt / bs; nMB++;
     }
+
+    // Yield to the event loop after every epoch — simLoop gets to tick here,
+    // so cars keep moving and the worker stays responsive at any speed.
+    await new Promise(r => setTimeout(r, 0));
   }
 
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
   iteration++;
+  _ppoRunning = false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -961,6 +977,7 @@ function buildSnapshot() {
     iteration,
     totalSteps,
     bufferFill: Math.min(1, agentSteps / (cfg.horizon * cfg.numEnvs)),
+    phase: _ppoRunning ? 'updating' : 'collecting',
     avgReturn,
     bestLap: Number.isFinite(bestLap) ? bestLap : null,
     episodes: recentReturns.length,
@@ -1042,7 +1059,7 @@ self.onmessage = function (e) {
     running = false;
     stopLoop();
     initSim(model || null);
-    postMessage({ type: 'ready', obsDim: OBS_DIM, hiddenSize: actor.sizes[1], numEnvs: cfg.numEnvs });
+    postMessage({ type: 'ready', obsDim: OBS_DIM, actorSizes: actor.sizes, numEnvs: cfg.numEnvs });
     return;
   }
 
