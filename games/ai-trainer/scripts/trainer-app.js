@@ -2,7 +2,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  AI Trainer — Main Thread
 //
-//  Handles Three.js rendering + UI.  All physics/AI runs in sim-worker.js.
+//  Handles Three.js rendering + UI.  All physics + PPO training runs in
+//  sim-worker.js on a separate thread.
 // ─────────────────────────────────────────────────────────────────────────────
 import { THREE }           from '../../turborace/scripts/three.js';
 import { buildTrack }      from '../../turborace/scripts/track-gen.js';
@@ -137,12 +138,9 @@ function syncCarMeshes(cars, bestIdx) {
     const c = cars[i], m = carMeshes[i];
     m.position.set(c.x, c.y, c.z);
     m.rotation.y = c.hdg;
-    const alpha = c.offTrack ? 0.22 : 1.0;
     m.traverse(o => {
       if (!o.isMesh || !o.material) return;
-      o.material.opacity = alpha;
-      o.material.transparent = c.offTrack;
-      if (o.material.emissive && i === bestIdx && !c.offTrack) {
+      if (o.material.emissive && i === bestIdx) {
         o.material.emissive.setHex(0x001530);
       } else if (o.material.emissive) {
         o.material.emissive.setHex(0x000000);
@@ -155,11 +153,11 @@ function syncCarMeshes(cars, bestIdx) {
 }
 
 function bestCarIndex(cars) {
-  let bi = -1, bf = -Infinity;
+  let bi = 0, bf = -Infinity;
   for (let i = 0; i < cars.length; i++) {
-    if (!cars[i].offTrack && cars[i].fitness > bf) { bf = cars[i].fitness; bi = i; }
+    if (cars[i].ret > bf) { bf = cars[i].ret; bi = i; }
   }
-  return bi < 0 ? 0 : bi;
+  return bi;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -170,21 +168,20 @@ let workerReady = false;
 let simRunning  = false;
 
 const simCfg = {
-  popSize: 8,
-  genDuration: 35,
+  // environment
+  numEnvs: 8,            // restart required
   speedMult: 1,
-  mutRate: 0.15,
-  mutStrength: 0.35,
-  onTrackRewardRate: 0.10,
-  stuckPenaltyRate: 5.0,
-  gravelPenaltyBase: 0.5,
-  gravelGrowthRate: 0.30,
-  offTrackMult: 10,
-  offTrackDQTime: 3.0,
-  dqPenalty: 200,
-  hiddenLayers: 1,
-  nodesPerLayer: 5,
-  lapMode: false,
+  episodeLen: 60,
+  randomSpawn: true,
+  // PPO
+  lr: 3e-4,
+  entropyCoef: 0.003,
+  // rewards (live)
+  progressReward: 0.2,
+  gravelPenalty: 1.0,
+  wallPenalty: 2.0,
+  terminalPenalty: 10,
+  lapBonus: 20,
 };
 
 function mkWorker() {
@@ -195,7 +192,7 @@ function mkWorker() {
   workerReady = false;
 }
 
-function sendInit(seedGenome = null, forceRandom = false, layersOverride = null) {
+function sendInit(model = null) {
   if (!worker || !state.trkPts || !state.trkPts.length) return;
   const carData = {
     accel: CAR_SPEC.accel, maxSpd: CAR_SPEC.maxSpd,
@@ -219,15 +216,15 @@ function sendInit(seedGenome = null, forceRandom = false, layersOverride = null)
       ? { pts: state.cityAiPts.pts.map(p => ({ x: p.x, z: p.z })) }
       : null,
   };
-  worker.postMessage({ type: 'init', track, carData, config: { ...simCfg }, seedGenome, forceRandom, layersOverride });
+  worker.postMessage({ type: 'init', track, carData, config: { ...simCfg }, model });
 }
 
 function onMsg(e) {
   const d = e.data;
   if (d.type === 'ready') {
     workerReady = true;
-    rebuildCarMeshes(simCfg.popSize);
-    refreshHUD({ generation: 0, genTime: 0, genDuration: simCfg.genDuration, bestFitness: -Infinity, avgFitness: 0 });
+    rebuildCarMeshes(d.numEnvs || simCfg.numEnvs);
+    refreshHUD({ iteration: 0, totalSteps: 0, bufferFill: 0, avgReturn: 0, bestLap: null });
     updateStartBtn();
     return;
   }
@@ -237,14 +234,18 @@ function onMsg(e) {
     syncCarMeshes(lastCars, bi);
     if (lastCars[bi]) applyOrbitCamera(lastCars[bi]);
     refreshHUD(d);
-    if (d.bestGenome && d.layers) drawNN(d.bestGenome, d.layers);
+    if (d.actorFlat && d.actorSizes) drawNN(d.actorFlat, d.actorSizes);
+    return;
+  }
+  if (d.type === 'error') {
+    alert(d.message);
     return;
   }
   if (d.type === 'modelExport' && d.model) {
     const blob = new Blob([JSON.stringify(d.model, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'ai-trainer-model.json'; a.click();
+    a.href = url; a.download = 'ai-trainer-ppo-model.json'; a.click();
     URL.revokeObjectURL(url);
   }
 }
@@ -252,58 +253,75 @@ function onMsg(e) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  HUD
 // ─────────────────────────────────────────────────────────────────────────────
-function fmt(v) { return Number.isFinite(v) && v > -1e9 ? v.toFixed(1) : '—'; }
+function fmt(v) { return Number.isFinite(v) ? v.toFixed(1) : '—'; }
+function fmtSteps(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return String(n);
+}
+function fmtLap(t) {
+  if (!Number.isFinite(t) || t == null) return '—';
+  const m = Math.floor(t / 60), s = (t % 60).toFixed(2);
+  return m > 0 ? `${m}:${s.padStart(5, '0')}` : s + 's';
+}
 
 function refreshHUD(d) {
-  const { generation = 0, genTime = 0, genDuration = 35, bestFitness = -Infinity, avgFitness = 0 } = d;
-  document.getElementById('hudGen').textContent   = 'GEN ' + generation;
-  document.getElementById('hudBest').textContent  = 'BEST ' + fmt(bestFitness);
-  document.getElementById('hudAvg').textContent   = 'AVG '  + fmt(avgFitness);
-  document.getElementById('hudTime').textContent  = Math.max(0, genDuration - genTime).toFixed(1) + 's';
-  document.getElementById('genBar').style.width   = (Math.min(1, genTime / Math.max(1, genDuration)) * 100).toFixed(1) + '%';
+  const { iteration = 0, totalSteps = 0, bufferFill = 0, avgReturn = 0, bestLap = null } = d;
+  document.getElementById('hudGen').textContent   = 'ITER ' + iteration;
+  document.getElementById('hudBest').textContent  = 'RETURN ' + fmt(avgReturn);
+  document.getElementById('hudAvg').textContent   = 'BEST LAP ' + fmtLap(bestLap);
+  document.getElementById('hudTime').textContent  = fmtSteps(totalSteps) + ' steps';
+  document.getElementById('genBar').style.width   = (Math.min(1, bufferFill) * 100).toFixed(1) + '%';
+
+  if (d.sigma) {
+    document.getElementById('hudSigma').textContent =
+      'σ ' + d.sigma.map(s => s.toFixed(2)).join('/');
+  }
 
   if (lastCars.length) {
-    const sorted = lastCars.map((c, i) => ({ ...c, i })).sort((a, b) => b.fitness - a.fitness);
+    const sorted = lastCars.map((c, i) => ({ ...c, i })).sort((a, b) => b.ret - a.ret);
     document.getElementById('lbRows').innerHTML = sorted.slice(0, 8).map((c, r) => `
-      <div class="lb-row" style="opacity:${c.offTrack ? 0.35 : 1}">
+      <div class="lb-row">
         <span class="lb-rank">${r + 1}</span>
-        <span class="lb-fit">${fmt(c.fitness)}</span>
+        <span class="lb-fit">${fmt(c.ret)}</span>
         <span class="lb-spd">${(c.spd * 3.6).toFixed(0)}km/h</span>
-        <span class="lb-flag">${c.offTrack ? '🚫' : c.finished ? '🏁' : ''}</span>
+        <span class="lb-flag">${c.lap > 0 ? 'L' + c.lap : ''}</span>
       </div>`).join('');
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Neural network visualiser
+//  Neural network visualiser — draws the actor (policy) network
 // ─────────────────────────────────────────────────────────────────────────────
 const nnCanvas = document.getElementById('nnCanvas');
 const nnCtx    = nnCanvas.getContext('2d');
 
-function drawNN(genome, layers) {
+function drawNN(flat, layers) {
   const W = nnCanvas.width, H = nnCanvas.height;
   nnCtx.clearRect(0, 0, W, H);
   const nL  = layers.length;
   const xSt = W / (nL + 1);
-  const nodeR = Math.max(2, Math.min(7, 55 / Math.max(...layers)));
+  const nodeR = Math.max(1.4, Math.min(7, 110 / Math.max(...layers)));
 
-  // Build node positions
   const pos = layers.map((cnt, li) => Array.from({ length: cnt }, (_, ni) => ({
     x: xSt * (li + 1),
-    y: H / 2 + (ni - (cnt - 1) / 2) * (H / (cnt + 2)) * 0.82,
+    y: H / 2 + (ni - (cnt - 1) / 2) * (H / (cnt + 2)) * 0.92,
   })));
 
-  // Draw connections with weight-based colour.
-  // Genome layout per layer: all weight rows (nOut × nIn), THEN all biases (nOut).
+  // Weight layout per layer: all weight rows (nOut × nIn), THEN all biases.
+  // Only draw connections above a magnitude threshold — a 36×64 layer has
+  // ~2300 weights and drawing them all is illegible.
   let gi = 0;
   for (let li = 0; li < nL - 1; li++) {
     const nIn = layers[li], nOut = layers[li + 1];
     for (let j = 0; j < nOut; j++) {
       for (let i = 0; i < nIn; i++) {
-        const w = genome[gi++];
-        const a = Math.min(0.9, Math.abs(w) * 0.3);
+        const w = flat[gi++];
+        const aw = Math.abs(w);
+        if (aw < 0.12) continue;
+        const a = Math.min(0.85, aw * 0.45);
         nnCtx.strokeStyle = w > 0 ? `rgba(70,190,255,${a})` : `rgba(255,70,70,${a})`;
-        nnCtx.lineWidth   = Math.min(2.5, Math.abs(w) * 0.5 + 0.15);
+        nnCtx.lineWidth   = Math.min(2, aw * 0.6 + 0.1);
         nnCtx.beginPath();
         nnCtx.moveTo(pos[li][i].x,   pos[li][i].y);
         nnCtx.lineTo(pos[li+1][j].x, pos[li+1][j].y);
@@ -313,7 +331,6 @@ function drawNN(genome, layers) {
     gi += nOut; // skip the layer's bias block
   }
 
-  // Draw nodes
   for (let li = 0; li < nL; li++) {
     const col = li === 0 ? '#4af' : li === nL - 1 ? '#fa4' : '#ccc';
     for (const { x, y } of pos[li]) {
@@ -321,9 +338,6 @@ function drawNN(genome, layers) {
       nnCtx.arc(x, y, nodeR, 0, Math.PI * 2);
       nnCtx.fillStyle = col;
       nnCtx.fill();
-      nnCtx.strokeStyle = '#122';
-      nnCtx.lineWidth = 1;
-      nnCtx.stroke();
     }
   }
 }
@@ -331,7 +345,7 @@ function drawNN(genome, layers) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  UI wiring
 // ─────────────────────────────────────────────────────────────────────────────
-function wireSlider(sliderId, valId, key, fmtFn) {
+function wireSlider(sliderId, valId, key, fmtFn, live = true) {
   const sl = document.getElementById(sliderId);
   const vl = document.getElementById(valId);
   sl.value = simCfg[key];
@@ -340,7 +354,7 @@ function wireSlider(sliderId, valId, key, fmtFn) {
     const v = parseFloat(sl.value);
     simCfg[key] = v;
     vl.textContent = fmtFn ? fmtFn(v) : v;
-    if (worker) worker.postMessage({ type: 'setConfig', config: { [key]: v } });
+    if (live && worker) worker.postMessage({ type: 'setConfig', config: { [key]: v } });
   });
 }
 
@@ -394,23 +408,26 @@ function initUI() {
   document.getElementById('mapStartBtn').addEventListener('click', startWithSelectedTrack);
   document.getElementById('mapBackBtn').addEventListener('click', () => { window.location.href = '../index.html'; });
 
-  wireSlider('speedSlider',   'speedVal',   'speedMult',        v => v + '×');
-  wireSlider('genDurSlider',  'genDurVal',  'genDuration',      v => v + 's');
-  wireSlider('mutRateSlider', 'mutRateVal', 'mutRate',          v => v.toFixed(2));
-  wireSlider('mutStrSlider',  'mutStrVal',  'mutStrength',      v => v.toFixed(2));
-  wireSlider('onTrackSlider', 'onTrackVal', 'onTrackRewardRate',v => v.toFixed(2));
-  wireSlider('stuckSlider',   'stuckVal',   'stuckPenaltyRate', v => v.toFixed(1));
-  wireSlider('dqPenSlider',   'dqPenVal',   'dqPenalty',        v => Math.round(v));
+  wireSlider('speedSlider',  'speedVal',  'speedMult',      v => v + '×');
+  wireSlider('lrSlider',     'lrVal',     'lr',             v => v.toExponential(1));
+  wireSlider('entSlider',    'entVal',    'entropyCoef',    v => v.toFixed(4));
+  wireSlider('epLenSlider',  'epLenVal',  'episodeLen',     v => v + 's');
+  wireSlider('progSlider',   'progVal',   'progressReward', v => v.toFixed(2));
+  wireSlider('gravelSlider', 'gravelVal', 'gravelPenalty',  v => v.toFixed(1));
+  wireSlider('wallSlider',   'wallVal',   'wallPenalty',    v => v.toFixed(1));
+  wireSlider('termSlider',   'termVal',   'terminalPenalty',v => Math.round(v));
+  wireSlider('lapBonusSlider','lapBonusVal','lapBonus',     v => Math.round(v));
 
-  // popSize doesn't live-update the worker (requires restart)
+  // numEnvs doesn't live-update the worker (requires restart)
   const popSl = document.getElementById('popSlider');
   const popVl = document.getElementById('popVal');
-  popSl.value = simCfg.popSize; popVl.textContent = simCfg.popSize;
-  popSl.addEventListener('input', () => { simCfg.popSize = parseInt(popSl.value); popVl.textContent = popSl.value; });
+  popSl.value = simCfg.numEnvs; popVl.textContent = simCfg.numEnvs;
+  popSl.addEventListener('input', () => { simCfg.numEnvs = parseInt(popSl.value); popVl.textContent = popSl.value; });
 
-  document.getElementById('lapModeToggle').addEventListener('change', function () {
-    simCfg.lapMode = this.checked;
-    if (worker) worker.postMessage({ type: 'setConfig', config: { lapMode: simCfg.lapMode } });
+  document.getElementById('spawnToggle').checked = simCfg.randomSpawn;
+  document.getElementById('spawnToggle').addEventListener('change', function () {
+    simCfg.randomSpawn = this.checked;
+    if (worker) worker.postMessage({ type: 'setConfig', config: { randomSpawn: simCfg.randomSpawn } });
   });
 
   document.getElementById('startBtn').addEventListener('click', () => {
@@ -430,7 +447,7 @@ function initUI() {
   document.getElementById('resetBtn').addEventListener('click', () => {
     if (!workerReady) return;
     const was = simRunning; simRunning = false;
-    sendInit(null, true);
+    sendInit(null);
     setTimeout(() => {
       if (was) { worker.postMessage({ type: 'start' }); simRunning = true; }
       updateStartBtn();
@@ -448,10 +465,11 @@ function initUI() {
     if (!this.files[0]) return;
     try {
       const model = JSON.parse(await this.files[0].text());
-      if (!Array.isArray(model.genome) || !Array.isArray(model.layers)) throw new Error('Invalid model JSON');
+      if (model.algo !== 'ppo' || !model.actor || !model.critic) {
+        throw new Error('Not a PPO model export (older genetic-trainer exports are not compatible)');
+      }
       const was = simRunning; simRunning = false;
-      // Pass the model's own architecture so the genome actually loads
-      sendInit(model.genome, false, model.layers);
+      sendInit(model);
       setTimeout(() => {
         if (was) { worker.postMessage({ type: 'start' }); simRunning = true; }
         updateStartBtn();

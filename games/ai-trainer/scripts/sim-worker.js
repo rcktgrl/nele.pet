@@ -1,11 +1,19 @@
 'use strict';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  AI Trainer — Simulation Worker
+//  AI Trainer — Simulation Worker (PPO)
 //
 //  Runs entirely off the main thread. No DOM, no Three.js.
-//  Receives track data and config via postMessage, runs physics + neural AI +
-//  genetic training at full CPU speed, and posts frame snapshots back.
+//  Implements Proximal Policy Optimization with:
+//    · actor-critic MLPs (tanh hidden, linear output) with manual backprop
+//    · Adam optimizer
+//    · GAE(λ) advantage estimation
+//    · clipped surrogate objective + entropy bonus
+//    · N parallel environments sharing one policy
+//
+//  Observations include fixed centerline look-ahead probes (relative angle +
+//  slope at several distances ahead), so the policy can anticipate corners
+//  and elevation changes without any controllable sensor.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Track state (populated on 'init') ────────────────────────────────────────
@@ -17,39 +25,48 @@ let gravelProfile = null;// {pts, leftRunoff, rightRunoff, rw}
 let cityCorridors = null;// [{x,z,hw,hd}] axis-aligned driveable rects (city tracks)
 let cityAiPts     = null;// {pts:[{x,z}...]} city navigation waypoints
 
-// ── Simulation config (live-updateable) ──────────────────────────────────────
+// Centerline arc-length tables (built on init) — used for progress reward and
+// look-ahead probes. For city tracks the nav grid points are used (y = 0).
+let navPts   = [];       // [{x,y,z}]
+let arcLen   = [];       // cumulative arc length at navPts[i]
+let trackLen = 1;
+
+// ── Config (live-updateable unless noted) ─────────────────────────────────────
 let cfg = {
-  popSize: 8,
-  genDuration: 35,
+  // environment
+  numEnvs: 8,            // restart required
   speedMult: 1,
-  mutRate: 0.15,
-  mutStrength: 0.35,
-  onTrackRewardRate: 0.10,
-  stuckPenaltyRate: 5.0,
-  gravelPenaltyBase: 0.5,
-  gravelGrowthRate: 0.30,
-  offTrackMult: 10,
-  offTrackDQTime: 3.0,
-  dqPenalty: 200,
-  hiddenLayers: 1,
-  nodesPerLayer: 5,
-  eliteCloneMode: false,
-  singleCarMode: false,
-  lapMode: false,
+  episodeLen: 60,        // seconds before truncation
+  randomSpawn: true,     // spawn each episode at a random centerline point
+  actionRepeat: 2,       // physics ticks per agent decision (restart required)
+  // PPO hyperparameters
+  lr: 3e-4,
+  gamma: 0.99,
+  lam: 0.95,
+  clip: 0.2,
+  entropyCoef: 0.003,
+  vfCoef: 0.5,
+  horizon: 512,          // agent steps per env per update (restart required)
+  epochs: 6,
+  minibatch: 256,
+  hiddenSize: 64,        // restart required
+  // reward shaping
+  progressReward: 0.2,   // per metre of forward progress along the centerline
+  gravelPenalty: 1.0,    // per second on gravel
+  wallPenalty: 2.0,      // per second of wall contact
+  terminalPenalty: 10,   // on off-track / stuck termination
+  lapBonus: 20,          // on lap completion
 };
 
-// ── Runtime state ─────────────────────────────────────────────────────────────
-let running = false;
-let cars    = [];
-let ais     = [];
-let trainer = null;
-let simTime = 0;
-let lastTickMs = 0;
-
 const FIXED_DT = 1 / 60;
-const POST_HZ  = 30;          // send frame snapshot at most this often
+const POST_HZ  = 30;
+
+let running    = false;
+let simTime    = 0;
+let lastTickMs = 0;
 let lastPostMs = 0;
 let tickHandle = null;
+let carSpec    = null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Geometry helpers
@@ -85,61 +102,88 @@ function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
   return -1;
 }
 
+function wrapPi(a) { return ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI; }
+
+function buildArcTable() {
+  const useCity = !!(cityAiPts && cityAiPts.pts && cityAiPts.pts.length);
+  navPts = useCity
+    ? cityAiPts.pts.map(p => ({ x: p.x, y: 0, z: p.z }))
+    : trkPts;
+  const n = navPts.length;
+  arcLen = new Float64Array(n);
+  let s = 0;
+  for (let i = 1; i < n; i++) {
+    s += Math.hypot(navPts[i].x - navPts[i - 1].x, navPts[i].z - navPts[i - 1].z);
+    arcLen[i] = s;
+  }
+  trackLen = s + Math.hypot(navPts[0].x - navPts[n - 1].x, navPts[0].z - navPts[n - 1].z);
+  if (trackLen < 1) trackLen = 1;
+}
+
+// Continuous arc position (metres along centerline) of a world point.
+function arcPosition(px, pz) {
+  const n = navPts.length;
+  let md = Infinity, ni = 0;
+  for (let i = 0; i < n; i++) {
+    const d = (px - navPts[i].x) ** 2 + (pz - navPts[i].z) ** 2;
+    if (d < md) { md = d; ni = i; }
+  }
+  const a = navPts[ni], b = navPts[(ni + 1) % n];
+  const abx = b.x - a.x, abz = b.z - a.z;
+  const ab2 = abx * abx + abz * abz || 1;
+  const t = Math.max(0, Math.min(1, ((px - a.x) * abx + (pz - a.z) * abz) / ab2));
+  const segLen = Math.sqrt(ab2);
+  return { s: (arcLen[ni] + t * segLen) % trackLen, nearestIdx: ni, nearestD2: md };
+}
+
+// Point + elevation at arc distance s (wrapped).
+function pointAtArc(s) {
+  const n = navPts.length;
+  s = ((s % trackLen) + trackLen) % trackLen;
+  // binary search the cumulative table
+  let lo = 0, hi = n - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (arcLen[mid] <= s) lo = mid; else hi = mid - 1;
+  }
+  const a = navPts[lo], b = navPts[(lo + 1) % n];
+  const segLen = (lo + 1 < n ? arcLen[lo + 1] : trackLen) - arcLen[lo] || 1;
+  const t = Math.min(1, (s - arcLen[lo]) / segLen);
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+    z: a.z + (b.z - a.z) * t,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-//  Pure-physics car (no Three.js, no mesh)
+//  Pure-physics car — faithful port of car.js (no Three.js, no mesh)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class SimCar {
   constructor(carData, pos, hdg) {
-    this.data = carData;                          // {accel,maxSpd,brake,hdl,aiSpd}
+    this.data = carData;
     this.pos  = { x: pos.x, y: pos.y, z: pos.z };
     this.hdg  = hdg;
     this.spd  = 0;
-    this.gear = 1;
     this.isReversing  = false;
     this.revSpd       = 0;
     this.reverseTimer = 0;
     this.onGravel     = false;
     this.stuckTimer   = 0;
-    this.aiAgg        = 1.0;
-
-    // Race progress
-    this.lap       = 0;
-    this.lastCP    = 0;
-    this.cpPassed  = 0;
-    this.totalProg = 0;
-    this.finished  = false;
-    this.lapStart  = 0;
-    this.lapTimes  = [];
-
-    // Training fitness
-    this._fitPenalty   = 0;
-    this._onTrackTime  = 0;
-    this._offTrackTime = 0;
-    this._gravelTime   = 0;
-    this._offTrack     = false;
-    this._fitness      = 0;
-    this._lapCompleted = false;
-    this._lapTime      = 0;
-    this._trainPrevStuck = 0;
-    this._peakRawProg  = 0;
+    this.lap          = 0;
+    this.lapTimes     = [];
   }
 
   reset(pos, hdg) {
     this.pos.x = pos.x; this.pos.y = pos.y; this.pos.z = pos.z;
-    this.hdg = hdg; this.spd = 0; this.gear = 1;
+    this.hdg = hdg; this.spd = 0;
     this.isReversing = false; this.revSpd = 0; this.reverseTimer = 0;
     this.onGravel = false; this.stuckTimer = 0;
-    this.lap = 0; this.lastCP = 0; this.cpPassed = 0;
-    this.totalProg = 0; this.finished = false; this.lapStart = 0; this.lapTimes = [];
-    this._fitPenalty = 0; this._onTrackTime = 0; this._offTrackTime = 0;
-    this._gravelTime = 0; this._offTrack = false; this._fitness = 0;
-    this._lapCompleted = false; this._lapTime = 0; this._trainPrevStuck = 0;
-    this._peakRawProg = 0;
+    this.lap = 0; this.lapTimes = [];
   }
 
   update(inp, dt) {
-    if (this.finished) return;
     const { thr, brk, str } = inp;
 
     if (this.spd < 0.3 && brk > 0.5 && thr < 0.1 && !this.isReversing) {
@@ -184,7 +228,6 @@ class SimCar {
     this.pos.y = this._groundY();
     this.boundary(dt);
     this.checkGravel();
-    this.progress();
   }
 
   _groundY() {
@@ -200,7 +243,6 @@ class SimCar {
   boundary(dt) {
     if (!trkPts.length) return;
 
-    // ── City tracks: use grid corridors (same as car.js) ──
     if (cityCorridors && cityCorridors.length) {
       const px = this.pos.x, pz = this.pos.z;
       let inside = false;
@@ -253,7 +295,6 @@ class SimCar {
         this.spd *= 0.82;
         if (this.isReversing) this.revSpd *= 0.7;
         const trkHdg  = Math.atan2(tx, tz);
-        const wrapPi  = a => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
         const targetHdg = this.isReversing ? trkHdg + Math.PI : trkHdg;
         const hdgErr  = wrapPi(targetHdg - this.hdg);
         this.hdg += Math.max(-Math.PI / 16, Math.min(Math.PI / 16, hdgErr * 0.8));
@@ -272,7 +313,6 @@ class SimCar {
       this.pos.z += pz / pl * (dist - maxD + 0.5);
       this.spd *= 0.85;
       const trkHdg = Math.atan2(tx, tz);
-      const wrapPi = a => ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       const targetHdg = this.isReversing ? trkHdg + Math.PI : trkHdg;
       const hdgErr = wrapPi(targetHdg - this.hdg);
       this.hdg += Math.max(-Math.PI / 18, Math.min(Math.PI / 18, hdgErr * 0.75));
@@ -304,49 +344,10 @@ class SimCar {
     const gravelW = lat >= 0 ? (rightRunoff[ri] || 0) : (leftRunoff[ri] || 0);
     this.onGravel = latAbs > inner && latAbs < inner + gravelW;
   }
-
-  progress() {
-    if (!trkData) return;
-    const wps = trkData.wp, n = wps.length;
-    for (let i = 0; i < n; i++) {
-      const w    = wps[i];
-      const prev = wps[(i - 1 + n) % n], next = wps[(i + 1) % n];
-      const tx   = next[0] - prev[0], tz = next[2] - prev[2];
-      const tl   = Math.sqrt(tx * tx + tz * tz) || 1;
-      const dx   = this.pos.x - w[0], dz = this.pos.z - w[2];
-      const longDist = Math.abs(dx * (tx / tl) + dz * (tz / tl));
-      if (longDist < 12 && i !== this.lastCP) {
-        const exp = (this.lastCP + 1 + n) % n;
-        if (i === exp) {
-          this.lastCP = i; this.cpPassed++;
-          if (i === 0 && this.cpPassed >= n) {
-            this.cpPassed = 0; this.lap++;
-            const lt = simTime - this.lapStart; this.lapStart = simTime;
-            this.lapTimes.push(lt);
-            // Lap training mode: one full lap completes the run (faster = more fitness)
-            if (cfg.lapMode && !this._lapCompleted) {
-              this._lapCompleted = true; this._lapTime = lt;
-              this.finished = true; this.finTime = simTime;
-            } else if (this.lap >= (trkData.laps || 3)) {
-              this.finished = true; this.finTime = simTime;
-            }
-          }
-        }
-      }
-    }
-    const ni  = (this.lastCP + 1 + n) % n;
-    const nw  = wps[ni], pw = wps[this.lastCP];
-    const sx  = nw[0] - pw[0], sz = nw[2] - pw[2];
-    const seg2 = sx * sx + sz * sz || 1;
-    const cx  = this.pos.x - pw[0], cz = this.pos.z - pw[2];
-    const t   = Math.max(0, Math.min(1, (cx * sx + cz * sz) / seg2));
-    this.totalProg = this.lap * n + this.cpPassed + t;
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Neural AI (adapted from neural-ai.js — no state global, receives track data
-//  via closure over module-level variables)
+//  Sensors
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RAY_ANGLES = [
@@ -356,7 +357,7 @@ const RAY_ANGLES = [
   Math.PI / 36, Math.PI / 18,
   Math.PI / 6, Math.PI / 3, Math.PI / 2,
 ];
-const RAY_DIST  = 200;
+const RAY_DIST = 200;
 const EDGE_RAY_ANGLES = [
   -Math.PI / 2, -Math.PI / 4, -Math.PI / 18,
   0,
@@ -364,9 +365,9 @@ const EDGE_RAY_ANGLES = [
 ];
 const EDGE_RAY_DIST = 35;
 
-function castRays(car) {
+function castRayFan(car, angles, maxDist, out, offset) {
   const ox = car.pos.x, oz = car.pos.z;
-  const rr = RAY_DIST * RAY_DIST * 1.5;
+  const rr = maxDist * maxDist * 1.5;
   const near = [];
   for (const segs of [trkWallLeft, trkWallRight]) {
     for (const w of segs) {
@@ -374,527 +375,622 @@ function castRays(car) {
       if (cx * cx + cz * cz < rr) near.push(w);
     }
   }
-  return RAY_ANGLES.map(a => {
-    const angle = car.hdg + a;
+  for (let k = 0; k < angles.length; k++) {
+    const angle = car.hdg + angles[k];
     const dx = Math.sin(angle), dz = Math.cos(angle);
-    let minT = RAY_DIST;
+    let minT = maxDist;
     for (const w of near) {
       const t = raySegment(ox, oz, dx, dz, w.x0, w.z0, w.x1, w.z1);
       if (t > 0 && t < minT) minT = t;
     }
-    return Math.sqrt(minT / RAY_DIST);
-  });
+    out[offset + k] = minT / maxDist;
+  }
 }
 
-function castEdgeRays(car) {
-  const ox = car.pos.x, oz = car.pos.z;
-  const rr = EDGE_RAY_DIST * EDGE_RAY_DIST * 1.5;
-  const near = [];
-  for (const segs of [trkWallLeft, trkWallRight]) {
-    for (const e of segs) {
-      const cx = (e.x0 + e.x1) * 0.5 - ox, cz = (e.z0 + e.z1) * 0.5 - oz;
-      if (cx * cx + cz * cz < rr) near.push(e);
-    }
+// Look-ahead probes: fixed distances ahead along the centerline.
+// Replaces the "controllable sensor ball" idea — the policy sees relative
+// angle AND slope at every probe simultaneously, with a stationary
+// observation distribution (no extra action needed).
+const PROBE_DISTS = [10, 20, 35, 55, 80, 120];
+const SLOPE_NORM  = 0.30;   // |Δy/Δs| considered "max steep"
+
+// Observation layout:
+//  [0..10]  11 track-edge rays (sqrt-normalised, like the original AI)
+//  [11..17] 7 short wall rays
+//  [18] speed fraction      [19] heading error to dynamic look-ahead waypoint
+//  [20] edge proximity      [21] on-gravel flag
+//  [22] reversing flag      [23] slope at the car
+//  [24..35] 6 probes × (relative angle, slope between probes)
+const OBS_DIM = 24 + PROBE_DISTS.length * 2;
+
+function buildObs(car, out) {
+  castRayFan(car, RAY_ANGLES, RAY_DIST, out, 0);
+  for (let k = 0; k < RAY_ANGLES.length; k++) out[k] = Math.sqrt(out[k]);
+  castRayFan(car, EDGE_RAY_ANGLES, EDGE_RAY_DIST, out, 11);
+
+  const ap = arcPosition(car.pos.x, car.pos.z);
+  const speedFrac = car.spd / car.data.maxSpd;
+
+  // Dynamic look-ahead waypoint heading error (same idea as the original AI)
+  const useCity = !!(cityAiPts && cityAiPts.pts && cityAiPts.pts.length);
+  const lookM = useCity ? 8 + speedFrac * 25 : 12 + speedFrac * 45;
+  const tgt = pointAtArc(ap.s + lookM);
+  const he  = wrapPi(Math.atan2(tgt.x - car.pos.x, tgt.z - car.pos.z) - car.hdg);
+
+  const halfW = trkData ? trkData.rw * 0.5 : 10;
+  out[18] = speedFrac;
+  out[19] = Math.max(-1, Math.min(1, he / Math.PI));
+  out[20] = Math.min(1, Math.sqrt(ap.nearestD2) / Math.max(1, halfW));
+  out[21] = car.onGravel ? 1 : 0;
+  out[22] = car.isReversing ? 1 : 0;
+
+  // Slope at the car (immediate grade) + probes ahead
+  let prevY = pointAtArc(ap.s).y;
+  const hereAhead = pointAtArc(ap.s + 4);
+  out[23] = Math.max(-1, Math.min(1, (hereAhead.y - prevY) / 4 / SLOPE_NORM));
+
+  let prevD = 0;
+  for (let k = 0; k < PROBE_DISTS.length; k++) {
+    const d = PROBE_DISTS[k];
+    const p = pointAtArc(ap.s + d);
+    const ang = wrapPi(Math.atan2(p.x - car.pos.x, p.z - car.pos.z) - car.hdg);
+    const slope = (p.y - prevY) / (d - prevD);
+    out[24 + k * 2]     = Math.max(-1, Math.min(1, ang / Math.PI));
+    out[24 + k * 2 + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
+    prevY = p.y; prevD = d;
   }
-  return EDGE_RAY_ANGLES.map(a => {
-    const angle = car.hdg + a;
-    const dx = Math.sin(angle), dz = Math.cos(angle);
-    let minT = EDGE_RAY_DIST;
-    for (const e of near) {
-      const t = raySegment(ox, oz, dx, dz, e.x0, e.z0, e.x1, e.z1);
-      if (t > 0 && t < minT) minT = t;
-    }
-    return minT / EDGE_RAY_DIST;
-  });
-}
-
-function nnForward(inputs, weights) {
-  let x = inputs;
-  for (let l = 0; l < weights.length - 1; l++) {
-    const { W, b } = weights[l];
-    x = W.map((row, i) => Math.tanh(row.reduce((s, w, j) => s + w * x[j], 0) + b[i]));
-  }
-  const last = weights[weights.length - 1];
-  return last.W.map((row, i) => Math.tanh(row.reduce((s, w, j) => s + w * x[j], 0) + last.b[i]));
-}
-
-function unpackGenome(g, layers) {
-  const weights = [];
-  let idx = 0;
-  for (let l = 0; l < layers.length - 1; l++) {
-    const rows = layers[l + 1], cols = layers[l];
-    const W = Array.from({ length: rows }, () =>
-      Array.from({ length: cols }, () => g[idx++])
-    );
-    const b = Array.from({ length: rows }, () => g[idx++]);
-    weights.push({ W, b });
-  }
-  return weights;
-}
-
-class SimNeuralAI {
-  constructor(car, layers, genome) {
-    this.car = car;
-    this.layers = layers;
-    this.weights = unpackGenome(genome, layers);
-    this.slowTimer  = 0;
-    this.prevPos    = null;
-    this.stuckCount = 0;
-    this.revMode    = 'none';
-    this.revTimer   = 0;
-    this.revSteer   = 0;
-    this._graceTimer = 0;
-  }
-
-  setGenome(genome) {
-    this.weights = unpackGenome(genome, this.layers);
-    this.slowTimer = 0; this.prevPos = null; this.stuckCount = 0;
-    this.revMode = 'none'; this.revTimer = 0; this._graceTimer = 0;
-  }
-
-  update(dt) {
-    if (!trkPts.length || this.car.finished) return;
-    const c = this.car;
-
-    // Stuck detection
-    this._graceTimer += dt;
-    if (!this.prevPos) this.prevPos = { x: c.pos.x, z: c.pos.z };
-    const moved = Math.sqrt((c.pos.x - this.prevPos.x) ** 2 + (c.pos.z - this.prevPos.z) ** 2);
-    this.prevPos.x = c.pos.x; this.prevPos.z = c.pos.z;
-    if (this._graceTimer > 3 && moved < 0.015 * dt * 60) this.slowTimer += dt;
-    else { this.slowTimer = Math.max(0, this.slowTimer - dt * 3); if (this.revMode === 'none') this.stuckCount = 0; }
-
-    if (this.revMode === 'braking') {
-      this.revTimer += dt;
-      c.update({ thr: 0, brk: 1, str: 0 }, dt);
-      if (c.spd < 0.15 || this.revTimer > 0.8) { this.revMode = 'reversing'; this.revTimer = 0; }
-      return;
-    }
-    if (this.revMode === 'reversing') {
-      this.revTimer += dt;
-      c.update({ thr: 0, brk: 0.9, str: this.revSteer }, dt);
-      if (this.revTimer > 1.8) { this.revMode = 'none'; this.slowTimer = 0; this.stuckCount++; }
-      return;
-    }
-    if (this.slowTimer > 1.5 && this.revMode === 'none') {
-      this.revMode = 'braking'; this.revTimer = 0;
-      this.revSteer = (Math.random() > 0.5 ? 1 : -1) * 0.9;
-      c.stuckTimer = 0;
-      return;
-    }
-
-    // Waypoint navigation (city tracks use the dedicated grid waypoints)
-    const useCity = !!(cityAiPts && cityAiPts.pts && cityAiPts.pts.length);
-    const navPts  = useCity ? cityAiPts.pts : trkPts;
-    let md = Infinity, ci = 0;
-    for (let i = 0; i < navPts.length; i++) {
-      const d = (c.pos.x - navPts[i].x) ** 2 + (c.pos.z - navPts[i].z) ** 2;
-      if (d < md) { md = d; ci = i; }
-    }
-    const n = navPts.length;
-    const speedFrac = c.spd / c.data.maxSpd;
-    const look = useCity ? Math.round(4 + speedFrac * 12) : Math.round(6 + speedFrac * 22);
-    const ti   = (ci + look) % n;
-    const dh   = Math.atan2(navPts[ti].x - c.pos.x, navPts[ti].z - c.pos.z);
-    const he   = ((dh - c.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-
-    const sensors     = castRays(c);
-    const edgeSensors = castEdgeRays(c);
-    const halfW    = trkData ? trkData.rw * 0.5 : 999;
-    const edgeProx = Math.min(1, Math.sqrt(md) / Math.max(1, halfW));
-    const gravelFlag = c.onGravel ? 1.0 : 0.0;
-    const extra6   = [
-      speedFrac,
-      Math.max(-1, Math.min(1, he / Math.PI)),
-      edgeProx,
-      gravelFlag,
-      c.data.hdl,
-      Math.min(1, c.data.accel / 12),
-    ];
-
-    let inputs;
-    if (this.layers[0] >= 24) {
-      inputs = [...sensors, ...edgeSensors, ...extra6];          // 24
-    } else if (this.layers[0] >= 17) {
-      inputs = [...sensors, ...extra6];                          // 17
-    } else if (this.layers[0] >= 13) {
-      inputs = [...sensors.slice(1, 10), speedFrac, Math.max(-1, Math.min(1, he / Math.PI)), edgeProx, gravelFlag]; // 13
-    } else {
-      inputs = [...sensors.slice(1, 10), speedFrac, Math.max(-1, Math.min(1, he / Math.PI))]; // 11
-    }
-
-    const out      = nnForward(inputs, this.weights);
-    const nnSteer  = out[0], thrMod = out[1];
-    const nnBrake  = thrMod < 0 ? -thrMod : 0;
-    let str = Math.max(-1, Math.min(1, nnSteer));
-    let thr = thrMod > 0 ? thrMod : 0;
-    let brk = nnBrake;
-    thr *= 0.85 + thrMod * 0.25;
-    if (c.onGravel) thr = Math.min(thr, 0.7);
-    thr *= c.data.aiSpd * c.aiAgg * 1.15;
-    thr = Math.min(1, Math.max(0, thr));
-    c.update({ thr, brk: Math.min(1, brk), str }, dt);
-  }
+  return ap; // caller reuses arc position for reward
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Genome utilities
+//  Neural network with manual backprop + Adam
 // ─────────────────────────────────────────────────────────────────────────────
 
-function computeGenomeSize(layers) {
-  let s = 0;
-  for (let i = 0; i < layers.length - 1; i++) s += layers[i + 1] * (layers[i] + 1);
-  return s;
+function gauss() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-function xavierGenome(layers) {
-  const genome = [];
-  for (let l = 0; l < layers.length - 1; l++) {
-    const nIn = layers[l], nOut = layers[l + 1];
-    const std = Math.sqrt(2 / (nIn + nOut)) * 3;
-    for (let j = 0; j < nOut * nIn; j++) genome.push((Math.random() * 2 - 1) * std);
-    for (let j = 0; j < nOut; j++) genome.push(0);
-  }
-  return genome;
-}
-
-// Hand-designed seed for [24,5,2]
-const SEED_GENOME_24_5_2 = [
-  -2.0,-2.5,-3.0,-2.0,-1.0,-0.5, 0.0, 0.3, 0.5, 0.3, 0.0,-1.0,-1.5,-0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.5, 0.0, 0.0,
-   0.0, 0.3, 0.5, 0.0, 0.3,-0.5,-1.0,-2.0,-3.0,-2.5,-2.0, 0.0, 0.0, 0.0, 0.0,-0.5,-1.5,-1.0, 0.0, 0.0, 0.8, 0.5, 0.0, 0.0,
-   0.0, 0.0,-0.5,-1.0,-2.0,-3.0,-2.0,-1.0,-0.5, 0.0, 0.0,-0.3,-0.8,-1.5,-3.0,-1.5,-0.8,-0.3, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0,
-   0.8, 0.8, 0.8, 0.6, 0.5, 1.5, 0.5, 0.6, 0.8, 0.8, 0.8, 0.5, 0.8, 0.8, 1.0, 0.8, 0.8, 0.5, 1.5, 0.0,-1.5,-1.0, 0.0, 0.0,
-   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0,
-  2.0, 2.0, 2.0,-6.0, 0.0,
-   1.2,-1.2, 0.0, 0.0, 1.5,
-  -0.3,-0.3,-1.5, 1.5, 0.0,
-  0.0, 0.5,
-];
-
-function buildDefaultGenome(layers) {
-  if (JSON.stringify(layers) === '[24,5,2]') return [...SEED_GENOME_24_5_2];
-  return xavierGenome(layers);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Fitness calculation
-// ─────────────────────────────────────────────────────────────────────────────
-
-function computeFitness(car) {
-  const onTrackRate = cfg.onTrackRewardRate;
-  const penalty     = car._fitPenalty || 0;
-  const rawProg     = car.totalProg * (1 + (car._onTrackTime || 0) * onTrackRate);
-  const effectiveRaw = Math.max(car._peakRawProg, rawProg);
-  let fit = effectiveRaw - penalty;
-  if (cfg.lapMode && car._lapCompleted && car._lapTime > 0) {
-    fit += 1000 / car._lapTime;
-  }
-  return fit;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Fitness penalties (called every physics tick)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function updateFitnessPenalties(car, dt) {
-  if (car._offTrack) return;
-
-  // Gravel penalty (accumulates while on gravel)
-  if (car.onGravel) {
-    car._gravelTime += dt;
-    car._fitPenalty += (cfg.gravelPenaltyBase + car._gravelTime * cfg.gravelGrowthRate) * dt;
-  } else {
-    car._gravelTime = Math.max(0, car._gravelTime - dt * 0.5);
-  }
-
-  // Stuck penalty
-  const stuckInc = car.stuckTimer - (car._trainPrevStuck || 0);
-  if (stuckInc > 0) car._fitPenalty += stuckInc * cfg.stuckPenaltyRate;
-  car._trainPrevStuck = car.stuckTimer;
-
-  // Off-track DQ check — gravel runoff counts as "still on track" (it has its
-  // own penalty); city tracks never DQ because corridors hard-clamp position.
-  if (!trkData || (cityCorridors && cityCorridors.length)) {
-    car._onTrackTime += dt;
-    const rawProg = car.totalProg * (1 + car._onTrackTime * cfg.onTrackRewardRate);
-    if (rawProg > car._peakRawProg) car._peakRawProg = rawProg;
-    car._fitness = computeFitness(car);
-    return;
-  }
-  let md = Infinity;
-  for (const p of trkPts) {
-    const d = (car.pos.x - p.x) ** 2 + (car.pos.z - p.z) ** 2;
-    if (d < md) md = d;
-  }
-  const halfW = trkData.rw * 0.5;
-  const offTrack = !car.onGravel && Math.sqrt(md) > halfW + 2;
-
-  if (offTrack) {
-    car._offTrackTime += dt;
-    car._fitPenalty += cfg.gravelPenaltyBase * cfg.offTrackMult * dt;
-    if (car._offTrackTime >= cfg.offTrackDQTime) {
-      car._fitPenalty += cfg.dqPenalty;
-      car._offTrack = true;
+class Net {
+  // sizes e.g. [36, 64, 2]; tanh hidden layers, linear output.
+  constructor(sizes, finalScale = 1) {
+    this.sizes = sizes;
+    this.W = []; this.b = [];
+    for (let l = 0; l < sizes.length - 1; l++) {
+      const nIn = sizes[l], nOut = sizes[l + 1];
+      const lim = Math.sqrt(6 / (nIn + nOut)) * (l === sizes.length - 2 ? finalScale : 1);
+      const W = new Float64Array(nOut * nIn);
+      for (let k = 0; k < W.length; k++) W[k] = (Math.random() * 2 - 1) * lim;
+      this.W.push(W);
+      this.b.push(new Float64Array(nOut));
     }
-  } else {
-    car._offTrackTime = Math.max(0, car._offTrackTime - dt);
-    car._onTrackTime += dt;
+    this.gW = this.W.map(w => new Float64Array(w.length));
+    this.gb = this.b.map(b => new Float64Array(b.length));
+    this.mW = this.W.map(w => new Float64Array(w.length));
+    this.vW = this.W.map(w => new Float64Array(w.length));
+    this.mb = this.b.map(b => new Float64Array(b.length));
+    this.vb = this.b.map(b => new Float64Array(b.length));
+    this.t  = 0;
   }
 
-  // Update peak raw progress
-  if (!car._offTrack) {
-    const rawProg = car.totalProg * (1 + (car._onTrackTime || 0) * cfg.onTrackRewardRate);
-    if (rawProg > car._peakRawProg) car._peakRawProg = rawProg;
-  }
-
-  car._fitness = computeFitness(car);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Genetic trainer (self-contained, no global state)
-// ─────────────────────────────────────────────────────────────────────────────
-
-class GeneticTrainer {
-  constructor(layers) {
-    this.layers    = layers;
-    this.genomeSize = computeGenomeSize(layers);
-    this.generation = 0;
-    this.genTime    = 0;
-    this.population = [];
-    this.bestGenome  = null;
-    this.bestFitness = -Infinity;
-    this.avgFitness  = 0;
-  }
-
-  initPopulation(seedGenome = null, forceRandom = false) {
-    if (forceRandom) { this.bestGenome = null; this.bestFitness = -Infinity; }
-
-    let seed;
-    if (!forceRandom && seedGenome && seedGenome.length === this.genomeSize) {
-      seed = seedGenome;
-    } else if (!forceRandom) {
-      seed = buildDefaultGenome(this.layers);
-    } else {
-      seed = null;
-    }
-
-    this.population = Array.from({ length: cfg.popSize }, (_, i) => {
-      let genome;
-      if (seed) {
-        genome = [...seed];
-        if (i > 0) this._mutate(genome, 0.4, 0.8);
-      } else {
-        genome = xavierGenome(this.layers);
+  forward(x, cache = null) {
+    let a = x;
+    if (cache) cache.acts = [x];
+    for (let l = 0; l < this.W.length; l++) {
+      const nIn = this.sizes[l], nOut = this.sizes[l + 1];
+      const W = this.W[l], b = this.b[l];
+      const out = new Float64Array(nOut);
+      const isLast = l === this.W.length - 1;
+      for (let j = 0; j < nOut; j++) {
+        let s = b[j];
+        const off = j * nIn;
+        for (let i = 0; i < nIn; i++) s += W[off + i] * a[i];
+        out[j] = isLast ? s : Math.tanh(s);
       }
-      return { genome, fitness: 0 };
-    });
-    this.generation = 0;
-    this.genTime    = 0;
+      a = out;
+      if (cache) cache.acts.push(out);
+    }
+    return a;
   }
 
-  evolve() {
-    this.population.sort((a, b) => b.fitness - a.fitness);
-    const best = this.population[0];
-
-    if (this.bestFitness > 0 && best.fitness < 0) this.bestFitness = -Infinity;
-    if (best.fitness > this.bestFitness) {
-      this.bestFitness = best.fitness;
-      this.bestGenome  = [...best.genome];
-    }
-    this.avgFitness = this.population.reduce((s, p) => s + p.fitness, 0) / this.population.length;
-
-    const champion = this.bestGenome || best.genome;
-    const next = [{ genome: [...champion], fitness: 0 }];
-    while (next.length < cfg.popSize) {
-      const child = [...champion];
-      this._mutate(child, cfg.mutRate, cfg.mutStrength);
-      next.push({ genome: child, fitness: 0 });
-    }
-    this.population = next;
-    this.generation++;
-    this.genTime = 0;
-  }
-
-  _mutate(genome, rate, strength) {
-    for (let i = 0; i < genome.length; i++) {
-      if (Math.random() < rate) genome[i] += (Math.random() * 2 - 1) * strength;
+  // Accumulates gradients; dOut = dLoss/dOutput for the cached forward pass.
+  backward(cache, dOut) {
+    let delta = dOut;
+    for (let l = this.W.length - 1; l >= 0; l--) {
+      const nIn = this.sizes[l], nOut = this.sizes[l + 1];
+      const aIn = cache.acts[l];
+      const W = this.W[l], gW = this.gW[l], gb = this.gb[l];
+      const dPrev = l > 0 ? new Float64Array(nIn) : null;
+      for (let j = 0; j < nOut; j++) {
+        const d = delta[j];
+        if (d === 0) continue;
+        gb[j] += d;
+        const off = j * nIn;
+        for (let i = 0; i < nIn; i++) {
+          gW[off + i] += d * aIn[i];
+          if (dPrev) dPrev[i] += d * W[off + i];
+        }
+      }
+      if (dPrev) {
+        for (let i = 0; i < nIn; i++) dPrev[i] *= (1 - aIn[i] * aIn[i]);
+        delta = dPrev;
+      }
     }
   }
 
-  exportModel() {
-    if (!this.bestGenome) return null;
-    return {
-      id: 'ai-trainer-export',
-      name: 'AI Trainer Export',
-      version: 1,
-      layers: this.layers,
-      genome: this.bestGenome,
-      fitness: this.bestFitness,
-      generation: this.generation,
+  zeroGrad() {
+    for (const g of this.gW) g.fill(0);
+    for (const g of this.gb) g.fill(0);
+  }
+
+  adamStep(lr, scale) {
+    this.t++;
+    const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+    const bc1 = 1 - Math.pow(b1, this.t), bc2 = 1 - Math.pow(b2, this.t);
+    const upd = (P, G, M, V) => {
+      for (let k = 0; k < P.length; k++) {
+        const g = G[k] * scale;
+        M[k] = b1 * M[k] + (1 - b1) * g;
+        V[k] = b2 * V[k] + (1 - b2) * g * g;
+        P[k] -= lr * (M[k] / bc1) / (Math.sqrt(V[k] / bc2) + eps);
+      }
     };
+    for (let l = 0; l < this.W.length; l++) {
+      upd(this.W[l], this.gW[l], this.mW[l], this.vW[l]);
+      upd(this.b[l], this.gb[l], this.mb[l], this.vb[l]);
+    }
+  }
+
+  flat() {
+    const out = [];
+    for (let l = 0; l < this.W.length; l++) {
+      for (const w of this.W[l]) out.push(w);
+      for (const b of this.b[l]) out.push(b);
+    }
+    return out;
+  }
+
+  loadFlat(arr) {
+    let k = 0;
+    for (let l = 0; l < this.W.length; l++) {
+      for (let i = 0; i < this.W[l].length; i++) this.W[l][i] = arr[k++];
+      for (let i = 0; i < this.b[l].length; i++) this.b[l][i] = arr[k++];
+    }
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Grid placement
+//  PPO agent
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildGrid(count) {
+const ACT_DIM = 2;          // [steer, throttle/brake]
+const LOG_2PI = Math.log(2 * Math.PI);
+
+let actor  = null;          // Net [OBS_DIM, h, ACT_DIM] → action means
+let critic = null;          // Net [OBS_DIM, h, 1] → state value
+let logStd = null;          // Float64Array(ACT_DIM), learnable
+let lsM = null, lsV = null; // Adam moments for logStd
+let lsT = 0;
+
+function initAgent(modelOverride) {
+  const h = cfg.hiddenSize;
+  actor  = new Net([OBS_DIM, h, ACT_DIM], 0.01); // small final layer → near-zero initial actions
+  critic = new Net([OBS_DIM, h, 1], 1);
+  logStd = new Float64Array(ACT_DIM).fill(-0.5);
+  lsM = new Float64Array(ACT_DIM);
+  lsV = new Float64Array(ACT_DIM);
+  lsT = 0;
+  if (modelOverride && modelOverride.algo === 'ppo') {
+    try {
+      actor  = new Net(modelOverride.actor.sizes, 1);
+      actor.loadFlat(modelOverride.actor.flat);
+      critic = new Net(modelOverride.critic.sizes, 1);
+      critic.loadFlat(modelOverride.critic.flat);
+      logStd = Float64Array.from(modelOverride.logStd);
+      lsM = new Float64Array(ACT_DIM);
+      lsV = new Float64Array(ACT_DIM);
+      lsT = 0;
+    } catch (err) {
+      postMessage({ type: 'error', message: 'Model import failed: ' + err.message });
+    }
+  }
+}
+
+function logProb(act, mean) {
+  let lp = 0;
+  for (let d = 0; d < ACT_DIM; d++) {
+    const sd = Math.exp(logStd[d]);
+    const z = (act[d] - mean[d]) / sd;
+    lp += -0.5 * z * z - logStd[d] - 0.5 * LOG_2PI;
+  }
+  return lp;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Environments
+// ─────────────────────────────────────────────────────────────────────────────
+
+let envs = [];              // per-env state
+let iteration   = 0;        // PPO update count
+let totalSteps  = 0;        // total physics steps across envs
+let agentSteps  = 0;        // transitions collected since last update
+let recentReturns = [];     // last completed episode returns
+let bestLap = Infinity;
+let lastLoss = { pi: 0, v: 0, ent: 0 };
+
+function spawnPose(envIdx) {
   const n = trkPts.length;
-  if (!n) return Array(count).fill({ pos: { x: 0, y: 0, z: 0 }, hdg: 0 });
-  const COLS = 4, COL_GAP = 3.5, ROW_STEP = 8;
-  const grid = [];
-  for (let i = 0; i < count; i++) {
-    const row = Math.floor(i / COLS), col = i % COLS;
-    const colOff = (col - (COLS - 1) / 2) * COL_GAP;
-    const idx  = ((n - row * ROW_STEP) % n + n) % n;
-    const pt   = trkPts[idx], ptF = trkPts[(idx + 5) % n];
-    const hdg  = Math.atan2(ptF.x - pt.x, ptF.z - pt.z);
-    const rx   = Math.cos(hdg), rz = -Math.sin(hdg);
-    grid.push({ pos: { x: pt.x + rx * colOff, y: pt.y, z: pt.z + rz * colOff }, hdg });
+  if (!n) return { pos: { x: 0, y: 0, z: 0 }, hdg: 0 };
+  let idx;
+  if (cfg.randomSpawn) {
+    idx = Math.floor(Math.random() * n);
+  } else {
+    // grid behind the start line, one row per env
+    const ROW_STEP = 8;
+    idx = ((n - Math.floor(envIdx / 2) * ROW_STEP) % n + n) % n;
   }
-  return grid;
+  const pt  = trkPts[idx], ptF = trkPts[(idx + 5) % n];
+  const hdg = Math.atan2(ptF.x - pt.x, ptF.z - pt.z);
+  // small lateral jitter for diversity
+  const rx = Math.cos(hdg), rz = -Math.sin(hdg);
+  const off = cfg.randomSpawn ? (Math.random() * 2 - 1) * Math.min(3, (trkData ? trkData.rw : 12) * 0.2) : 0;
+  return { pos: { x: pt.x + rx * off, y: pt.y, z: pt.z + rz * off }, hdg };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Simulation initialisation
-// ─────────────────────────────────────────────────────────────────────────────
-
-function initSim(carData, layers, seedGenome, forceRandom) {
-  trainer = new GeneticTrainer(layers);
-  trainer.initPopulation(seedGenome, forceRandom);
-
-  const grid = buildGrid(cfg.popSize);
-  cars = [];
-  ais  = [];
-
-  for (let i = 0; i < cfg.popSize; i++) {
-    const g   = grid[i] || grid[0];
-    const car = new SimCar(carData, g.pos, g.hdg);
-    car.aiAgg = 1.0; // identical throttle authority for every car — fair fitness comparison
-    const genome = trainer.population[i].genome;
-    const ai = new SimNeuralAI(car, layers, genome);
-    cars.push(car);
-    ais.push(ai);
-  }
-  simTime = 0;
-}
-
-function restartGeneration() {
-  const grid = buildGrid(cfg.popSize);
-  for (let i = 0; i < cars.length; i++) {
-    const g = grid[i] || grid[0];
-    cars[i].reset(g.pos, g.hdg);
-    ais[i].setGenome(trainer.population[i].genome);
-  }
-  simTime = 0;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Single physics step
-// ─────────────────────────────────────────────────────────────────────────────
-
-function stepOnce(dt) {
-  simTime += dt;
-  trainer.genTime += dt;
-
-  for (let i = 0; i < ais.length; i++) {
-    if (!cars[i]._offTrack) {
-      ais[i].update(dt);
-    }
-    updateFitnessPenalties(cars[i], dt);
-    trainer.population[i].fitness = cars[i]._fitness;
-  }
-
-  // Resolve car-to-car collisions (N² but N is small)
-  const CAR_R = 1.8, MIN_D = CAR_R * 2;
-  for (let i = 0; i < cars.length; i++) {
-    for (let j = i + 1; j < cars.length; j++) {
-      const a = cars[i], b = cars[j];
-      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist >= MIN_D || dist < 0.01) continue;
-      const nx = dx / dist, nz = dz / dist;
-      const ov = (MIN_D - dist) * 0.5;
-      a.pos.x -= nx * ov; a.pos.z -= nz * ov;
-      b.pos.x += nx * ov; b.pos.z += nz * ov;
-      const vAx = a.spd * Math.sin(a.hdg), vAz = a.spd * Math.cos(a.hdg);
-      const vBx = b.spd * Math.sin(b.hdg), vBz = b.spd * Math.cos(b.hdg);
-      const relVn = (vBx - vAx) * nx + (vBz - vAz) * nz;
-      if (relVn >= 0) continue;
-      const imp = -(1 + 0.35) * relVn * 0.5;
-      const nAx = vAx - imp * nx, nAz = vAz - imp * nz;
-      const nBx = vBx + imp * nx, nBz = vBz + imp * nz;
-      const sA = Math.sqrt(nAx * nAx + nAz * nAz);
-      const sB = Math.sqrt(nBx * nBx + nBz * nBz);
-      if (sA > 0.3) { const h = Math.atan2(nAx, nAz); const d = ((h - a.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI; a.hdg += Math.max(-0.35, Math.min(0.35, d)); }
-      if (sB > 0.3) { const h = Math.atan2(nBx, nBz); const d = ((h - b.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI; b.hdg += Math.max(-0.35, Math.min(0.35, d)); }
-      a.spd = Math.min(a.data.maxSpd, sA);
-      b.spd = Math.min(b.data.maxSpd, sB);
-    }
-  }
-
-  // Check if generation is over — lap mode ends early when every car has
-  // finished or been DQ'd, but the time cap always applies (matches trainer.js)
-  const lapDone = cfg.lapMode && cars.length > 0 &&
-    cars.every(c => c._lapCompleted || c._offTrack);
-  const allDone = lapDone || trainer.genTime >= cfg.genDuration;
-
-  if (allDone) {
-    trainer.evolve();
-    restartGeneration();
-    return true; // generation ended
-  }
-  return false;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Frame snapshot for postMessage
-// ─────────────────────────────────────────────────────────────────────────────
-
-function buildSnapshot() {
-  const carData = cars.map(c => ({
-    x: c.pos.x, y: c.pos.y, z: c.pos.z,
-    hdg: c.hdg,
-    spd: c.spd,
-    fitness: c._fitness,
-    totalProg: c.totalProg,
-    lap: c.lap,
-    onGravel: c.onGravel,
-    offTrack: c._offTrack,
-    finished: c.finished,
-  }));
+function makeEnv(i) {
+  const sp = spawnPose(i);
+  const car = new SimCar(carSpec, sp.pos, sp.hdg);
   return {
-    type: 'frame',
-    cars: carData,
-    generation: trainer.generation,
-    genTime: trainer.genTime,
-    genDuration: cfg.genDuration,
-    bestFitness: trainer.bestFitness,
-    avgFitness: trainer.avgFitness,
-    bestGenome: trainer.bestGenome,
-    layers: trainer.layers,
+    car,
+    // arc tracking for progress reward + lap detection
+    prevS: arcPosition(car.pos.x, car.pos.z).s,
+    lapAcc: 0,            // accumulated forward metres this lap
+    lapTime: 0,
+    epTime: 0,
+    epReturn: 0,
+    offTrackTime: 0,
+    noProgTime: 0,
+    prevStuck: 0,
+    // action-repeat bookkeeping
+    repCount: 0,
+    curAct: new Float64Array(ACT_DIM),
+    // pending transition (written to buffer when the repeat window closes)
+    pendObs: null, pendLogp: 0, pendVal: 0, rewAcc: 0,
+    // per-env rollout chain
+    buf: { obs: [], act: [], logp: [], val: [], rew: [], done: [] },
   };
 }
 
+function resetEnv(env, i) {
+  const sp = spawnPose(i);
+  env.car.reset(sp.pos, sp.hdg);
+  env.prevS = arcPosition(env.car.pos.x, env.car.pos.z).s;
+  env.lapAcc = 0; env.lapTime = 0;
+  env.epTime = 0; env.epReturn = 0;
+  env.offTrackTime = 0; env.noProgTime = 0; env.prevStuck = 0;
+  env.repCount = 0;
+  env.pendObs = null; env.rewAcc = 0;
+}
+
+function initSim(modelOverride) {
+  buildArcTable();
+  initAgent(modelOverride || null);
+  envs = Array.from({ length: cfg.numEnvs }, (_, i) => makeEnv(i));
+  iteration = 0; totalSteps = 0; agentSteps = 0;
+  recentReturns = []; bestLap = Infinity;
+  simTime = 0;
+  lastLoss = { pi: 0, v: 0, ent: 0 };
+}
+
+// Finalize the pending transition of an env into its rollout chain.
+function commitTransition(env, done) {
+  if (!env.pendObs) return;
+  env.buf.obs.push(env.pendObs);
+  env.buf.act.push(Float64Array.from(env.curAct));
+  env.buf.logp.push(env.pendLogp);
+  env.buf.val.push(env.pendVal);
+  env.buf.rew.push(env.rewAcc);
+  env.buf.done.push(done ? 1 : 0);
+  env.pendObs = null;
+  env.rewAcc = 0;
+  agentSteps++;
+}
+
+function terminateEnv(env, i, penalty, truncated) {
+  // per-tick rewards are already in epReturn; only the penalty/bootstrap
+  // terms are added to the stored transition reward here
+  if (penalty) env.rewAcc -= penalty;
+  if (truncated && env.pendObs) {
+    // bootstrap the value of the post-step state so truncation isn't
+    // mistaken for a real terminal
+    const obs = new Float64Array(OBS_DIM);
+    buildObs(env.car, obs);
+    env.rewAcc += cfg.gamma * critic.forward(obs)[0];
+  }
+  commitTransition(env, true);
+  recentReturns.push(env.epReturn);
+  if (recentReturns.length > 50) recentReturns.shift();
+  resetEnv(env, i);
+}
+
+// One physics tick for every env (dt = FIXED_DT).
+function stepOnce(dt) {
+  simTime += dt;
+  for (let i = 0; i < envs.length; i++) {
+    const env = envs[i];
+    const car = env.car;
+
+    // ── New agent decision at the start of each repeat window ──
+    if (env.repCount <= 0) {
+      commitTransition(env, false); // finalize previous window (non-terminal)
+      const obs = new Float64Array(OBS_DIM);
+      buildObs(car, obs);
+      const mean = actor.forward(obs);
+      for (let d = 0; d < ACT_DIM; d++) {
+        env.curAct[d] = mean[d] + Math.exp(logStd[d]) * gauss();
+      }
+      env.pendObs  = obs;
+      env.pendLogp = logProb(env.curAct, mean);
+      env.pendVal  = critic.forward(obs)[0];
+      env.repCount = cfg.actionRepeat;
+    }
+    env.repCount--;
+
+    // ── Apply action ──
+    const str = Math.max(-1, Math.min(1, env.curAct[0]));
+    const a1  = Math.max(-1, Math.min(1, env.curAct[1]));
+    const thr = a1 > 0 ? a1 : 0;
+    const brk = a1 < 0 ? -a1 : 0;
+    car.update({ thr, brk, str }, dt);
+    totalSteps++;
+
+    // ── Reward ──
+    const ap = arcPosition(car.pos.x, car.pos.z);
+    let ds = ap.s - env.prevS;
+    if (ds >  trackLen / 2) ds -= trackLen;
+    if (ds < -trackLen / 2) ds += trackLen;
+    env.prevS = ap.s;
+    let r = ds * cfg.progressReward;
+
+    // Lap detection via accumulated forward arc distance
+    env.lapAcc += ds;
+    env.lapTime += dt;
+    if (env.lapAcc >= trackLen) {
+      env.lapAcc -= trackLen;
+      car.lap++;
+      car.lapTimes.push(env.lapTime);
+      if (env.lapTime < bestLap) bestLap = env.lapTime;
+      env.lapTime = 0;
+      r += cfg.lapBonus;
+    }
+
+    if (car.onGravel) r -= cfg.gravelPenalty * dt;
+    const stuckInc = car.stuckTimer - env.prevStuck;
+    if (stuckInc > 0) r -= cfg.wallPenalty * stuckInc;
+    env.prevStuck = car.stuckTimer;
+
+    env.rewAcc  += r;
+    env.epReturn += r;
+    env.epTime  += dt;
+
+    // ── Termination checks ──
+    // off-track: not on gravel and beyond the road + margin (circuit only;
+    // city corridors hard-clamp position so they can't leave the track)
+    let terminated = false;
+    if (trkData && !(cityCorridors && cityCorridors.length)) {
+      const halfW = trkData.rw * 0.5;
+      const off = !car.onGravel && Math.sqrt(ap.nearestD2) > halfW + 2;
+      if (off) {
+        env.offTrackTime += dt;
+        if (env.offTrackTime > 1.0) terminated = true;
+      } else {
+        env.offTrackTime = Math.max(0, env.offTrackTime - dt);
+      }
+    }
+    // stuck: under 1 m of net progress in a 4 s window (after 5 s of grace)
+    if (Math.abs(ds) < 0.02 * dt * 60) env.noProgTime += dt;
+    else env.noProgTime = 0;
+    if (env.epTime > 5 && env.noProgTime > 4) terminated = true;
+
+    if (terminated) {
+      env.epReturn -= cfg.terminalPenalty;
+      terminateEnv(env, i, cfg.terminalPenalty, false);
+    } else if (env.epTime >= cfg.episodeLen) {
+      terminateEnv(env, i, 0, true);
+    }
+  }
+
+  // ── PPO update when enough transitions are collected ──
+  if (agentSteps >= cfg.horizon * cfg.numEnvs) {
+    ppoUpdate();
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-//  Simulation loop
+//  PPO update — GAE + clipped surrogate, minibatch Adam
 // ─────────────────────────────────────────────────────────────────────────────
 
-let _accum = 0; // seconds of simulated time owed
+function ppoUpdate() {
+  // Flush any open repeat windows so chains end cleanly, and force a fresh
+  // decision on the next tick (the flushed action's window is over)
+  for (const env of envs) { commitTransition(env, false); env.repCount = 0; }
+
+  // Gather all transitions; compute GAE per env chain
+  const OBS = [], ACT = [], LOGP = [], ADV = [], RET = [];
+  for (const env of envs) {
+    const b = env.buf, T = b.obs.length;
+    if (!T) continue;
+    // bootstrap with the value of the env's current state unless terminal
+    let nextVal = 0;
+    if (!b.done[T - 1]) {
+      const obs = new Float64Array(OBS_DIM);
+      buildObs(env.car, obs);
+      nextVal = critic.forward(obs)[0];
+    }
+    let gae = 0;
+    const adv = new Float64Array(T);
+    for (let t = T - 1; t >= 0; t--) {
+      const nonTerm = 1 - b.done[t];
+      const nextV = t === T - 1 ? nextVal : b.val[t + 1];
+      const delta = b.rew[t] + cfg.gamma * nextV * nonTerm - b.val[t];
+      gae = delta + cfg.gamma * cfg.lam * nonTerm * gae;
+      adv[t] = gae;
+    }
+    for (let t = 0; t < T; t++) {
+      OBS.push(b.obs[t]); ACT.push(b.act[t]); LOGP.push(b.logp[t]);
+      ADV.push(adv[t]); RET.push(adv[t] + b.val[t]);
+    }
+    b.obs.length = 0; b.act.length = 0; b.logp.length = 0;
+    b.val.length = 0; b.rew.length = 0; b.done.length = 0;
+  }
+  agentSteps = 0;
+  const N = OBS.length;
+  if (N < 8) return;
+
+  // Normalize advantages
+  let mean = 0; for (const a of ADV) mean += a; mean /= N;
+  let varr = 0; for (const a of ADV) varr += (a - mean) ** 2;
+  const std = Math.sqrt(varr / N) + 1e-8;
+  for (let k = 0; k < N; k++) ADV[k] = (ADV[k] - mean) / std;
+
+  const idx = Array.from({ length: N }, (_, k) => k);
+  let sumPi = 0, sumV = 0, sumEnt = 0, nMB = 0;
+
+  for (let ep = 0; ep < cfg.epochs; ep++) {
+    // Fisher-Yates shuffle
+    for (let k = N - 1; k > 0; k--) {
+      const j = Math.floor(Math.random() * (k + 1));
+      const tmp = idx[k]; idx[k] = idx[j]; idx[j] = tmp;
+    }
+    for (let start = 0; start < N; start += cfg.minibatch) {
+      const end = Math.min(N, start + cfg.minibatch);
+      const bs = end - start;
+      actor.zeroGrad(); critic.zeroGrad();
+      const gLs = new Float64Array(ACT_DIM);
+      let mbPi = 0, mbV = 0, mbEnt = 0;
+
+      for (let k = start; k < end; k++) {
+        const s = idx[k];
+        const obs = OBS[s], act = ACT[s], A = ADV[s], ret = RET[s];
+
+        // ── Actor ──
+        const aCache = {};
+        const mu = actor.forward(obs, aCache);
+        let lp = 0;
+        for (let d = 0; d < ACT_DIM; d++) {
+          const sd = Math.exp(logStd[d]);
+          const z = (act[d] - mu[d]) / sd;
+          lp += -0.5 * z * z - logStd[d] - 0.5 * LOG_2PI;
+        }
+        const ratio = Math.exp(Math.min(20, lp - LOGP[s]));
+        const clipped = Math.max(1 - cfg.clip, Math.min(1 + cfg.clip, ratio));
+        const surr1 = ratio * A, surr2 = clipped * A;
+        mbPi += -Math.min(surr1, surr2);
+        // gradient flows only through the unclipped branch when it's the min
+        const coef = surr1 <= surr2 ? -A * ratio : 0;
+        if (coef !== 0) {
+          const dMu = new Float64Array(ACT_DIM);
+          for (let d = 0; d < ACT_DIM; d++) {
+            const sd2 = Math.exp(2 * logStd[d]);
+            dMu[d] = coef * (act[d] - mu[d]) / sd2;
+            gLs[d] += coef * (((act[d] - mu[d]) ** 2) / sd2 - 1);
+          }
+          actor.backward(aCache, dMu);
+        }
+        // entropy bonus: H = Σ(logσ + ½log(2πe)) → dH/dlogσ = 1
+        for (let d = 0; d < ACT_DIM; d++) {
+          gLs[d] += -cfg.entropyCoef;
+          mbEnt += logStd[d] + 0.5 * (LOG_2PI + 1);
+        }
+
+        // ── Critic ──
+        const cCache = {};
+        const v = critic.forward(obs, cCache)[0];
+        const dv = cfg.vfCoef * (v - ret);
+        mbV += 0.5 * (v - ret) ** 2;
+        critic.backward(cCache, Float64Array.of(dv));
+      }
+
+      actor.adamStep(cfg.lr, 1 / bs);
+      critic.adamStep(cfg.lr, 1 / bs);
+      // Adam step for logStd
+      lsT++;
+      const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+      const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
+      for (let d = 0; d < ACT_DIM; d++) {
+        const g = gLs[d] / bs;
+        lsM[d] = b1 * lsM[d] + (1 - b1) * g;
+        lsV[d] = b2 * lsV[d] + (1 - b2) * g * g;
+        logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
+        logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
+      }
+
+      sumPi += mbPi / bs; sumV += mbV / bs; sumEnt += mbEnt / bs; nMB++;
+    }
+  }
+
+  if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
+  iteration++;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Snapshots
+// ─────────────────────────────────────────────────────────────────────────────
+
+let vizCounter = 0;
+
+function buildSnapshot() {
+  const carData = envs.map(env => ({
+    x: env.car.pos.x, y: env.car.pos.y, z: env.car.pos.z,
+    hdg: env.car.hdg,
+    spd: env.car.spd,
+    ret: env.epReturn,
+    lap: env.car.lap,
+    onGravel: env.car.onGravel,
+  }));
+  let avgReturn = 0;
+  if (recentReturns.length) {
+    const tail = recentReturns.slice(-20);
+    avgReturn = tail.reduce((s, v) => s + v, 0) / tail.length;
+  }
+  const snap = {
+    type: 'frame',
+    cars: carData,
+    iteration,
+    totalSteps,
+    bufferFill: Math.min(1, agentSteps / (cfg.horizon * cfg.numEnvs)),
+    avgReturn,
+    bestLap: Number.isFinite(bestLap) ? bestLap : null,
+    episodes: recentReturns.length,
+    loss: lastLoss,
+    sigma: logStd ? [Math.exp(logStd[0]), Math.exp(logStd[1])] : null,
+  };
+  // actor weights for the visualiser — heavy, send ~once per second
+  if (vizCounter++ % POST_HZ === 0 && actor) {
+    snap.actorFlat = actor.flat();
+    snap.actorSizes = actor.sizes;
+  }
+  return snap;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Simulation loop — wall-clock accumulator pacing
+// ─────────────────────────────────────────────────────────────────────────────
+
+let _accum = 0;
 
 function simLoop() {
-  if (!running || !trainer) { tickHandle = null; return; }
+  if (!running || !actor) { tickHandle = null; return; }
 
-  // Wall-clock pacing: at speedMult=1 the sim advances in real time;
-  // higher multipliers run proportionally more fixed steps per tick.
   const now = performance.now();
   const elapsed = Math.min(0.25, (now - lastTickMs) / 1000);
   lastTickMs = now;
   _accum += elapsed * Math.max(1, cfg.speedMult);
 
   let steps = Math.floor(_accum / FIXED_DT);
-  const MAX_STEPS_PER_TICK = 4000; // don't stall the message queue
+  const MAX_STEPS_PER_TICK = 2000;
   if (steps > MAX_STEPS_PER_TICK) { steps = MAX_STEPS_PER_TICK; _accum = 0; }
   else _accum -= steps * FIXED_DT;
 
@@ -931,7 +1027,7 @@ self.onmessage = function (e) {
   const { type } = e.data;
 
   if (type === 'init') {
-    const { track, carData, config, seedGenome, forceRandom, layersOverride } = e.data;
+    const { track, carData, config, model } = e.data;
     trkPts        = track.pts;
     trkWallLeft   = track.wallLeft;
     trkWallRight  = track.wallRight;
@@ -939,23 +1035,19 @@ self.onmessage = function (e) {
     gravelProfile = track.gravelProfile || null;
     cityCorridors = track.cityCorridors || null;
     cityAiPts     = track.cityAiPts || null;
+    carSpec       = carData;
 
     if (config) Object.assign(cfg, config);
 
-    // Architecture: explicit override (imported model) > sliders
-    const layers = (Array.isArray(layersOverride) && layersOverride.length >= 2)
-      ? layersOverride
-      : [24, ...Array(cfg.hiddenLayers).fill(cfg.nodesPerLayer), 2];
-
     running = false;
     stopLoop();
-    initSim(carData, layers, seedGenome || null, forceRandom || false);
-    postMessage({ type: 'ready', layers });
+    initSim(model || null);
+    postMessage({ type: 'ready', obsDim: OBS_DIM, hiddenSize: actor.sizes[1], numEnvs: cfg.numEnvs });
     return;
   }
 
   if (type === 'start') {
-    if (!trainer) return;
+    if (!actor) return;
     running = true;
     startLoop();
     return;
@@ -970,9 +1062,8 @@ self.onmessage = function (e) {
   if (type === 'reset') {
     running = false;
     stopLoop();
-    if (!trainer) return;
-    trainer.initPopulation(null, true);
-    restartGeneration();
+    if (!carSpec) return;
+    initSim(null);
     return;
   }
 
@@ -982,14 +1073,28 @@ self.onmessage = function (e) {
   }
 
   if (type === 'getSnapshot') {
-    if (trainer) postMessage(buildSnapshot());
+    if (actor) postMessage(buildSnapshot());
     return;
   }
 
   if (type === 'exportModel') {
-    if (!trainer) return;
-    const model = trainer.exportModel();
-    postMessage({ type: 'modelExport', model });
+    if (!actor) return;
+    postMessage({
+      type: 'modelExport',
+      model: {
+        id: 'ai-trainer-ppo',
+        name: 'AI Trainer PPO Export',
+        version: 2,
+        algo: 'ppo',
+        obsDim: OBS_DIM,
+        actor:  { sizes: actor.sizes,  flat: actor.flat()  },
+        critic: { sizes: critic.sizes, flat: critic.flat() },
+        logStd: Array.from(logStd),
+        iteration,
+        totalSteps,
+        bestLap: Number.isFinite(bestLap) ? bestLap : null,
+      },
+    });
     return;
   }
 };
