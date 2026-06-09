@@ -246,6 +246,63 @@
     cursor: default;
   }
 
+  /* ── Map selection menu ──────────────────────────────────────────────────── */
+  #mapMenu {
+    position: fixed;
+    inset: 0;
+    background: rgba(3,4,14,.96);
+    z-index: 200;
+    display: none;            /* flex when visible */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    padding: 24px;
+  }
+  #mapMenuTitle {
+    color: #4af;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-shadow: 0 0 18px rgba(68,170,255,.5);
+  }
+  #mapMenuSub { color: #667; font-size: .7rem; letter-spacing: 1px; }
+  #mapCards {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 860px;
+  }
+  .map-card {
+    background: rgba(10,14,32,.9);
+    border: 1px solid #1e3050;
+    border-radius: 10px;
+    padding: 14px 16px;
+    width: 185px;
+    cursor: pointer;
+    transition: border-color .15s, transform .15s, box-shadow .15s;
+  }
+  .map-card:hover { border-color: #3a5a8a; transform: translateY(-2px); }
+  .map-card.sel {
+    border-color: #4af;
+    box-shadow: 0 0 14px rgba(68,170,255,.35);
+  }
+  .map-card-swatch {
+    height: 6px;
+    border-radius: 3px;
+    margin-bottom: 10px;
+  }
+  .map-card-name { color: #dde; font-size: .85rem; font-weight: 700; margin-bottom: 4px; }
+  .map-card-desc { color: #778; font-size: .62rem; min-height: 26px; margin-bottom: 6px; }
+  .map-card-meta { color: #455; font-size: .58rem; }
+  .map-menu-actions { display: flex; gap: 12px; }
+  .btn-big {
+    font-size: .85rem;
+    padding: 10px 26px;
+    letter-spacing: 2px;
+  }
+
   /* ── Hint bar (bottom centre) ─────────────────────────────────────────────── */
   #hint {
     position: fixed;
@@ -278,7 +335,8 @@
   <span class="hud-chip" id="hudBest">BEST —</span>
   <span class="hud-chip" id="hudAvg">AVG —</span>
   <span class="hud-sep">│</span>
-  <select id="trackSelect" title="Select track"></select>
+  <span class="hud-chip" id="hudTrack" style="color:#4af;">—</span>
+  <button class="btn" id="mapsBtn" title="Choose a different map">MAPS</button>
   <span class="hud-sep">│</span>
   <button class="btn btn-start" id="startBtn">▶ START</button>
   <button class="btn" id="restartBtn" title="Restart training with same settings">RESTART</button>
@@ -369,6 +427,17 @@
 <!-- ── Neural network visualiser ─────────────────────────────────────────── -->
 <div id="nnWrap">
   <canvas id="nnCanvas" width="320" height="200"></canvas>
+</div>
+
+<!-- ── Map selection menu (shown before the trainer) ─────────────────────── -->
+<div id="mapMenu">
+  <div id="mapMenuTitle">🧠 AI TRAINER</div>
+  <div id="mapMenuSub">REINFORCEMENT LEARNING · SELECT A MAP TO TRAIN ON</div>
+  <div id="mapCards"></div>
+  <div class="map-menu-actions">
+    <button class="btn btn-big" id="mapBackBtn">← ARCADE</button>
+    <button class="btn btn-start btn-big" id="mapStartBtn">ENTER TRAINER ▶</button>
+  </div>
 </div>
 
 <!-- ── Hint ──────────────────────────────────────────────────────────────── -->

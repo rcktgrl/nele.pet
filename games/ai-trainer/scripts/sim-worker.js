@@ -14,6 +14,8 @@ let trkWallLeft  = [];   // [{x0,z0,x1,z1}] left barrier segments
 let trkWallRight = [];   // [{x0,z0,x1,z1}] right barrier segments
 let trkData      = null; // {wp:[[x,0,z],...], rw, laps}
 let gravelProfile = null;// {pts, leftRunoff, rightRunoff, rw}
+let cityCorridors = null;// [{x,z,hw,hd}] axis-aligned driveable rects (city tracks)
+let cityAiPts     = null;// {pts:[{x,z}...]} city navigation waypoints
 
 // ── Simulation config (live-updateable) ──────────────────────────────────────
 let cfg = {
@@ -197,6 +199,32 @@ class SimCar {
 
   boundary(dt) {
     if (!trkPts.length) return;
+
+    // ── City tracks: use grid corridors (same as car.js) ──
+    if (cityCorridors && cityCorridors.length) {
+      const px = this.pos.x, pz = this.pos.z;
+      let inside = false;
+      for (const c of cityCorridors) {
+        if (px > c.x - c.hw && px < c.x + c.hw && pz > c.z - c.hd && pz < c.z + c.hd) { inside = true; break; }
+      }
+      if (!inside) {
+        let bestDist = Infinity, bestPx = px, bestPz = pz;
+        for (const c of cityCorridors) {
+          const cx = Math.max(c.x - c.hw, Math.min(c.x + c.hw, px));
+          const cz = Math.max(c.z - c.hd, Math.min(c.z + c.hd, pz));
+          const d = (px - cx) ** 2 + (pz - cz) ** 2;
+          if (d < bestDist) { bestDist = d; bestPx = cx; bestPz = cz; }
+        }
+        this.pos.x = bestPx; this.pos.z = bestPz;
+        this.spd *= 0.82;
+        if (this.isReversing) this.revSpd *= 0.7;
+        this.stuckTimer += dt;
+      } else {
+        this.stuckTimer = Math.max(0, this.stuckTimer - 0.04);
+      }
+      return;
+    }
+
     let md = Infinity, ni = 0;
     for (let i = 0; i < trkPts.length; i++) {
       const d = (this.pos.x - trkPts[i].x) ** 2 + (this.pos.z - trkPts[i].z) ** 2;
@@ -295,9 +323,12 @@ class SimCar {
             this.cpPassed = 0; this.lap++;
             const lt = simTime - this.lapStart; this.lapStart = simTime;
             this.lapTimes.push(lt);
-            if (this.lap >= (trkData.laps || 3)) {
+            // Lap training mode: one full lap completes the run (faster = more fitness)
+            if (cfg.lapMode && !this._lapCompleted) {
+              this._lapCompleted = true; this._lapTime = lt;
               this.finished = true; this.finTime = simTime;
-              if (cfg.lapMode) { this._lapCompleted = true; this._lapTime = lt; }
+            } else if (this.lap >= (trkData.laps || 3)) {
+              this.finished = true; this.finTime = simTime;
             }
           }
         }
@@ -452,17 +483,19 @@ class SimNeuralAI {
       return;
     }
 
-    // Waypoint navigation
+    // Waypoint navigation (city tracks use the dedicated grid waypoints)
+    const useCity = !!(cityAiPts && cityAiPts.pts && cityAiPts.pts.length);
+    const navPts  = useCity ? cityAiPts.pts : trkPts;
     let md = Infinity, ci = 0;
-    for (let i = 0; i < trkPts.length; i++) {
-      const d = (c.pos.x - trkPts[i].x) ** 2 + (c.pos.z - trkPts[i].z) ** 2;
+    for (let i = 0; i < navPts.length; i++) {
+      const d = (c.pos.x - navPts[i].x) ** 2 + (c.pos.z - navPts[i].z) ** 2;
       if (d < md) { md = d; ci = i; }
     }
-    const n = trkPts.length;
+    const n = navPts.length;
     const speedFrac = c.spd / c.data.maxSpd;
-    const look = Math.round(6 + speedFrac * 22);
+    const look = useCity ? Math.round(4 + speedFrac * 12) : Math.round(6 + speedFrac * 22);
     const ti   = (ci + look) % n;
-    const dh   = Math.atan2(trkPts[ti].x - c.pos.x, trkPts[ti].z - c.pos.z);
+    const dh   = Math.atan2(navPts[ti].x - c.pos.x, navPts[ti].z - c.pos.z);
     const he   = ((dh - c.hdg + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
 
     const sensors     = castRays(c);
@@ -579,15 +612,22 @@ function updateFitnessPenalties(car, dt) {
   if (stuckInc > 0) car._fitPenalty += stuckInc * cfg.stuckPenaltyRate;
   car._trainPrevStuck = car.stuckTimer;
 
-  // Off-track DQ check
-  if (!trkData) return;
+  // Off-track DQ check — gravel runoff counts as "still on track" (it has its
+  // own penalty); city tracks never DQ because corridors hard-clamp position.
+  if (!trkData || (cityCorridors && cityCorridors.length)) {
+    car._onTrackTime += dt;
+    const rawProg = car.totalProg * (1 + car._onTrackTime * cfg.onTrackRewardRate);
+    if (rawProg > car._peakRawProg) car._peakRawProg = rawProg;
+    car._fitness = computeFitness(car);
+    return;
+  }
   let md = Infinity;
   for (const p of trkPts) {
     const d = (car.pos.x - p.x) ** 2 + (car.pos.z - p.z) ** 2;
     if (d < md) md = d;
   }
   const halfW = trkData.rw * 0.5;
-  const offTrack = Math.sqrt(md) > halfW + 3;
+  const offTrack = !car.onGravel && Math.sqrt(md) > halfW + 2;
 
   if (offTrack) {
     car._offTrackTime += dt;
@@ -731,7 +771,7 @@ function initSim(carData, layers, seedGenome, forceRandom) {
   for (let i = 0; i < cfg.popSize; i++) {
     const g   = grid[i] || grid[0];
     const car = new SimCar(carData, g.pos, g.hdg);
-    car.aiAgg = 0.9 + i * 0.01;
+    car.aiAgg = 1.0; // identical throttle authority for every car — fair fitness comparison
     const genome = trainer.population[i].genome;
     const ai = new SimNeuralAI(car, layers, genome);
     cars.push(car);
@@ -794,10 +834,11 @@ function stepOnce(dt) {
     }
   }
 
-  // Check if generation is over
-  const allDone = cfg.lapMode
-    ? cars.every(c => c._lapCompleted || c._offTrack || c.finished)
-    : trainer.genTime >= cfg.genDuration;
+  // Check if generation is over — lap mode ends early when every car has
+  // finished or been DQ'd, but the time cap always applies (matches trainer.js)
+  const lapDone = cfg.lapMode && cars.length > 0 &&
+    cars.every(c => c._lapCompleted || c._offTrack);
+  const allDone = lapDone || trainer.genTime >= cfg.genDuration;
 
   if (allDone) {
     trainer.evolve();
@@ -840,16 +881,28 @@ function buildSnapshot() {
 //  Simulation loop
 // ─────────────────────────────────────────────────────────────────────────────
 
+let _accum = 0; // seconds of simulated time owed
+
 function simLoop() {
   if (!running || !trainer) { tickHandle = null; return; }
 
-  const steps = Math.max(1, cfg.speedMult);
+  // Wall-clock pacing: at speedMult=1 the sim advances in real time;
+  // higher multipliers run proportionally more fixed steps per tick.
+  const now = performance.now();
+  const elapsed = Math.min(0.25, (now - lastTickMs) / 1000);
+  lastTickMs = now;
+  _accum += elapsed * Math.max(1, cfg.speedMult);
+
+  let steps = Math.floor(_accum / FIXED_DT);
+  const MAX_STEPS_PER_TICK = 4000; // don't stall the message queue
+  if (steps > MAX_STEPS_PER_TICK) { steps = MAX_STEPS_PER_TICK; _accum = 0; }
+  else _accum -= steps * FIXED_DT;
+
   for (let s = 0; s < steps; s++) {
     stepOnce(FIXED_DT);
     if (!running) break;
   }
 
-  const now = performance.now();
   if (now - lastPostMs >= 1000 / POST_HZ) {
     postMessage(buildSnapshot());
     lastPostMs = now;
@@ -861,6 +914,8 @@ function simLoop() {
 function startLoop() {
   if (tickHandle !== null) return;
   lastPostMs = performance.now();
+  lastTickMs = performance.now();
+  _accum = 0;
   tickHandle = setTimeout(simLoop, 0);
 }
 
@@ -876,19 +931,21 @@ self.onmessage = function (e) {
   const { type } = e.data;
 
   if (type === 'init') {
-    const { track, carData, config, seedGenome, forceRandom } = e.data;
-    trkPts       = track.pts;
-    trkWallLeft  = track.wallLeft;
-    trkWallRight = track.wallRight;
-    trkData      = track.data;
+    const { track, carData, config, seedGenome, forceRandom, layersOverride } = e.data;
+    trkPts        = track.pts;
+    trkWallLeft   = track.wallLeft;
+    trkWallRight  = track.wallRight;
+    trkData       = track.data;
     gravelProfile = track.gravelProfile || null;
+    cityCorridors = track.cityCorridors || null;
+    cityAiPts     = track.cityAiPts || null;
 
     if (config) Object.assign(cfg, config);
 
-    const hiddenCount = cfg.hiddenLayers;
-    const nodesCount  = cfg.nodesPerLayer;
-    const inSize      = 24;
-    const layers = [inSize, ...Array(hiddenCount).fill(nodesCount), 2];
+    // Architecture: explicit override (imported model) > sliders
+    const layers = (Array.isArray(layersOverride) && layersOverride.length >= 2)
+      ? layersOverride
+      : [24, ...Array(cfg.hiddenLayers).fill(cfg.nodesPerLayer), 2];
 
     running = false;
     stopLoop();
@@ -921,17 +978,6 @@ self.onmessage = function (e) {
 
   if (type === 'setConfig') {
     Object.assign(cfg, e.data.config);
-    return;
-  }
-
-  if (type === 'loadGenome') {
-    const { genome, layers } = e.data;
-    if (!trainer) return;
-    running = false;
-    stopLoop();
-    const newLayers = layers || trainer.layers;
-    initSim(cars[0]?.data || { accel: 9, maxSpd: 61, brake: 21, hdl: 0.84, aiSpd: 1.0 }, newLayers, genome, false);
-    postMessage({ type: 'ready', layers: newLayers });
     return;
   }
 

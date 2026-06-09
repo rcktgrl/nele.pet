@@ -72,35 +72,32 @@ function applyOrbitCamera(target) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Track selection
+//  NOTE: fetch() resolves against the page URL (games/ai-trainer/index.html),
+//  NOT this module's URL — so the path needs exactly one "../".
 // ─────────────────────────────────────────────────────────────────────────────
-const TRACKS_BASE = '../../turborace/tracks/';
-let trackList = [];
+const TRACKS_BASE = '../turborace/tracks/';
+let trackList = [];   // [{filename, data}] — full track JSON, used by the menu cards
 
 async function loadTrackIndex() {
   // index.json is an array of filenames: ["monaco-streets.json", ...]
   const filenames = await fetch(TRACKS_BASE + 'index.json').then(r => r.json());
-  trackList = filenames.map(fn => ({
-    filename: fn,
-    name: fn.replace('.json', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-  }));
-  const sel = document.getElementById('trackSelect');
-  sel.innerHTML = '';
-  for (const t of trackList) {
-    const opt = document.createElement('option');
-    opt.value = t.filename; opt.textContent = t.name;
-    sel.appendChild(opt);
+  trackList = [];
+  for (const fn of filenames) {
+    try {
+      const data = await fetch(TRACKS_BASE + fn).then(r => r.json());
+      trackList.push({ filename: fn, data });
+    } catch (err) {
+      console.warn('Skipping unreadable track:', fn, err);
+    }
   }
-  if (trackList.length) await applyTrack(trackList[0].filename);
 }
 
-async function applyTrack(filename) {
-  const data = await fetch(TRACKS_BASE + filename).then(r => r.json());
-
+function applyTrack(data) {
   // Populate state.trkData (buildTrack only handles geometry, not the data reference)
   state.trkData = data;
 
   // buildTrack populates state.trkPts, state.trkWallLeft, state.trkWallRight,
-  // state.gravelProfile, and adds 3D objects to state.scene (= SCENE).
+  // state.gravelProfile, state.cityCorridors/cityAiPts and adds 3D objects to SCENE.
   buildTrack(data);
 
   // Centre orbit on track centroid
@@ -198,7 +195,7 @@ function mkWorker() {
   workerReady = false;
 }
 
-function sendInit(seedGenome = null, forceRandom = false) {
+function sendInit(seedGenome = null, forceRandom = false, layersOverride = null) {
   if (!worker || !state.trkPts || !state.trkPts.length) return;
   const carData = {
     accel: CAR_SPEC.accel, maxSpd: CAR_SPEC.maxSpd,
@@ -215,8 +212,14 @@ function sendInit(seedGenome = null, forceRandom = false) {
       rightRunoff: state.gravelProfile.rightRunoff,
       rw:          state.gravelProfile.rw,
     } : null,
+    cityCorridors: state.cityCorridors
+      ? state.cityCorridors.map(c => ({ x: c.x, z: c.z, hw: c.hw, hd: c.hd }))
+      : null,
+    cityAiPts: state.cityAiPts
+      ? { pts: state.cityAiPts.pts.map(p => ({ x: p.x, z: p.z })) }
+      : null,
   };
-  worker.postMessage({ type: 'init', track, carData, config: { ...simCfg }, seedGenome, forceRandom });
+  worker.postMessage({ type: 'init', track, carData, config: { ...simCfg }, seedGenome, forceRandom, layersOverride });
 }
 
 function onMsg(e) {
@@ -290,7 +293,8 @@ function drawNN(genome, layers) {
     y: H / 2 + (ni - (cnt - 1) / 2) * (H / (cnt + 2)) * 0.82,
   })));
 
-  // Draw connections with weight-based colour
+  // Draw connections with weight-based colour.
+  // Genome layout per layer: all weight rows (nOut × nIn), THEN all biases (nOut).
   let gi = 0;
   for (let li = 0; li < nL - 1; li++) {
     const nIn = layers[li], nOut = layers[li + 1];
@@ -305,8 +309,8 @@ function drawNN(genome, layers) {
         nnCtx.lineTo(pos[li+1][j].x, pos[li+1][j].y);
         nnCtx.stroke();
       }
-      gi++; // bias
     }
+    gi += nOut; // skip the layer's bias block
   }
 
   // Draw nodes
@@ -340,15 +344,55 @@ function wireSlider(sliderId, valId, key, fmtFn) {
   });
 }
 
-function initUI() {
-  document.getElementById('trackSelect').addEventListener('change', async e => {
-    const was = simRunning;
-    if (was) { worker.postMessage({ type: 'stop' }); simRunning = false; }
-    await applyTrack(e.target.value); // value is filename like "monaco-streets.json"
-    sendInit();
-    if (was) { worker.postMessage({ type: 'start' }); simRunning = true; }
-    updateStartBtn();
+// ─────────────────────────────────────────────────────────────────────────────
+//  Map selection menu
+// ─────────────────────────────────────────────────────────────────────────────
+let selectedTrackIdx = 0;
+
+function showMapMenu() {
+  if (simRunning) { worker.postMessage({ type: 'stop' }); simRunning = false; updateStartBtn(); }
+  renderMapCards();
+  document.getElementById('mapMenu').style.display = 'flex';
+}
+
+function hideMapMenu() {
+  document.getElementById('mapMenu').style.display = 'none';
+}
+
+function renderMapCards() {
+  const wrap = document.getElementById('mapCards');
+  wrap.innerHTML = '';
+  trackList.forEach((t, i) => {
+    const d = t.data;
+    const card = document.createElement('div');
+    card.className = 'map-card' + (i === selectedTrackIdx ? ' sel' : '');
+    card.innerHTML = `
+      <div class="map-card-swatch" style="background:${d.previewColor || '#44aaff'}"></div>
+      <div class="map-card-name">${d.name || t.filename}</div>
+      <div class="map-card-desc">${d.desc || ''}</div>
+      <div class="map-card-meta">${d.type === 'city' ? '🏙 City' : '🏁 Circuit'} · ${d.laps || 3} laps · road ${d.rw || 12}m</div>`;
+    card.addEventListener('click', () => {
+      selectedTrackIdx = i;
+      wrap.querySelectorAll('.map-card').forEach(c => c.classList.remove('sel'));
+      card.classList.add('sel');
+    });
+    wrap.appendChild(card);
   });
+}
+
+function startWithSelectedTrack() {
+  const entry = trackList[selectedTrackIdx];
+  if (!entry) return;
+  hideMapMenu();
+  applyTrack(entry.data);
+  document.getElementById('hudTrack').textContent = entry.data.name || entry.filename;
+  sendInit();
+}
+
+function initUI() {
+  document.getElementById('mapsBtn').addEventListener('click', showMapMenu);
+  document.getElementById('mapStartBtn').addEventListener('click', startWithSelectedTrack);
+  document.getElementById('mapBackBtn').addEventListener('click', () => { window.location.href = '../index.html'; });
 
   wireSlider('speedSlider',   'speedVal',   'speedMult',        v => v + '×');
   wireSlider('genDurSlider',  'genDurVal',  'genDuration',      v => v + 's');
@@ -406,7 +450,8 @@ function initUI() {
       const model = JSON.parse(await this.files[0].text());
       if (!Array.isArray(model.genome) || !Array.isArray(model.layers)) throw new Error('Invalid model JSON');
       const was = simRunning; simRunning = false;
-      sendInit(model.genome, false);
+      // Pass the model's own architecture so the genome actually loads
+      sendInit(model.genome, false, model.layers);
       setTimeout(() => {
         if (was) { worker.postMessage({ type: 'start' }); simRunning = true; }
         updateStartBtn();
@@ -446,11 +491,15 @@ async function boot() {
   initUI();
   mkWorker();
   try {
-    await loadTrackIndex();     // builds track → populates state.trkPts etc.
-    sendInit();                 // ship track data to worker
+    await loadTrackIndex();     // fetch all track JSONs for the menu
+    if (!trackList.length) throw new Error('No tracks found');
+    showMapMenu();              // map selection menu comes first
   } catch (err) {
     console.error('Boot error:', err);
-    document.getElementById('hudGen').textContent = 'TRACK LOAD ERROR';
+    document.getElementById('mapMenuTitle').textContent = 'TRACK LOAD ERROR';
+    document.getElementById('mapCards').innerHTML =
+      `<div style="color:#f66;font-size:.8rem;">${err.message}</div>`;
+    document.getElementById('mapMenu').style.display = 'flex';
   }
   renderLoop();
 }
