@@ -314,6 +314,63 @@
     pointer-events: none;
     white-space: nowrap;
   }
+
+  /* ── Option-button group (toggle buttons for discrete choices) ────────────── */
+  .opt-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .opt-btn {
+    background: rgba(8,12,30,.85);
+    border: 1px solid #253545;
+    border-radius: 5px;
+    color: #667;
+    font-family: inherit;
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .opt-btn:hover { border-color: #4af; color: #aaa; }
+  .opt-btn.sel  { border-color: #4af; color: #4af; background: rgba(20,60,100,.6); }
+
+  /* ── Config menu (second menu — between map and trainer) ─────────────────── */
+  #configMenu {
+    position: fixed; inset: 0;
+    background: rgba(3,4,14,.96);
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 24px;
+    overflow-y: auto;
+  }
+  #configTitle { color: #4af; font-size: 1.4rem; font-weight: 700; letter-spacing: 3px; text-shadow: 0 0 18px rgba(68,170,255,.5); }
+  #configSub   { color: #445; font-size: .65rem; letter-spacing: 1px; }
+  .config-panels {
+    display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; max-width: 860px;
+  }
+  .config-panel {
+    background: rgba(8,12,30,.9);
+    border: 1px solid #1e3050;
+    border-radius: 10px;
+    padding: 16px 18px;
+    min-width: 220px; flex: 1; max-width: 280px;
+  }
+  .config-panel-title {
+    color: #4af; font-size: .6rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 14px;
+  }
+  .config-row {
+    display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px;
+  }
+  .config-label { color: #889; font-size: .62rem; }
+  .config-info {
+    color: #4f4; font-size: .62rem; letter-spacing: .5px; margin-top: 6px;
+    background: rgba(0,60,0,.25); border-radius: 4px; padding: 5px 8px;
+    font-family: 'Courier New', monospace;
+  }
+  .config-val { color: #4af; font-size: .62rem; }
+  .config-actions { display: flex; gap: 14px; }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -329,12 +386,13 @@
 
 <!-- ── Top HUD bar ─────────────────────────────────────────────────────────── -->
 <div id="topHud">
-  <span class="hud-chip" id="hudGen">ITER 0</span>
-  <div id="genBarWrap" title="Rollout buffer fill — a PPO update runs each time it fills"><div id="genBar"></div></div>
+  <span class="hud-chip" id="hudGen">UPDATE 0</span>
+  <div id="genBarWrap" title="Collecting rollout — fills up, then policy updates (turns orange)"><div id="genBar"></div></div>
+  <span class="hud-chip" id="hudPhase" style="color:#4f4;font-size:.65rem;">● COLLECTING</span>
   <span class="hud-chip" id="hudTime">0 steps</span>
-  <span class="hud-chip" id="hudBest">RETURN —</span>
+  <span class="hud-chip" id="hudBest">REWARD —</span>
   <span class="hud-chip" id="hudAvg">BEST LAP —</span>
-  <span class="hud-chip" id="hudSigma" title="Policy exploration noise (steer/throttle)">σ —</span>
+  <span class="hud-chip" id="hudSigma" title="Policy exploration noise σ (steer/throttle) — shrinks as AI gets confident">σ —</span>
   <span class="hud-sep">│</span>
   <span class="hud-chip" id="hudTrack" style="color:#4af;">—</span>
   <button class="btn" id="mapsBtn" title="Choose a different map">MAPS</button>
@@ -447,8 +505,92 @@
   </div>
 </div>
 
+<!-- ── Config menu (second menu — between map and training start) ─────────── -->
+<div id="configMenu">
+  <div id="configTitle">⚙ CONFIGURE TRAINING</div>
+  <div id="configSub">SETTINGS ARE LOCKED ONCE TRAINING STARTS — RESTART REQUIRED TO CHANGE ARCHITECTURE</div>
+
+  <div class="config-panels">
+
+    <!-- Network architecture -->
+    <div class="config-panel">
+      <div class="config-panel-title">🧠 NETWORK ARCHITECTURE</div>
+      <div class="config-row">
+        <span class="config-label">HIDDEN LAYERS</span>
+        <div class="opt-group" id="configLayerBtns"></div>
+        <span style="color:#445;font-size:.58rem;">more layers = learns complex patterns, trains slower</span>
+      </div>
+      <div class="config-row">
+        <span class="config-label">NEURONS PER LAYER</span>
+        <div class="opt-group" id="configUnitBtns"></div>
+        <span style="color:#445;font-size:.58rem;">more neurons = more capacity, heavier updates</span>
+      </div>
+      <div class="config-info" id="configParamCount">…</div>
+    </div>
+
+    <!-- Environment -->
+    <div class="config-panel">
+      <div class="config-panel-title">🏎️ ENVIRONMENT</div>
+      <div class="config-row">
+        <div style="display:flex;justify-content:space-between">
+          <span class="config-label">PARALLEL AGENTS</span>
+          <span class="config-val" id="configAgentVal">8 agents</span>
+        </div>
+        <input type="range" id="configAgentSlider" min="2" max="16" value="8" step="1" style="accent-color:#4af;">
+        <span style="color:#445;font-size:.58rem;">more agents = more diverse experience per update</span>
+      </div>
+      <div class="config-row">
+        <div style="display:flex;justify-content:space-between">
+          <span class="config-label">EPISODE LENGTH</span>
+          <span class="config-val" id="configEpLenVal">60s</span>
+        </div>
+        <input type="range" id="configEpLenSlider" min="15" max="120" value="60" step="5" style="accent-color:#4fa;">
+        <span style="color:#445;font-size:.58rem;">max seconds per run before reset</span>
+      </div>
+      <div class="config-row">
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#889;font-size:.65rem;">
+          <span>RANDOM SPAWN<br><span style="color:#445;font-size:.9em">start each run at random track position</span></span>
+          <input type="checkbox" id="configSpawnToggle" checked style="accent-color:#4af;">
+        </label>
+      </div>
+    </div>
+
+    <!-- Training -->
+    <div class="config-panel">
+      <div class="config-panel-title">📊 TRAINING</div>
+      <div class="config-row">
+        <span class="config-label">STEPS PER UPDATE (HORIZON)</span>
+        <div class="opt-group" id="configHorizonBtns"></div>
+        <span style="color:#445;font-size:.58rem;">more steps = better gradient estimate, slower update</span>
+      </div>
+      <div class="config-row">
+        <div style="display:flex;justify-content:space-between">
+          <span class="config-label">LEARNING RATE</span>
+          <span class="config-val" id="configLrVal">3.0e-4</span>
+        </div>
+        <input type="range" id="configLrSlider" min="0.00005" max="0.001" value="0.0003" step="0.00005" style="accent-color:#c8f;">
+        <span style="color:#445;font-size:.58rem;">how fast the network learns — too high = unstable</span>
+      </div>
+      <div class="config-row">
+        <div style="display:flex;justify-content:space-between">
+          <span class="config-label">ENTROPY (EXPLORATION)</span>
+          <span class="config-val" id="configEntVal">0.0030</span>
+        </div>
+        <input type="range" id="configEntSlider" min="0" max="0.02" value="0.003" step="0.0005" style="accent-color:#c8f;">
+        <span style="color:#445;font-size:.58rem;">higher = more random actions early on, helps explore</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="config-actions">
+    <button class="btn btn-big" id="configBackBtn">← BACK TO MAPS</button>
+    <button class="btn btn-start btn-big" id="configStartBtn">START TRAINING ▶</button>
+  </div>
+</div>
+
 <!-- ── Hint ──────────────────────────────────────────────────────────────── -->
-<div id="hint">DRAG=PAN · SCROLL=ZOOM · PPO TRAINING ON WORKER THREAD · RENDERING ON MAIN THREAD</div>
+<div id="hint">DRAG=PAN · SCROLL=ZOOM · SIM ON WORKER THREAD · RENDERING ON MAIN THREAD · PPO UPDATES NON-BLOCKING</div>
 
 <script type="module" src="./scripts/trainer-app.js"></script>
 </body>

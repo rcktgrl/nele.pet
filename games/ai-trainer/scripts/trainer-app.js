@@ -9,14 +9,12 @@ import { THREE }           from '../../turborace/scripts/three.js';
 import { buildTrack }      from '../../turborace/scripts/track-gen.js';
 import { createCarVisual } from '../../turborace/scripts/car-model.js';
 import { CARS }            from '../../turborace/scripts/data/cars.js';
-// state.js is a side-effect import — it creates state.scene, state.trkPts, etc.
-import { state, scene as trState }  from '../../turborace/scripts/state.js';
+import { state, scene as trState } from '../../turborace/scripts/state.js';
 
-// state.scene is the Three.js scene that track-gen writes into; render that.
 const SCENE = state.scene || trState;
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Renderer + camera (overhead orbit)
+//  Renderer + camera
 // ─────────────────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('gc');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -26,23 +24,20 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
-
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 });
 
-// Ambient + directional lights
 const ambLight = new THREE.AmbientLight(0xffffff, 0.55);
 SCENE.add(ambLight);
 const dirLight = new THREE.DirectionalLight(0xfff4e0, 1.2);
-dirLight.position.set(80, 160, 60);
-dirLight.castShadow = true;
+dirLight.position.set(80, 160, 60); dirLight.castShadow = true;
 SCENE.add(dirLight);
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Orbit camera control
+//  Orbit camera
 // ─────────────────────────────────────────────────────────────────────────────
 const orbit = { yaw: 0, pitch: 1.1, dist: 120, tx: 0, ty: 0, tz: 0 };
 let _drag = null;
@@ -72,15 +67,13 @@ function applyOrbitCamera(target) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Track selection
-//  NOTE: fetch() resolves against the page URL (games/ai-trainer/index.html),
-//  NOT this module's URL — so the path needs exactly one "../".
+//  Track loading
+//  fetch() resolves against the page URL, NOT the module URL — one "../".
 // ─────────────────────────────────────────────────────────────────────────────
 const TRACKS_BASE = '../turborace/tracks/';
-let trackList = [];   // [{filename, data}] — full track JSON, used by the menu cards
+let trackList = [];
 
 async function loadTrackIndex() {
-  // index.json is an array of filenames: ["monaco-streets.json", ...]
   const filenames = await fetch(TRACKS_BASE + 'index.json').then(r => r.json());
   trackList = [];
   for (const fn of filenames) {
@@ -94,30 +87,22 @@ async function loadTrackIndex() {
 }
 
 function applyTrack(data) {
-  // Populate state.trkData (buildTrack only handles geometry, not the data reference)
   state.trkData = data;
-
-  // buildTrack populates state.trkPts, state.trkWallLeft, state.trkWallRight,
-  // state.gravelProfile, state.cityCorridors/cityAiPts and adds 3D objects to SCENE.
   buildTrack(data);
-
-  // Centre orbit on track centroid
   if (state.trkPts && state.trkPts.length) {
     let sx = 0, sz = 0;
     for (const p of state.trkPts) { sx += p.x; sz += p.z; }
     orbit.tx = sx / state.trkPts.length;
     orbit.tz = sz / state.trkPts.length;
-    orbit.ty = 0;
-    orbit.dist = 120;
+    orbit.ty = 0; orbit.dist = 120;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Car meshes (Three.js visualisation of worker-computed positions)
+//  Car meshes
 // ─────────────────────────────────────────────────────────────────────────────
-const CAR_SPEC = CARS[0]; // Viper GT
-let carMeshes = [];
-let carWheelGroups = [];
+const CAR_SPEC = CARS[0];
+let carMeshes = [], carWheelGroups = [];
 
 function rebuildCarMeshes(count) {
   for (const m of carMeshes) SCENE.remove(m);
@@ -140,11 +125,7 @@ function syncCarMeshes(cars, bestIdx) {
     m.rotation.y = c.hdg;
     m.traverse(o => {
       if (!o.isMesh || !o.material) return;
-      if (o.material.emissive && i === bestIdx) {
-        o.material.emissive.setHex(0x001530);
-      } else if (o.material.emissive) {
-        o.material.emissive.setHex(0x000000);
-      }
+      if (o.material.emissive) o.material.emissive.setHex(i === bestIdx ? 0x001530 : 0x000000);
     });
     for (const wg of carWheelGroups[i] || []) {
       if (wg.children[0]) wg.children[0].rotation.x += c.spd * FIXED_DT * 2.2;
@@ -154,29 +135,28 @@ function syncCarMeshes(cars, bestIdx) {
 
 function bestCarIndex(cars) {
   let bi = 0, bf = -Infinity;
-  for (let i = 0; i < cars.length; i++) {
-    if (cars[i].ret > bf) { bf = cars[i].ret; bi = i; }
-  }
+  for (let i = 0; i < cars.length; i++) if (cars[i].ret > bf) { bf = cars[i].ret; bi = i; }
   return bi;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Worker
 // ─────────────────────────────────────────────────────────────────────────────
-let worker     = null;
-let workerReady = false;
-let simRunning  = false;
+let worker = null, workerReady = false, simRunning = false;
 
+const OBS_DIM = 36; // must match sim-worker.js
+
+// Full training config — architecture fields require restart, others are live
 const simCfg = {
-  // environment
+  hiddenLayers: 1,       // restart required
+  hiddenSize: 64,        // restart required
   numEnvs: 8,            // restart required
   speedMult: 1,
   episodeLen: 60,
   randomSpawn: true,
-  // PPO
   lr: 3e-4,
   entropyCoef: 0.003,
-  // rewards (live)
+  horizon: 512,          // restart required
   progressReward: 0.2,
   gravelPenalty: 1.0,
   wallPenalty: 2.0,
@@ -210,11 +190,9 @@ function sendInit(model = null) {
       rw:          state.gravelProfile.rw,
     } : null,
     cityCorridors: state.cityCorridors
-      ? state.cityCorridors.map(c => ({ x: c.x, z: c.z, hw: c.hw, hd: c.hd }))
-      : null,
+      ? state.cityCorridors.map(c => ({ x: c.x, z: c.z, hw: c.hw, hd: c.hd })) : null,
     cityAiPts: state.cityAiPts
-      ? { pts: state.cityAiPts.pts.map(p => ({ x: p.x, z: p.z })) }
-      : null,
+      ? { pts: state.cityAiPts.pts.map(p => ({ x: p.x, z: p.z })) } : null,
   };
   worker.postMessage({ type: 'init', track, carData, config: { ...simCfg }, model });
 }
@@ -223,27 +201,24 @@ function onMsg(e) {
   const d = e.data;
   if (d.type === 'ready') {
     workerReady = true;
-    rebuildCarMeshes(d.numEnvs || simCfg.numEnvs);
-    refreshHUD({ iteration: 0, totalSteps: 0, bufferFill: 0, avgReturn: 0, bestLap: null });
+    rebuildCarMeshes(simCfg.numEnvs);
+    refreshHUD({ iteration: 0, totalSteps: 0, bufferFill: 0, avgReturn: 0, bestLap: null, phase: 'collecting' });
     updateStartBtn();
     return;
   }
   if (d.type === 'frame') {
     lastCars = d.cars || [];
-    const bi  = bestCarIndex(lastCars);
+    const bi = bestCarIndex(lastCars);
     syncCarMeshes(lastCars, bi);
     if (lastCars[bi]) applyOrbitCamera(lastCars[bi]);
     refreshHUD(d);
     if (d.actorFlat && d.actorSizes) drawNN(d.actorFlat, d.actorSizes);
     return;
   }
-  if (d.type === 'error') {
-    alert(d.message);
-    return;
-  }
+  if (d.type === 'error') { alert(d.message); return; }
   if (d.type === 'modelExport' && d.model) {
     const blob = new Blob([JSON.stringify(d.model, null, 2)], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'ai-trainer-ppo-model.json'; a.click();
     URL.revokeObjectURL(url);
@@ -266,16 +241,28 @@ function fmtLap(t) {
 }
 
 function refreshHUD(d) {
-  const { iteration = 0, totalSteps = 0, bufferFill = 0, avgReturn = 0, bestLap = null } = d;
-  document.getElementById('hudGen').textContent   = 'ITER ' + iteration;
-  document.getElementById('hudBest').textContent  = 'RETURN ' + fmt(avgReturn);
-  document.getElementById('hudAvg').textContent   = 'BEST LAP ' + fmtLap(bestLap);
-  document.getElementById('hudTime').textContent  = fmtSteps(totalSteps) + ' steps';
-  document.getElementById('genBar').style.width   = (Math.min(1, bufferFill) * 100).toFixed(1) + '%';
+  const { iteration = 0, totalSteps = 0, bufferFill = 0, avgReturn = 0, bestLap = null, phase = 'collecting' } = d;
+  document.getElementById('hudGen').textContent  = 'UPDATE ' + iteration;
+  document.getElementById('hudBest').textContent = 'REWARD ' + fmt(avgReturn);
+  document.getElementById('hudAvg').textContent  = 'BEST LAP ' + fmtLap(bestLap);
+  document.getElementById('hudTime').textContent = fmtSteps(totalSteps) + ' steps';
+
+  const bar = document.getElementById('genBar');
+  const wrap = document.getElementById('genBarWrap');
+  if (phase === 'updating') {
+    bar.style.width = '100%';
+    bar.style.background = 'linear-gradient(90deg, #fa4, #f84)';
+    wrap.title = 'UPDATING POLICY…';
+  } else {
+    bar.style.width = (Math.min(1, bufferFill) * 100).toFixed(1) + '%';
+    bar.style.background = 'linear-gradient(90deg, #4af, #4f4)';
+    wrap.title = 'Collecting rollout — bar fills then policy updates';
+  }
+  document.getElementById('hudPhase').textContent = phase === 'updating' ? '⚙ UPDATING' : '● COLLECTING';
+  document.getElementById('hudPhase').style.color = phase === 'updating' ? '#fa4' : '#4f4';
 
   if (d.sigma) {
-    document.getElementById('hudSigma').textContent =
-      'σ ' + d.sigma.map(s => s.toFixed(2)).join('/');
+    document.getElementById('hudSigma').textContent = 'σ ' + d.sigma.map(s => s.toFixed(2)).join('/');
   }
 
   if (lastCars.length) {
@@ -291,7 +278,7 @@ function refreshHUD(d) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Neural network visualiser — draws the actor (policy) network
+//  Neural network visualiser
 // ─────────────────────────────────────────────────────────────────────────────
 const nnCanvas = document.getElementById('nnCanvas');
 const nnCtx    = nnCanvas.getContext('2d');
@@ -301,16 +288,12 @@ function drawNN(flat, layers) {
   nnCtx.clearRect(0, 0, W, H);
   const nL  = layers.length;
   const xSt = W / (nL + 1);
-  const nodeR = Math.max(1.4, Math.min(7, 110 / Math.max(...layers)));
-
+  const nodeR = Math.max(1.2, Math.min(7, 110 / Math.max(...layers)));
   const pos = layers.map((cnt, li) => Array.from({ length: cnt }, (_, ni) => ({
     x: xSt * (li + 1),
     y: H / 2 + (ni - (cnt - 1) / 2) * (H / (cnt + 2)) * 0.92,
   })));
 
-  // Weight layout per layer: all weight rows (nOut × nIn), THEN all biases.
-  // Only draw connections above a magnitude threshold — a 36×64 layer has
-  // ~2300 weights and drawing them all is illegible.
   let gi = 0;
   for (let li = 0; li < nL - 1; li++) {
     const nIn = layers[li], nOut = layers[li + 1];
@@ -328,34 +311,110 @@ function drawNN(flat, layers) {
         nnCtx.stroke();
       }
     }
-    gi += nOut; // skip the layer's bias block
+    gi += nOut;
   }
 
   for (let li = 0; li < nL; li++) {
     const col = li === 0 ? '#4af' : li === nL - 1 ? '#fa4' : '#ccc';
     for (const { x, y } of pos[li]) {
-      nnCtx.beginPath();
-      nnCtx.arc(x, y, nodeR, 0, Math.PI * 2);
-      nnCtx.fillStyle = col;
-      nnCtx.fill();
+      nnCtx.beginPath(); nnCtx.arc(x, y, nodeR, 0, Math.PI * 2);
+      nnCtx.fillStyle = col; nnCtx.fill();
     }
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  UI wiring
+//  Config menu — shown between map selection and training start
 // ─────────────────────────────────────────────────────────────────────────────
-function wireSlider(sliderId, valId, key, fmtFn, live = true) {
-  const sl = document.getElementById(sliderId);
-  const vl = document.getElementById(valId);
+
+function netParams(hiddenLayers, hiddenSize, outDim) {
+  const sizes = [OBS_DIM, ...Array(hiddenLayers).fill(hiddenSize), outDim];
+  let n = 0;
+  for (let i = 0; i < sizes.length - 1; i++) n += (sizes[i] + 1) * sizes[i + 1];
+  return n;
+}
+
+function updateConfigParamCount() {
+  const l = simCfg.hiddenLayers, h = simCfg.hiddenSize;
+  const act  = netParams(l, h, 2);
+  const crit = netParams(l, h, 1);
+  document.getElementById('configParamCount').textContent =
+    `${(act + crit).toLocaleString()} total parameters  (actor ${act.toLocaleString()} · critic ${crit.toLocaleString()})`;
+}
+
+function makeOptBtnGroup(containerId, options, key, onChange) {
+  const wrap = document.getElementById(containerId);
+  wrap.innerHTML = '';
+  for (const { label, val } of options) {
+    const b = document.createElement('button');
+    b.className = 'opt-btn' + (simCfg[key] === val ? ' sel' : '');
+    b.textContent = label || val;
+    b.dataset.val = val;
+    b.addEventListener('click', () => {
+      simCfg[key] = val;
+      wrap.querySelectorAll('.opt-btn').forEach(el => el.classList.toggle('sel', +el.dataset.val === val));
+      onChange && onChange(val);
+    });
+    wrap.appendChild(b);
+  }
+}
+
+function wireConfigSlider(sliderId, valId, key, fmtFn) {
+  const sl = document.getElementById(sliderId), vl = document.getElementById(valId);
   sl.value = simCfg[key];
   vl.textContent = fmtFn ? fmtFn(simCfg[key]) : simCfg[key];
   sl.addEventListener('input', () => {
     const v = parseFloat(sl.value);
     simCfg[key] = v;
     vl.textContent = fmtFn ? fmtFn(v) : v;
-    if (live && worker) worker.postMessage({ type: 'setConfig', config: { [key]: v } });
   });
+}
+
+function initConfigMenu() {
+  makeOptBtnGroup('configLayerBtns',
+    [{ val: 1 }, { val: 2 }, { val: 3 }],
+    'hiddenLayers', () => updateConfigParamCount());
+
+  makeOptBtnGroup('configUnitBtns',
+    [{ val: 32 }, { val: 64 }, { val: 128 }, { val: 256 }],
+    'hiddenSize', () => updateConfigParamCount());
+
+  makeOptBtnGroup('configHorizonBtns',
+    [{ label: '256', val: 256 }, { label: '512', val: 512 }, { label: '1024', val: 1024 }],
+    'horizon');
+
+  wireConfigSlider('configAgentSlider',  'configAgentVal',  'numEnvs',  v => Math.round(v) + ' agents');
+  wireConfigSlider('configEpLenSlider',  'configEpLenVal',  'episodeLen', v => v + 's');
+  wireConfigSlider('configLrSlider',     'configLrVal',     'lr',        v => v.toExponential(1));
+  wireConfigSlider('configEntSlider',    'configEntVal',    'entropyCoef', v => v.toFixed(4));
+
+  const spawnTog = document.getElementById('configSpawnToggle');
+  spawnTog.checked = simCfg.randomSpawn;
+  spawnTog.addEventListener('change', () => { simCfg.randomSpawn = spawnTog.checked; });
+
+  document.getElementById('configBackBtn').addEventListener('click', () => {
+    hideConfigMenu(); showMapMenu();
+  });
+  document.getElementById('configStartBtn').addEventListener('click', startFromConfigMenu);
+
+  updateConfigParamCount();
+}
+
+function showConfigMenu() {
+  document.getElementById('configMenu').style.display = 'flex';
+  updateConfigParamCount();
+}
+
+function hideConfigMenu() {
+  document.getElementById('configMenu').style.display = 'none';
+}
+
+function startFromConfigMenu() {
+  hideConfigMenu();
+  sendInit();
+  setTimeout(() => {
+    if (workerReady) { worker.postMessage({ type: 'start' }); simRunning = true; updateStartBtn(); }
+  }, 80);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -369,9 +428,7 @@ function showMapMenu() {
   document.getElementById('mapMenu').style.display = 'flex';
 }
 
-function hideMapMenu() {
-  document.getElementById('mapMenu').style.display = 'none';
-}
+function hideMapMenu() { document.getElementById('mapMenu').style.display = 'none'; }
 
 function renderMapCards() {
   const wrap = document.getElementById('mapCards');
@@ -394,41 +451,47 @@ function renderMapCards() {
   });
 }
 
-function startWithSelectedTrack() {
+function selectMapAndConfigure() {
   const entry = trackList[selectedTrackIdx];
   if (!entry) return;
   hideMapMenu();
   applyTrack(entry.data);
   document.getElementById('hudTrack').textContent = entry.data.name || entry.filename;
-  sendInit();
+  showConfigMenu();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  In-trainer controls sidebar
+// ─────────────────────────────────────────────────────────────────────────────
+function wireSlider(sliderId, valId, key, fmtFn) {
+  const sl = document.getElementById(sliderId);
+  const vl = document.getElementById(valId);
+  sl.value = simCfg[key];
+  vl.textContent = fmtFn ? fmtFn(simCfg[key]) : simCfg[key];
+  sl.addEventListener('input', () => {
+    const v = parseFloat(sl.value);
+    simCfg[key] = v;
+    vl.textContent = fmtFn ? fmtFn(v) : v;
+    if (worker) worker.postMessage({ type: 'setConfig', config: { [key]: v } });
+  });
 }
 
 function initUI() {
   document.getElementById('mapsBtn').addEventListener('click', showMapMenu);
-  document.getElementById('mapStartBtn').addEventListener('click', startWithSelectedTrack);
+  document.getElementById('mapStartBtn').addEventListener('click', selectMapAndConfigure);
   document.getElementById('mapBackBtn').addEventListener('click', () => { window.location.href = '../index.html'; });
 
-  wireSlider('speedSlider',  'speedVal',  'speedMult',      v => v + '×');
-  wireSlider('lrSlider',     'lrVal',     'lr',             v => v.toExponential(1));
-  wireSlider('entSlider',    'entVal',    'entropyCoef',    v => v.toFixed(4));
-  wireSlider('epLenSlider',  'epLenVal',  'episodeLen',     v => v + 's');
-  wireSlider('progSlider',   'progVal',   'progressReward', v => v.toFixed(2));
-  wireSlider('gravelSlider', 'gravelVal', 'gravelPenalty',  v => v.toFixed(1));
-  wireSlider('wallSlider',   'wallVal',   'wallPenalty',    v => v.toFixed(1));
-  wireSlider('termSlider',   'termVal',   'terminalPenalty',v => Math.round(v));
-  wireSlider('lapBonusSlider','lapBonusVal','lapBonus',     v => Math.round(v));
+  initConfigMenu();
 
-  // numEnvs doesn't live-update the worker (requires restart)
-  const popSl = document.getElementById('popSlider');
-  const popVl = document.getElementById('popVal');
-  popSl.value = simCfg.numEnvs; popVl.textContent = simCfg.numEnvs;
-  popSl.addEventListener('input', () => { simCfg.numEnvs = parseInt(popSl.value); popVl.textContent = popSl.value; });
-
-  document.getElementById('spawnToggle').checked = simCfg.randomSpawn;
-  document.getElementById('spawnToggle').addEventListener('change', function () {
-    simCfg.randomSpawn = this.checked;
-    if (worker) worker.postMessage({ type: 'setConfig', config: { randomSpawn: simCfg.randomSpawn } });
-  });
+  wireSlider('speedSlider',   'speedVal',   'speedMult',       v => v + '×');
+  wireSlider('lrSlider',      'lrVal',      'lr',              v => v.toExponential(1));
+  wireSlider('entSlider',     'entVal',     'entropyCoef',     v => v.toFixed(4));
+  wireSlider('epLenSlider',   'epLenVal',   'episodeLen',      v => v + 's');
+  wireSlider('progSlider',    'progVal',    'progressReward',  v => v.toFixed(2));
+  wireSlider('gravelSlider',  'gravelVal',  'gravelPenalty',   v => v.toFixed(1));
+  wireSlider('wallSlider',    'wallVal',    'wallPenalty',     v => v.toFixed(1));
+  wireSlider('termSlider',    'termVal',    'terminalPenalty', v => Math.round(v));
+  wireSlider('lapBonusSlider','lapBonusVal','lapBonus',        v => Math.round(v));
 
   document.getElementById('startBtn').addEventListener('click', () => {
     if (!workerReady) return;
@@ -439,41 +502,32 @@ function initUI() {
 
   document.getElementById('restartBtn').addEventListener('click', () => {
     if (!workerReady) return;
-    simRunning = false;
+    simRunning = false; updateStartBtn();
     sendInit();
-    setTimeout(() => { worker.postMessage({ type: 'start' }); simRunning = true; updateStartBtn(); }, 50);
+    setTimeout(() => { worker.postMessage({ type: 'start' }); simRunning = true; updateStartBtn(); }, 80);
   });
 
   document.getElementById('resetBtn').addEventListener('click', () => {
     if (!workerReady) return;
     const was = simRunning; simRunning = false;
     sendInit(null);
-    setTimeout(() => {
-      if (was) { worker.postMessage({ type: 'start' }); simRunning = true; }
-      updateStartBtn();
-    }, 50);
+    setTimeout(() => { if (was) { worker.postMessage({ type: 'start' }); simRunning = true; } updateStartBtn(); }, 80);
   });
 
   document.getElementById('exportBtn').addEventListener('click', () => {
     if (worker) worker.postMessage({ type: 'exportModel' });
   });
 
-  document.getElementById('importBtn').addEventListener('click', () => {
-    document.getElementById('importFile').click();
-  });
+  document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFile').click());
   document.getElementById('importFile').addEventListener('change', async function () {
     if (!this.files[0]) return;
     try {
       const model = JSON.parse(await this.files[0].text());
-      if (model.algo !== 'ppo' || !model.actor || !model.critic) {
-        throw new Error('Not a PPO model export (older genetic-trainer exports are not compatible)');
-      }
+      if (model.algo !== 'ppo' || !model.actor || !model.critic)
+        throw new Error('Not a PPO model — older genetic trainer exports are not compatible');
       const was = simRunning; simRunning = false;
       sendInit(model);
-      setTimeout(() => {
-        if (was) { worker.postMessage({ type: 'start' }); simRunning = true; }
-        updateStartBtn();
-      }, 50);
+      setTimeout(() => { if (was) { worker.postMessage({ type: 'start' }); simRunning = true; } updateStartBtn(); }, 80);
     } catch (err) { alert('Import failed: ' + err.message); }
     this.value = '';
   });
@@ -494,7 +548,7 @@ function updateStartBtn() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Render loop (pure rendering — no simulation here)
+//  Render loop
 // ─────────────────────────────────────────────────────────────────────────────
 function renderLoop() {
   requestAnimationFrame(renderLoop);
@@ -509,14 +563,13 @@ async function boot() {
   initUI();
   mkWorker();
   try {
-    await loadTrackIndex();     // fetch all track JSONs for the menu
+    await loadTrackIndex();
     if (!trackList.length) throw new Error('No tracks found');
-    showMapMenu();              // map selection menu comes first
+    showMapMenu();
   } catch (err) {
     console.error('Boot error:', err);
     document.getElementById('mapMenuTitle').textContent = 'TRACK LOAD ERROR';
-    document.getElementById('mapCards').innerHTML =
-      `<div style="color:#f66;font-size:.8rem;">${err.message}</div>`;
+    document.getElementById('mapCards').innerHTML = `<div style="color:#f66;font-size:.8rem;">${err.message}</div>`;
     document.getElementById('mapMenu').style.display = 'flex';
   }
   renderLoop();
