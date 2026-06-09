@@ -246,6 +246,63 @@
     cursor: default;
   }
 
+  /* ── Map selection menu ──────────────────────────────────────────────────── */
+  #mapMenu {
+    position: fixed;
+    inset: 0;
+    background: rgba(3,4,14,.96);
+    z-index: 200;
+    display: none;            /* flex when visible */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    padding: 24px;
+  }
+  #mapMenuTitle {
+    color: #4af;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-shadow: 0 0 18px rgba(68,170,255,.5);
+  }
+  #mapMenuSub { color: #667; font-size: .7rem; letter-spacing: 1px; }
+  #mapCards {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 860px;
+  }
+  .map-card {
+    background: rgba(10,14,32,.9);
+    border: 1px solid #1e3050;
+    border-radius: 10px;
+    padding: 14px 16px;
+    width: 185px;
+    cursor: pointer;
+    transition: border-color .15s, transform .15s, box-shadow .15s;
+  }
+  .map-card:hover { border-color: #3a5a8a; transform: translateY(-2px); }
+  .map-card.sel {
+    border-color: #4af;
+    box-shadow: 0 0 14px rgba(68,170,255,.35);
+  }
+  .map-card-swatch {
+    height: 6px;
+    border-radius: 3px;
+    margin-bottom: 10px;
+  }
+  .map-card-name { color: #dde; font-size: .85rem; font-weight: 700; margin-bottom: 4px; }
+  .map-card-desc { color: #778; font-size: .62rem; min-height: 26px; margin-bottom: 6px; }
+  .map-card-meta { color: #455; font-size: .58rem; }
+  .map-menu-actions { display: flex; gap: 12px; }
+  .btn-big {
+    font-size: .85rem;
+    padding: 10px 26px;
+    letter-spacing: 2px;
+  }
+
   /* ── Hint bar (bottom centre) ─────────────────────────────────────────────── */
   #hint {
     position: fixed;
@@ -272,13 +329,15 @@
 
 <!-- ── Top HUD bar ─────────────────────────────────────────────────────────── -->
 <div id="topHud">
-  <span class="hud-chip" id="hudGen">GEN 0</span>
-  <div id="genBarWrap"><div id="genBar"></div></div>
-  <span class="hud-chip" id="hudTime">35.0s</span>
-  <span class="hud-chip" id="hudBest">BEST —</span>
-  <span class="hud-chip" id="hudAvg">AVG —</span>
+  <span class="hud-chip" id="hudGen">ITER 0</span>
+  <div id="genBarWrap" title="Rollout buffer fill — a PPO update runs each time it fills"><div id="genBar"></div></div>
+  <span class="hud-chip" id="hudTime">0 steps</span>
+  <span class="hud-chip" id="hudBest">RETURN —</span>
+  <span class="hud-chip" id="hudAvg">BEST LAP —</span>
+  <span class="hud-chip" id="hudSigma" title="Policy exploration noise (steer/throttle)">σ —</span>
   <span class="hud-sep">│</span>
-  <select id="trackSelect" title="Select track"></select>
+  <span class="hud-chip" id="hudTrack" style="color:#4af;">—</span>
+  <button class="btn" id="mapsBtn" title="Choose a different map">MAPS</button>
   <span class="hud-sep">│</span>
   <button class="btn btn-start" id="startBtn">▶ START</button>
   <button class="btn" id="restartBtn" title="Restart training with same settings">RESTART</button>
@@ -295,41 +354,37 @@
 <div id="controls">
 
   <div class="ctrl-section">
-    <div class="ctrl-title live-title">⚡ LIVE</div>
+    <div class="ctrl-title live-title">⚡ LIVE — PPO</div>
     <div class="ctrl-row">
       <span class="ctrl-label">SPEED</span>
       <span class="ctrl-val" id="speedVal">1×</span>
       <input type="range" id="speedSlider" min="1" max="200" value="1" step="1">
     </div>
     <div class="ctrl-row">
-      <span class="ctrl-label">MUT RATE</span>
-      <span class="ctrl-val" id="mutRateVal">0.15</span>
-      <input type="range" id="mutRateSlider" min="0" max="1" value="0.15" step="0.01" style="accent-color:#c8f;">
+      <span class="ctrl-label">LEARN RATE</span>
+      <span class="ctrl-val" id="lrVal">3.0e-4</span>
+      <input type="range" id="lrSlider" min="0.00002" max="0.001" value="0.0003" step="0.00002" style="accent-color:#c8f;">
     </div>
     <div class="ctrl-row">
-      <span class="ctrl-label">MUT STRENGTH</span>
-      <span class="ctrl-val" id="mutStrVal">0.35</span>
-      <input type="range" id="mutStrSlider" min="0" max="2" value="0.35" step="0.05" style="accent-color:#c8f;">
+      <span class="ctrl-label">ENTROPY</span>
+      <span class="ctrl-val" id="entVal">0.0030</span>
+      <input type="range" id="entSlider" min="0" max="0.02" value="0.003" step="0.0005" style="accent-color:#c8f;">
     </div>
-  </div>
-
-  <div class="ctrl-section">
-    <div class="ctrl-title next-title">◷ NEXT GENERATION</div>
     <div class="ctrl-row">
-      <span class="ctrl-label">SIM TIME</span>
-      <span class="ctrl-val" id="genDurVal">35s</span>
-      <input type="range" id="genDurSlider" min="5" max="120" value="35" step="5" style="accent-color:#4fa;">
+      <span class="ctrl-label">EPISODE LEN</span>
+      <span class="ctrl-val" id="epLenVal">60s</span>
+      <input type="range" id="epLenSlider" min="15" max="120" value="60" step="5" style="accent-color:#4fa;">
     </div>
-    <label class="toggle-row">
-      <span>LAP MODE</span>
-      <input type="checkbox" id="lapModeToggle">
+    <label class="toggle-row" title="Spawn each episode at a random point on the track — much better state coverage">
+      <span>RANDOM SPAWN</span>
+      <input type="checkbox" id="spawnToggle" checked>
     </label>
   </div>
 
   <div class="ctrl-section">
     <div class="ctrl-title reset-title">↺ RESTART REQUIRED</div>
     <div class="ctrl-row">
-      <span class="ctrl-label">POPULATION</span>
+      <span class="ctrl-label">AGENTS</span>
       <span class="ctrl-val" id="popVal">8</span>
       <input type="range" id="popSlider" min="1" max="32" value="8" step="1" style="accent-color:#4af;">
     </div>
@@ -342,19 +397,29 @@
   <div id="rewardsPanel" style="display:none" class="ctrl-section">
     <div class="ctrl-title live-title">⚡ LIVE — REWARDS</div>
     <div class="ctrl-row">
-      <span class="ctrl-label">ON-TRACK /s</span>
-      <span class="ctrl-val" id="onTrackVal">0.10</span>
-      <input type="range" id="onTrackSlider" min="0" max="1" value="0.10" step="0.01" style="accent-color:#4f4;">
+      <span class="ctrl-label">PROGRESS /m</span>
+      <span class="ctrl-val" id="progVal">0.20</span>
+      <input type="range" id="progSlider" min="0.05" max="1" value="0.2" step="0.05" style="accent-color:#4f4;">
     </div>
     <div class="ctrl-row">
-      <span class="ctrl-label">STUCK PEN /s</span>
-      <span class="ctrl-val" id="stuckVal">5.0</span>
-      <input type="range" id="stuckSlider" min="0" max="20" value="5" step="0.5" style="accent-color:#f44;">
+      <span class="ctrl-label">LAP BONUS</span>
+      <span class="ctrl-val" id="lapBonusVal">20</span>
+      <input type="range" id="lapBonusSlider" min="0" max="100" value="20" step="5" style="accent-color:#4f4;">
     </div>
     <div class="ctrl-row">
-      <span class="ctrl-label">DQ PENALTY</span>
-      <span class="ctrl-val" id="dqPenVal">200</span>
-      <input type="range" id="dqPenSlider" min="0" max="500" value="200" step="10" style="accent-color:#f44;">
+      <span class="ctrl-label">GRAVEL /s</span>
+      <span class="ctrl-val" id="gravelVal">1.0</span>
+      <input type="range" id="gravelSlider" min="0" max="5" value="1" step="0.1" style="accent-color:#f44;">
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">WALL /s</span>
+      <span class="ctrl-val" id="wallVal">2.0</span>
+      <input type="range" id="wallSlider" min="0" max="10" value="2" step="0.5" style="accent-color:#f44;">
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">CRASH-OUT</span>
+      <span class="ctrl-val" id="termVal">10</span>
+      <input type="range" id="termSlider" min="0" max="50" value="10" step="1" style="accent-color:#f44;">
     </div>
   </div>
 
@@ -362,7 +427,7 @@
 
 <!-- ── AI Leaderboard ─────────────────────────────────────────────────────── -->
 <div id="leaderboard">
-  <div class="lb-title">AI LEADERBOARD</div>
+  <div class="lb-title">EPISODE RETURNS</div>
   <div id="lbRows"></div>
 </div>
 
@@ -371,8 +436,19 @@
   <canvas id="nnCanvas" width="320" height="200"></canvas>
 </div>
 
+<!-- ── Map selection menu (shown before the trainer) ─────────────────────── -->
+<div id="mapMenu">
+  <div id="mapMenuTitle">🧠 AI TRAINER</div>
+  <div id="mapMenuSub">PPO REINFORCEMENT LEARNING · SELECT A MAP TO TRAIN ON</div>
+  <div id="mapCards"></div>
+  <div class="map-menu-actions">
+    <button class="btn btn-big" id="mapBackBtn">← ARCADE</button>
+    <button class="btn btn-start btn-big" id="mapStartBtn">ENTER TRAINER ▶</button>
+  </div>
+</div>
+
 <!-- ── Hint ──────────────────────────────────────────────────────────────── -->
-<div id="hint">DRAG=PAN · SCROLL=ZOOM · PHYSICS ON WORKER THREAD · RENDERING ON MAIN THREAD</div>
+<div id="hint">DRAG=PAN · SCROLL=ZOOM · PPO TRAINING ON WORKER THREAD · RENDERING ON MAIN THREAD</div>
 
 <script type="module" src="./scripts/trainer-app.js"></script>
 </body>
