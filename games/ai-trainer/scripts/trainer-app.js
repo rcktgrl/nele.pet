@@ -258,7 +258,10 @@ function refreshHUD(d) {
     bar.style.background = 'linear-gradient(90deg, #4af, #4f4)';
     wrap.title = 'Collecting rollout — bar fills then policy updates';
   }
-  document.getElementById('hudPhase').textContent = phase === 'updating' ? '⚙ UPDATING' : '● COLLECTING';
+  const threads = d.gradThreads || 0;
+  document.getElementById('hudPhase').textContent = phase === 'updating'
+    ? (threads ? `⚙ UPDATING ×${threads} CORES` : '⚙ UPDATING')
+    : '● COLLECTING';
   document.getElementById('hudPhase').style.color = phase === 'updating' ? '#fa4' : '#4f4';
 
   if (d.sigma) {

@@ -1,5 +1,7 @@
 'use strict';
 
+import { Net, gauss, LOG_2PI, accumulatePPOGrads } from './nn-core.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  AI Trainer — Simulation Worker (PPO)
 //
@@ -444,130 +446,10 @@ function buildObs(car, out) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Neural network with manual backprop + Adam
-// ─────────────────────────────────────────────────────────────────────────────
-
-function gauss() {
-  let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
-class Net {
-  // sizes e.g. [36, 64, 2]; tanh hidden layers, linear output.
-  constructor(sizes, finalScale = 1) {
-    this.sizes = sizes;
-    this.W = []; this.b = [];
-    for (let l = 0; l < sizes.length - 1; l++) {
-      const nIn = sizes[l], nOut = sizes[l + 1];
-      const lim = Math.sqrt(6 / (nIn + nOut)) * (l === sizes.length - 2 ? finalScale : 1);
-      const W = new Float64Array(nOut * nIn);
-      for (let k = 0; k < W.length; k++) W[k] = (Math.random() * 2 - 1) * lim;
-      this.W.push(W);
-      this.b.push(new Float64Array(nOut));
-    }
-    this.gW = this.W.map(w => new Float64Array(w.length));
-    this.gb = this.b.map(b => new Float64Array(b.length));
-    this.mW = this.W.map(w => new Float64Array(w.length));
-    this.vW = this.W.map(w => new Float64Array(w.length));
-    this.mb = this.b.map(b => new Float64Array(b.length));
-    this.vb = this.b.map(b => new Float64Array(b.length));
-    this.t  = 0;
-  }
-
-  forward(x, cache = null) {
-    let a = x;
-    if (cache) cache.acts = [x];
-    for (let l = 0; l < this.W.length; l++) {
-      const nIn = this.sizes[l], nOut = this.sizes[l + 1];
-      const W = this.W[l], b = this.b[l];
-      const out = new Float64Array(nOut);
-      const isLast = l === this.W.length - 1;
-      for (let j = 0; j < nOut; j++) {
-        let s = b[j];
-        const off = j * nIn;
-        for (let i = 0; i < nIn; i++) s += W[off + i] * a[i];
-        out[j] = isLast ? s : Math.tanh(s);
-      }
-      a = out;
-      if (cache) cache.acts.push(out);
-    }
-    return a;
-  }
-
-  // Accumulates gradients; dOut = dLoss/dOutput for the cached forward pass.
-  backward(cache, dOut) {
-    let delta = dOut;
-    for (let l = this.W.length - 1; l >= 0; l--) {
-      const nIn = this.sizes[l], nOut = this.sizes[l + 1];
-      const aIn = cache.acts[l];
-      const W = this.W[l], gW = this.gW[l], gb = this.gb[l];
-      const dPrev = l > 0 ? new Float64Array(nIn) : null;
-      for (let j = 0; j < nOut; j++) {
-        const d = delta[j];
-        if (d === 0) continue;
-        gb[j] += d;
-        const off = j * nIn;
-        for (let i = 0; i < nIn; i++) {
-          gW[off + i] += d * aIn[i];
-          if (dPrev) dPrev[i] += d * W[off + i];
-        }
-      }
-      if (dPrev) {
-        for (let i = 0; i < nIn; i++) dPrev[i] *= (1 - aIn[i] * aIn[i]);
-        delta = dPrev;
-      }
-    }
-  }
-
-  zeroGrad() {
-    for (const g of this.gW) g.fill(0);
-    for (const g of this.gb) g.fill(0);
-  }
-
-  adamStep(lr, scale) {
-    this.t++;
-    const b1 = 0.9, b2 = 0.999, eps = 1e-8;
-    const bc1 = 1 - Math.pow(b1, this.t), bc2 = 1 - Math.pow(b2, this.t);
-    const upd = (P, G, M, V) => {
-      for (let k = 0; k < P.length; k++) {
-        const g = G[k] * scale;
-        M[k] = b1 * M[k] + (1 - b1) * g;
-        V[k] = b2 * V[k] + (1 - b2) * g * g;
-        P[k] -= lr * (M[k] / bc1) / (Math.sqrt(V[k] / bc2) + eps);
-      }
-    };
-    for (let l = 0; l < this.W.length; l++) {
-      upd(this.W[l], this.gW[l], this.mW[l], this.vW[l]);
-      upd(this.b[l], this.gb[l], this.mb[l], this.vb[l]);
-    }
-  }
-
-  flat() {
-    const out = [];
-    for (let l = 0; l < this.W.length; l++) {
-      for (const w of this.W[l]) out.push(w);
-      for (const b of this.b[l]) out.push(b);
-    }
-    return out;
-  }
-
-  loadFlat(arr) {
-    let k = 0;
-    for (let l = 0; l < this.W.length; l++) {
-      for (let i = 0; i < this.W[l].length; i++) this.W[l][i] = arr[k++];
-      for (let i = 0; i < this.b[l].length; i++) this.b[l][i] = arr[k++];
-    }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 //  PPO agent
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ACT_DIM = 2;          // [steer, throttle/brake]
-const LOG_2PI = Math.log(2 * Math.PI);
 
 let actor  = null;          // Net [OBS_DIM, h, ACT_DIM] → action means
 let critic = null;          // Net [OBS_DIM, h, 1] → state value
@@ -720,6 +602,11 @@ function terminateEnv(env, i, penalty, truncated) {
 
 // One physics tick for every env (dt = FIXED_DT).
 function stepOnce(dt) {
+  // Back-pressure: if an update is in flight and the next batch is already
+  // twice the horizon, pause collection so batches can't grow without bound
+  // at high speed multipliers.
+  if (_ppoRunning && agentSteps >= cfg.horizon * cfg.numEnvs * 2) return;
+
   simTime += dt;
   for (let i = 0; i < envs.length; i++) {
     const env = envs[i];
@@ -815,6 +702,43 @@ function stepOnce(dt) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Gradient worker pool — distributes minibatch gradient computation across
+//  CPU cores. Each minibatch is split into slices; every grad worker computes
+//  gradient sums over its slice with the current weights, the results are
+//  reduced here and a single Adam step is applied. While the pool is busy
+//  this worker's event loop is free, so the simulation keeps ticking.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let gradPool = null;   // Worker[] — empty array means "fall back to local compute"
+
+function initGradPool() {
+  if (gradPool !== null) return;
+  gradPool = [];
+  try {
+    const hc = (self.navigator && self.navigator.hardwareConcurrency) || 4;
+    const n = Math.max(1, Math.min(6, hc - 2)); // leave cores for sim + render
+    for (let i = 0; i < n; i++) {
+      const w = new Worker(new URL('./grad-worker.js', import.meta.url), { type: 'module' });
+      w.onerror = () => { // nested workers unsupported / failed → local fallback
+        for (const x of gradPool) { try { x.terminate(); } catch (_) { /* already dead */ } }
+        gradPool = [];
+      };
+      gradPool.push(w);
+    }
+  } catch (err) {
+    gradPool = [];
+  }
+}
+
+function gradTask(w, msg, transfers) {
+  return new Promise((resolve, reject) => {
+    w.onmessage = e => resolve(e.data);
+    w.onerror   = e => reject(e);
+    w.postMessage(msg, transfers);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  PPO batch preparation (synchronous — runs once per horizon fill)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -854,10 +778,29 @@ function _flushBatch() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  PPO gradient update — runs asynchronously, yielding after every epoch so
-//  the sim loop can keep ticking while the policy is being updated.
-//  The simulation is never frozen during gradient updates.
+//  PPO gradient update — asynchronous and multi-core.
+//
+//  Each minibatch is split across the gradient worker pool; while the pool
+//  computes, this worker awaits — its event loop is free, so simLoop keeps
+//  ticking and the cars never freeze. Falls back to local computation
+//  (yielding between minibatches) if nested workers are unavailable.
 // ─────────────────────────────────────────────────────────────────────────────
+
+function packSlice(OBS, ACT, LOGP, ADV, RET, idx, s0, s1) {
+  const n = s1 - s0;
+  const obs  = new Float64Array(n * OBS_DIM);
+  const act  = new Float64Array(n * ACT_DIM);
+  const logp = new Float64Array(n);
+  const adv  = new Float64Array(n);
+  const ret  = new Float64Array(n);
+  for (let k = 0; k < n; k++) {
+    const s = idx[s0 + k];
+    obs.set(OBS[s], k * OBS_DIM);
+    act.set(ACT[s], k * ACT_DIM);
+    logp[k] = LOGP[s]; adv[k] = ADV[s]; ret[k] = RET[s];
+  }
+  return { n, obsDim: OBS_DIM, actDim: ACT_DIM, obs, act, logp, adv, ret };
+}
 
 async function _runPPO(batch) {
   const { OBS, ACT, LOGP, ADV, RET } = batch;
@@ -870,6 +813,7 @@ async function _runPPO(batch) {
   for (let k = 0; k < N; k++) ADV[k] = (ADV[k] - mean) / std;
 
   const idx = Array.from({ length: N }, (_, k) => k);
+  const hp = { clip: cfg.clip, entropyCoef: cfg.entropyCoef, vfCoef: cfg.vfCoef };
   let sumPi = 0, sumV = 0, sumEnt = 0, nMB = 0;
 
   for (let ep = 0; ep < cfg.epochs; ep++) {
@@ -881,48 +825,57 @@ async function _runPPO(batch) {
     for (let start = 0; start < N; start += cfg.minibatch) {
       const end = Math.min(N, start + cfg.minibatch);
       const bs = end - start;
-      actor.zeroGrad(); critic.zeroGrad();
-      const gLs = new Float64Array(ACT_DIM);
-      let mbPi = 0, mbV = 0, mbEnt = 0;
+      let gLs, mbPi, mbV, mbEnt;
 
-      for (let k = start; k < end; k++) {
-        const s = idx[k];
-        const obs = OBS[s], act = ACT[s], A = ADV[s], ret = RET[s];
-
-        // ── Actor ──
-        const aCache = {};
-        const mu = actor.forward(obs, aCache);
-        let lp = 0;
-        for (let d = 0; d < ACT_DIM; d++) {
-          const sd = Math.exp(logStd[d]);
-          const z = (act[d] - mu[d]) / sd;
-          lp += -0.5 * z * z - logStd[d] - 0.5 * LOG_2PI;
+      const pool = gradPool && gradPool.length ? gradPool : null;
+      if (pool) {
+        // ── Parallel: split the minibatch across the pool ──
+        const K = Math.min(pool.length, Math.max(1, Math.floor(bs / 32)));
+        const per = Math.ceil(bs / K);
+        const aFlat = actor.flatF64(), cFlat = critic.flatF64();
+        const lsArr = Array.from(logStd);
+        const tasks = [];
+        for (let c = 0; c < K; c++) {
+          const s0 = start + c * per, s1 = Math.min(end, s0 + per);
+          if (s0 >= s1) break;
+          const slice = packSlice(OBS, ACT, LOGP, ADV, RET, idx, s0, s1);
+          tasks.push(gradTask(pool[c], {
+            type: 'grad',
+            actorSizes: actor.sizes, criticSizes: critic.sizes,
+            actorFlat: aFlat, criticFlat: cFlat, logStd: lsArr,
+            hp, ...slice,
+          }, [slice.obs.buffer, slice.act.buffer, slice.logp.buffer, slice.adv.buffer, slice.ret.buffer]));
         }
-        const ratio = Math.exp(Math.min(20, lp - LOGP[s]));
-        const clipped = Math.max(1 - cfg.clip, Math.min(1 + cfg.clip, ratio));
-        const surr1 = ratio * A, surr2 = clipped * A;
-        mbPi += -Math.min(surr1, surr2);
-        const coef = surr1 <= surr2 ? -A * ratio : 0;
-        if (coef !== 0) {
-          const dMu = new Float64Array(ACT_DIM);
-          for (let d = 0; d < ACT_DIM; d++) {
-            const sd2 = Math.exp(2 * logStd[d]);
-            dMu[d] = coef * (act[d] - mu[d]) / sd2;
-            gLs[d] += coef * (((act[d] - mu[d]) ** 2) / sd2 - 1);
-          }
-          actor.backward(aCache, dMu);
+        let results;
+        try {
+          results = await Promise.all(tasks);
+        } catch (err) {
+          // pool died mid-update (e.g. nested workers unsupported) → disable
+          for (const x of gradPool) { try { x.terminate(); } catch (_) { /* dead */ } }
+          gradPool = [];
+          start -= cfg.minibatch; // redo this minibatch locally
+          continue;
         }
-        for (let d = 0; d < ACT_DIM; d++) {
-          gLs[d] += -cfg.entropyCoef;
-          mbEnt += logStd[d] + 0.5 * (LOG_2PI + 1);
+        const aG = new Float64Array(aFlat.length);
+        const cG = new Float64Array(cFlat.length);
+        gLs = new Float64Array(ACT_DIM);
+        mbPi = 0; mbV = 0; mbEnt = 0;
+        for (const r of results) {
+          for (let k = 0; k < aG.length; k++) aG[k] += r.aG[k];
+          for (let k = 0; k < cG.length; k++) cG[k] += r.cG[k];
+          for (let d = 0; d < ACT_DIM; d++) gLs[d] += r.gLs[d];
+          mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
         }
-
-        // ── Critic ──
-        const cCache = {};
-        const v = critic.forward(obs, cCache)[0];
-        const dv = cfg.vfCoef * (v - ret);
-        mbV += 0.5 * (v - ret) ** 2;
-        critic.backward(cCache, Float64Array.of(dv));
+        actor.loadGradFlat(aG);
+        critic.loadGradFlat(cG);
+      } else {
+        // ── Local fallback: single-threaded gradient computation ──
+        actor.zeroGrad(); critic.zeroGrad();
+        const slice = packSlice(OBS, ACT, LOGP, ADV, RET, idx, start, end);
+        const r = accumulatePPOGrads(actor, critic, logStd, hp, slice);
+        gLs = r.gLs; mbPi = r.pi; mbV = r.v; mbEnt = r.ent;
+        // yield so simLoop can tick between minibatches
+        await new Promise(res => setTimeout(res, 0));
       }
 
       actor.adamStep(cfg.lr, 1 / bs);
@@ -940,10 +893,6 @@ async function _runPPO(batch) {
 
       sumPi += mbPi / bs; sumV += mbV / bs; sumEnt += mbEnt / bs; nMB++;
     }
-
-    // Yield to the event loop after every epoch — simLoop gets to tick here,
-    // so cars keep moving and the worker stays responsive at any speed.
-    await new Promise(r => setTimeout(r, 0));
   }
 
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
@@ -978,6 +927,7 @@ function buildSnapshot() {
     totalSteps,
     bufferFill: Math.min(1, agentSteps / (cfg.horizon * cfg.numEnvs)),
     phase: _ppoRunning ? 'updating' : 'collecting',
+    gradThreads: gradPool ? gradPool.length : 0,
     avgReturn,
     bestLap: Number.isFinite(bestLap) ? bestLap : null,
     episodes: recentReturns.length,
@@ -1058,8 +1008,12 @@ self.onmessage = function (e) {
 
     running = false;
     stopLoop();
+    initGradPool();
     initSim(model || null);
-    postMessage({ type: 'ready', obsDim: OBS_DIM, actorSizes: actor.sizes, numEnvs: cfg.numEnvs });
+    postMessage({
+      type: 'ready', obsDim: OBS_DIM, actorSizes: actor.sizes,
+      numEnvs: cfg.numEnvs, gradThreads: gradPool ? gradPool.length : 0,
+    });
     return;
   }
 
