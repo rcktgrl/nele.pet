@@ -258,11 +258,24 @@ function refreshHUD(d) {
     bar.style.background = 'linear-gradient(90deg, #4af, #4f4)';
     wrap.title = 'Collecting rollout — bar fills then policy updates';
   }
-  const threads = d.gradThreads || 0;
-  document.getElementById('hudPhase').textContent = phase === 'updating'
-    ? (threads ? `⚙ UPDATING ×${threads} CORES` : '⚙ UPDATING')
-    : '● COLLECTING';
-  document.getElementById('hudPhase').style.color = phase === 'updating' ? '#fa4' : '#4f4';
+  const threads    = d.gradThreads || 0;
+  const wasmActive = d.wasmActive  || false;
+  const phaseEl = document.getElementById('hudPhase');
+  if (phase === 'updating') {
+    const coreStr = threads ? ` ×${threads}` : '';
+    const wasmStr = wasmActive ? ' WASM' : '';
+    phaseEl.textContent = `⚙ UPDATING${coreStr}${wasmStr}`;
+    phaseEl.style.color = '#fa4';
+  } else {
+    phaseEl.textContent = '● COLLECTING';
+    phaseEl.style.color = '#4f4';
+  }
+  // Show WASM badge in dedicated element if it exists
+  const wasmEl = document.getElementById('hudWasm');
+  if (wasmEl) {
+    wasmEl.textContent = wasmActive ? 'WASM ✓' : 'JS';
+    wasmEl.style.color  = wasmActive ? '#4fa' : '#888';
+  }
 
   if (d.sigma) {
     document.getElementById('hudSigma').textContent = 'σ ' + d.sigma.map(s => s.toFixed(2)).join('/');

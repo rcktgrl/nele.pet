@@ -279,7 +279,8 @@ self.onmessage = function (e) {
   }
 
   postMessage(
-    { aG: r.aG, cG: r.cG, gLs: r.gLs, pi: r.pi, v: r.v, ent: r.ent, n: d.n },
+    { aG: r.aG, cG: r.cG, gLs: r.gLs, pi: r.pi, v: r.v, ent: r.ent, n: d.n,
+      wasmOk: wasmReady && !wasmFailed },
     [r.aG.buffer, r.cG.buffer, r.gLs.buffer],
   );
 };
