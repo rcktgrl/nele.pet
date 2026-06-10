@@ -85,7 +85,7 @@ function emitBackward(sizes, wOff, bOff, bases, tag) {
   return code;
 }
 
-function genWGSL(lay) {
+export function genWGSL(lay) {
   const { AS, CS, I, A, ECAP, SLAB, aP, cP, OUT } = lay;
   const aOffs  = layerOffsets(AS, 0);
   const cOffs  = layerOffsets(CS, aP);
@@ -233,7 +233,6 @@ export class GpuGrad {
     this._wScratch   = new Float32Array(aP + cP + A);
     this._obsScratch = new Float32Array(epochCap * I);
     this._actScratch = new Float32Array(epochCap * A);
-    this._lScalars   = new Float32Array(epochCap * 3);  // logp + adv + ret interleaved? no — separate below
     this._logpScratch = new Float32Array(epochCap);
     this._advScratch  = new Float32Array(epochCap);
     this._retScratch  = new Float32Array(epochCap);
@@ -309,7 +308,7 @@ export class GpuGrad {
     const mbs    = this.mbs;
     const nMB    = Math.ceil(N / mbs);
 
-    if (nMB > this._nMBMax) throw new Error(`epoch too large: ${N} > ${this.ECAP}`);
+    if (N > this.ECAP) throw new Error(`epoch too large: ${N} samples > capacity ${this.ECAP}`);
 
     // ── Upload weights (f64 → f32 via pre-allocated scratch) ──────────────────
     const w = this._wScratch;

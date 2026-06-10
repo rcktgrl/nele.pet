@@ -565,6 +565,14 @@
         <span style="color:#445;font-size:.58rem;">AUTO = multi-core WASM · GPU = WebGPU (experimental, self-validating) · JS = plain fallback</span>
       </div>
       <div class="config-row">
+        <div style="display:flex;justify-content:space-between">
+          <span class="config-label">GRADIENT THREADS</span>
+          <span class="config-val" id="configThreadVal">4 threads</span>
+        </div>
+        <input type="range" id="configThreadSlider" min="1" max="64" value="4" step="1" style="accent-color:#4fa;">
+        <span style="color:#445;font-size:.58rem;">CPU worker count for WASM/JS backends — more than your core count wastes memory</span>
+      </div>
+      <div class="config-row">
         <span class="config-label">STEPS PER UPDATE (HORIZON)</span>
         <div class="opt-group" id="configHorizonBtns"></div>
         <span style="color:#445;font-size:.58rem;">more steps = better gradient estimate, slower update</span>
