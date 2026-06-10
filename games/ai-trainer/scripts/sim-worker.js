@@ -374,8 +374,14 @@ function castRayFan(car, angles, maxDist, out, offset) {
   const near = [];
   for (const segs of [trkWallLeft, trkWallRight]) {
     for (const w of segs) {
+      // Check midpoint AND both endpoints: midpoint-only misses wall segments
+      // where the car is near one end but the segment midpoint is far away.
       const cx = (w.x0 + w.x1) * 0.5 - ox, cz = (w.z0 + w.z1) * 0.5 - oz;
-      if (cx * cx + cz * cz < rr) near.push(w);
+      const e0x = w.x0 - ox, e0z = w.z0 - oz;
+      const e1x = w.x1 - ox, e1z = w.z1 - oz;
+      if (cx * cx + cz * cz < rr ||
+          e0x * e0x + e0z * e0z < rr ||
+          e1x * e1x + e1z * e1z < rr) near.push(w);
     }
   }
   for (let k = 0; k < angles.length; k++) {
@@ -394,7 +400,10 @@ function castRayFan(car, angles, maxDist, out, offset) {
 // Replaces the "controllable sensor ball" idea — the policy sees relative
 // angle AND slope at every probe simultaneously, with a stationary
 // observation distribution (no extra action needed).
-const PROBE_DISTS = [10, 20, 35, 55, 80, 120];
+// Probe distances extended: Jeff has a 122 m straight ending in a 90° turn.
+// With the old 120 m max, the corner was invisible until the car was already on it.
+// 200 m gives ~80 m of advance warning — enough for a full braking event.
+const PROBE_DISTS = [10, 20, 35, 55, 100, 200];
 const SLOPE_NORM  = 0.30;   // |Δy/Δs| considered "max steep"
 
 // Observation layout:
@@ -742,7 +751,8 @@ function gradTask(w, msg, transfers) {
 //  PPO batch preparation (synchronous — runs once per horizon fill)
 // ─────────────────────────────────────────────────────────────────────────────
 
-let _ppoRunning = false;
+let _ppoRunning  = false;
+let _wasmActive  = false;   // true once a grad-worker confirms WASM is running
 
 function _flushBatch() {
   // Close any open repeat windows; envs get fresh decisions next tick.
@@ -865,6 +875,7 @@ async function _runPPO(batch) {
           for (let k = 0; k < cG.length; k++) cG[k] += r.cG[k];
           for (let d = 0; d < ACT_DIM; d++) gLs[d] += r.gLs[d];
           mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
+          if (r.wasmOk) _wasmActive = true;
         }
         actor.loadGradFlat(aG);
         critic.loadGradFlat(cG);
@@ -928,6 +939,7 @@ function buildSnapshot() {
     bufferFill: Math.min(1, agentSteps / (cfg.horizon * cfg.numEnvs)),
     phase: _ppoRunning ? 'updating' : 'collecting',
     gradThreads: gradPool ? gradPool.length : 0,
+    wasmActive: _wasmActive,
     avgReturn,
     bestLap: Number.isFinite(bestLap) ? bestLap : null,
     episodes: recentReturns.length,
