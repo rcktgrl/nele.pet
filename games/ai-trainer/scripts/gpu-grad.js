@@ -86,7 +86,7 @@ function emitBackward(sizes, wOff, bOff, bases, tag) {
 }
 
 export function genWGSL(lay) {
-  const { AS, CS, I, A, ECAP, SLAB, aP, cP, OUT } = lay;
+  const { AS, CS, I, A, ECAP, GROUP, SLAB, aP, cP, OUT } = lay;
   const aOffs  = layerOffsets(AS, 0);
   const cOffs  = layerOffsets(CS, aP);
   const aBases = actBases(AS);
@@ -114,17 +114,25 @@ struct Uni { n: u32, nGroups: u32, mbBase: u32, clip: f32, entCoef: f32, vfCoef:
 @group(0) @binding(3) var<storage, read_write>  outg    : array<f32>;
 @group(0) @binding(4) var<uniform>              uni     : Uni;
 
-// grad_main: one thread per training sample (GROUP=1).
+// grad_main: one thread per GROUP consecutive samples. GROUP is sized so the
+// per-group gradient slab buffer fits the device's storage binding limit —
+// big networks get larger groups (fewer slabs), small networks get GROUP=1.
 @compute @workgroup_size(64)
 fn grad_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let g = gid.x;
   if (g >= uni.nGroups) { return; }
-  let k  = uni.mbBase + g;
   let sb = g * ${SLAB}u;
 
   var acts : array<f32, ${ACTS}>;
   var dcur : array<f32, ${MAXW}>;
   var dnxt : array<f32, ${MAXW}>;
+  var lossPi  = 0.0;
+  var lossV   = 0.0;
+  var lossEnt = 0.0;
+
+  let k0   = uni.mbBase + g * ${GROUP}u;
+  let kEnd = min(uni.mbBase + uni.n, k0 + ${GROUP}u);
+  for (var k = k0; k < kEnd; k++) {
 
   // Load observation into actor input slots.
   for (var i = 0u; i < ${I}u; i++) { acts[i] = batch[${OB}u + k * ${I}u + i]; }
@@ -147,8 +155,7 @@ fn grad_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let clp    = clamp(ratio, 1.0 - uni.clip, 1.0 + uni.clip);
   let surr1  = ratio * advk;
   let surr2  = clp   * advk;
-  let lossPi = -min(surr1, surr2);
-  slabs[sb + ${LOSS}u + 0u] = lossPi;
+  lossPi += -min(surr1, surr2);
 
   // Actor gradient: coef is nonzero only when the clipped bound is NOT binding.
   var coef = 0.0;
@@ -164,22 +171,26 @@ fn grad_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   ${emitBackward(AS, aOffs.wOff, aOffs.bOff, aBases, 'a')}
 
   // ── Entropy bonus (gradient on logStd) ──
-  var lossEnt = 0.0;
   for (var d = 0u; d < ${A}u; d++) {
     slabs[sb + ${GLS}u + d] += -uni.entCoef;
     lossEnt += weights[${LS}u + d] + ${0.5 * (LOG_2PI + 1)}f;
   }
-  slabs[sb + ${LOSS}u + 2u] = lossEnt;
 
   // ── Critic forward (reuses acts; actor pass is complete) ──
   for (var ci = 0u; ci < ${I}u; ci++) { acts[ci] = batch[${OB}u + k * ${I}u + ci]; }
   ${emitForward(CS, cOffs.wOff, cOffs.bOff, cBases)}
   let v   = acts[${CVB}u];
   let dr  = v - batch[${RB}u + k];
-  slabs[sb + ${LOSS}u + 1u] = 0.5 * dr * dr;
+  lossV += 0.5 * dr * dr;
   dcur[0] = uni.vfCoef * dr;
   // ── Critic backward ──
   ${emitBackward(CS, cOffs.wOff, cOffs.bOff, cBases, 'c')}
+
+  } // sample loop
+
+  slabs[sb + ${LOSS}u + 0u] = lossPi;
+  slabs[sb + ${LOSS}u + 1u] = lossV;
+  slabs[sb + ${LOSS}u + 2u] = lossEnt;
 }
 
 // reduce_main: sum slab[g][p] across all nGroups into outg[p].
@@ -205,7 +216,15 @@ export class GpuGrad {
       }
       const adapter = await navigator.gpu.requestAdapter();
       if (!adapter) return { ok: false, error: 'no WebGPU adapter' };
-      const device = await adapter.requestDevice();
+      // Ask for the adapter's full buffer limits — the 128 MB default storage
+      // binding limit is too small for the gradient slabs of big networks.
+      const al = adapter.limits;
+      const device = await adapter.requestDevice({
+        requiredLimits: {
+          maxStorageBufferBindingSize: al.maxStorageBufferBindingSize,
+          maxBufferSize:               al.maxBufferSize,
+        },
+      });
       const g = new GpuGrad(device, actorSizes, criticSizes, epochCap | 0 || 512, mbs | 0 || 256);
       await g._build();
       return { ok: true, gpu: g };
@@ -217,15 +236,35 @@ export class GpuGrad {
   constructor(device, actorSizes, criticSizes, epochCap, mbs) {
     this.device = device;
     this.lost   = false;
-    device.lost.then(() => { this.lost = true; });
+    this._uncaptured = null;
+    device.lost.then(info => { this.lost = true; this._uncaptured = 'device lost: ' + (info && info.message || ''); });
+    device.addEventListener('uncapturederror', e => {
+      this._uncaptured = e.error && e.error.message || String(e.error);
+    });
 
     const AS = actorSizes.slice(), CS = criticSizes.slice();
     const I  = AS[0], A = AS[AS.length - 1];
     const aP = paramCount(AS), cP = paramCount(CS);
-    const SLAB = aP + cP + A + 4;   // per-sample: grads + gLogStd + [pi, v, ent, pad]
+    const SLAB = aP + cP + A + 4;   // per-group: grads + gLogStd + [pi, v, ent, pad]
     const OUT  = SLAB;               // reduce output mirrors slab layout
 
-    this.lay  = { AS, CS, I, A, ECAP: epochCap, SLAB, aP, cP, OUT };
+    // Samples per thread: grow GROUP until the slabs buffer fits the device's
+    // storage binding limit (with headroom). A 3-layer 256-unit net has a
+    // ~1.1 MB slab — at GROUP=1 × minibatch 256 that's ~290 MB, far over the
+    // 128 MB default limit, and an oversized buffer silently voids every
+    // dispatch (the all-zeros readback failure mode).
+    const lim    = device.limits;
+    const budget = Math.min(lim.maxStorageBufferBindingSize || 128 << 20,
+                            lim.maxBufferSize || 256 << 20,
+                            256 << 20) * 0.75;
+    let GROUP = 1;
+    while (Math.ceil(mbs / GROUP) * SLAB * 4 > budget) GROUP *= 2;
+    if (SLAB * 4 > budget) {
+      throw new Error(`network too large for GPU: one gradient slab is ${(SLAB * 4 / 1048576).toFixed(0)} MB, ` +
+                      `device storage limit is ${(budget / 0.75 / 1048576).toFixed(0)} MB`);
+    }
+
+    this.lay  = { AS, CS, I, A, ECAP: epochCap, GROUP, SLAB, aP, cP, OUT };
     this.mbs  = mbs;
     this.ECAP = epochCap;
 
@@ -270,11 +309,12 @@ export class GpuGrad {
       d.createComputePipelineAsync({ layout: pipeLayout, compute: { module, entryPoint: 'reduce_main' } }),
     ]);
 
+    const nGroupsMax = Math.ceil(mbs / this.lay.GROUP);
     const mk = (size, usage) => d.createBuffer({ size, usage });
     const W = this._wScratch.length;
     this.bufWeights = mk(W * 4,                                   GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
     this.bufBatch   = mk((ECAP * (I + A) + 3 * ECAP) * 4,        GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
-    this.bufSlabs   = mk(mbs * SLAB * 4,                          GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
+    this.bufSlabs   = mk(nGroupsMax * SLAB * 4,                   GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
     this.bufOut     = mk(OUT  * 4,                                GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC);
     this.bufAllOut  = mk(nMBMax * OUT * 4,                        GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC);
     this.bufStage   = mk(nMBMax * OUT * 4,                        GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
@@ -301,9 +341,10 @@ export class GpuGrad {
   // Returns [{ aG, cG, gLs, pi, v, ent }] — one entry per minibatch.
   async computeEpoch(actorFlat, criticFlat, logStd, hp, epochData) {
     if (this.lost) throw new Error('GPU device lost');
+    if (this._uncaptured) throw new Error('WebGPU error: ' + this._uncaptured);
 
     const d   = this.device, q = d.queue;
-    const { I, A, ECAP, aP, cP, OUT, SLAB } = this.lay;
+    const { I, A, ECAP, GROUP, aP, cP, OUT, SLAB } = this.lay;
     const { N, obs, act, logp, adv, ret } = epochData;
     const mbs    = this.mbs;
     const nMB    = Math.ceil(N / mbs);
@@ -335,7 +376,7 @@ export class GpuGrad {
     f32[3] = hp.clip; f32[4] = hp.entropyCoef; f32[5] = hp.vfCoef;
     for (let m = 0; m < nMB; m++) {
       const bs = Math.min(mbs, N - m * mbs);
-      u32[0] = bs; u32[1] = bs; u32[2] = m * mbs;
+      u32[0] = bs; u32[1] = Math.ceil(bs / GROUP); u32[2] = m * mbs;
       q.writeBuffer(this.uniBufs[m], 0, uBuf);
     }
 
@@ -346,11 +387,12 @@ export class GpuGrad {
     const enc = d.createCommandEncoder();
     for (let m = 0; m < nMB; m++) {
       const bs = Math.min(mbs, N - m * mbs);
-      enc.clearBuffer(this.bufSlabs, 0, bs * SLAB * 4);
+      const nGroups = Math.ceil(bs / GROUP);
+      enc.clearBuffer(this.bufSlabs, 0, nGroups * SLAB * 4);
       const pass = enc.beginComputePass();
       pass.setBindGroup(0, this.bindGroups[m]);
       pass.setPipeline(this.gradPipe);
-      pass.dispatchWorkgroups(Math.ceil(bs / 64));
+      pass.dispatchWorkgroups(Math.ceil(nGroups / 64));
       pass.setPipeline(this.reducePipe);
       pass.dispatchWorkgroups(Math.ceil(OUT / 256));
       pass.end();
@@ -362,15 +404,17 @@ export class GpuGrad {
     // ── Single mapAsync for the entire epoch ──────────────────────────────────
     const mapP = this.bufStage.mapAsync(GPUMapMode.READ, 0, nMB * OUT * 4);
     const timeout = new Promise((_, rej) =>
-      setTimeout(() => rej(new Error('GPU mapAsync timeout (>10s)')), 10000));
+      setTimeout(() => rej(new Error('GPU mapAsync timeout (>30s)')), 30000));
     await Promise.race([mapP, timeout]);
 
     const raw = new Float32Array(this.bufStage.getMappedRange(0, nMB * OUT * 4)).slice();
     this.bufStage.unmap();
 
-    // Drain error scopes (non-blocking).
-    d.popErrorScope().then(e => { if (e) this._lastError = e.message; });
-    d.popErrorScope().then(e => { if (e) this._lastError = e.message; });
+    // Surface any GPU-side error — an invalid submit reads back as all zeros,
+    // which would otherwise be misreported as a numeric validation failure.
+    const [eOOM, eVal] = await Promise.all([d.popErrorScope(), d.popErrorScope()]);
+    const gpuErr = (eVal && eVal.message) || (eOOM && eOOM.message) || this._uncaptured;
+    if (gpuErr) throw new Error('WebGPU error: ' + gpuErr);
 
     // ── Unpack results ────────────────────────────────────────────────────────
     const results = [];
