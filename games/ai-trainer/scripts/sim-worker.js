@@ -799,7 +799,9 @@ function initGpu() {
   gpuValidated = false;
   if (cfg.backend !== 'gpu') { gpuState = 'off'; gpuInfo = ''; return; }
   gpuState = 'init'; gpuInfo = 'GPU initializing…';
-  GpuGrad.create(actor.sizes, critic.sizes, cfg.minibatch).then(res => {
+  // epochCap = max training samples per epoch; mbs = minibatch size.
+  const epochCap = cfg.numEnvs * cfg.horizon;
+  GpuGrad.create(actor.sizes, critic.sizes, epochCap, cfg.minibatch).then(res => {
     if (res.ok) { gpu = res.gpu; gpuState = 'ready'; gpuInfo = 'WebGPU active'; }
     else        { gpu = null;    gpuState = 'failed'; gpuInfo = 'GPU unavailable: ' + res.error; }
   });
@@ -880,6 +882,22 @@ function packSlice(OBS, ACT, LOGP, ADV, RET, idx, s0, s1) {
   return { n, obsDim: OBS_DIM, actDim: ACT_DIM, obs, act, logp, adv, ret };
 }
 
+// Pack an entire shuffled epoch into flat Float64Arrays for computeEpoch().
+function packEpochData(OBS, ACT, LOGP, ADV, RET, idx, N) {
+  const obs  = new Float64Array(N * OBS_DIM);
+  const act  = new Float64Array(N * ACT_DIM);
+  const logp = new Float64Array(N);
+  const adv  = new Float64Array(N);
+  const ret  = new Float64Array(N);
+  for (let k = 0; k < N; k++) {
+    const s = idx[k];
+    obs.set(OBS[s], k * OBS_DIM);
+    act.set(ACT[s], k * ACT_DIM);
+    logp[k] = LOGP[s]; adv[k] = ADV[s]; ret[k] = RET[s];
+  }
+  return { N, obs, act, logp, adv, ret };
+}
+
 async function _runPPO(batch) {
   const { OBS, ACT, LOGP, ADV, RET } = batch;
   const N = OBS.length;
@@ -900,47 +918,82 @@ async function _runPPO(batch) {
       const j = Math.floor(Math.random() * (k + 1));
       const tmp = idx[k]; idx[k] = idx[j]; idx[j] = tmp;
     }
+
+    // ── GPU path: entire epoch dispatched in one command buffer, one mapAsync ──
+    if (gpuState === 'ready' && gpu) {
+      const epochData = packEpochData(OBS, ACT, LOGP, ADV, RET, idx, N);
+      let mbResults = null;
+      try {
+        mbResults = await gpu.computeEpoch(actor.flatF64(), critic.flatF64(), logStd, hp, epochData);
+      } catch (err) {
+        gpuState = 'failed';
+        gpuInfo = 'GPU disabled: ' + (err && err.message || err);
+        try { gpu.destroy(); } catch (_) { /* dead */ }
+        gpu = null;
+      }
+
+      if (mbResults && !gpuValidated) {
+        // One-time numeric check against JS reference on the first minibatch.
+        const r0   = mbResults[0];
+        const bs0  = r0.n;
+        const vSlice = {
+          n: bs0, obsDim: OBS_DIM, actDim: ACT_DIM,
+          obs:  epochData.obs.subarray(0, bs0 * OBS_DIM),
+          act:  epochData.act.subarray(0, bs0 * ACT_DIM),
+          logp: epochData.logp.subarray(0, bs0),
+          adv:  epochData.adv.subarray(0, bs0),
+          ret:  epochData.ret.subarray(0, bs0),
+        };
+        actor.zeroGrad(); critic.zeroGrad();
+        accumulatePPOGrads(actor, critic, logStd, hp, vSlice);
+        const refA = actor.gradFlatF64(), refC = critic.gradFlatF64();
+        const relL2 = (x, y) => {
+          let e2 = 0, n2 = 0;
+          for (let q = 0; q < x.length; q++) { const e = x[q] - y[q]; e2 += e*e; n2 += y[q]*y[q]; }
+          return Math.sqrt(e2 / (n2 + 1e-12));
+        };
+        const ea = relL2(r0.aG, refA), ec = relL2(r0.cG, refC);
+        if (ea > 5e-3 || ec > 5e-3) {
+          gpuState = 'failed';
+          gpuInfo = `GPU disabled: validation failed (actor ${ea.toExponential(1)}, critic ${ec.toExponential(1)})`;
+          try { gpu.destroy(); } catch (_) { /* dead */ }
+          gpu = null;
+          mbResults = null;
+        } else {
+          gpuValidated = true;
+          gpuInfo = 'WebGPU active (validated)';
+        }
+      }
+
+      if (mbResults) {
+        const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+        for (const r of mbResults) {
+          actor.loadGradFlat(r.aG);
+          critic.loadGradFlat(r.cG);
+          actor.adamStep(cfg.lr, 1 / r.n);
+          critic.adamStep(cfg.lr, 1 / r.n);
+          lsT++;
+          const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
+          for (let d = 0; d < ACT_DIM; d++) {
+            const g = r.gLs[d] / r.n;
+            lsM[d] = b1 * lsM[d] + (1 - b1) * g;
+            lsV[d] = b2 * lsV[d] + (1 - b2) * g * g;
+            logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
+            logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
+          }
+          sumPi += r.pi / r.n; sumV += r.v / r.n; sumEnt += r.ent / r.n; nMB++;
+        }
+        continue; // epoch handled by GPU — skip CPU path
+      }
+    }
+
+    // ── CPU path (pool or local): per-minibatch ──────────────────────────────
     for (let start = 0; start < N; start += cfg.minibatch) {
       const end = Math.min(N, start + cfg.minibatch);
       const bs = end - start;
       let gLs, mbPi, mbV, mbEnt;
-      let handled = false;
 
-      // ── GPU path (experimental, opt-in): whole minibatch on WebGPU ──
-      if (gpuState === 'ready' && gpu && bs <= gpu.cap) {
-        const slice = packSlice(OBS, ACT, LOGP, ADV, RET, idx, start, end);
-        try {
-          const r = await gpu.compute(actor.flatF64(), critic.flatF64(), logStd, hp, slice);
-          if (!gpuValidated) {
-            // one-time numeric check against the reference JS implementation
-            actor.zeroGrad(); critic.zeroGrad();
-            accumulatePPOGrads(actor, critic, logStd, hp, slice);
-            const refA = actor.gradFlatF64(), refC = critic.gradFlatF64();
-            const relL2 = (x, y) => {
-              let e2 = 0, n2 = 0;
-              for (let q = 0; q < x.length; q++) { const e = x[q] - y[q]; e2 += e * e; n2 += y[q] * y[q]; }
-              return Math.sqrt(e2 / (n2 + 1e-12));
-            };
-            const ea = relL2(r.aG, refA), ec = relL2(r.cG, refC);
-            if (ea > 5e-3 || ec > 5e-3) {
-              throw new Error(`validation failed (rel err actor ${ea.toExponential(1)}, critic ${ec.toExponential(1)})`);
-            }
-            gpuValidated = true;
-            gpuInfo = 'WebGPU active (validated)';
-          }
-          actor.loadGradFlat(r.aG);
-          critic.loadGradFlat(r.cG);
-          gLs = r.gLs; mbPi = r.pi; mbV = r.v; mbEnt = r.ent;
-          handled = true;
-        } catch (err) {
-          gpuState = 'failed';
-          gpuInfo = 'GPU disabled: ' + (err && err.message || err);
-          try { gpu.destroy(); } catch (_) { /* dead */ }
-          gpu = null;
-        }
-      }
-
-      const pool = !handled && gradPool && gradPool.length ? gradPool : null;
+      const pool = gradPool && gradPool.length ? gradPool : null;
       if (pool) {
         // ── Parallel: split the minibatch across the pool ──
         const K = Math.min(pool.length, Math.max(1, Math.floor(bs / 32)));
@@ -983,7 +1036,7 @@ async function _runPPO(batch) {
         }
         actor.loadGradFlat(aG);
         critic.loadGradFlat(cG);
-      } else if (!handled) {
+      } else {
         // ── Local fallback: single-threaded gradient computation ──
         actor.zeroGrad(); critic.zeroGrad();
         const slice = packSlice(OBS, ACT, LOGP, ADV, RET, idx, start, end);
