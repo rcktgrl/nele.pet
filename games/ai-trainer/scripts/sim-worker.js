@@ -1,6 +1,7 @@
 'use strict';
 
 import { Net, gauss, LOG_2PI, accumulatePPOGrads } from './nn-core.js';
+import { GpuGrad } from './gpu-grad.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  AI Trainer — Simulation Worker (PPO)
@@ -53,6 +54,7 @@ let cfg = {
   minibatch: 256,
   hiddenSize: 64,        // restart required
   hiddenLayers: 1,       // restart required
+  backend: 'auto',       // 'auto' | 'gpu' | 'wasm' | 'js' — restart required
   // reward shaping
   progressReward: 0.2,   // per metre of forward progress along the centerline
   gravelPenalty: 1.0,    // per second on gravel
@@ -105,7 +107,12 @@ function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
   return -1;
 }
 
-function wrapPi(a) { return ((a + Math.PI * 3) % (Math.PI * 2)) - Math.PI; }
+// Wrap to (-π, π]. Valid for ANY input magnitude — the previous formula
+// ((a + 3π) % 2π) − π silently returned values < −π once its argument
+// dropped below −3π, which happens when car.hdg accumulates +2π per lap
+// on counterclockwise tracks. That inverted every angle observation on
+// lap 2+ and made the policy steer hard into the wall at a fixed spot.
+function wrapPi(a) { return a - 2 * Math.PI * Math.round(a / (2 * Math.PI)); }
 
 function buildArcTable() {
   const useCity = !!(cityAiPts && cityAiPts.pts && cityAiPts.pts.length);
@@ -123,14 +130,38 @@ function buildArcTable() {
   if (trackLen < 1) trackLen = 1;
 }
 
-// Continuous arc position (metres along centerline) of a world point.
-function arcPosition(px, pz) {
-  const n = navPts.length;
+// Hint-based nearest point search. When `hint` is a valid previous index the
+// scan is restricted to a window around it — this keeps the matched position
+// CONTINUOUS along the route even where the track passes close to itself
+// (city routes legitimately cross the same intersection several times), and
+// turns an O(n) scan into O(win). Falls back to a global scan when the local
+// match is implausibly far (respawn, teleport, first call).
+const RESEED_D2 = 30 * 30;
+
+function nearestIdx(px, pz, pts, hint, win) {
+  const n = pts.length;
   let md = Infinity, ni = 0;
+  if (hint >= 0 && hint < n) {
+    for (let k = -win; k <= win; k++) {
+      const i = ((hint + k) % n + n) % n;
+      const d = (px - pts[i].x) ** 2 + (pz - pts[i].z) ** 2;
+      if (d < md) { md = d; ni = i; }
+    }
+    if (md <= RESEED_D2) return { idx: ni, d2: md };
+  }
+  md = Infinity; ni = 0;
   for (let i = 0; i < n; i++) {
-    const d = (px - navPts[i].x) ** 2 + (pz - navPts[i].z) ** 2;
+    const d = (px - pts[i].x) ** 2 + (pz - pts[i].z) ** 2;
     if (d < md) { md = d; ni = i; }
   }
+  return { idx: ni, d2: md };
+}
+
+// Continuous arc position (metres along centerline) of a world point.
+function arcPosition(px, pz, hint = -1) {
+  const n = navPts.length;
+  const r = nearestIdx(px, pz, navPts, hint, 25);
+  const ni = r.idx, md = r.d2;
   const a = navPts[ni], b = navPts[(ni + 1) % n];
   const abx = b.x - a.x, abz = b.z - a.z;
   const ab2 = abx * abx + abz * abz || 1;
@@ -176,6 +207,10 @@ class SimCar {
     this.stuckTimer   = 0;
     this.lap          = 0;
     this.lapTimes     = [];
+    // nearest-point hints (−1 = unknown → global search on next lookup)
+    this.arcHint    = -1;   // into navPts
+    this.trkHint    = -1;   // into trkPts
+    this.gravelHint = -1;   // into gravelProfile.pts
   }
 
   reset(pos, hdg) {
@@ -184,6 +219,7 @@ class SimCar {
     this.isReversing = false; this.revSpd = 0; this.reverseTimer = 0;
     this.onGravel = false; this.stuckTimer = 0;
     this.lap = 0; this.lapTimes = [];
+    this.arcHint = -1; this.trkHint = -1; this.gravelHint = -1;
   }
 
   update(inp, dt) {
@@ -228,6 +264,9 @@ class SimCar {
       this.pos.z += Math.cos(this.hdg) * this.spd * dt;
     }
 
+    // keep hdg bounded — it would otherwise grow ±2π per lap forever
+    if (this.hdg > Math.PI || this.hdg < -Math.PI) this.hdg = wrapPi(this.hdg);
+
     this.pos.y = this._groundY();
     this.boundary(dt);
     this.checkGravel();
@@ -235,12 +274,9 @@ class SimCar {
 
   _groundY() {
     if (!trkPts.length) return 0;
-    let md = Infinity, ny = 0;
-    for (const p of trkPts) {
-      const d = (this.pos.x - p.x) ** 2 + (this.pos.z - p.z) ** 2;
-      if (d < md) { md = d; ny = p.y; }
-    }
-    return ny;
+    const r = nearestIdx(this.pos.x, this.pos.z, trkPts, this.trkHint, 25);
+    this.trkHint = r.idx;
+    return trkPts[r.idx].y;
   }
 
   boundary(dt) {
@@ -270,11 +306,9 @@ class SimCar {
       return;
     }
 
-    let md = Infinity, ni = 0;
-    for (let i = 0; i < trkPts.length; i++) {
-      const d = (this.pos.x - trkPts[i].x) ** 2 + (this.pos.z - trkPts[i].z) ** 2;
-      if (d < md) { md = d; ni = i; }
-    }
+    const near = nearestIdx(this.pos.x, this.pos.z, trkPts, this.trkHint, 25);
+    const ni = near.idx, md = near.d2;
+    this.trkHint = ni;
     const np  = trkPts[ni];
     const nxt = trkPts[(ni + 1) % trkPts.length];
     const prv = trkPts[(ni + trkPts.length - 1) % trkPts.length];
@@ -330,11 +364,9 @@ class SimCar {
     if (!profile) { this.onGravel = false; return; }
     const { pts, leftRunoff, rightRunoff, rw } = profile;
     const n = pts.length;
-    let md = Infinity, ni = 0;
-    for (let i = 0; i < n; i++) {
-      const d = (this.pos.x - pts[i].x) ** 2 + (this.pos.z - pts[i].z) ** 2;
-      if (d < md) { md = d; ni = i; }
-    }
+    const near = nearestIdx(this.pos.x, this.pos.z, pts, this.gravelHint, 40);
+    const ni = near.idx;
+    this.gravelHint = ni;
     const p   = pts[ni];
     const nxt = pts[(ni + 1) % n], prv = pts[(ni + n - 1) % n];
     const tx  = nxt.x - prv.x, tz = nxt.z - prv.z;
@@ -415,12 +447,19 @@ const SLOPE_NORM  = 0.30;   // |Δy/Δs| considered "max steep"
 //  [24..35] 6 probes × (relative angle, slope between probes)
 const OBS_DIM = 24 + PROBE_DISTS.length * 2;
 
+// Arc position of a car, using and updating its locality hint.
+function carArc(car) {
+  const ap = arcPosition(car.pos.x, car.pos.z, car.arcHint);
+  car.arcHint = ap.nearestIdx;
+  return ap;
+}
+
 function buildObs(car, out) {
   castRayFan(car, RAY_ANGLES, RAY_DIST, out, 0);
   for (let k = 0; k < RAY_ANGLES.length; k++) out[k] = Math.sqrt(out[k]);
   castRayFan(car, EDGE_RAY_ANGLES, EDGE_RAY_DIST, out, 11);
 
-  const ap = arcPosition(car.pos.x, car.pos.z);
+  const ap = carArc(car);
   const speedFrac = car.spd / car.data.maxSpd;
 
   // Dynamic look-ahead waypoint heading error (same idea as the original AI)
@@ -539,7 +578,7 @@ function makeEnv(i) {
   return {
     car,
     // arc tracking for progress reward + lap detection
-    prevS: arcPosition(car.pos.x, car.pos.z).s,
+    prevS: carArc(car).s,
     lapAcc: 0,            // accumulated forward metres this lap
     lapTime: 0,
     epTime: 0,
@@ -560,7 +599,7 @@ function makeEnv(i) {
 function resetEnv(env, i) {
   const sp = spawnPose(i);
   env.car.reset(sp.pos, sp.hdg);
-  env.prevS = arcPosition(env.car.pos.x, env.car.pos.z).s;
+  env.prevS = carArc(env.car).s;
   env.lapAcc = 0; env.lapTime = 0;
   env.epTime = 0; env.epReturn = 0;
   env.offTrackTime = 0; env.noProgTime = 0; env.prevStuck = 0;
@@ -646,7 +685,7 @@ function stepOnce(dt) {
     totalSteps++;
 
     // ── Reward ──
-    const ap = arcPosition(car.pos.x, car.pos.z);
+    const ap = carArc(car);
     let ds = ap.s - env.prevS;
     if (ds >  trackLen / 2) ds -= trackLen;
     if (ds < -trackLen / 2) ds += trackLen;
@@ -719,6 +758,14 @@ function stepOnce(dt) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 let gradPool = null;   // Worker[] — empty array means "fall back to local compute"
+let _wasmOk  = false;  // a grad-worker confirmed its WASM module loaded
+let _wasmErr = '';     // last WASM load/runtime error reported by a grad-worker
+
+// GPU backend (cfg.backend === 'gpu')
+let gpu          = null;     // GpuGrad instance
+let gpuState     = 'off';    // 'off' | 'init' | 'ready' | 'failed'
+let gpuInfo      = '';
+let gpuValidated = false;    // first GPU minibatch is checked against the JS path
 
 function initGradPool() {
   if (gradPool !== null) return;
@@ -732,6 +779,14 @@ function initGradPool() {
         for (const x of gradPool) { try { x.terminate(); } catch (_) { /* already dead */ } }
         gradPool = [];
       };
+      // persistent status listener — independent of per-task onmessage
+      w.addEventListener('message', e => {
+        const d = e.data;
+        if (d && d.type === 'wasmStatus') {
+          if (d.ok) _wasmOk = true;
+          else if (d.error) _wasmErr = d.error;
+        }
+      });
       gradPool.push(w);
     }
   } catch (err) {
@@ -739,10 +794,24 @@ function initGradPool() {
   }
 }
 
+function initGpu() {
+  if (gpu) { try { gpu.destroy(); } catch (_) { /* dead */ } gpu = null; }
+  gpuValidated = false;
+  if (cfg.backend !== 'gpu') { gpuState = 'off'; gpuInfo = ''; return; }
+  gpuState = 'init'; gpuInfo = 'GPU initializing…';
+  GpuGrad.create(actor.sizes, critic.sizes, cfg.minibatch).then(res => {
+    if (res.ok) { gpu = res.gpu; gpuState = 'ready'; gpuInfo = 'WebGPU active'; }
+    else        { gpu = null;    gpuState = 'failed'; gpuInfo = 'GPU unavailable: ' + res.error; }
+  });
+}
+
 function gradTask(w, msg, transfers) {
   return new Promise((resolve, reject) => {
-    w.onmessage = e => resolve(e.data);
-    w.onerror   = e => reject(e);
+    w.onmessage = e => {
+      if (e.data && e.data.type === 'gradResult') resolve(e.data);
+      // ignore status messages — handled by the persistent listener
+    };
+    w.onerror = e => reject(e);
     w.postMessage(msg, transfers);
   });
 }
@@ -751,8 +820,7 @@ function gradTask(w, msg, transfers) {
 //  PPO batch preparation (synchronous — runs once per horizon fill)
 // ─────────────────────────────────────────────────────────────────────────────
 
-let _ppoRunning  = false;
-let _wasmActive  = false;   // true once a grad-worker confirms WASM is running
+let _ppoRunning = false;
 
 function _flushBatch() {
   // Close any open repeat windows; envs get fresh decisions next tick.
@@ -836,8 +904,43 @@ async function _runPPO(batch) {
       const end = Math.min(N, start + cfg.minibatch);
       const bs = end - start;
       let gLs, mbPi, mbV, mbEnt;
+      let handled = false;
 
-      const pool = gradPool && gradPool.length ? gradPool : null;
+      // ── GPU path (experimental, opt-in): whole minibatch on WebGPU ──
+      if (gpuState === 'ready' && gpu && bs <= gpu.cap) {
+        const slice = packSlice(OBS, ACT, LOGP, ADV, RET, idx, start, end);
+        try {
+          const r = await gpu.compute(actor.flatF64(), critic.flatF64(), logStd, hp, slice);
+          if (!gpuValidated) {
+            // one-time numeric check against the reference JS implementation
+            actor.zeroGrad(); critic.zeroGrad();
+            accumulatePPOGrads(actor, critic, logStd, hp, slice);
+            const refA = actor.gradFlatF64(), refC = critic.gradFlatF64();
+            const relL2 = (x, y) => {
+              let e2 = 0, n2 = 0;
+              for (let q = 0; q < x.length; q++) { const e = x[q] - y[q]; e2 += e * e; n2 += y[q] * y[q]; }
+              return Math.sqrt(e2 / (n2 + 1e-12));
+            };
+            const ea = relL2(r.aG, refA), ec = relL2(r.cG, refC);
+            if (ea > 5e-3 || ec > 5e-3) {
+              throw new Error(`validation failed (rel err actor ${ea.toExponential(1)}, critic ${ec.toExponential(1)})`);
+            }
+            gpuValidated = true;
+            gpuInfo = 'WebGPU active (validated)';
+          }
+          actor.loadGradFlat(r.aG);
+          critic.loadGradFlat(r.cG);
+          gLs = r.gLs; mbPi = r.pi; mbV = r.v; mbEnt = r.ent;
+          handled = true;
+        } catch (err) {
+          gpuState = 'failed';
+          gpuInfo = 'GPU disabled: ' + (err && err.message || err);
+          try { gpu.destroy(); } catch (_) { /* dead */ }
+          gpu = null;
+        }
+      }
+
+      const pool = !handled && gradPool && gradPool.length ? gradPool : null;
       if (pool) {
         // ── Parallel: split the minibatch across the pool ──
         const K = Math.min(pool.length, Math.max(1, Math.floor(bs / 32)));
@@ -851,6 +954,7 @@ async function _runPPO(batch) {
           const slice = packSlice(OBS, ACT, LOGP, ADV, RET, idx, s0, s1);
           tasks.push(gradTask(pool[c], {
             type: 'grad',
+            force: cfg.backend === 'js' ? 'js' : 'auto',
             actorSizes: actor.sizes, criticSizes: critic.sizes,
             actorFlat: aFlat, criticFlat: cFlat, logStd: lsArr,
             hp, ...slice,
@@ -875,11 +979,11 @@ async function _runPPO(batch) {
           for (let k = 0; k < cG.length; k++) cG[k] += r.cG[k];
           for (let d = 0; d < ACT_DIM; d++) gLs[d] += r.gLs[d];
           mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
-          if (r.wasmOk) _wasmActive = true;
+          if (r.mode === 'wasm') _wasmOk = true;
         }
         actor.loadGradFlat(aG);
         critic.loadGradFlat(cG);
-      } else {
+      } else if (!handled) {
         // ── Local fallback: single-threaded gradient computation ──
         actor.zeroGrad(); critic.zeroGrad();
         const slice = packSlice(OBS, ACT, LOGP, ADV, RET, idx, start, end);
@@ -939,7 +1043,13 @@ function buildSnapshot() {
     bufferFill: Math.min(1, agentSteps / (cfg.horizon * cfg.numEnvs)),
     phase: _ppoRunning ? 'updating' : 'collecting',
     gradThreads: gradPool ? gradPool.length : 0,
-    wasmActive: _wasmActive,
+    backend: gpuState === 'ready' ? 'gpu'
+           : (gradPool && gradPool.length && _wasmOk && cfg.backend !== 'js') ? 'wasm'
+           : 'js',
+    backendInfo: gpuState === 'failed' ? gpuInfo
+               : gpuState === 'init'   ? gpuInfo
+               : _wasmErr ? 'WASM unavailable: ' + _wasmErr
+               : '',
     avgReturn,
     bestLap: Number.isFinite(bestLap) ? bestLap : null,
     episodes: recentReturns.length,
@@ -1022,6 +1132,7 @@ self.onmessage = function (e) {
     stopLoop();
     initGradPool();
     initSim(model || null);
+    initGpu();
     postMessage({
       type: 'ready', obsDim: OBS_DIM, actorSizes: actor.sizes,
       numEnvs: cfg.numEnvs, gradThreads: gradPool ? gradPool.length : 0,

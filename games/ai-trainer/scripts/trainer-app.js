@@ -150,6 +150,7 @@ const OBS_DIM = 36; // must match sim-worker.js
 const simCfg = {
   hiddenLayers: 1,       // restart required
   hiddenSize: 64,        // restart required
+  backend: 'auto',       // restart required — 'auto' | 'gpu' | 'wasm' | 'js'
   numEnvs: 8,            // restart required
   speedMult: 1,
   episodeLen: 60,
@@ -258,23 +259,23 @@ function refreshHUD(d) {
     bar.style.background = 'linear-gradient(90deg, #4af, #4f4)';
     wrap.title = 'Collecting rollout — bar fills then policy updates';
   }
-  const threads    = d.gradThreads || 0;
-  const wasmActive = d.wasmActive  || false;
+  const threads = d.gradThreads || 0;
   const phaseEl = document.getElementById('hudPhase');
   if (phase === 'updating') {
-    const coreStr = threads ? ` ×${threads}` : '';
-    const wasmStr = wasmActive ? ' WASM' : '';
-    phaseEl.textContent = `⚙ UPDATING${coreStr}${wasmStr}`;
+    phaseEl.textContent = threads ? `⚙ UPDATING ×${threads}` : '⚙ UPDATING';
     phaseEl.style.color = '#fa4';
   } else {
     phaseEl.textContent = '● COLLECTING';
     phaseEl.style.color = '#4f4';
   }
-  // Show WASM badge in dedicated element if it exists
-  const wasmEl = document.getElementById('hudWasm');
-  if (wasmEl) {
-    wasmEl.textContent = wasmActive ? 'WASM ✓' : 'JS';
-    wasmEl.style.color  = wasmActive ? '#4fa' : '#888';
+  // Compute-backend badge: GPU / WASM / JS, tooltip carries failure reasons
+  const backendEl = document.getElementById('hudWasm');
+  if (backendEl && d.backend) {
+    const labels = { gpu: 'GPU ✓', wasm: `WASM ×${threads}`, js: `JS ×${threads || 1}` };
+    const colors = { gpu: '#c9f', wasm: '#4fa', js: '#888' };
+    backendEl.textContent = labels[d.backend] || d.backend;
+    backendEl.style.color = colors[d.backend] || '#888';
+    backendEl.title = d.backendInfo || 'Gradient compute backend';
   }
 
   if (d.sigma) {
@@ -368,7 +369,7 @@ function makeOptBtnGroup(containerId, options, key, onChange) {
     b.dataset.val = val;
     b.addEventListener('click', () => {
       simCfg[key] = val;
-      wrap.querySelectorAll('.opt-btn').forEach(el => el.classList.toggle('sel', +el.dataset.val === val));
+      wrap.querySelectorAll('.opt-btn').forEach(el => el.classList.toggle('sel', el.dataset.val === String(val)));
       onChange && onChange(val);
     });
     wrap.appendChild(b);
@@ -398,6 +399,11 @@ function initConfigMenu() {
   makeOptBtnGroup('configHorizonBtns',
     [{ label: '256', val: 256 }, { label: '512', val: 512 }, { label: '1024', val: 1024 }],
     'horizon');
+
+  makeOptBtnGroup('configBackendBtns',
+    [{ label: 'AUTO', val: 'auto' }, { label: 'GPU', val: 'gpu' },
+     { label: 'WASM', val: 'wasm' }, { label: 'JS', val: 'js' }],
+    'backend');
 
   wireConfigSlider('configAgentSlider',  'configAgentVal',  'numEnvs',  v => Math.round(v) + ' agents');
   wireConfigSlider('configEpLenSlider',  'configEpLenVal',  'episodeLen', v => v + 's');
