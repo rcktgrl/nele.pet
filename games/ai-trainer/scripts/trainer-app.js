@@ -144,13 +144,15 @@ function bestCarIndex(cars) {
 // ─────────────────────────────────────────────────────────────────────────────
 let worker = null, workerReady = false, simRunning = false;
 
-const OBS_DIM = 36; // must match sim-worker.js
+const OBS_DIM = 40; // must match sim-worker.js (36 + 4 memory cells)
+const ACT_DIM = 6;  // steer, throttle/brake + 4 memory-cell deltas
 
 // Full training config — architecture fields require restart, others are live
 const simCfg = {
   hiddenLayers: 1,       // restart required
   hiddenSize: 64,        // restart required
   backend: 'auto',       // restart required — 'auto' | 'gpu' | 'wasm' | 'js'
+  threads: Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 2)),
   numEnvs: 8,            // restart required
   speedMult: 1,
   episodeLen: 60,
@@ -271,8 +273,14 @@ function refreshHUD(d) {
   // Compute-backend badge: GPU / WASM / JS, tooltip carries failure reasons
   const backendEl = document.getElementById('hudWasm');
   if (backendEl && d.backend) {
-    const labels = { gpu: 'GPU ✓', wasm: `WASM ×${threads}`, js: `JS ×${threads || 1}` };
-    const colors = { gpu: '#c9f', wasm: '#4fa', js: '#888' };
+    const labels = {
+      'gpu': 'GPU ✓', 'gpu-init': 'GPU …', 'gpu-failed': 'GPU ✗→CPU',
+      'wasm': `WASM ×${threads}`, 'js': `JS ×${threads || 1}`,
+    };
+    const colors = {
+      'gpu': '#c9f', 'gpu-init': '#fa4', 'gpu-failed': '#f66',
+      'wasm': '#4fa', 'js': '#888',
+    };
     backendEl.textContent = labels[d.backend] || d.backend;
     backendEl.style.color = colors[d.backend] || '#888';
     backendEl.title = d.backendInfo || 'Gradient compute backend';
@@ -353,7 +361,7 @@ function netParams(hiddenLayers, hiddenSize, outDim) {
 
 function updateConfigParamCount() {
   const l = simCfg.hiddenLayers, h = simCfg.hiddenSize;
-  const act  = netParams(l, h, 2);
+  const act  = netParams(l, h, ACT_DIM);
   const crit = netParams(l, h, 1);
   document.getElementById('configParamCount').textContent =
     `${(act + crit).toLocaleString()} total parameters  (actor ${act.toLocaleString()} · critic ${crit.toLocaleString()})`;
@@ -406,6 +414,7 @@ function initConfigMenu() {
     'backend');
 
   wireConfigSlider('configAgentSlider',  'configAgentVal',  'numEnvs',  v => Math.round(v) + ' agents');
+  wireConfigSlider('configThreadSlider', 'configThreadVal', 'threads',  v => Math.round(v) + ' threads');
   wireConfigSlider('configEpLenSlider',  'configEpLenVal',  'episodeLen', v => v + 's');
   wireConfigSlider('configLrSlider',     'configLrVal',     'lr',        v => v.toExponential(1));
   wireConfigSlider('configEntSlider',    'configEntVal',    'entropyCoef', v => v.toFixed(4));

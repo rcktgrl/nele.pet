@@ -55,6 +55,7 @@ let cfg = {
   hiddenSize: 64,        // restart required
   hiddenLayers: 1,       // restart required
   backend: 'auto',       // 'auto' | 'gpu' | 'wasm' | 'js' — restart required
+  threads: 0,            // gradient worker count, 0 = auto (cores − 2, max 6)
   // reward shaping
   progressReward: 0.2,   // per metre of forward progress along the centerline
   gravelPenalty: 1.0,    // per second on gravel
@@ -211,6 +212,8 @@ class SimCar {
     this.arcHint    = -1;   // into navPts
     this.trkHint    = -1;   // into trkPts
     this.gravelHint = -1;   // into gravelProfile.pts
+    // policy-writable memory register (fed back as observations)
+    this.mem = new Float64Array(4);
   }
 
   reset(pos, hdg) {
@@ -220,6 +223,7 @@ class SimCar {
     this.onGravel = false; this.stuckTimer = 0;
     this.lap = 0; this.lapTimes = [];
     this.arcHint = -1; this.trkHint = -1; this.gravelHint = -1;
+    this.mem.fill(0);
   }
 
   update(inp, dt) {
@@ -438,6 +442,16 @@ function castRayFan(car, angles, maxDist, out, offset) {
 const PROBE_DISTS = [10, 20, 35, 55, 100, 200];
 const SLOPE_NORM  = 0.30;   // |Δy/Δs| considered "max steep"
 
+// Memory cells: the policy gets MEM_DIM extra action outputs that write a
+// rate-limited delta into a persistent per-car register, which is fed back
+// as extra observations on the next decision. PPO treats the register as
+// part of the environment state (stored in the observation), so no
+// backprop-through-time is needed — this is the standard "external memory
+// as action" recurrence. The delta limit keeps the register stable under
+// the Gaussian exploration noise on the memory actions.
+const MEM_DIM  = 4;
+const MEM_RATE = 0.1;  // max register change per decision (≈5 % of range per tick)
+
 // Observation layout:
 //  [0..10]  11 track-edge rays (sqrt-normalised, like the original AI)
 //  [11..17] 7 short wall rays
@@ -445,7 +459,9 @@ const SLOPE_NORM  = 0.30;   // |Δy/Δs| considered "max steep"
 //  [20] edge proximity      [21] on-gravel flag
 //  [22] reversing flag      [23] slope at the car
 //  [24..35] 6 probes × (relative angle, slope between probes)
-const OBS_DIM = 24 + PROBE_DISTS.length * 2;
+//  [36..39] 4 memory cells (written by the policy's memory actions)
+const OBS_DIM = 24 + PROBE_DISTS.length * 2 + MEM_DIM;
+const MEM_OBS = 24 + PROBE_DISTS.length * 2;   // base index of memory cells
 
 // Arc position of a car, using and updating its locality hint.
 function carArc(car) {
@@ -490,6 +506,7 @@ function buildObs(car, out) {
     out[24 + k * 2 + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
     prevY = p.y; prevD = d;
   }
+  for (let d = 0; d < MEM_DIM; d++) out[MEM_OBS + d] = car.mem[d];
   return ap; // caller reuses arc position for reward
 }
 
@@ -497,7 +514,7 @@ function buildObs(car, out) {
 //  PPO agent
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ACT_DIM = 2;          // [steer, throttle/brake]
+const ACT_DIM = 2 + MEM_DIM; // [steer, throttle/brake, 4 memory-cell deltas]
 
 let actor  = null;          // Net [OBS_DIM, h, ACT_DIM] → action means
 let critic = null;          // Net [OBS_DIM, h, 1] → state value
@@ -517,6 +534,11 @@ function initAgent(modelOverride) {
   lsT = 0;
   if (modelOverride && modelOverride.algo === 'ppo') {
     try {
+      const mSizes = modelOverride.actor.sizes;
+      if (modelOverride.obsDim !== OBS_DIM || mSizes[mSizes.length - 1] !== ACT_DIM) {
+        throw new Error(`incompatible model: expects obs ${modelOverride.obsDim}/act ${mSizes[mSizes.length - 1]}, ` +
+                        `current layout is obs ${OBS_DIM}/act ${ACT_DIM} (memory cells added)`);
+      }
       actor  = new Net(modelOverride.actor.sizes, 1);
       actor.loadFlat(modelOverride.actor.flat);
       critic = new Net(modelOverride.critic.sizes, 1);
@@ -673,6 +695,13 @@ function stepOnce(dt) {
       env.pendLogp = logProb(env.curAct, mean);
       env.pendVal  = critic.forward(obs)[0];
       env.repCount = cfg.actionRepeat;
+      // Memory write: rate-limited delta from the memory actions. Applied
+      // after the observation snapshot, so the new value appears in the
+      // NEXT decision's observation.
+      for (let d = 0; d < MEM_DIM; d++) {
+        const a = Math.max(-1, Math.min(1, env.curAct[2 + d]));
+        car.mem[d] = Math.max(-1, Math.min(1, car.mem[d] + MEM_RATE * a));
+      }
     }
     env.repCount--;
 
@@ -767,12 +796,21 @@ let gpuState     = 'off';    // 'off' | 'init' | 'ready' | 'failed'
 let gpuInfo      = '';
 let gpuValidated = false;    // first GPU minibatch is checked against the JS path
 
-function initGradPool() {
-  if (gradPool !== null) return;
+function desiredThreads() {
+  const t = cfg.threads | 0;
+  if (t > 0) return Math.max(1, Math.min(64, t));
+  const hc = (self.navigator && self.navigator.hardwareConcurrency) || 4;
+  return Math.max(1, Math.min(6, hc - 2)); // leave cores for sim + render
+}
+
+let _poolRebuild = false; // thread count changed mid-update → rebuild when idle
+
+function initGradPool(force) {
+  if (gradPool !== null && !force) return;
+  if (gradPool) for (const x of gradPool) { try { x.terminate(); } catch (_) { /* dead */ } }
   gradPool = [];
   try {
-    const hc = (self.navigator && self.navigator.hardwareConcurrency) || 4;
-    const n = Math.max(1, Math.min(6, hc - 2)); // leave cores for sim + render
+    const n = desiredThreads();
     for (let i = 0; i < n; i++) {
       const w = new Worker(new URL('./grad-worker.js', import.meta.url), { type: 'module' });
       w.onerror = () => { // nested workers unsupported / failed → local fallback
@@ -799,8 +837,10 @@ function initGpu() {
   gpuValidated = false;
   if (cfg.backend !== 'gpu') { gpuState = 'off'; gpuInfo = ''; return; }
   gpuState = 'init'; gpuInfo = 'GPU initializing…';
-  // epochCap = max training samples per epoch; mbs = minibatch size.
-  const epochCap = cfg.numEnvs * cfg.horizon;
+  // epochCap = max training samples per epoch. Collection continues while an
+  // update is in flight (back-pressure caps it at 2× horizon·envs), and
+  // _flushBatch commits one extra open transition per env — size for both.
+  const epochCap = cfg.numEnvs * cfg.horizon * 2 + cfg.numEnvs * 8;
   GpuGrad.create(actor.sizes, critic.sizes, epochCap, cfg.minibatch).then(res => {
     if (res.ok) { gpu = res.gpu; gpuState = 'ready'; gpuInfo = 'WebGPU active'; }
     else        { gpu = null;    gpuState = 'failed'; gpuInfo = 'GPU unavailable: ' + res.error; }
@@ -1066,6 +1106,7 @@ async function _runPPO(batch) {
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
   iteration++;
   _ppoRunning = false;
+  if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1096,7 +1137,9 @@ function buildSnapshot() {
     bufferFill: Math.min(1, agentSteps / (cfg.horizon * cfg.numEnvs)),
     phase: _ppoRunning ? 'updating' : 'collecting',
     gradThreads: gradPool ? gradPool.length : 0,
-    backend: gpuState === 'ready' ? 'gpu'
+    backend: gpuState === 'ready'  ? 'gpu'
+           : gpuState === 'init'   ? 'gpu-init'
+           : gpuState === 'failed' ? 'gpu-failed'
            : (gradPool && gradPool.length && _wasmOk && cfg.backend !== 'js') ? 'wasm'
            : 'js',
     backendInfo: gpuState === 'failed' ? gpuInfo
@@ -1215,7 +1258,13 @@ self.onmessage = function (e) {
   }
 
   if (type === 'setConfig') {
+    const prevThreads = desiredThreads();
     Object.assign(cfg, e.data.config);
+    if (gradPool !== null && desiredThreads() !== prevThreads) {
+      // resize the pool — deferred while an update has tasks in flight
+      if (_ppoRunning) _poolRebuild = true;
+      else initGradPool(true);
+    }
     return;
   }
 
@@ -1231,9 +1280,10 @@ self.onmessage = function (e) {
       model: {
         id: 'ai-trainer-ppo',
         name: 'AI Trainer PPO Export',
-        version: 2,
+        version: 3,
         algo: 'ppo',
         obsDim: OBS_DIM,
+        actDim: ACT_DIM,
         actor:  { sizes: actor.sizes,  flat: actor.flat()  },
         critic: { sizes: critic.sizes, flat: critic.flat() },
         logStd: Array.from(logStd),
