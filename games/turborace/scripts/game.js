@@ -57,6 +57,7 @@ import {
 } from './leaderboard.js';
 import { resetEditorCameraToTrack as camResetEditorCam } from './camera.js';
 import { loadArcadeUser } from './user.js';
+import { showFreeDriveMenu, startFreeDrive, onFdColorInput, updateFreeDrive } from './freedrive.js';
 
 'use strict';
 
@@ -65,24 +66,24 @@ import { loadArcadeUser } from './user.js';
 // ═══════════════════════════════════════════════════════
 document.addEventListener('keydown',e=>{
   keys[e.code]=true;
-  if(e.code==='KeyC'&&(state.gState==='racing'||state.gState==='cooldown'))toggleCam();
+  if(e.code==='KeyC'&&(state.gState==='racing'||state.gState==='cooldown'||state.gState==='freedrive'))toggleCam();
   if(e.code==='Escape'){
     const leaderboardModal=document.getElementById('leaderboardModal');
     if(leaderboardModal&&leaderboardModal.style.display==='flex'){ closeTrackLeaderboardModal(); return; }
-    if(state.gState==='racing'||state.gState==='cooldown')pauseRace();
+    if(state.gState==='racing'||state.gState==='cooldown'||state.gState==='freedrive')pauseRace();
     else if(state.gState==='paused')resumeRace();
   }
 });
 document.addEventListener('keyup',e=>{ keys[e.code]=false; });
 document.addEventListener('pointermove',e=>{
-  if((state.gState==='racing'||state.gState==='cooldown'||state.gState==='finished'||state.gState==='countdown')&&e.buttons===2){
+  if((state.gState==='racing'||state.gState==='cooldown'||state.gState==='finished'||state.gState==='countdown'||state.gState==='freedrive')&&e.buttons===2){
     raceCamOrbit.yaw-=e.movementX*0.004;
     raceCamOrbit.pitch=Math.max(-0.55,Math.min(0.75,raceCamOrbit.pitch-e.movementY*0.003));
     raceCamOrbit.lastInput=performance.now();
   }
 });
 document.addEventListener('wheel',e=>{
-  if(state.gState==='racing'||state.gState==='cooldown'||state.gState==='countdown'||state.gState==='finished'){
+  if(state.gState==='racing'||state.gState==='cooldown'||state.gState==='countdown'||state.gState==='finished'||state.gState==='freedrive'){
     raceCamOrbit.distance=Math.max(4,Math.min(40,raceCamOrbit.distance*(1+Math.sign(e.deltaY)*0.08)));
   }
 },{passive:true});
@@ -235,6 +236,8 @@ function updateFrame(dt){
     updateAudio(0,0,dt,state.pCar,keys); updateCamera();
     updateGhostReplay();
     if(document.getElementById('results').style.display==='flex') updateResultsUI();
+  }else if(state.gState==='freedrive'){
+    updateFreeDrive(dt);
   }else if(state.gState==='editorPreview'){
     updateEditorPreviewCamera(dt);
   }else if(state.gState==='editor'){
@@ -275,6 +278,11 @@ document.getElementById('settingsCloseBtn').addEventListener('click',closeSettin
 document.getElementById('introStartBtn').addEventListener('click',function(){tryStartMenuMusic();showMain();});
 document.getElementById('gameStartBtn').addEventListener('click',function(){tryStartMenuMusic();showTrkSel();});
 document.getElementById('vsModeBtn').addEventListener('click',function(){tryStartMenuMusic();showVsLobby();});
+document.getElementById('freeDriveBtn').addEventListener('click',function(){tryStartMenuMusic();showFreeDriveMenu();});
+document.getElementById('fdBackBtn').addEventListener('click',showMain);
+document.getElementById('fdStartBtn').addEventListener('click',function(){tryStartMenuMusic();void startFreeDrive();});
+document.getElementById('fdColor').addEventListener('input',e=>onFdColorInput(e.target.value));
+document.getElementById('fdOnlineToggle').addEventListener('change',e=>{ state.fdOnline=e.target.checked; });
 document.getElementById('trackEditorBtn').addEventListener('click',function(){tryStartMenuMusic();showTrackEditor();});
 document.getElementById('mainSettingsBtn').addEventListener('click',function(){tryStartMenuMusic();showSettings();});
 document.getElementById('backToSelectionBtn').addEventListener('click',()=>{ window.location.href='../index.html'; });

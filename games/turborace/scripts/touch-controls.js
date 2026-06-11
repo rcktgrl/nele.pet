@@ -167,7 +167,7 @@ export function getGyroVisualSteer(){
 export function isTouchControlsEnabled(){ return touchControlsEnabled; }
 
 export function isTouchControlsVisibleInState(state){
-  return touchControlsEnabled&&(state==='racing'||state==='cooldown');
+  return touchControlsEnabled&&(state==='racing'||state==='cooldown'||state==='freedrive');
 }
 
 export function updateTouchControlsVisibility(gState){

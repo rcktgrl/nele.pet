@@ -86,4 +86,11 @@ export const state = {
     // Broadcast throttle
     vsPosSendTimer: 0,
     vsPosSendInterval: 0.033, // 30 Hz
+
+    // ── Free Drive (open-world island) ──────────────────────────────────────
+    fdMode: false,           // true while free-driving on the island
+    fdOnline: true,          // menu toggle: share the island with other players
+    fdNetwork: null,         // FreeDriveNetwork instance (null = solo)
+    fdPosTimer: 0,           // broadcast throttle
+    fdCleanup: null,         // set by freedrive.js; called by showMain on exit
 };

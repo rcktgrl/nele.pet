@@ -67,6 +67,7 @@ export function showMain(){
   state.allCars=[]; state.aiCars=[]; state.pCar=null;
   state.vsMode=false;
   if(state.vsNetwork){ state.vsNetwork.leave().catch(()=>{}); state.vsNetwork=null; }
+  if(state.fdCleanup) state.fdCleanup();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -93,7 +94,7 @@ function ensureCarCardPreviewRenderer(){
 }
 
 function renderCarCardPreviews(ts){
-  if((state.gState!=='carSel'&&state.gState!=='vsLobby')||!state.carCardPreviews.length){ state.carCardPreviewRaf=0; return; }
+  if((state.gState!=='carSel'&&state.gState!=='vsLobby'&&state.gState!=='fdMenu')||!state.carCardPreviews.length){ state.carCardPreviewRaf=0; return; }
   const now=ts||performance.now();
   const dt=Math.min(0.05,Math.max(0.001,(now-state.carCardPreviewLastTime||16)/1000));
   state.carCardPreviewLastTime=now;
@@ -543,9 +544,9 @@ export async function vsLoadOnlineTracks() {
   if (btn) { btn.disabled = false; btn.textContent = '✓ ONLINE TRACKS LOADED'; }
 }
 
-// ── Inline car selector ───────────────────────────────────────────────────────
+// ── Inline car selector (shared by VS lobby and Free Drive) ──────────────────
 
-function _buildVsCarRow(containerId, onSelect) {
+export function buildCarChipRow(containerId, onSelect) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
@@ -586,18 +587,18 @@ function _buildVsCarRow(containerId, onSelect) {
       container.querySelectorAll('.vsCarChip').forEach(x => x.classList.remove('sel'));
       d.classList.add('sel'); state.selCar = i;
       state.carCardPreviews.forEach(item => { item.selected = item.host === d; });
-      _refreshVsCarColors(containerId);
+      refreshCarChipColors(containerId);
       startCarCardPreviews();
       onSelect(i);
     };
     container.appendChild(d);
   });
-  _refreshVsCarColors(containerId);
+  refreshCarChipColors(containerId);
   startCarCardPreviews();
 }
 
-// VS car chips: selected chip shows the chosen colour, others stay default.
-function _refreshVsCarColors(containerId) {
+// Car chips: selected chip shows the chosen colour, others stay default.
+export function refreshCarChipColors(containerId) {
   state.carCardPreviews.filter(p => p._vsContainer === containerId).forEach(p => {
     _recolorPreviewModel(p, (p.selected && state.carColor != null) ? state.carColor : null);
   });
@@ -609,10 +610,10 @@ export function onVsColorInput(css) {
   if (state.vsIsHost) {
     const me = _vsRoster.find(e => e.id === state.vsNetwork?.myId);
     if (me) { me.color = state.carColor; _hostSyncRoster(); }
-    _refreshVsCarColors('vsHostCarRow');
+    refreshCarChipColors('vsHostCarRow');
   } else {
     state.vsNetwork?.sendGuestReady(state.selCar ?? 0, state.carColor);
-    _refreshVsCarColors('vsGuestCarRow');
+    refreshCarChipColors('vsGuestCarRow');
   }
   startCarCardPreviews();
 }
@@ -647,12 +648,12 @@ function _showVsRoomPanel(isHost) {
       onlineBtn.textContent = _vsShowOnline ? '✓ ONLINE TRACKS LOADED' : 'LOAD ONLINE TRACKS';
     }
     _buildVsTrkCards();
-    _buildVsCarRow('vsHostCarRow', carIdx => {
+    buildCarChipRow('vsHostCarRow', carIdx => {
       const me = _vsRoster.find(e => e.id === state.vsNetwork?.myId);
       if (me) { me.carIdx = carIdx; me.color = state.carColor; _hostSyncRoster(); }
     });
   } else {
-    _buildVsCarRow('vsGuestCarRow', carIdx => {
+    buildCarChipRow('vsGuestCarRow', carIdx => {
       state.vsNetwork?.sendGuestReady(carIdx, state.carColor);
     });
   }

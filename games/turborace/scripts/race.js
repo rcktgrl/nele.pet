@@ -213,7 +213,7 @@ export function pauseRace(){
 }
 
 export function resumeRace(){
-  state.gState=_prePauseState==='cooldown'?'cooldown':'racing';
+  state.gState=_prePauseState==='cooldown'?'cooldown':_prePauseState==='freedrive'?'freedrive':'racing';
   document.getElementById('pauseMenu').style.display='none';
   document.getElementById('settingsModal').style.display='none';
   updateTouchControlsVisibility(state.gState);
@@ -331,6 +331,11 @@ export function restartRace(){
   document.getElementById('settingsModal').style.display='none';
   releaseAllTouchControls();
   document.getElementById('results').style.display='none';
+  if(state.fdMode){
+    // Free Drive: "restart" = respawn at the nearest city
+    import('./freedrive.js').then(m=>m.fdRespawn());
+    return;
+  }
   if(state.vsMode){
     // Return everyone to the VS lobby so they can pick a new track/car
     import('./menu.js').then(m=>m.vsReturnToLobby());
