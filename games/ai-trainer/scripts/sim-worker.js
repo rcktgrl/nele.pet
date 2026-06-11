@@ -62,6 +62,10 @@ let cfg = {
   wallPenalty: 2.0,      // per second of wall contact
   terminalPenalty: 10,   // on off-track / stuck termination
   lapBonus: 20,          // on lap completion
+  // consistency guard — best-policy checkpoint + auto-revert
+  ckptEnable: true,        // snapshot the best policy, revert on sustained regression
+  consistencyWeight: 0.5,  // score = mean(returns) − weight·std(returns)
+  revertPatience: 25,      // updates below the best score before auto-revert
 };
 
 const FIXED_DT = 1 / 60;
@@ -575,6 +579,22 @@ let recentReturns = [];     // last completed episode returns
 let bestLap = Infinity;
 let lastLoss = { pi: 0, v: 0, ent: 0 };
 
+// ── Consistency guard state ──────────────────────────────────────────────────
+// PPO is on-policy: once the policy drifts into a worse strategy (and σ has
+// shrunk) there is nothing in vanilla PPO that can pull it back to an earlier,
+// better policy. The guard snapshots the policy whenever a consistency-aware
+// score — mean(recent returns) − w·std(recent returns), which rewards HIGH and
+// STABLE returns — reaches a new best, and restores that snapshot after
+// `revertPatience` consecutive updates spent significantly below it.
+let ckpt          = null;   // { aFlat, cFlat, logStd, score, mean, std, iter }
+let curScore      = null;   // last computed { score, mean, std }
+let regressCount  = 0;      // consecutive updates below the checkpoint score
+let revertCount   = 0;      // total reverts this run
+let _revertPending = false; // manual revert requested while an update is in flight
+
+const CKPT_WINDOW  = 20;    // episodes used for the score
+const CKPT_MIN_EPS = 12;    // minimum episodes before scoring
+
 function spawnPose(envIdx) {
   const n = trkPts.length;
   if (!n) return { pos: { x: 0, y: 0, z: 0 }, hdg: 0 };
@@ -637,6 +657,8 @@ function initSim(modelOverride) {
   recentReturns = []; bestLap = Infinity;
   simTime = 0;
   lastLoss = { pi: 0, v: 0, ent: 0 };
+  ckpt = null; curScore = null;
+  regressCount = 0; revertCount = 0; _revertPending = false;
 }
 
 // Finalize the pending transition of an env into its rollout chain.
@@ -938,6 +960,75 @@ function packEpochData(OBS, ACT, LOGP, ADV, RET, idx, N) {
   return { N, obs, act, logp, adv, ret };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Consistency guard
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Consistency-aware policy score over the recent episode window.
+// Subtracting the std means an erratic policy (huge spread between its best
+// and worst episodes) scores below a steady one with the same mean.
+function policyScore() {
+  const tail = recentReturns.slice(-CKPT_WINDOW);
+  if (tail.length < CKPT_MIN_EPS) return null;
+  let mean = 0; for (const r of tail) mean += r; mean /= tail.length;
+  let varr = 0; for (const r of tail) varr += (r - mean) ** 2;
+  const std = Math.sqrt(varr / tail.length);
+  return { score: mean - cfg.consistencyWeight * std, mean, std };
+}
+
+function updateCheckpoint() {
+  if (!cfg.ckptEnable) { regressCount = 0; return; }
+  const s = policyScore();
+  if (!s) return;
+  curScore = s;
+  if (!ckpt || s.score > ckpt.score) {
+    ckpt = {
+      aFlat: actor.flatF64(), cFlat: critic.flatF64(),
+      logStd: Float64Array.from(logStd),
+      score: s.score, mean: s.mean, std: s.std, iter: iteration,
+    };
+    regressCount = 0;
+    return;
+  }
+  // Sustained, significant regression → restore the best snapshot. The margin
+  // keeps ordinary episode-return noise from triggering reverts.
+  const margin = Math.max(2, Math.abs(ckpt.score) * 0.1);
+  if (s.score < ckpt.score - margin) {
+    if (++regressCount >= Math.max(1, cfg.revertPatience | 0)) restoreCheckpoint();
+  } else {
+    regressCount = 0;
+  }
+}
+
+// Restore the best snapshot. Only call between PPO updates (weights must not
+// change while gradient tasks are in flight).
+function restoreCheckpoint() {
+  if (!ckpt) return;
+  actor.loadFlat(ckpt.aFlat);
+  critic.loadFlat(ckpt.cFlat);
+  logStd.set(ckpt.logStd);
+  actor.resetAdam();
+  critic.resetAdam();
+  lsM.fill(0); lsV.fill(0); lsT = 0;
+  // Re-open exploration a little: the policy already proved the abandoned
+  // direction is a dead end, so it needs noise to find a DIFFERENT one.
+  for (let d = 0; d < ACT_DIM; d++) logStd[d] = Math.min(0.3, logStd[d] + 0.25);
+  // Drop rollouts and episode stats gathered under the abandoned policy —
+  // stale transitions would train the restored weights toward it again, and
+  // stale returns would immediately re-trigger the regression counter.
+  for (const env of envs) {
+    const b = env.buf;
+    b.obs.length = 0; b.act.length = 0; b.logp.length = 0;
+    b.val.length = 0; b.rew.length = 0; b.done.length = 0;
+    env.pendObs = null; env.rewAcc = 0; env.repCount = 0;
+  }
+  agentSteps = 0;
+  recentReturns = [];
+  curScore = null;
+  regressCount = 0;
+  revertCount++;
+}
+
 async function _runPPO(batch) {
   const { OBS, ACT, LOGP, ADV, RET } = batch;
   const N = OBS.length;
@@ -1105,6 +1196,8 @@ async function _runPPO(batch) {
 
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
   iteration++;
+  if (_revertPending) { _revertPending = false; restoreCheckpoint(); }
+  else updateCheckpoint();
   _ppoRunning = false;
   if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
 }
@@ -1151,6 +1244,11 @@ function buildSnapshot() {
     episodes: recentReturns.length,
     loss: lastLoss,
     sigma: logStd ? [Math.exp(logStd[0]), Math.exp(logStd[1])] : null,
+    ckpt: ckpt ? {
+      score: ckpt.score, iter: ckpt.iter,
+      cur: curScore ? curScore.score : null,
+      regress: regressCount, reverts: revertCount,
+    } : null,
   };
   // actor weights for the visualiser — heavy, send ~once per second
   if (vizCounter++ % POST_HZ === 0 && actor) {
@@ -1270,6 +1368,13 @@ self.onmessage = function (e) {
 
   if (type === 'getSnapshot') {
     if (actor) postMessage(buildSnapshot());
+    return;
+  }
+
+  if (type === 'revertBest') {
+    if (!ckpt) return;
+    if (_ppoRunning) _revertPending = true;  // applied when the update finishes
+    else restoreCheckpoint();
     return;
   }
 

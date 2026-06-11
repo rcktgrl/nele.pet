@@ -93,6 +93,17 @@ export class Net {
     for (const g of this.gb) g.fill(0);
   }
 
+  // Clear Adam moments + step count — required after externally overwriting
+  // the weights (checkpoint restore), or the stale momentum immediately
+  // pushes the restored weights back toward the abandoned policy.
+  resetAdam() {
+    for (const m of this.mW) m.fill(0);
+    for (const v of this.vW) v.fill(0);
+    for (const m of this.mb) m.fill(0);
+    for (const v of this.vb) v.fill(0);
+    this.t = 0;
+  }
+
   adamStep(lr, scale) {
     this.t++;
     const b1 = 0.9, b2 = 0.999, eps = 1e-8;

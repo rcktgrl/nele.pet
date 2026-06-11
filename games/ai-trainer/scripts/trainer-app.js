@@ -165,6 +165,9 @@ const simCfg = {
   wallPenalty: 2.0,
   terminalPenalty: 10,
   lapBonus: 20,
+  ckptEnable: true,
+  consistencyWeight: 0.5,
+  revertPatience: 25,
 };
 
 function mkWorker() {
@@ -288,6 +291,22 @@ function refreshHUD(d) {
 
   if (d.sigma) {
     document.getElementById('hudSigma').textContent = 'σ ' + d.sigma.map(s => s.toFixed(2)).join('/');
+  }
+
+  const ckptEl = document.getElementById('ckptStatus');
+  if (ckptEl) {
+    const ck = d.ckpt;
+    if (ck) {
+      let txt = `best ${fmt(ck.score)} @ update ${ck.iter}`;
+      if (ck.cur != null) txt += ` · now ${fmt(ck.cur)}`;
+      if (ck.regress > 0) txt += ` · regressing ${ck.regress}`;
+      if (ck.reverts > 0) txt += ` · reverts ${ck.reverts}`;
+      ckptEl.textContent = txt;
+      ckptEl.style.color = ck.regress > 0 ? '#fa4' : '#4a8';
+    } else if (Object.prototype.hasOwnProperty.call(d, 'ckpt')) {
+      ckptEl.textContent = 'no checkpoint yet — needs ~12 finished episodes';
+      ckptEl.style.color = '#667';
+    }
   }
 
   if (lastCars.length) {
@@ -523,6 +542,18 @@ function initUI() {
   wireSlider('wallSlider',    'wallVal',    'wallPenalty',     v => v.toFixed(1));
   wireSlider('termSlider',    'termVal',    'terminalPenalty', v => Math.round(v));
   wireSlider('lapBonusSlider','lapBonusVal','lapBonus',        v => Math.round(v));
+
+  wireSlider('consSlider',     'consVal',     'consistencyWeight', v => v.toFixed(1));
+  wireSlider('patienceSlider', 'patienceVal', 'revertPatience',    v => Math.round(v));
+  const ckptTog = document.getElementById('ckptToggle');
+  ckptTog.checked = simCfg.ckptEnable;
+  ckptTog.addEventListener('change', () => {
+    simCfg.ckptEnable = ckptTog.checked;
+    if (worker) worker.postMessage({ type: 'setConfig', config: { ckptEnable: ckptTog.checked } });
+  });
+  document.getElementById('revertBtn').addEventListener('click', () => {
+    if (worker) worker.postMessage({ type: 'revertBest' });
+  });
 
   document.getElementById('startBtn').addEventListener('click', () => {
     if (!workerReady) return;
