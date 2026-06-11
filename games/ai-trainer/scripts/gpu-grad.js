@@ -2,11 +2,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  gpu-grad.js — WebGPU PPO gradient backend
 //
-//  computeEpoch() processes an entire shuffled epoch in ONE GPU round-trip:
-//  all minibatch gradient dispatches are encoded into a single command buffer,
-//  submitted once, and all results are read back with a single mapAsync.
-//  This avoids the 96 sequential CPU-GPU fences that caused the CPU core spike
-//  in the per-minibatch approach.
+//  computeEpoch() processes an entire shuffled epoch with ONE readback:
+//  minibatch gradient dispatches are encoded into command buffers of a few
+//  minibatches each, results accumulate on-device, and everything is read
+//  back with a single mapAsync at the end. Chunking matters: a single
+//  epoch-sized command buffer can occupy the GPU for hundreds of ms (seconds
+//  on integrated GPUs) without any chance of preemption — the OS compositor
+//  and the browser starve (system-wide lag), and drivers with a hang
+//  watchdog reset the device ("GPU driver crash"). Chunk size adapts to keep
+//  each submit near a small time budget, and a short pause between chunks
+//  leaves the GPU idle gaps for the rest of the system. The chunks grow
+//  toward whole epochs on fast GPUs, so the fence count stays far below the
+//  96 sequential per-minibatch round-trips that caused the old CPU spike.
 //
 //  WGSL is generated per architecture with all sizes baked in as constants.
 //  GROUP = 1: one GPU thread per training sample (maximum parallelism, shortest
@@ -278,6 +285,24 @@ export class GpuGrad {
 
     // Maximum minibatches per epoch.
     this._nMBMax = Math.ceil(epochCap / mbs);
+
+    // Minibatches per command-buffer submit — adapted at runtime so each
+    // submit stays near _TARGET_MS of GPU time (see computeEpoch).
+    this._chunk = 1;
+  }
+
+  // Await a GPU promise with a hard timeout so a hung driver surfaces as a
+  // catchable error (→ CPU fallback) instead of freezing the update forever.
+  async _awaitGpu(promise, ms, label) {
+    let to;
+    try {
+      await Promise.race([
+        promise,
+        new Promise((_, rej) => { to = setTimeout(() => rej(new Error(label)), ms); }),
+      ]);
+    } finally {
+      clearTimeout(to);
+    }
   }
 
   async _build() {
@@ -380,32 +405,46 @@ export class GpuGrad {
       q.writeBuffer(this.uniBufs[m], 0, uBuf);
     }
 
-    // ── Encode all minibatch dispatches in ONE command buffer ─────────────────
-    // One mapAsync at the end instead of 96 sequential round-trips.
+    // ── Encode minibatch dispatches in paced chunks ───────────────────────────
+    // Each chunk is its own submit; we wait for it to drain before sending the
+    // next, so the GPU gets preemption points for the compositor/browser and a
+    // hang watchdog never sees one monolithic multi-second command buffer.
+    const TARGET_MS = 15;
     d.pushErrorScope('validation');
     d.pushErrorScope('out-of-memory');
-    const enc = d.createCommandEncoder();
-    for (let m = 0; m < nMB; m++) {
-      const bs = Math.min(mbs, N - m * mbs);
-      const nGroups = Math.ceil(bs / GROUP);
-      enc.clearBuffer(this.bufSlabs, 0, nGroups * SLAB * 4);
-      const pass = enc.beginComputePass();
-      pass.setBindGroup(0, this.bindGroups[m]);
-      pass.setPipeline(this.gradPipe);
-      pass.dispatchWorkgroups(Math.ceil(nGroups / 64));
-      pass.setPipeline(this.reducePipe);
-      pass.dispatchWorkgroups(Math.ceil(OUT / 256));
-      pass.end();
-      enc.copyBufferToBuffer(this.bufOut, 0, this.bufAllOut, m * OUT * 4, OUT * 4);
+    let m = 0;
+    while (m < nMB) {
+      const mEnd = Math.min(nMB, m + this._chunk);
+      const enc = d.createCommandEncoder();
+      for (; m < mEnd; m++) {
+        const bs = Math.min(mbs, N - m * mbs);
+        const nGroups = Math.ceil(bs / GROUP);
+        enc.clearBuffer(this.bufSlabs, 0, nGroups * SLAB * 4);
+        const pass = enc.beginComputePass();
+        pass.setBindGroup(0, this.bindGroups[m]);
+        pass.setPipeline(this.gradPipe);
+        pass.dispatchWorkgroups(Math.ceil(nGroups / 64));
+        pass.setPipeline(this.reducePipe);
+        pass.dispatchWorkgroups(Math.ceil(OUT / 256));
+        pass.end();
+        enc.copyBufferToBuffer(this.bufOut, 0, this.bufAllOut, m * OUT * 4, OUT * 4);
+      }
+      q.submit([enc.finish()]);
+      const t0 = performance.now();
+      await this._awaitGpu(q.onSubmittedWorkDone(), 15000, 'GPU work timeout (>15s) — driver hung?');
+      const ms = performance.now() - t0;
+      if (ms < TARGET_MS * 0.5 && this._chunk < this._nMBMax) this._chunk = Math.min(this._chunk * 2, this._nMBMax);
+      else if (ms > TARGET_MS * 2 && this._chunk > 1)         this._chunk = Math.max(1, this._chunk >> 1);
+      // idle gap ∝ chunk runtime (≤25 % overhead) so other GPU users get a turn
+      if (m < nMB) await new Promise(res => setTimeout(res, Math.min(8, Math.max(1, ms / 4))));
     }
-    enc.copyBufferToBuffer(this.bufAllOut, 0, this.bufStage, 0, nMB * OUT * 4);
-    q.submit([enc.finish()]);
 
-    // ── Single mapAsync for the entire epoch ──────────────────────────────────
-    const mapP = this.bufStage.mapAsync(GPUMapMode.READ, 0, nMB * OUT * 4);
-    const timeout = new Promise((_, rej) =>
-      setTimeout(() => rej(new Error('GPU mapAsync timeout (>30s)')), 30000));
-    await Promise.race([mapP, timeout]);
+    // ── Single readback for the entire epoch ──────────────────────────────────
+    const encC = d.createCommandEncoder();
+    encC.copyBufferToBuffer(this.bufAllOut, 0, this.bufStage, 0, nMB * OUT * 4);
+    q.submit([encC.finish()]);
+    await this._awaitGpu(this.bufStage.mapAsync(GPUMapMode.READ, 0, nMB * OUT * 4),
+                         30000, 'GPU mapAsync timeout (>30s)');
 
     const raw = new Float32Array(this.bufStage.getMappedRange(0, nMB * OUT * 4)).slice();
     this.bufStage.unmap();
