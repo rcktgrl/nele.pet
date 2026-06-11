@@ -1,7 +1,6 @@
 'use strict';
 
 import { Net, gauss, LOG_2PI, accumulatePPOGrads } from './nn-core.js';
-import { GpuGrad } from './gpu-grad.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  AI Trainer — Simulation Worker (PPO)
@@ -805,11 +804,17 @@ let gradPool = null;   // Worker[] — empty array means "fall back to local com
 let _wasmOk  = false;  // a grad-worker confirmed its WASM module loaded
 let _wasmErr = '';     // last WASM load/runtime error reported by a grad-worker
 
-// GPU backend (cfg.backend === 'gpu')
-let gpu          = null;     // GpuGrad instance
-let gpuState     = 'off';    // 'off' | 'init' | 'ready' | 'failed'
-let gpuInfo      = '';
-let gpuValidated = false;    // first GPU minibatch is checked against the JS path
+// GPU backend (cfg.backend === 'gpu') — TensorFlow.js WebGL in a nested
+// worker (tf-worker.js). The hand-written WebGPU kernel was removed from the
+// trainer: Firefox drives WebGPU buffer mapping from a 100 ms polling timer
+// (Bugzilla #1870699 / wgpu #6660) and its WebGPU process is crash-prone
+// under sustained compute, which lagged the whole system and crashed the
+// browser. The tf worker runs the COMPLETE update (all epochs) and sends the
+// new weights back — one message round-trip per update.
+let tfWorker   = null;
+let gpuState   = 'off';    // 'off' | 'init' | 'ready' | 'failed'
+let gpuInfo    = '';
+let _tfPending = null;     // { resolve, reject, timer } of the in-flight update
 
 function desiredThreads() {
   const t = cfg.threads | 0;
@@ -847,19 +852,74 @@ function initGradPool(force) {
   }
 }
 
-function initGpu() {
-  if (gpu) { try { gpu.destroy(); } catch (_) { /* dead */ } gpu = null; }
-  gpuValidated = false;
-  if (cfg.backend !== 'gpu') { gpuState = 'off'; gpuInfo = ''; return; }
-  gpuState = 'init'; gpuInfo = 'GPU initializing…';
-  // epochCap = max training samples per epoch. Collection continues while an
-  // update is in flight (back-pressure caps it at 2× horizon·envs), and
-  // _flushBatch commits one extra open transition per env — size for both.
-  const epochCap = cfg.numEnvs * cfg.horizon * 2 + cfg.numEnvs * 8;
-  GpuGrad.create(actor.sizes, critic.sizes, epochCap, cfg.minibatch).then(res => {
-    if (res.ok) { gpu = res.gpu; gpuState = 'ready'; gpuInfo = 'WebGPU active'; }
-    else        { gpu = null;    gpuState = 'failed'; gpuInfo = 'GPU unavailable: ' + res.error; }
+function _tfFail(msg) {
+  gpuState = 'failed';
+  gpuInfo = 'GPU unavailable: ' + msg;
+  if (_tfPending) {
+    clearTimeout(_tfPending.timer);
+    const p = _tfPending; _tfPending = null;
+    p.reject(new Error(msg));
+  }
+  if (tfWorker) { try { tfWorker.terminate(); } catch (_) { /* dead */ } tfWorker = null; }
+}
+
+// Push the JS-side weights to the tf worker — required whenever they change
+// outside a GPU update (CPU-path updates during init, reset, load-best).
+function sendTfWeights() {
+  if (!tfWorker || gpuState !== 'ready' || !actor) return;
+  tfWorker.postMessage({
+    type: 'setWeights',
+    actorFlat:  Float32Array.from(actor.flatF64()),
+    criticFlat: Float32Array.from(critic.flatF64()),
+    logStd:     Float32Array.from(logStd),
   });
+}
+
+function initGpu() {
+  if (tfWorker) { try { tfWorker.terminate(); } catch (_) { /* dead */ } tfWorker = null; }
+  if (_tfPending) { clearTimeout(_tfPending.timer); _tfPending = null; }
+  if (cfg.backend !== 'gpu') { gpuState = 'off'; gpuInfo = ''; return; }
+  gpuState = 'init'; gpuInfo = 'GPU (TF.js WebGL) initializing…';
+  try {
+    // classic worker — tf.min.js is a UMD bundle loaded via importScripts
+    tfWorker = new Worker(new URL('./tf-worker.js', import.meta.url));
+    tfWorker.onerror = e => _tfFail((e && e.message) || 'tf-worker failed to load');
+    tfWorker.onmessage = e => {
+      const d = e.data;
+      if (d.type === 'ready') {
+        gpuState = 'ready';
+        gpuInfo = 'TF.js GPU active (' + d.backend + ')';
+        sendTfWeights();  // CPU-path updates may have run while tf initialized
+        return;
+      }
+      if (d.type === 'fail') { _tfFail(d.error); return; }
+      if (d.type === 'updated' && _tfPending) {
+        clearTimeout(_tfPending.timer);
+        const p = _tfPending; _tfPending = null;
+        p.resolve(d);
+        return;
+      }
+      if (d.type === 'error') {
+        if (_tfPending) {
+          clearTimeout(_tfPending.timer);
+          const p = _tfPending; _tfPending = null;
+          p.reject(new Error(d.error));
+        } else {
+          _tfFail(d.error);
+        }
+      }
+    };
+    tfWorker.postMessage({
+      type: 'init',
+      actorSizes: actor.sizes, criticSizes: critic.sizes,
+      actorFlat:  Float32Array.from(actor.flatF64()),
+      criticFlat: Float32Array.from(critic.flatF64()),
+      logStd:     Float32Array.from(logStd),
+      lr: cfg.lr,
+    });
+  } catch (err) {
+    _tfFail(String(err && err.message || err));
+  }
 }
 
 function gradTask(w, msg, transfers) {
@@ -995,6 +1055,7 @@ function loadBestSnapshot() {
   agentSteps = 0;
   recentReturns = [];
   curAvg = null;
+  sendTfWeights();  // keep the GPU backend's resident weights in sync
 }
 
 async function _runPPO(batch) {
@@ -1010,80 +1071,52 @@ async function _runPPO(batch) {
   const idx = Array.from({ length: N }, (_, k) => k);
   const hp = { clip: cfg.clip, entropyCoef: cfg.entropyCoef, vfCoef: cfg.vfCoef };
   let sumPi = 0, sumV = 0, sumEnt = 0, nMB = 0;
+  let gpuDone = false;
 
-  for (let ep = 0; ep < cfg.epochs; ep++) {
+  // ── GPU path: the COMPLETE update (all epochs, shuffling, Adam) runs on the
+  //    TF.js worker; the new weights come back in one message ────────────────
+  if (gpuState === 'ready' && tfWorker) {
+    try {
+      const data = packEpochData(OBS, ACT, LOGP, ADV, RET, idx, N);  // natural order
+      const r = await new Promise((resolve, reject) => {
+        _tfPending = {
+          resolve, reject,
+          timer: setTimeout(() => {
+            _tfPending = null;
+            reject(new Error('GPU update timeout (>60s)'));
+          }, 60000),
+        };
+        const obs  = Float32Array.from(data.obs),  act = Float32Array.from(data.act);
+        const logp = Float32Array.from(data.logp), adv = Float32Array.from(data.adv);
+        const ret  = Float32Array.from(data.ret);
+        tfWorker.postMessage({
+          type: 'update', n: N, obs, act, logp, adv, ret,
+          hp: { ...hp, lr: cfg.lr },
+          epochs: cfg.epochs, minibatch: cfg.minibatch,
+        }, [obs.buffer, act.buffer, logp.buffer, adv.buffer, ret.buffer]);
+      });
+      // sanity: never load NaN/Inf weights into the live policy
+      let finite = Number.isFinite(r.loss.pi) && Number.isFinite(r.loss.v);
+      for (let k = 0; finite && k < r.actorFlat.length; k += 97) {
+        finite = Number.isFinite(r.actorFlat[k]);
+      }
+      if (!finite) throw new Error('non-finite weights returned');
+      actor.loadFlat(r.actorFlat);
+      critic.loadFlat(r.criticFlat);
+      for (let d2 = 0; d2 < ACT_DIM; d2++) logStd[d2] = r.logStd[d2];
+      lastLoss = r.loss;
+      gpuDone = true;
+    } catch (err) {
+      _tfFail(String(err && err.message || err));
+      // fall through to the CPU path for this batch
+    }
+  }
+
+  for (let ep = 0; ep < cfg.epochs && !gpuDone; ep++) {
     // Fisher-Yates shuffle
     for (let k = N - 1; k > 0; k--) {
       const j = Math.floor(Math.random() * (k + 1));
       const tmp = idx[k]; idx[k] = idx[j]; idx[j] = tmp;
-    }
-
-    // ── GPU path: entire epoch dispatched in one command buffer, one mapAsync ──
-    if (gpuState === 'ready' && gpu) {
-      const epochData = packEpochData(OBS, ACT, LOGP, ADV, RET, idx, N);
-      let mbResults = null;
-      try {
-        mbResults = await gpu.computeEpoch(actor.flatF64(), critic.flatF64(), logStd, hp, epochData);
-      } catch (err) {
-        gpuState = 'failed';
-        gpuInfo = 'GPU disabled: ' + (err && err.message || err);
-        try { gpu.destroy(); } catch (_) { /* dead */ }
-        gpu = null;
-      }
-
-      if (mbResults && !gpuValidated) {
-        // One-time numeric check against JS reference on the first minibatch.
-        const r0   = mbResults[0];
-        const bs0  = r0.n;
-        const vSlice = {
-          n: bs0, obsDim: OBS_DIM, actDim: ACT_DIM,
-          obs:  epochData.obs.subarray(0, bs0 * OBS_DIM),
-          act:  epochData.act.subarray(0, bs0 * ACT_DIM),
-          logp: epochData.logp.subarray(0, bs0),
-          adv:  epochData.adv.subarray(0, bs0),
-          ret:  epochData.ret.subarray(0, bs0),
-        };
-        actor.zeroGrad(); critic.zeroGrad();
-        accumulatePPOGrads(actor, critic, logStd, hp, vSlice);
-        const refA = actor.gradFlatF64(), refC = critic.gradFlatF64();
-        const relL2 = (x, y) => {
-          let e2 = 0, n2 = 0;
-          for (let q = 0; q < x.length; q++) { const e = x[q] - y[q]; e2 += e*e; n2 += y[q]*y[q]; }
-          return Math.sqrt(e2 / (n2 + 1e-12));
-        };
-        const ea = relL2(r0.aG, refA), ec = relL2(r0.cG, refC);
-        if (ea > 5e-3 || ec > 5e-3) {
-          gpuState = 'failed';
-          gpuInfo = `GPU disabled: validation failed (actor ${ea.toExponential(1)}, critic ${ec.toExponential(1)})`;
-          try { gpu.destroy(); } catch (_) { /* dead */ }
-          gpu = null;
-          mbResults = null;
-        } else {
-          gpuValidated = true;
-          gpuInfo = 'WebGPU active (validated)';
-        }
-      }
-
-      if (mbResults) {
-        const b1 = 0.9, b2 = 0.999, eps = 1e-8;
-        for (const r of mbResults) {
-          actor.loadGradFlat(r.aG);
-          critic.loadGradFlat(r.cG);
-          actor.adamStep(cfg.lr, 1 / r.n);
-          critic.adamStep(cfg.lr, 1 / r.n);
-          lsT++;
-          const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
-          for (let d = 0; d < ACT_DIM; d++) {
-            const g = r.gLs[d] / r.n;
-            lsM[d] = b1 * lsM[d] + (1 - b1) * g;
-            lsV[d] = b2 * lsV[d] + (1 - b2) * g * g;
-            logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
-            logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
-          }
-          sumPi += r.pi / r.n; sumV += r.v / r.n; sumEnt += r.ent / r.n; nMB++;
-        }
-        continue; // epoch handled by GPU — skip CPU path
-      }
     }
 
     // ── CPU path (pool or local): per-minibatch ──────────────────────────────
@@ -1205,6 +1238,7 @@ function buildSnapshot() {
            : 'js',
     backendInfo: gpuState === 'failed' ? gpuInfo
                : gpuState === 'init'   ? gpuInfo
+               : gpuState === 'ready'  ? gpuInfo
                : _wasmErr ? 'WASM unavailable: ' + _wasmErr
                : '',
     avgReturn,
@@ -1316,6 +1350,7 @@ self.onmessage = function (e) {
     stopLoop();
     if (!carSpec) return;
     initSim(null);
+    sendTfWeights();  // fresh random weights must replace the tf-resident ones
     return;
   }
 
