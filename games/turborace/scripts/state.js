@@ -26,7 +26,7 @@ export const state = {
     carColor: null,          // chosen car body colour (hex number) or null = car default
     selTrk: null,
     aiDifficulty: 'medium',  // 'easy' | 'medium' | 'hard'
-    opponentMode: 'ai',      // 'ai' | 'ghost'
+    opponentMode: 'ai',      // 'ai' | 'ghost' | 'trained'
     carCardPreviewScene: null,
     carCardPreviewCamera: null,
     carCardPreviews: [],

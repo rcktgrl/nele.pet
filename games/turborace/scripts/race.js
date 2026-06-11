@@ -4,6 +4,7 @@ import { state, scene, dc, editorCam, camEditor } from './state.js';
 import { buildTrack } from './track-gen.js';
 import { instantiateRaceCars, Car, buildRaceGrid } from './car.js';
 import { AI } from './ai-script.js';
+import { PPOAI, loadTrainedModel } from './ppo-ai.js';
 import { setupLights } from './lighting.js';
 import {
   initAudio, initAiSounds, clearAiSounds,
@@ -45,11 +46,20 @@ export async function initRace(){
   const ghostModeEnabled = state.opponentMode==='ghost';
   if(ghostModeEnabled!==onlineGhostEnabled) setOnlineGhostToggle(ghostModeEnabled);
 
+  let trainedModel=null;
+  if(state.opponentMode==='trained'){
+    trainedModel=loadTrainedModel();
+    if(!trainedModel) notify('No trained AI model imported — racing standard AI instead.');
+  }
+
   const raceCars=instantiateRaceCars({
     trackPoints: state.trkPts,
     cars: CARS,
     selectedCarIndex: state.selCar,
-    aiCount: ghostModeEnabled ? 0 : 4,
+    aiCount: ghostModeEnabled ? 0 : trainedModel ? 1 : 4,
+    // The AI Trainer always trains with CARS[0] physics — give the trained
+    // policy the car it was trained on, regardless of the player's pick.
+    aiCarModels: trainedModel ? [CARS[0]] : null,
     scene,
     createAIController: (aiCar,i)=>{
       const ctx=()=>({
@@ -60,6 +70,7 @@ export async function initRace(){
         trackData: state.trkData,
         playerCar: state.pCar
       });
+      if(trainedModel) return new PPOAI(aiCar,trainedModel,ctx);
       return new AI(aiCar,.044+i*.010,ctx);
     }
   });

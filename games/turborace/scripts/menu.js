@@ -16,6 +16,8 @@ import {
 } from './editor.js';
 import { VsNetwork, generateRoomCode, BOT_NAMES } from './vs-network.js';
 import { getArcadeUser } from './user.js';
+import { loadTrainedModel, saveTrainedModel, validateTrainedModel } from './ppo-ai.js';
+import { notify } from './notify.js';
 
 // ═══════════════════════════════════════════════════════
 //  SETTINGS
@@ -312,7 +314,51 @@ export function showDiffSel(){
   });
   document.querySelectorAll('#oppCards .diffCard').forEach(card=>{
     card.classList.toggle('sel', card.dataset.opp===state.opponentMode);
-    card.onclick=()=>{ document.querySelectorAll('#oppCards .diffCard').forEach(c=>c.classList.remove('sel')); card.classList.add('sel'); state.opponentMode=card.dataset.opp; };
+    card.onclick=()=>{
+      document.querySelectorAll('#oppCards .diffCard').forEach(c=>c.classList.remove('sel'));
+      card.classList.add('sel'); state.opponentMode=card.dataset.opp;
+      if(card.dataset.opp==='trained'&&!loadTrainedModel()) document.getElementById('trainedAiFile').click();
+    };
+  });
+  _refreshTrainedAiCard();
+  _wireTrainedAiImport();
+}
+
+function _refreshTrainedAiCard(){
+  const desc=document.getElementById('trainedAiDesc');
+  if(!desc) return;
+  const model=loadTrainedModel();
+  if(model){
+    const steps=model.totalSteps>=1e6?(model.totalSteps/1e6).toFixed(1)+'M':Math.round((model.totalSteps||0)/1e3)+'k';
+    const lap=Number.isFinite(model.bestLap)?` · best lap ${model.bestLap.toFixed(2)}s`:'';
+    desc.textContent=`Race the model you trained (${steps} steps${lap})`;
+  }else{
+    desc.textContent='Import a model from the AI Trainer';
+  }
+}
+
+let _trainedImportWired=false;
+function _wireTrainedAiImport(){
+  if(_trainedImportWired) return;
+  _trainedImportWired=true;
+  const input=document.getElementById('trainedAiFile');
+  document.getElementById('trainedAiImportBtn').addEventListener('click',e=>{
+    e.stopPropagation();
+    input.click();
+  });
+  input.addEventListener('change',async function(){
+    if(!this.files[0]) return;
+    try{
+      const model=validateTrainedModel(JSON.parse(await this.files[0].text()));
+      saveTrainedModel(model);
+      state.opponentMode='trained';
+      document.querySelectorAll('#oppCards .diffCard').forEach(c=>c.classList.toggle('sel',c.dataset.opp==='trained'));
+      _refreshTrainedAiCard();
+      notify('Trained AI model imported — it will race against you.');
+    }catch(err){
+      notify('Model import failed: '+err.message);
+    }
+    this.value='';
   });
 }
 
