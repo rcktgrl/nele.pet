@@ -16,7 +16,7 @@
   <div class="menuActions">
     <button id="introStartBtn" class="btn btn-p">START GAME</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.131</div>
+  <div class="menuVersion" aria-label="Game version">v0.132</div>
 </div>
 <div id="hud" role="status" aria-live="polite">
   <div id="raceTop">
@@ -31,6 +31,7 @@
   <div id="gearBox" class="hudBottomDock"><div id="gearNum">1</div><div id="gearLabel">GEAR</div></div>
   <div id="camLabel" class="hudBottomDock">[ C ] COCKPIT VIEW</div>
   <div id="mm"><canvas id="mmc" width="150" height="150"></canvas></div>
+  <div id="fdOnlineTag" style="display:none;position:absolute;top:14px;left:50%;transform:translateX(-50%);font-family:Orbitron,monospace;font-size:.7rem;letter-spacing:2px;color:#4f9;background:rgba(5,5,20,.7);border:1px solid rgba(46,204,136,.4);border-radius:6px;padding:4px 14px;white-space:nowrap;"></div>
 </div>
 
 <!-- VS opponent nametag (floating over opponent's car) -->
@@ -142,11 +143,12 @@
   <div class="menuActions">
     <button id="gameStartBtn" class="btn btn-p">START RACE</button>
     <button id="vsModeBtn" class="btn btn-p" style="background:linear-gradient(135deg,#1a0a2e,#0d1a2e);border-color:#c44aff;">⚔️ VS MODE</button>
+    <button id="freeDriveBtn" class="btn btn-p" style="background:linear-gradient(135deg,#0a2e1a,#0d1a2e);border-color:#2ecc88;">🏝️ FREE DRIVE</button>
     <button id="trackEditorBtn" class="btn btn-s">TRACK EDITOR</button>
     <button id="mainSettingsBtn" class="btn btn-s">SETTINGS</button>
     <button id="backToSelectionBtn" class="btn btn-s">BACK TO GAME SELECTION</button>
   </div>
-  <div class="menuVersion" aria-label="Game version">v0.131</div>
+  <div class="menuVersion" aria-label="Game version">v0.132</div>
 </div>
 
 <!-- CAR SELECT -->
@@ -312,6 +314,38 @@
     </div>
 
     <button id="vsLeaveLobbyBtn" class="btn btn-s">LEAVE LOBBY</button>
+  </div>
+</div>
+
+<!-- FREE DRIVE SETUP -->
+<div class="screen" id="sFreeDrive" style="display:none">
+  <h2>🏝️ Free Drive</h2>
+  <div class="sub">Open-world island · three cities · cruise together</div>
+  <div id="fdStatusMsg" style="color:#fa4;font-size:.8rem;min-height:1.2em;text-align:center;width:100%;max-width:640px;"></div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+    <span style="color:#556;font-size:.75rem;font-family:Orbitron,monospace;letter-spacing:1px;">DRIVING AS</span>
+    <span id="fdMyNameLabel" style="color:#ffd700;font-family:Orbitron,monospace;font-size:.9rem;font-weight:700;letter-spacing:1px;"></span>
+  </div>
+  <div class="vsSection" style="max-width:700px;">
+    <div class="vsLabel">Your Car</div>
+    <div id="fdCarRow" class="vsCarRow"></div>
+    <div class="vsColorRow">
+      <span class="carColorLabel">Colour</span>
+      <input id="fdColor" type="color" class="carColorInput" value="#ff2222">
+    </div>
+  </div>
+  <label class="toggleRow" for="fdOnlineToggle" style="width:100%;max-width:700px;margin-top:14px;">
+    <span class="toggleLbl">ONLINE — JOIN OTHER DRIVERS ON THE ISLAND</span>
+    <input type="checkbox" id="fdOnlineToggle" checked>
+  </label>
+  <p style="color:#667;font-size:.78rem;max-width:640px;text-align:center;line-height:1.5;margin-top:12px;">
+    One shared island, no room codes — everyone with Online enabled drives together.
+    Three cities linked by highways, a winding coastal road and narrow country lanes.
+    Off the tarmac you'll slow right down… unless you bring the Rally Storm.
+  </p>
+  <div class="menuActions menuActions-inline">
+    <button id="fdBackBtn" class="btn btn-s">BACK</button>
+    <button id="fdStartBtn" class="btn btn-p">START DRIVING</button>
   </div>
 </div>
 
