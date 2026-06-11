@@ -6,8 +6,10 @@ import { state } from './state.js';
 //
 //  Reproduces the exact observation layout of ai-trainer/scripts/sim-worker.js
 //  (40 inputs: 11 track-edge rays, 7 wall rays, 6 state scalars, 6 centerline
-//  probes × 2, 4 memory cells) and runs the exported PPO actor network
+//  probes × 2, 4 memory cells) and runs the exported actor network
 //  deterministically (mean action, no exploration noise) on a real race Car.
+//  Supports both trainer algorithms: PPO actors output the action means
+//  directly; SAC actors output [mean, logStd] and the action is tanh(mean).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'turborace_trained_ai_model';
@@ -52,13 +54,16 @@ function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
 
 /** Throws with a human-readable message if the model can't drive here. */
 export function validateTrainedModel(model) {
-  if (!model || model.algo !== 'ppo' || !model.actor || !Array.isArray(model.actor.sizes) || !Array.isArray(model.actor.flat)) {
-    throw new Error('Not an AI Trainer PPO export');
+  const okAlgo = model && (model.algo === 'ppo' || model.algo === 'sac');
+  if (!okAlgo || !model.actor || !Array.isArray(model.actor.sizes) || !Array.isArray(model.actor.flat)) {
+    throw new Error('Not an AI Trainer PPO/SAC export');
   }
   const sizes = model.actor.sizes;
-  if (model.obsDim !== OBS_DIM || sizes[0] !== OBS_DIM || sizes[sizes.length - 1] !== ACT_DIM) {
-    throw new Error(`incompatible model: obs ${model.obsDim}/act ${sizes[sizes.length - 1]}, ` +
-                    `the game expects obs ${OBS_DIM}/act ${ACT_DIM} — retrain and re-export in the AI Trainer`);
+  // SAC actors carry a logStd head: twice the action outputs
+  const wantOut = model.algo === 'sac' ? 2 * ACT_DIM : ACT_DIM;
+  if (model.obsDim !== OBS_DIM || sizes[0] !== OBS_DIM || sizes[sizes.length - 1] !== wantOut) {
+    throw new Error(`incompatible model: obs ${model.obsDim}/act-out ${sizes[sizes.length - 1]}, ` +
+                    `the game expects obs ${OBS_DIM}/act-out ${wantOut} — retrain and re-export in the AI Trainer`);
   }
   let n = 0;
   for (let l = 0; l < sizes.length - 1; l++) n += (sizes[l] + 1) * sizes[l + 1];
@@ -101,6 +106,7 @@ export class PPOAI {
   constructor(car, model, context) {
     this.car = car;
     this.context = context;
+    this.algo = model.algo || 'ppo';
     this._unpackActor(model.actor);
     this.mem = new Float64Array(MEM_DIM);
     this.curAct = new Float64Array(ACT_DIM);
@@ -290,8 +296,11 @@ export class PPOAI {
     if (this.repCount <= 0) {
       const obs = new Float64Array(OBS_DIM);
       this._buildObs(obs);
-      const mean = this._forward(obs);
-      for (let d = 0; d < ACT_DIM; d++) this.curAct[d] = mean[d];
+      const out = this._forward(obs);
+      // SAC: out = [mean(A), logStd(A)], deterministic action is tanh(mean)
+      for (let d = 0; d < ACT_DIM; d++) {
+        this.curAct[d] = this.algo === 'sac' ? Math.tanh(out[d]) : out[d];
+      }
       this.repCount = ACTION_REPEAT;
       for (let d = 0; d < MEM_DIM; d++) {
         const a = Math.max(-1, Math.min(1, this.curAct[2 + d]));
