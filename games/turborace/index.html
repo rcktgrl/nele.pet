@@ -212,7 +212,14 @@
         <div class="diffName">Ghost Cars</div>
         <div class="diffDesc">Race leaderboard ghost replays</div>
       </div>
+      <div class="diffCard" data-opp="trained">
+        <div class="diffIcon">🧠</div>
+        <div class="diffName">Trained AI</div>
+        <div class="diffDesc" id="trainedAiDesc">Import a model from the AI Trainer</div>
+        <button id="trainedAiImportBtn" class="btn btn-s" type="button">IMPORT MODEL</button>
+      </div>
     </div>
+    <input type="file" id="trainedAiFile" accept=".json,application/json" style="display:none">
   </div>
   <div class="menuActions menuActions-inline">
     <button id="diffBackBtn" class="btn btn-s">BACK</button>
