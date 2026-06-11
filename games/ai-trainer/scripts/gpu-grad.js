@@ -2,18 +2,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  gpu-grad.js — WebGPU PPO gradient backend
 //
-//  computeEpoch() processes an entire shuffled epoch with ONE readback:
-//  minibatch gradient dispatches are encoded into command buffers of a few
-//  minibatches each, results accumulate on-device, and everything is read
-//  back with a single mapAsync at the end. Chunking matters: a single
-//  epoch-sized command buffer can occupy the GPU for hundreds of ms (seconds
-//  on integrated GPUs) without any chance of preemption — the OS compositor
-//  and the browser starve (system-wide lag), and drivers with a hang
-//  watchdog reset the device ("GPU driver crash"). Chunk size adapts to keep
-//  each submit near a small time budget, and a short pause between chunks
-//  leaves the GPU idle gaps for the rest of the system. The chunks grow
-//  toward whole epochs on fast GPUs, so the fence count stays far below the
-//  96 sequential per-minibatch round-trips that caused the old CPU spike.
+//  computeEpoch() runs the epoch's minibatch gradient dispatches in SMALL,
+//  PACED command-buffer submits. After each submit a 4-byte fence readback
+//  waits until the GPU has actually finished it — onSubmittedWorkDone() is
+//  NOT used because some browsers resolve it before the work completes,
+//  which would let the chunk size balloon back into one monolithic submit.
+//  Between submits the loop idles long enough to cap the trainer's GPU duty
+//  cycle (GPU_DUTY): without that the trainer monopolises the GPU, the OS
+//  compositor and the browser starve (system-wide lag, browser crashes) and
+//  a driver hang watchdog can reset the device ("GPU driver crash").
+//  Gradients accumulate on-device; one mapAsync at the end reads back the
+//  whole epoch.
 //
 //  WGSL is generated per architecture with all sizes baked in as constants.
 //  GROUP = 1: one GPU thread per training sample (maximum parallelism, shortest
@@ -287,7 +286,7 @@ export class GpuGrad {
     this._nMBMax = Math.ceil(epochCap / mbs);
 
     // Minibatches per command-buffer submit — adapted at runtime so each
-    // submit stays near _TARGET_MS of GPU time (see computeEpoch).
+    // submit stays near the per-submit GPU time budget (see computeEpoch).
     this._chunk = 1;
   }
 
@@ -343,6 +342,9 @@ export class GpuGrad {
     this.bufOut     = mk(OUT  * 4,                                GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC);
     this.bufAllOut  = mk(nMBMax * OUT * 4,                        GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC);
     this.bufStage   = mk(nMBMax * OUT * 4,                        GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
+    // 4-byte fence target: mapping this after a submit is a completion signal
+    // that works on every implementation (unlike onSubmittedWorkDone).
+    this.bufFence   = mk(4,                                       GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
 
     // One uniform buffer + one bind group per max-minibatch slot.
     // Written fresh each computeEpoch call, before the command encoder.
@@ -405,11 +407,15 @@ export class GpuGrad {
       q.writeBuffer(this.uniBufs[m], 0, uBuf);
     }
 
-    // ── Encode minibatch dispatches in paced chunks ───────────────────────────
-    // Each chunk is its own submit; we wait for it to drain before sending the
-    // next, so the GPU gets preemption points for the compositor/browser and a
-    // hang watchdog never sees one monolithic multi-second command buffer.
-    const TARGET_MS = 15;
+    // ── Encode minibatch dispatches in small, paced submits ───────────────────
+    // Each submit is fenced (real completion, see bufFence) and followed by an
+    // idle period that caps this trainer's share of the GPU at GPU_DUTY. The
+    // GPU therefore always has preemption points and guaranteed free time for
+    // the compositor/browser, and a hang watchdog never sees one monolithic
+    // multi-second command buffer.
+    const TARGET_MS = 10;   // GPU busy time to aim for per submit
+    const GPU_DUTY  = 0.5;  // max fraction of wall time the GPU works for us
+    const MAX_CHUNK = 8;    // hard cap on minibatches per submit
     d.pushErrorScope('validation');
     d.pushErrorScope('out-of-memory');
     let m = 0;
@@ -429,14 +435,25 @@ export class GpuGrad {
         pass.end();
         enc.copyBufferToBuffer(this.bufOut, 0, this.bufAllOut, m * OUT * 4, OUT * 4);
       }
+      enc.copyBufferToBuffer(this.bufOut, 0, this.bufFence, 0, 4);
       q.submit([enc.finish()]);
+
+      // Fence: mapAsync on the 4-byte target cannot resolve before every
+      // command in this submit has executed.
       const t0 = performance.now();
-      await this._awaitGpu(q.onSubmittedWorkDone(), 15000, 'GPU work timeout (>15s) — driver hung?');
-      const ms = performance.now() - t0;
-      if (ms < TARGET_MS * 0.5 && this._chunk < this._nMBMax) this._chunk = Math.min(this._chunk * 2, this._nMBMax);
-      else if (ms > TARGET_MS * 2 && this._chunk > 1)         this._chunk = Math.max(1, this._chunk >> 1);
-      // idle gap ∝ chunk runtime (≤25 % overhead) so other GPU users get a turn
-      if (m < nMB) await new Promise(res => setTimeout(res, Math.min(8, Math.max(1, ms / 4))));
+      await this._awaitGpu(this.bufFence.mapAsync(GPUMapMode.READ, 0, 4),
+                           15000, 'GPU work timeout (>15s) — driver hung?');
+      this.bufFence.unmap();
+      const busy = performance.now() - t0;
+
+      if (busy < TARGET_MS * 0.5 && this._chunk < MAX_CHUNK) this._chunk++;
+      else if (busy > TARGET_MS * 2 && this._chunk > 1)      this._chunk = Math.max(1, this._chunk >> 1);
+
+      // Duty-cycle enforcement: idle long enough that our busy share of wall
+      // time stays at GPU_DUTY. Applies after the last chunk too, so
+      // back-to-back epochs/updates can't merge into continuous GPU load.
+      const idle = Math.min(500, busy * (1 - GPU_DUTY) / GPU_DUTY);
+      await new Promise(res => setTimeout(res, Math.max(1, idle)));
     }
 
     // ── Single readback for the entire epoch ──────────────────────────────────

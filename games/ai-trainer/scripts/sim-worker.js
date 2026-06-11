@@ -62,10 +62,6 @@ let cfg = {
   wallPenalty: 2.0,      // per second of wall contact
   terminalPenalty: 10,   // on off-track / stuck termination
   lapBonus: 20,          // on lap completion
-  // consistency guard — best-policy checkpoint + auto-revert
-  ckptEnable: true,        // snapshot the best policy, revert on sustained regression
-  consistencyWeight: 0.5,  // score = mean(returns) − weight·std(returns)
-  revertPatience: 25,      // updates below the best score before auto-revert
 };
 
 const FIXED_DT = 1 / 60;
@@ -579,21 +575,19 @@ let recentReturns = [];     // last completed episode returns
 let bestLap = Infinity;
 let lastLoss = { pi: 0, v: 0, ent: 0 };
 
-// ── Consistency guard state ──────────────────────────────────────────────────
-// PPO is on-policy: once the policy drifts into a worse strategy (and σ has
-// shrunk) there is nothing in vanilla PPO that can pull it back to an earlier,
-// better policy. The guard snapshots the policy whenever a consistency-aware
-// score — mean(recent returns) − w·std(recent returns), which rewards HIGH and
-// STABLE returns — reaches a new best, and restores that snapshot after
-// `revertPatience` consecutive updates spent significantly below it.
-let ckpt          = null;   // { aFlat, cFlat, logStd, score, mean, std, iter }
-let curScore      = null;   // last computed { score, mean, std }
-let regressCount  = 0;      // consecutive updates below the checkpoint score
-let revertCount   = 0;      // total reverts this run
-let _revertPending = false; // manual revert requested while an update is in flight
+// ── Best-network snapshot ────────────────────────────────────────────────────
+// A network is judged by the AVERAGE return over the recent episodes of ALL
+// parallel agents — one lucky agent or one lucky episode is not enough. The
+// best-average snapshot is what 'exportModel' saves by default, and training
+// can be manually reset to it ('loadBest') after the policy drifts somewhere
+// worse (PPO is on-policy and has no built-in way back out of a bad local
+// optimum once exploration noise has shrunk).
+let best = null;            // { aFlat, cFlat, logStd, avg, iter }
+let curAvg = null;          // average return of the current window
+let _loadBestPending = false; // manual restore requested while an update runs
 
-const CKPT_WINDOW  = 20;    // episodes used for the score
-const CKPT_MIN_EPS = 12;    // minimum episodes before scoring
+const BEST_WINDOW  = 20;    // episodes in the scoring window
+const BEST_MIN_EPS = 12;    // minimum episodes before scoring
 
 function spawnPose(envIdx) {
   const n = trkPts.length;
@@ -657,8 +651,7 @@ function initSim(modelOverride) {
   recentReturns = []; bestLap = Infinity;
   simTime = 0;
   lastLoss = { pi: 0, v: 0, ent: 0 };
-  ckpt = null; curScore = null;
-  regressCount = 0; revertCount = 0; _revertPending = false;
+  best = null; curAvg = null; _loadBestPending = false;
 }
 
 // Finalize the pending transition of an env into its rollout chain.
@@ -961,61 +954,38 @@ function packEpochData(OBS, ACT, LOGP, ADV, RET, idx, N) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Consistency guard
+//  Best-network snapshot (by average return across all agents)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Consistency-aware policy score over the recent episode window.
-// Subtracting the std means an erratic policy (huge spread between its best
-// and worst episodes) scores below a steady one with the same mean.
-function policyScore() {
-  const tail = recentReturns.slice(-CKPT_WINDOW);
-  if (tail.length < CKPT_MIN_EPS) return null;
-  let mean = 0; for (const r of tail) mean += r; mean /= tail.length;
-  let varr = 0; for (const r of tail) varr += (r - mean) ** 2;
-  const std = Math.sqrt(varr / tail.length);
-  return { score: mean - cfg.consistencyWeight * std, mean, std };
-}
-
-function updateCheckpoint() {
-  if (!cfg.ckptEnable) { regressCount = 0; return; }
-  const s = policyScore();
-  if (!s) return;
-  curScore = s;
-  if (!ckpt || s.score > ckpt.score) {
-    ckpt = {
+function updateBestSnapshot() {
+  const tail = recentReturns.slice(-BEST_WINDOW);
+  if (tail.length < BEST_MIN_EPS) { curAvg = null; return; }
+  let avg = 0; for (const r of tail) avg += r; avg /= tail.length;
+  curAvg = avg;
+  if (!best || avg > best.avg) {
+    best = {
       aFlat: actor.flatF64(), cFlat: critic.flatF64(),
       logStd: Float64Array.from(logStd),
-      score: s.score, mean: s.mean, std: s.std, iter: iteration,
+      avg, iter: iteration,
     };
-    regressCount = 0;
-    return;
-  }
-  // Sustained, significant regression → restore the best snapshot. The margin
-  // keeps ordinary episode-return noise from triggering reverts.
-  const margin = Math.max(2, Math.abs(ckpt.score) * 0.1);
-  if (s.score < ckpt.score - margin) {
-    if (++regressCount >= Math.max(1, cfg.revertPatience | 0)) restoreCheckpoint();
-  } else {
-    regressCount = 0;
   }
 }
 
 // Restore the best snapshot. Only call between PPO updates (weights must not
 // change while gradient tasks are in flight).
-function restoreCheckpoint() {
-  if (!ckpt) return;
-  actor.loadFlat(ckpt.aFlat);
-  critic.loadFlat(ckpt.cFlat);
-  logStd.set(ckpt.logStd);
+function loadBestSnapshot() {
+  if (!best) return;
+  actor.loadFlat(best.aFlat);
+  critic.loadFlat(best.cFlat);
+  logStd.set(best.logStd);
   actor.resetAdam();
   critic.resetAdam();
   lsM.fill(0); lsV.fill(0); lsT = 0;
-  // Re-open exploration a little: the policy already proved the abandoned
-  // direction is a dead end, so it needs noise to find a DIFFERENT one.
+  // Re-open exploration a little: the abandoned direction was a dead end, so
+  // the restored policy needs noise to find a DIFFERENT improvement.
   for (let d = 0; d < ACT_DIM; d++) logStd[d] = Math.min(0.3, logStd[d] + 0.25);
   // Drop rollouts and episode stats gathered under the abandoned policy —
-  // stale transitions would train the restored weights toward it again, and
-  // stale returns would immediately re-trigger the regression counter.
+  // stale transitions would train the restored weights toward it again.
   for (const env of envs) {
     const b = env.buf;
     b.obs.length = 0; b.act.length = 0; b.logp.length = 0;
@@ -1024,9 +994,7 @@ function restoreCheckpoint() {
   }
   agentSteps = 0;
   recentReturns = [];
-  curScore = null;
-  regressCount = 0;
-  revertCount++;
+  curAvg = null;
 }
 
 async function _runPPO(batch) {
@@ -1196,8 +1164,8 @@ async function _runPPO(batch) {
 
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
   iteration++;
-  if (_revertPending) { _revertPending = false; restoreCheckpoint(); }
-  else updateCheckpoint();
+  if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
+  else updateBestSnapshot();
   _ppoRunning = false;
   if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
 }
@@ -1244,11 +1212,7 @@ function buildSnapshot() {
     episodes: recentReturns.length,
     loss: lastLoss,
     sigma: logStd ? [Math.exp(logStd[0]), Math.exp(logStd[1])] : null,
-    ckpt: ckpt ? {
-      score: ckpt.score, iter: ckpt.iter,
-      cur: curScore ? curScore.score : null,
-      regress: regressCount, reverts: revertCount,
-    } : null,
+    best: best ? { avg: best.avg, iter: best.iter, cur: curAvg } : null,
   };
   // actor weights for the visualiser — heavy, send ~once per second
   if (vizCounter++ % POST_HZ === 0 && actor) {
@@ -1371,15 +1335,19 @@ self.onmessage = function (e) {
     return;
   }
 
-  if (type === 'revertBest') {
-    if (!ckpt) return;
-    if (_ppoRunning) _revertPending = true;  // applied when the update finishes
-    else restoreCheckpoint();
+  if (type === 'loadBest') {
+    if (!best) return;
+    if (_ppoRunning) _loadBestPending = true;  // applied when the update finishes
+    else loadBestSnapshot();
     return;
   }
 
   if (type === 'exportModel') {
     if (!actor) return;
+    // Default: export the best-average snapshot when one exists — the live
+    // weights may have drifted past their peak. { which: 'current' } forces
+    // the live weights.
+    const useBest = !!best && e.data.which !== 'current';
     postMessage({
       type: 'modelExport',
       model: {
@@ -1389,12 +1357,14 @@ self.onmessage = function (e) {
         algo: 'ppo',
         obsDim: OBS_DIM,
         actDim: ACT_DIM,
-        actor:  { sizes: actor.sizes,  flat: actor.flat()  },
-        critic: { sizes: critic.sizes, flat: critic.flat() },
-        logStd: Array.from(logStd),
-        iteration,
+        actor:  { sizes: actor.sizes,  flat: useBest ? Array.from(best.aFlat) : actor.flat()  },
+        critic: { sizes: critic.sizes, flat: useBest ? Array.from(best.cFlat) : critic.flat() },
+        logStd: Array.from(useBest ? best.logStd : logStd),
+        iteration: useBest ? best.iter : iteration,
         totalSteps,
         bestLap: Number.isFinite(bestLap) ? bestLap : null,
+        snapshot: useBest ? 'best-average' : 'current',
+        avgReturn: useBest ? best.avg : curAvg,
       },
     });
     return;
