@@ -25,7 +25,7 @@ import { notify } from './notify.js';
 //  everyone else on the shared island channel.
 // ═══════════════════════════════════════════════════════
 
-const FD_WORLD_ID = 'island-v1';
+const FD_WORLD_ID = 'island-v2';
 
 // Remote drivers: id → {car, tagEl, name, snap, hasPos}
 let fdRemote = {};
@@ -320,13 +320,12 @@ export function updateFreeDrive(dt){
   const sliderSteer = getTouchSliderSteer();
   const str = Math.abs(gyroSteer) > 0.01 ? gyroSteer : Math.abs(sliderSteer) > 0.01 ? sliderSteer : keySteer;
 
-  // Off the road network everything behaves like gravel (caps around 80 km/h).
-  // The Rally Storm is the off-road specialist: full steering and ~130 km/h on dirt.
+  // Off-road: Rally Storm (green) drives freely. All other cars get reduced thrust
+  // (set via onGravel) — slower acceleration but no hard speed cap.
   const offroad = world.roadEdgeDist(car.pos.x, car.pos.z) > 1.5;
   const isRally = car.data.id === 2;
   car.onGravel = offroad && !isRally;
   car.update({ thr, brk, str }, dt);
-  if(offroad && isRally && car.spd > 36) car.spd = Math.max(36, car.spd - 14 * dt);
   _applyWorldBounds(car, world);
 
   _updateRemoteCars(dt);
@@ -369,13 +368,21 @@ function _buildStaticMinimap(world){
   const ctx = _mapCanvas.getContext('2d');
   const toM = (x, z) => [half + x * _mapScale, half + z * _mapScale];
   ctx.fillStyle = 'rgba(4,10,24,.85)'; ctx.fillRect(0, 0, S, S);
-  ctx.beginPath(); ctx.arc(half, half, (world.islandR + 95) * _mapScale, 0, Math.PI * 2);
-  ctx.fillStyle = '#54492f'; ctx.fill();
-  ctx.beginPath(); ctx.arc(half, half, world.islandR * _mapScale, 0, Math.PI * 2);
-  ctx.fillStyle = '#15301b'; ctx.fill();
+  // Draw irregular island outline from boundary points
+  function drawIslandShape(pts, scale, fillColor) {
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const mx = half + p.x * scale * _mapScale, mz = half + p.z * scale * _mapScale;
+      i === 0 ? ctx.moveTo(mx, mz) : ctx.lineTo(mx, mz);
+    });
+    ctx.closePath(); ctx.fillStyle = fillColor; ctx.fill();
+  }
+  const iPts = world.islandBoundaryPts || [];
+  drawIslandShape(iPts, 1.055, '#54492f'); // beach
+  drawIslandShape(iPts, 1.0,   '#15301b'); // grass
   ctx.beginPath(); ctx.arc(half, half, world.lakeR * _mapScale, 0, Math.PI * 2);
   ctx.fillStyle = '#10334d'; ctx.fill();
-  const styles = { highway: ['#ffb347', 2.4], country: ['#7ddb8a', 1.6], lane: ['#55996b', 1.0], street: ['#4a8cff', 1.0] };
+  const styles = { highway: ['#ffb347', 2.4], country: ['#7ddb8a', 1.6], lane: ['#55996b', 1.0], street: ['#4a8cff', 1.0], racetrack: ['#ff4400', 1.8] };
   for(const r of world.mapRoads){
     const [col, w] = styles[r.type] || ['#888', 1];
     ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
