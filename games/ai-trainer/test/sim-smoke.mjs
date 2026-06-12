@@ -5,11 +5,12 @@
 //  Run:  node games/ai-trainer/test/sim-smoke.mjs
 //
 //  Drives the worker protocol on a synthetic circular track. Nested Workers
-//  don't exist in Node, so the gradient pool fails over to the local
+//  don't exist in Node, so PPO's gradient pool fails over to the local
 //  single-thread path — exactly the trainer's worst-case fallback. Checks:
-//    1. SAC: warmup fills the replay buffer, gradient steps run, losses and
-//       α are finite, export carries the full twin-critic state.
-//    2. PPO: still collects and completes updates (regression).
+//    1. ES: generations complete, stats are finite, export is actor-only.
+//    2. PPO: updates complete, adaptive γ is reported (regression).
+//    3. Adaptive γ: with every reward zeroed the average return stagnates by
+//       construction, so γ MUST rise above its base after enough updates.
 // ─────────────────────────────────────────────────────────────────────────────
 
 let failures = 0;
@@ -68,11 +69,11 @@ function makeTrack() {
 
 const carData = { accel: 12, maxSpd: 50, brake: 25, hdl: 1.0, aiSpd: 1.0 };
 
-async function runAlgo(algo, config, runMs) {
+async function runAlgo(label, config, runMs) {
   inbox.length = 0;
   send({ type: 'init', track: makeTrack(), carData, config });
   const ready = await waitFor(m => m.type === 'ready', 5000);
-  check(`${algo}: worker ready`, !!ready);
+  check(`${label}: worker ready`, !!ready);
   if (!ready) return null;
   send({ type: 'start' });
   await new Promise(res => setTimeout(res, runMs));
@@ -85,41 +86,37 @@ async function runAlgo(algo, config, runMs) {
   return frame;
 }
 
-// ── 1. SAC ───────────────────────────────────────────────────────────────────
-console.log('\n1. SAC end-to-end (local CPU fallback path)');
+// ── 1. ES ────────────────────────────────────────────────────────────────────
+console.log('\n1. ES end-to-end (evolution strategies)');
 {
-  const frame = await runAlgo('sac', {
-    algo: 'sac', numEnvs: 4, speedMult: 200, episodeLen: 15,
-    backend: 'js', threads: 1, minibatch: 64, utd: 0.5,
-    bufferSize: 20000, lr: 3e-4,
-  }, 30000);
+  const frame = await runAlgo('es', {
+    algo: 'es', numEnvs: 8, speedMult: 200, episodeLen: 12,
+    esSigma: 0.1, esLr: 0.02,
+  }, 25000);
 
   check('frame received', !!frame);
   if (frame) {
-    check(`algo tagged sac`, frame.algo === 'sac');
-    check(`left warmup (phase ${frame.phase})`, frame.phase === 'training');
-    check(`gradient steps ran (${frame.iteration})`, frame.iteration > 0);
-    check('losses finite',
-      Number.isFinite(frame.loss.pi) && Number.isFinite(frame.loss.v) && Number.isFinite(frame.loss.ent));
-    check(`alpha live (${frame.alpha != null ? frame.alpha.toFixed(3) : '—'})`,
-      Number.isFinite(frame.alpha) && frame.alpha > 0);
-    check(`sigma reported`, Array.isArray(frame.sigma) && Number.isFinite(frame.sigma[0]));
+    check('algo tagged es', frame.algo === 'es');
+    check(`generations completed (${frame.iteration})`, frame.iteration > 1);
+    check('fitness stats finite',
+      Number.isFinite(frame.avgReturn) && Number.isFinite(frame.loss.pi) && Number.isFinite(frame.loss.v));
+    check('backend is sim-only (no gradient compute)', frame.backend === 'sim');
+    check('parameter σ reported', Array.isArray(frame.sigma) && frame.sigma[0] === 0.1);
+    check('γ not reported for ES', frame.gamma == null);
     check(`episodes completed (${frame.episodes})`, frame.episodes > 0);
-    console.log(`  steps ${frame.totalSteps} · grad steps ${frame.iteration} · ` +
-                `avg return ${frame.avgReturn.toFixed(1)} · α ${frame.alpha.toFixed(3)}`);
+    console.log(`  steps ${frame.totalSteps} · generations ${frame.iteration} · ` +
+                `gen mean ${frame.loss.pi.toFixed(1)} · gen best ${frame.loss.v.toFixed(1)}`);
   }
 
   inbox.length = 0;
   send({ type: 'exportModel' });
   const exp = await waitFor(m => m.type === 'modelExport', 3000);
   const m = exp && exp.model;
-  check('export is a complete SAC model',
-    !!m && m.algo === 'sac' && m.actor && m.q1 && m.q2 && m.tq1 && m.tq2 &&
-    Number.isFinite(m.logAlpha) &&
-    m.actor.sizes[m.actor.sizes.length - 1] === 2 * m.actDim &&
-    m.q1.sizes[0] === m.obsDim + m.actDim);
-  check('export weights finite',
-    !!m && m.actor.flat.every(Number.isFinite) && m.q1.flat.every(Number.isFinite));
+  check('export is an actor-only ES model',
+    !!m && m.algo === 'es' && m.actor && !m.critic && !m.logStd &&
+    m.actor.sizes[0] === m.obsDim &&
+    m.actor.sizes[m.actor.sizes.length - 1] === m.actDim);
+  check('export weights finite', !!m && m.actor.flat.every(Number.isFinite));
 }
 
 // ── 2. PPO regression ────────────────────────────────────────────────────────
@@ -136,6 +133,8 @@ console.log('\n2. PPO end-to-end (regression)');
     check('losses finite',
       Number.isFinite(frame.loss.pi) && Number.isFinite(frame.loss.v));
     check('sigma reported', Array.isArray(frame.sigma) && Number.isFinite(frame.sigma[0]));
+    check(`adaptive γ reported (${frame.gamma})`,
+      Number.isFinite(frame.gamma) && frame.gamma >= 0.99 && frame.gamma <= 0.998);
   }
 
   inbox.length = 0;
@@ -144,6 +143,27 @@ console.log('\n2. PPO end-to-end (regression)');
   const m = exp && exp.model;
   check('export is a complete PPO model',
     !!m && m.algo === 'ppo' && m.actor && m.critic && Array.isArray(m.logStd));
+}
+
+// ── 3. Adaptive γ rises under stagnation ─────────────────────────────────────
+//  All reward terms zeroed → every episode returns exactly 0 → the windowed
+//  average cannot improve → after GAMMA_STAGNATION_UPDATES updates the live γ
+//  must have been raised above its base.
+console.log('\n3. Adaptive γ under forced reward stagnation');
+{
+  const frame = await runAlgo('ppo-stagnant', {
+    algo: 'ppo', numEnvs: 4, speedMult: 200, episodeLen: 10,
+    backend: 'js', threads: 1, minibatch: 128, horizon: 64, epochs: 2,
+    progressReward: 0, lapBonus: 0, gravelPenalty: 0, wallPenalty: 0, terminalPenalty: 0,
+  }, 30000);
+
+  check('frame received', !!frame);
+  if (frame) {
+    console.log(`  updates ${frame.iteration} · episodes ${frame.episodes} · γ ${frame.gamma.toFixed(4)}`);
+    check(`enough updates ran for the stagnation window (${frame.iteration})`, frame.iteration >= 12);
+    check(`γ rose above its 0.99 base (${frame.gamma.toFixed(4)})`, frame.gamma > 0.9905);
+    check('γ stayed below its cap', frame.gamma <= 0.998);
+  }
 }
 
 console.log(failures ? `\n${failures} CHECK(S) FAILED` : '\nall checks passed');

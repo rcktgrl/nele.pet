@@ -2,7 +2,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  grad-worker-check.mjs — drives the REAL grad-worker.js message protocol in
 //  Node (fetch shimmed to read nn_wasm.wasm from disk), exercising both the
-//  WASM arena layout and the JS fallback for the PPO and SAC task kinds.
+//  WASM path and the JS fallback for the PPO gradient task.
 //
 //  Run:  node games/ai-trainer/test/grad-worker-check.mjs
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,49 +54,13 @@ check(`wasm module loaded (${status && (status.ok ? 'ok' : status.error)})`, !!s
 const OBS = 9, ACT = 4, H = 24, N = 48;
 const finite = arr => Array.from(arr).every(Number.isFinite);
 
-function sacMsg(force) {
-  const actor = new Net([OBS, H, 2 * ACT], 0.5);
-  const q = new Net([OBS + ACT, H, 1], 1);
-  const rnd = n => Float64Array.from({ length: n }, () => Math.random() * 2 - 1);
-  return {
-    type: 'sacGrad', force,
-    actorSizes: actor.sizes, qSizes: q.sizes,
-    actorFlat: actor.flatF64(),
-    q1Flat: new Net(q.sizes, 1).flatF64(),
-    q2Flat: new Net(q.sizes, 1).flatF64(),
-    tq1Flat: new Net(q.sizes, 1).flatF64(),
-    tq2Flat: new Net(q.sizes, 1).flatF64(),
-    logAlpha: Math.log(0.2),
-    hp: { gamma: 0.99, targetEntropy: -ACT },
-    n: N, obsDim: OBS, actDim: ACT,
-    obs: rnd(N * OBS), act: rnd(N * ACT), rew: rnd(N),
-    obs2: rnd(N * OBS), done: Float64Array.from({ length: N }, () => Math.random() < 0.5 ? 1 : 0),
-    _nAP: actor.paramCount(), _nQP: q.paramCount(),
-  };
-}
-
-console.log('\nSAC task — WASM and JS fallback');
+console.log('\nPPO task — WASM and JS fallback');
 for (const force of ['auto', 'js']) {
-  const msg = sacMsg(force);
-  handler({ data: msg });
-  const r = await nextOfType('gradResult');
-  const wantMode = force === 'js' ? 'js' : 'wasm';
-  check(`${wantMode}: reply with grads of the right shape`,
-    !!r && r.mode === wantMode &&
-    r.aG.length === msg._nAP && r.q1G.length === msg._nQP && r.q2G.length === msg._nQP,
-    r ? `mode ${r.mode}` : 'no reply');
-  check(`${wantMode}: values finite, q-loss non-negative, entropy stats sane`,
-    !!r && finite(r.aG) && finite(r.q1G) && finite(r.q2G) &&
-    Number.isFinite(r.gLa) && r.q >= 0 && r.std > 0 && r.n === N);
-}
-
-console.log('\nPPO task — regression');
-{
   const actor = new Net([OBS, H, ACT], 0.5);
   const critic = new Net([OBS, H, 1], 1);
   const rnd = n => Float64Array.from({ length: n }, () => Math.random() * 2 - 1);
   handler({ data: {
-    type: 'grad', force: 'auto',
+    type: 'grad', force,
     actorSizes: actor.sizes, criticSizes: critic.sizes,
     actorFlat: actor.flatF64(), criticFlat: critic.flatF64(),
     logStd: [-0.5, -0.5, -0.5, -0.5],
@@ -106,9 +70,13 @@ console.log('\nPPO task — regression');
     logp: rnd(N), adv: rnd(N), ret: rnd(N),
   } });
   const r = await nextOfType('gradResult');
-  check('wasm PPO reply finite and well-shaped',
-    !!r && r.mode === 'wasm' && r.aG.length === actor.paramCount() &&
-    r.cG.length === critic.paramCount() && finite(r.aG) && finite(r.cG) && r.v >= 0);
+  const wantMode = force === 'js' ? 'js' : 'wasm';
+  check(`${wantMode}: reply with grads of the right shape`,
+    !!r && r.mode === wantMode &&
+    r.aG.length === actor.paramCount() && r.cG.length === critic.paramCount(),
+    r ? `mode ${r.mode}` : 'no reply');
+  check(`${wantMode}: values finite, value loss non-negative`,
+    !!r && finite(r.aG) && finite(r.cG) && finite(r.gLs) && r.v >= 0 && r.n === N);
 }
 
 console.log(failures ? `\n${failures} CHECK(S) FAILED` : '\nall checks passed');

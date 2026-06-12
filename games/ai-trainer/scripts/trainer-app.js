@@ -149,7 +149,7 @@ const ACT_DIM = 6;  // steer, throttle/brake + 4 memory-cell deltas
 
 // Full training config — architecture fields require restart, others are live
 const simCfg = {
-  algo: 'ppo',           // restart required — 'ppo' | 'sac'
+  algo: 'ppo',           // restart required — 'ppo' | 'es'
   hiddenLayers: 1,       // restart required
   hiddenSize: 64,        // restart required
   backend: 'auto',       // restart required — 'auto' | 'gpu' | 'wasm' | 'js'
@@ -158,10 +158,12 @@ const simCfg = {
   speedMult: 1,
   episodeLen: 60,
   randomSpawn: true,
-  lr: 3e-4,
-  entropyCoef: 0.003,    // PPO only — SAC tunes its temperature itself
+  lr: 3e-4,              // PPO only
+  entropyCoef: 0.003,    // PPO only
+  gammaAuto: true,       // PPO only — γ rises while the reward stagnates
   horizon: 512,          // PPO only — restart required
-  utd: 1.0,              // SAC only — gradient steps per transition (live)
+  esSigma: 0.1,          // ES only — parameter noise (live)
+  esLr: 0.02,            // ES only — learning rate (live)
   progressReward: 0.2,
   gravelPenalty: 1.0,
   wallPenalty: 2.0,
@@ -252,7 +254,7 @@ function refreshHUD(d) {
   document.getElementById('hudAvg').textContent  = 'BEST LAP ' + fmtLap(bestLap);
   document.getElementById('hudTime').textContent = fmtSteps(totalSteps) + ' steps';
 
-  const sac = d.algo === 'sac';
+  const es = d.algo === 'es';
   const bar = document.getElementById('genBar');
   const wrap = document.getElementById('genBarWrap');
   if (phase === 'updating') {
@@ -261,13 +263,9 @@ function refreshHUD(d) {
     wrap.title = 'UPDATING POLICY…';
   } else {
     bar.style.width = (Math.min(1, bufferFill) * 100).toFixed(1) + '%';
-    bar.style.background = phase === 'training'
-      ? 'linear-gradient(90deg, #c8f, #4af)'
-      : 'linear-gradient(90deg, #4af, #4f4)';
-    wrap.title = sac
-      ? (phase === 'training'
-        ? 'SAC trains continuously — bar shows replay buffer fill'
-        : 'Warming up the replay buffer — training starts when full')
+    bar.style.background = 'linear-gradient(90deg, #4af, #4f4)';
+    wrap.title = es
+      ? 'Generation progress — fraction of cars that finished their episode'
       : 'Collecting rollout — bar fills then policy updates';
   }
   const threads = d.gradThreads || 0;
@@ -275,23 +273,21 @@ function refreshHUD(d) {
   if (phase === 'updating') {
     phaseEl.textContent = threads ? `⚙ UPDATING ×${threads}` : '⚙ UPDATING';
     phaseEl.style.color = '#fa4';
-  } else if (phase === 'training') {
-    phaseEl.textContent = '● TRAINING';
-    phaseEl.style.color = '#c8f';
   } else {
     phaseEl.textContent = '● COLLECTING';
     phaseEl.style.color = '#4f4';
   }
-  // Compute-backend badge: GPU / WASM / JS, tooltip carries failure reasons
+  // Compute-backend badge: GPU / WASM / JS / SIM, tooltip carries failure reasons
   const backendEl = document.getElementById('hudWasm');
   if (backendEl && d.backend) {
     const labels = {
       'gpu': 'GPU ✓', 'gpu-init': 'GPU …', 'gpu-failed': 'GPU ✗→CPU',
       'wasm': `WASM ×${threads}`, 'js': `JS ×${threads || 1}`,
+      'sim': 'SIM ONLY',
     };
     const colors = {
       'gpu': '#c9f', 'gpu-init': '#fa4', 'gpu-failed': '#f66',
-      'wasm': '#4fa', 'js': '#888',
+      'wasm': '#4fa', 'js': '#888', 'sim': '#4fa',
     };
     backendEl.textContent = labels[d.backend] || d.backend;
     backendEl.style.color = colors[d.backend] || '#888';
@@ -299,14 +295,19 @@ function refreshHUD(d) {
   }
 
   const sigmaEl = document.getElementById('hudSigma');
-  if (sac) {
-    const sStr = d.sigma ? d.sigma[0].toFixed(2) : '—';
-    const aStr = d.alpha != null ? d.alpha.toFixed(3) : '—';
-    sigmaEl.textContent = `σ ${sStr} · α ${aStr}`;
-    sigmaEl.title = 'Mean policy std σ and entropy temperature α — both auto-tuned by SAC';
-  } else if (d.sigma) {
-    sigmaEl.textContent = 'σ ' + d.sigma.map(s => s.toFixed(2)).join('/');
-    sigmaEl.title = 'Policy exploration noise σ (steer/throttle) — shrinks as AI gets confident';
+  if (d.sigma) {
+    if (es) {
+      sigmaEl.textContent = 'σₚ ' + d.sigma[0].toFixed(2);
+      sigmaEl.title = 'Parameter-noise σ — how different each car’s perturbed brain is from the base network';
+    } else {
+      sigmaEl.textContent = 'σ ' + d.sigma.map(s => s.toFixed(2)).join('/');
+      sigmaEl.title = 'Policy exploration noise σ (steer/throttle) — shrinks as AI gets confident';
+    }
+  }
+  const gammaEl = document.getElementById('hudGamma');
+  if (gammaEl) {
+    gammaEl.style.display = es ? 'none' : '';
+    if (d.gamma != null) gammaEl.textContent = 'γ ' + d.gamma.toFixed(4);
   }
 
   const bestEl = document.getElementById('bestStatus');
@@ -387,8 +388,8 @@ function drawNN(flat, layers) {
 //  Config menu — shown between map selection and training start
 // ─────────────────────────────────────────────────────────────────────────────
 
-function netParams(inDim, hiddenLayers, hiddenSize, outDim) {
-  const sizes = [inDim, ...Array(hiddenLayers).fill(hiddenSize), outDim];
+function netParams(hiddenLayers, hiddenSize, outDim) {
+  const sizes = [OBS_DIM, ...Array(hiddenLayers).fill(hiddenSize), outDim];
   let n = 0;
   for (let i = 0; i < sizes.length - 1; i++) n += (sizes[i] + 1) * sizes[i + 1];
   return n;
@@ -396,28 +397,31 @@ function netParams(inDim, hiddenLayers, hiddenSize, outDim) {
 
 function updateConfigParamCount() {
   const l = simCfg.hiddenLayers, h = simCfg.hiddenSize;
-  let text;
-  if (simCfg.algo === 'sac') {
-    const act = netParams(OBS_DIM, l, h, 2 * ACT_DIM);          // mean + logStd heads
-    const q   = netParams(OBS_DIM + ACT_DIM, l, h, 1);          // each twin critic
-    text = `${(act + 2 * q).toLocaleString()} total parameters  (actor ${act.toLocaleString()} · 2×Q ${q.toLocaleString()} each, + targets)`;
+  const act = netParams(l, h, ACT_DIM);
+  const el = document.getElementById('configParamCount');
+  if (simCfg.algo === 'es') {
+    el.textContent = `${act.toLocaleString()} parameters (actor only — evolution needs no critic)`;
   } else {
-    const act  = netParams(OBS_DIM, l, h, ACT_DIM);
-    const crit = netParams(OBS_DIM, l, h, 1);
-    text = `${(act + crit).toLocaleString()} total parameters  (actor ${act.toLocaleString()} · critic ${crit.toLocaleString()})`;
+    const crit = netParams(l, h, 1);
+    el.textContent =
+      `${(act + crit).toLocaleString()} total parameters  (actor ${act.toLocaleString()} · critic ${crit.toLocaleString()})`;
   }
-  document.getElementById('configParamCount').textContent = text;
 }
 
-// Show/hide algorithm-specific controls (config menu + live sidebar).
+// Show/hide algorithm-specific controls (config menu + live sidebar + HUD).
 function updateAlgoUI() {
-  const sac = simCfg.algo === 'sac';
-  document.getElementById('configHorizonRow').style.display = sac ? 'none' : '';
-  document.getElementById('configEntRow').style.display     = sac ? 'none' : '';
-  document.getElementById('configUtdRow').style.display     = sac ? '' : 'none';
-  document.getElementById('entRow').style.display = sac ? 'none' : '';
-  document.getElementById('utdRow').style.display = sac ? '' : 'none';
-  document.getElementById('liveTitle').textContent = sac ? '⚡ LIVE — SAC' : '⚡ LIVE — PPO';
+  const es = simCfg.algo === 'es';
+  for (const [id, showInEs] of [
+    ['configBackendRow', false], ['configThreadRow', false],
+    ['configHorizonRow', false], ['configLrRow', false], ['configEntRow', false],
+    ['configEsLrRow', true], ['configEsSigmaRow', true],
+    ['lrRow', false], ['entRow', false], ['gammaRow', false],
+    ['esLrRow', true], ['esSigmaRow', true],
+  ]) {
+    document.getElementById(id).style.display = (es === showInEs) ? '' : 'none';
+  }
+  document.getElementById('liveTitle').textContent = es ? '⚡ LIVE — EVOLUTION' : '⚡ LIVE — PPO';
+  document.getElementById('hudGamma').style.display = es ? 'none' : '';
   // imports can switch the algorithm outside the button group's own clicks
   document.getElementById('configAlgoBtns').querySelectorAll('.opt-btn')
     .forEach(el => el.classList.toggle('sel', el.dataset.val === simCfg.algo));
@@ -453,7 +457,7 @@ function wireConfigSlider(sliderId, valId, key, fmtFn) {
 
 function initConfigMenu() {
   makeOptBtnGroup('configAlgoBtns',
-    [{ label: 'PPO', val: 'ppo' }, { label: 'SAC', val: 'sac' }],
+    [{ label: 'PPO', val: 'ppo' }, { label: 'EVOLUTION', val: 'es' }],
     'algo', () => { updateAlgoUI(); updateConfigParamCount(); });
 
   makeOptBtnGroup('configLayerBtns',
@@ -478,7 +482,8 @@ function initConfigMenu() {
   wireConfigSlider('configEpLenSlider',  'configEpLenVal',  'episodeLen', v => v + 's');
   wireConfigSlider('configLrSlider',     'configLrVal',     'lr',        v => v.toExponential(1));
   wireConfigSlider('configEntSlider',    'configEntVal',    'entropyCoef', v => v.toFixed(4));
-  wireConfigSlider('configUtdSlider',    'configUtdVal',    'utd',       v => v.toFixed(1));
+  wireConfigSlider('configEsLrSlider',   'configEsLrVal',   'esLr',      v => v.toFixed(3));
+  wireConfigSlider('configEsSigmaSlider','configEsSigmaVal','esSigma',   v => v.toFixed(2));
 
   const spawnTog = document.getElementById('configSpawnToggle');
   spawnTog.checked = simCfg.randomSpawn;
@@ -579,8 +584,16 @@ function initUI() {
   wireSlider('speedSlider',   'speedVal',   'speedMult',       v => v + '×');
   wireSlider('lrSlider',      'lrVal',      'lr',              v => v.toExponential(1));
   wireSlider('entSlider',     'entVal',     'entropyCoef',     v => v.toFixed(4));
-  wireSlider('utdSlider',     'utdVal',     'utd',             v => v.toFixed(1));
+  wireSlider('esLrSlider',    'esLrVal',    'esLr',            v => v.toFixed(3));
+  wireSlider('esSigmaSlider', 'esSigmaVal', 'esSigma',         v => v.toFixed(2));
   wireSlider('epLenSlider',   'epLenVal',   'episodeLen',      v => v + 's');
+
+  const gammaTog = document.getElementById('gammaToggle');
+  gammaTog.checked = simCfg.gammaAuto;
+  gammaTog.addEventListener('change', () => {
+    simCfg.gammaAuto = gammaTog.checked;
+    if (worker) worker.postMessage({ type: 'setConfig', config: { gammaAuto: gammaTog.checked } });
+  });
   wireSlider('progSlider',    'progVal',    'progressReward',  v => v.toFixed(2));
   wireSlider('gravelSlider',  'gravelVal',  'gravelPenalty',   v => v.toFixed(1));
   wireSlider('wallSlider',    'wallVal',    'wallPenalty',     v => v.toFixed(1));
@@ -622,9 +635,9 @@ function initUI() {
     try {
       const model = JSON.parse(await this.files[0].text());
       const okPpo = model.algo === 'ppo' && model.actor && model.critic;
-      const okSac = model.algo === 'sac' && model.actor && model.q1 && model.q2;
-      if (!okPpo && !okSac)
-        throw new Error('Not a PPO/SAC trainer export — older genetic trainer exports are not compatible');
+      const okEs  = model.algo === 'es' && model.actor;
+      if (!okPpo && !okEs)
+        throw new Error('Not a PPO/ES trainer export — older genetic trainer exports are not compatible');
       // the model carries its algorithm — switch the trainer to match
       simCfg.algo = model.algo;
       updateAlgoUI();
