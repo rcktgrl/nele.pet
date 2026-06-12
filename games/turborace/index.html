@@ -317,10 +317,21 @@
   </div>
 </div>
 
+<!-- FREE DRIVE MAP SELECT -->
+<div class="screen" id="sFdMapSel" style="display:none">
+  <h2>🏝️ Free Drive — Select Map</h2>
+  <div id="fdMapCards" class="trackCards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:24px;"></div>
+  <div class="menuActions menuActions-inline">
+    <button id="fdMapBackBtn" class="btn btn-s">BACK</button>
+    <button id="fdMapLoadOnlineBtn" class="btn btn-s">LOAD ONLINE TRACKS</button>
+    <button id="fdMapNextBtn" class="btn btn-p" disabled>NEXT</button>
+  </div>
+</div>
+
 <!-- FREE DRIVE SETUP -->
 <div class="screen" id="sFreeDrive" style="display:none">
   <h2>🏝️ Free Drive</h2>
-  <div class="sub">Open-world island · three cities · cruise together</div>
+  <div class="sub" id="fdModeSub">Open-world island · three cities · cruise together</div>
   <div id="fdStatusMsg" style="color:#fa4;font-size:.8rem;min-height:1.2em;text-align:center;width:100%;max-width:640px;"></div>
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
     <span style="color:#556;font-size:.75rem;font-family:Orbitron,monospace;letter-spacing:1px;">DRIVING AS</span>

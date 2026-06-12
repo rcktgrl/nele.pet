@@ -376,6 +376,101 @@ export async function showOnlineTrkSel(){
 }
 
 // ═══════════════════════════════════════════════════════
+//  FREE DRIVE MAP SELECTION
+// ═══════════════════════════════════════════════════════
+
+function _drawIslandPreview(canvas) {
+  const W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#10334d'; ctx.fillRect(0, 0, W, H);
+  const r = Math.min(W, H) * 0.36;
+  const pts = 14;
+  function islandPath(scl) {
+    ctx.beginPath();
+    for (let i = 0; i <= pts; i++) {
+      const a = (i / pts) * Math.PI * 2;
+      const noise = 0.78 + 0.22 * Math.sin(a * 3.7 + 1.2) + 0.12 * Math.cos(a * 7.1 + 0.8);
+      const x = cx + Math.cos(a) * r * scl * noise;
+      const y = cy + Math.sin(a) * r * scl * noise;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+  islandPath(1.0); ctx.fillStyle = '#54492f'; ctx.fill();
+  islandPath(0.93); ctx.fillStyle = '#15301b'; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.13, 0, Math.PI * 2); ctx.fillStyle = '#10334d'; ctx.fill();
+  const cities = [{ a: -0.5, d: 0.52, col: '#ffd700' }, { a: 2.0, d: 0.54, col: '#ff6644' }, { a: 1.0, d: 0.48, col: '#44aaff' }];
+  for (const c of cities) {
+    ctx.beginPath(); ctx.arc(cx + Math.cos(c.a) * r * c.d, cy + Math.sin(c.a) * r * c.d, 4, 0, Math.PI * 2);
+    ctx.fillStyle = c.col; ctx.fill();
+  }
+  ctx.font = 'bold 10px Orbitron, monospace'; ctx.fillStyle = '#2ecc88'; ctx.textAlign = 'center';
+  ctx.fillText('ISLAND', cx, H - 10); ctx.textAlign = 'left';
+}
+
+function _buildFdMapCards(tracks) {
+  const COLORS = ['#4488ff', '#44cc66', '#ffaa22', '#ff4488', '#22ddaa', '#dd66ff', '#66bbff'];
+  const container = document.getElementById('fdMapCards');
+  container.innerHTML = '';
+
+  // Island card (always first)
+  const islandCard = document.createElement('div');
+  islandCard.className = 'tcard' + (state.fdSelMap === 'island' ? ' sel' : '');
+  const islandCanvas = document.createElement('canvas'); islandCanvas.width = 280; islandCanvas.height = 230; islandCanvas.style.borderRadius = '6px';
+  const islandH3 = document.createElement('h3'); islandH3.textContent = 'Island';
+  const islandP = document.createElement('p'); islandP.textContent = 'Open-world island · three cities · cruise freely';
+  islandCard.appendChild(islandCanvas); islandCard.appendChild(islandH3); islandCard.appendChild(islandP);
+  islandCard.onclick = () => {
+    container.querySelectorAll('.tcard').forEach(x => x.classList.remove('sel'));
+    islandCard.classList.add('sel'); state.fdSelMap = 'island';
+    document.getElementById('fdMapNextBtn').disabled = false;
+  };
+  container.appendChild(islandCard);
+  _drawIslandPreview(islandCanvas);
+
+  tracks.forEach((t, i) => {
+    const card = document.createElement('div'); card.className = 'tcard' + (String(state.fdSelMap) === String(t.id) ? ' sel' : '');
+    const canvas = document.createElement('canvas'); canvas.width = 280; canvas.height = 230; canvas.style.borderRadius = '6px';
+    const h3 = document.createElement('h3'); h3.textContent = t.name;
+    const p = document.createElement('p'); p.textContent = t.desc + ' · ' + t.rw + 'm wide' + (t.builtin ? '' : ' · Custom');
+    card.appendChild(canvas); card.appendChild(h3); card.appendChild(p);
+    card.onclick = () => {
+      container.querySelectorAll('.tcard').forEach(x => x.classList.remove('sel'));
+      card.classList.add('sel'); state.fdSelMap = t.id;
+      document.getElementById('fdMapNextBtn').disabled = false;
+    };
+    container.appendChild(card);
+    drawTrackPreview(canvas, t, t.previewColor || COLORS[i % COLORS.length]);
+  });
+
+  if (!state.fdSelMap) {
+    state.fdSelMap = 'island';
+    islandCard.classList.add('sel');
+    document.getElementById('fdMapNextBtn').disabled = false;
+  }
+}
+
+export async function showFdMapSel() {
+  await loadTracksFromFolder().catch(() => {});
+  document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
+  document.getElementById('sFdMapSel').style.display = 'flex';
+  state.gState = 'fdMapSel';
+  updateTouchControlsVisibility(state.gState);
+  document.getElementById('fdMapNextBtn').disabled = (state.fdSelMap == null);
+  _buildFdMapCards(state.folderTracks);
+}
+
+export async function showFdMapOnlineTracks() {
+  loadEditorTracks();
+  const container = document.getElementById('fdMapCards');
+  const loadingEl = document.createElement('p'); loadingEl.textContent = 'Loading online tracks…'; loadingEl.style.color = '#778'; loadingEl.style.width = '100%'; loadingEl.style.textAlign = 'center';
+  container.innerHTML = ''; container.appendChild(loadingEl);
+  await syncEditorTracksFromCloud().catch(() => {});
+  const allOnline = state.editorTracks.filter(t => !state.folderTracks.some(f => String(f.id) === String(t.id)));
+  _buildFdMapCards([...state.folderTracks, ...allOnline]);
+}
+
+// ═══════════════════════════════════════════════════════
 //  VS MODE LOBBY
 // ═══════════════════════════════════════════════════════
 
