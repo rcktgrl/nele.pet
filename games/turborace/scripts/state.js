@@ -34,6 +34,7 @@ export const state = {
     carCardPreviewRaf: 0,
     folderTracks: [],
     editorTracks: [],
+    driveMaps: [],         // custom free-ride maps loaded from drive_custom_maps
     editorTrack: null,
     editorSelectedNode: 0,
     editorSelectedAsset: -1,
@@ -93,6 +94,7 @@ export const state = {
     fdNetwork: null,         // FreeDriveNetwork instance (null = solo)
     fdPosTimer: 0,           // broadcast throttle
     fdCleanup: null,         // set by freedrive.js; called by showMain on exit
-    fdSelMap: 'island',      // 'island' or a track ID string
-    fdTrackData: null,       // null for island mode, track data object for track mode
+    fdSelMap: 'island',      // 'island', a track ID, or a drive-map ID string
+    fdTrackData: null,       // null for island/drivemap mode, track data object for track mode
+    fdCustomMapData: null,   // null unless a drive-map-editor map is selected
 };

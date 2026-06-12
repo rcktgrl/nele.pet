@@ -1,4 +1,5 @@
 'use strict';
+import { supabase } from './supabase.js';
 
 // ════════════════════════════════════════════════════════════════
 //  DRIVE MAP EDITOR
@@ -601,6 +602,63 @@ function duplicateCurrentMap() {
   notify('MAP DUPLICATED');
 }
 
+// ── Cloud sync ─────────────────────────────────────────────────
+const CLOUD_TABLE = 'drive_custom_maps';
+let _cloudOk = true;
+
+async function publishMapToCloud() {
+  if (!map) { notify('NO MAP TO PUBLISH'); return; }
+  const btn = document.getElementById('btnPublish');
+  if (btn) { btn.disabled = true; btn.textContent = 'PUBLISHING…'; }
+  try {
+    const payload = { ...JSON.parse(JSON.stringify(map)), updatedAt: new Date().toISOString() };
+    const { error } = await supabase.from(CLOUD_TABLE).upsert(
+      { map_id: map.id, map_data: payload },
+      { onConflict: 'map_id' }
+    );
+    if (error) throw error;
+    notify('MAP PUBLISHED ONLINE');
+    if (btn) {
+      btn.textContent = '✓ PUBLISHED';
+      setTimeout(() => { btn.disabled = false; btn.textContent = 'PUBLISH'; }, 2000);
+    }
+  } catch (err) {
+    notify('PUBLISH FAILED: ' + (err.message || 'network error'));
+    if (btn) { btn.disabled = false; btn.textContent = 'PUBLISH'; }
+  }
+}
+
+async function loadMapsFromCloud() {
+  if (!_cloudOk) { notify('CLOUD SYNC UNAVAILABLE'); return; }
+  const btn = document.getElementById('btnLoadOnline');
+  if (btn) { btn.disabled = true; btn.textContent = 'LOADING…'; }
+  try {
+    const { data, error } = await supabase.from(CLOUD_TABLE)
+      .select('map_id,map_data,updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(100);
+    if (error) { _cloudOk = false; throw error; }
+    const incoming = (data || [])
+      .map(r => r.map_data)
+      .filter(m => m && m.id && Array.isArray(m.nodes) && Array.isArray(m.roads));
+    for (const online of incoming) {
+      const idx = maps.findIndex(m => m.id === online.id);
+      if (idx >= 0) {
+        if ((online.updatedAt || '') >= (maps[idx].updatedAt || '')) maps[idx] = online;
+      } else {
+        maps.push(online);
+      }
+    }
+    saveMapsToStorage();
+    renderMapList();
+    notify('LOADED ' + incoming.length + ' ONLINE MAP' + (incoming.length !== 1 ? 'S' : ''));
+    if (btn) { btn.disabled = false; btn.textContent = 'LOAD ONLINE'; }
+  } catch (err) {
+    notify('LOAD FAILED: ' + (err.message || 'network error'));
+    if (btn) { btn.disabled = false; btn.textContent = 'LOAD ONLINE'; }
+  }
+}
+
 function exportJSON() {
   if (!map) return;
   const json = JSON.stringify(map, null, 2);
@@ -1022,6 +1080,8 @@ function bindUI() {
   document.getElementById('btnDupeMap').addEventListener('click', duplicateCurrentMap);
   document.getElementById('btnDeleteMap').addEventListener('click', deleteCurrentMap);
   document.getElementById('btnExport').addEventListener('click', exportJSON);
+  document.getElementById('btnPublish').addEventListener('click', publishMapToCloud);
+  document.getElementById('btnLoadOnline').addEventListener('click', loadMapsFromCloud);
   document.getElementById('btnResetView').addEventListener('click', resetView);
 
   // Import

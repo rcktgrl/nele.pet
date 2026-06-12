@@ -18,6 +18,9 @@ import { clearGhostVisual } from './ghost.js';
 import { getArcadeUser } from './user.js';
 import { hexNumToCss, cssToHexNum, getTrackById } from './editor.js';
 import { buildTrack } from './track-gen.js';
+import {
+  buildDriveMap, getDriveMapWorld, applyDriveMapBounds, buildDriveMapMinimap,
+} from './freedrive-custommap.js';
 import { notify } from './notify.js';
 
 // ═══════════════════════════════════════════════════════
@@ -65,7 +68,9 @@ export function showFreeDriveMenu(){
   _setFdStatus('');
   const subEl = document.getElementById('fdModeSub');
   if(subEl){
-    if(!state.fdSelMap || state.fdSelMap === 'island'){
+    if(state.fdCustomMapData){
+      subEl.textContent = `${state.fdCustomMapData.name || 'Custom Map'} · free ride map · drive freely`;
+    } else if(!state.fdSelMap || state.fdSelMap === 'island'){
       subEl.textContent = 'Open-world island · three cities · cruise together';
     } else {
       const trk = getTrackById(state.fdSelMap);
@@ -95,7 +100,20 @@ export async function startFreeDrive(){
   const selMap = state.fdSelMap || 'island';
   let spawnPos, spawnHdg, notifyMsg, fdWorldId;
 
-  if(selMap === 'island'){
+  if(state.fdCustomMapData){
+    const mapData = state.fdCustomMapData;
+    const world = buildDriveMap(mapData);
+    setupLights();
+    spawnPos = new THREE.Vector3(
+      world.spawnX + (Math.random() - 0.5) * 8, 0,
+      world.spawnZ + (Math.random() - 0.5) * 4
+    );
+    spawnHdg = world.spawnHdg;
+    notifyMsg = `Free Drive — ${mapData.name || 'Custom Map'}. Drive freely!`;
+    fdWorldId = `drivemap-fd-${String(mapData.id).replace(/[^a-z0-9_-]/gi, '-')}`;
+    const mm = buildDriveMapMinimap(mapData);
+    _mapCanvas = mm.canvas; _mapScale = mm.scale; _mapCenterX = mm.cx; _mapCenterZ = mm.cz;
+  } else if(selMap === 'island'){
     const world = buildFreeDriveWorld();
     setupLights();
     const sp = world.spawnPoints[Math.floor(Math.random() * world.spawnPoints.length)];
@@ -152,6 +170,20 @@ export async function startFreeDrive(){
 export function fdRespawn(){
   const car = state.pCar;
   if(!car) return;
+  if(state.fdCustomMapData){
+    const world = getDriveMapWorld();
+    if(world){
+      car.pos.set(world.spawnX + (Math.random() - 0.5) * 8, 0, world.spawnZ + (Math.random() - 0.5) * 4);
+      car.hdg = world.spawnHdg;
+      car.spd = 0; car.revSpd = 0; car.isReversing = false;
+      car.mesh.position.copy(car.pos); car.mesh.rotation.y = car.hdg;
+      state.gState = 'freedrive';
+      updateTouchControlsVisibility(state.gState);
+      initAudio(); startMusic();
+      notify('Respawned.');
+    }
+    return;
+  }
   if(state.fdTrackData){
     const sp0 = state.trkPts[0] || new THREE.Vector3(0, 0, 0);
     const sp1 = state.trkPts[1] || new THREE.Vector3(0, 0, 5);
@@ -192,7 +224,7 @@ function _teardownSession(){
 // Registered as state.fdCleanup — called by showMain when leaving the mode.
 function _quitCleanup(){
   _teardownSession();
-  state.fdMode = false; state.fdCleanup = null; state.fdTrackData = null;
+  state.fdMode = false; state.fdCleanup = null; state.fdTrackData = null; state.fdCustomMapData = null;
   document.getElementById('raceTop').style.display = '';
   document.getElementById('pos').style.display = '';
   const tag = document.getElementById('fdOnlineTag');
@@ -281,7 +313,9 @@ function _updateOnlineHudTag(){
   if(!el) return;
   if(!state.fdMode){ el.style.display = 'none'; return; }
   el.style.display = 'block';
-  const label = state.fdTrackData ? (state.fdTrackData.name || 'TRACK') : 'ISLAND';
+  const label = state.fdTrackData ? (state.fdTrackData.name || 'TRACK')
+              : state.fdCustomMapData ? (state.fdCustomMapData.name || 'MAP')
+              : 'ISLAND';
   if(state.fdNetwork){
     const n = 1 + Object.keys(fdRemote).length;
     el.textContent = `🏁 ${label.toUpperCase()} ONLINE · ${n} DRIVER${n > 1 ? 'S' : ''}`;
@@ -356,8 +390,8 @@ function _updateTags(){
 export function updateFreeDrive(dt){
   const car = state.pCar;
   if(!car) return;
-  const world = state.fdTrackData ? null : getFreeDriveWorld();
-  if(!state.fdTrackData && !world) return;
+  const world = (state.fdTrackData || state.fdCustomMapData) ? null : getFreeDriveWorld();
+  if(!state.fdTrackData && !state.fdCustomMapData && !world) return;
   state.raceTime += dt;
 
   const autoTouchThrottle = isTouchControlsVisibleInState(state.gState)
@@ -377,12 +411,16 @@ export function updateFreeDrive(dt){
     const offroad = world.roadEdgeDist(car.pos.x, car.pos.z) > 1.5;
     const isRally = car.data.id === 2;
     car.onGravel = offroad && !isRally;
+  } else if(state.fdCustomMapData){
+    // Custom free-ride map: all surfaces are drivable
+    car.onGravel = false;
   } else {
     // Track: use gravel zones baked into the track (same as race mode)
     car.checkGravel();
   }
   car.update({ thr, brk, str }, dt);
   if(world) _applyWorldBounds(car, world);
+  else if(state.fdCustomMapData) applyDriveMapBounds(car);
 
   _updateRemoteCars(dt);
   _broadcastPos(dt);
