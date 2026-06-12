@@ -17,6 +17,12 @@ const ROAD_COLORS_3D = {
   lane:    0x201e18,
 };
 
+function _assetHash(i) {
+  let h = (i + 1) * 2654435769;
+  h ^= (h >>> 15); h = Math.imul(h, 0x85ebca6b); h ^= (h >>> 13);
+  return ((h >>> 0) & 0xffff) / 0xffff;
+}
+
 let _dmWorld = null;
 let _dmSyncOk = true;
 
@@ -123,19 +129,64 @@ export function buildDriveMap(mapData) {
     mesh.receiveShadow = true; mesh.userData.trk = true; scene.add(mesh);
   }
 
-  // Assets (skip auto-generated ones to keep performance reasonable)
+  // Assets — render all (including auto-generated scenery)
   (mapData.assets || []).forEach((asset, i) => {
-    if (asset.generated) return;
+    const t = _assetHash(i);
+    const t2 = _assetHash(i + 1000);
     let mesh = null;
     if (asset.type === 'tree') {
-      const h = 6 + (i % 5) * 2;
-      mesh = new THREE.Mesh(new THREE.ConeGeometry(2.5, h, 6),
-        new THREE.MeshLambertMaterial({ color: 0x2d7a2d }));
-      mesh.position.set(asset.x, h / 2, asset.z);
+      const h = 5 + t * 9;
+      const grn = 0x1a5c1a + Math.floor(t2 * 0x305010);
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.5, h * 0.35, 5),
+        new THREE.MeshLambertMaterial({ color: 0x5c3a1a })
+      );
+      trunk.position.y = h * 0.175;
+      const crown = new THREE.Mesh(
+        new THREE.ConeGeometry(2 + t2 * 1.5, h * 0.75, 6),
+        new THREE.MeshLambertMaterial({ color: grn })
+      );
+      crown.position.y = h * 0.55;
+      mesh = new THREE.Group();
+      mesh.add(trunk); mesh.add(crown);
+      mesh.position.set(asset.x, 0, asset.z);
     } else if (asset.type === 'building') {
-      const h = 8 + (i % 7) * 3;
-      mesh = new THREE.Mesh(new THREE.BoxGeometry(8, h, 8),
-        new THREE.MeshLambertMaterial({ color: 0x55557a }));
+      const isTall = asset.tall;
+      const h = isTall ? 18 + t * 32 : 8 + t * 14;
+      const w = 7 + t2 * 6, d = 7 + _assetHash(i + 2000) * 6;
+      const col = 0x303050 + Math.floor(t * 0x202020);
+      const emv = 0x060612 + Math.floor(t2 * 0x0a0a08);
+      mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshLambertMaterial({ color: col, emissive: emv })
+      );
+      mesh.position.set(asset.x, h / 2, asset.z);
+    } else if (asset.type === 'park') {
+      const g = new THREE.Group();
+      const ground = new THREE.Mesh(
+        new THREE.BoxGeometry(16, 0.12, 16),
+        new THREE.MeshLambertMaterial({ color: 0x2d7a2d })
+      );
+      ground.position.y = 0.06;
+      g.add(ground);
+      for (let ti = 0; ti < 4; ti++) {
+        const th = _assetHash(i * 13 + ti);
+        const ang = (ti / 4) * Math.PI * 2;
+        const tr = new THREE.Mesh(
+          new THREE.ConeGeometry(1.2 + th * 0.8, 4 + th * 4, 5),
+          new THREE.MeshLambertMaterial({ color: 0x1e6b1e })
+        );
+        tr.position.set(Math.cos(ang) * 5.5, 2 + th * 2, Math.sin(ang) * 5.5);
+        g.add(tr);
+      }
+      mesh = g;
+      mesh.position.set(asset.x, 0, asset.z);
+    } else if (asset.type === 'stand') {
+      const h = 4 + t * 3;
+      mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(16, h, 5),
+        new THREE.MeshLambertMaterial({ color: 0x8a4a3a })
+      );
       mesh.position.set(asset.x, h / 2, asset.z);
     }
     if (mesh) { mesh.castShadow = true; mesh.userData.trk = true; scene.add(mesh); }

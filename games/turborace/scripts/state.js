@@ -97,4 +97,6 @@ export const state = {
     fdSelMap: 'island',      // 'island', a track ID, or a drive-map ID string
     fdTrackData: null,       // null for island/drivemap mode, track data object for track mode
     fdCustomMapData: null,   // null unless a drive-map-editor map is selected
+    fdTrafficEnabled: false, // AI traffic cars on custom maps
+    fdTrafficCollisions: false, // collide with AI traffic
 };

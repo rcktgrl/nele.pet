@@ -105,6 +105,14 @@
           <input id="newRoadWidth" type="number" min="4" max="40" value="12">
         </label>
       </div>
+      <label class="toggleRow">
+        <span>Curvy Roads (auto-curve new roads)</span>
+        <input type="checkbox" id="curvyToggle">
+      </label>
+      <label class="editorField" id="curvyAmountRow" style="display:none">
+        <span>Curve Amount <strong id="curvyAmountVal">3</strong></span>
+        <input id="curvyAmount" type="range" min="1" max="5" step="1" value="3">
+      </label>
       <div class="editorHint">Defaults for newly drawn roads. Change each road individually after selecting.</div>
     </div>
 

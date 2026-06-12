@@ -21,6 +21,7 @@ import { buildTrack } from './track-gen.js';
 import {
   buildDriveMap, getDriveMapWorld, applyDriveMapBounds, buildDriveMapMinimap,
 } from './freedrive-custommap.js';
+import { buildTraffic, destroyTraffic, updateTraffic, getTrafficPositions } from './freedrive-traffic.js';
 import { notify } from './notify.js';
 
 // ═══════════════════════════════════════════════════════
@@ -63,6 +64,16 @@ export function showFreeDriveMenu(){
   _syncFdColorPicker();
   const tgl = document.getElementById('fdOnlineToggle');
   if(tgl) tgl.checked = state.fdOnline;
+  const trafficSec = document.getElementById('fdTrafficSection');
+  if(trafficSec) trafficSec.style.display = state.fdCustomMapData ? '' : 'none';
+  const trafficTgl = document.getElementById('fdTrafficToggle');
+  if(trafficTgl){
+    trafficTgl.checked = state.fdTrafficEnabled;
+    const collRow = document.getElementById('fdTrafficCollisionsRow');
+    if(collRow) collRow.style.display = state.fdTrafficEnabled ? '' : 'none';
+  }
+  const collTgl = document.getElementById('fdTrafficCollisionsToggle');
+  if(collTgl) collTgl.checked = state.fdTrafficCollisions;
   const lbl = document.getElementById('fdMyNameLabel');
   if(lbl) lbl.textContent = getArcadeUser().name || 'Anonymous';
   _setFdStatus('');
@@ -113,6 +124,7 @@ export async function startFreeDrive(){
     fdWorldId = `drivemap-fd-${String(mapData.id).replace(/[^a-z0-9_-]/gi, '-')}`;
     const mm = buildDriveMapMinimap(mapData);
     _mapCanvas = mm.canvas; _mapScale = mm.scale; _mapCenterX = mm.cx; _mapCenterZ = mm.cz;
+    if(state.fdTrafficEnabled) buildTraffic(mapData);
   } else if(selMap === 'island'){
     const world = buildFreeDriveWorld();
     setupLights();
@@ -224,6 +236,7 @@ function _teardownSession(){
 // Registered as state.fdCleanup — called by showMain when leaving the mode.
 function _quitCleanup(){
   _teardownSession();
+  destroyTraffic();
   state.fdMode = false; state.fdCleanup = null; state.fdTrackData = null; state.fdCustomMapData = null;
   document.getElementById('raceTop').style.display = '';
   document.getElementById('pos').style.display = '';
@@ -422,6 +435,9 @@ export function updateFreeDrive(dt){
   if(world) _applyWorldBounds(car, world);
   else if(state.fdCustomMapData) applyDriveMapBounds(car);
 
+  if(state.fdCustomMapData && state.fdTrafficEnabled)
+    updateTraffic(dt, car, state.fdTrafficCollisions);
+
   _updateRemoteCars(dt);
   _broadcastPos(dt);
   resolveCarCollisions([car, ...Object.values(fdRemote).filter(r => r.hasPos).map(r => r.car)]);
@@ -534,6 +550,13 @@ function _drawFdMinimap(){
   const ctx = mmctx, S = 150, half = S / 2;
   ctx.clearRect(0, 0, S, S);
   ctx.drawImage(_mapCanvas, 0, 0);
+  if(state.fdCustomMapData && state.fdTrafficEnabled){
+    for(const tp of getTrafficPositions()){
+      ctx.beginPath();
+      ctx.arc(half + (tp.x - _mapCenterX) * _mapScale, half + (tp.z - _mapCenterZ) * _mapScale, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff8833'; ctx.fill();
+    }
+  }
   for(const r of Object.values(fdRemote)){
     if(!r.hasPos) continue;
     ctx.beginPath();
