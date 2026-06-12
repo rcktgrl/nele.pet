@@ -127,6 +127,29 @@ async function runUpdate(d) {
   const idx = new Int32Array(n);
   for (let k = 0; k < n; k++) idx[k] = k;
 
+  // KL movement (k3 estimator) of the live actor vs the stored behavior
+  // log-probs, on a fixed leading subsample — mirrors the CPU path's
+  // early-epoch-stop so both backends train identically.
+  const klSub = Math.min(512, n);
+  const klEstimate = async () => {
+    const t = tf.tidy(() => {
+      const obs  = tf.slice(obsT,  [0, 0], [klSub, -1]);
+      const act  = tf.slice(actT,  [0, 0], [klSub, -1]);
+      const logp = tf.slice(logpT, [0], [klSub]);
+      const mu = fwd(aVars, obs);
+      const z  = act.sub(mu).div(tf.exp(lsVar));
+      const lp = z.square().mul(-0.5).sub(lsVar).sub(0.5 * LOG_2PI).sum(1);
+      const dlt = tf.minimum(lp.sub(logp), 20);
+      return tf.exp(dlt).sub(1).sub(dlt).mean();
+    });
+    const v = (await t.data())[0];
+    t.dispose();
+    return v;
+  };
+  const klStop = !!(hp.klStop);
+  const kl0 = klStop ? await klEstimate() : 0;
+  let epochsRan = 0, lastKl = 0;
+
   try {
     for (let ep = 0; ep < d.epochs; ep++) {
       for (let k = n - 1; k > 0; k--) {  // Fisher-Yates shuffle
@@ -144,6 +167,11 @@ async function runUpdate(d) {
       }
       // yield so queued GPU work drains instead of piling up across epochs
       await new Promise(res => setTimeout(res, 0));
+      epochsRan = ep + 1;
+      if (klStop) {
+        lastKl = (await klEstimate()) - kl0;
+        if (lastKl > hp.klLimit) break;
+      }
     }
 
     // Loss scalars over the full batch with the final weights (for the HUD).
@@ -159,7 +187,8 @@ async function runUpdate(d) {
     const logStd     = new Float32Array(await lsVar.data());
     postMessage({
       type: 'updated', actorFlat, criticFlat, logStd,
-      loss: { pi, v, ent }, ms: performance.now() - t0,
+      loss: { pi, v, ent }, epochs: epochsRan, kl: lastKl,
+      ms: performance.now() - t0,
     }, [actorFlat.buffer, criticFlat.buffer, logStd.buffer]);
   } finally {
     tf.dispose([obsT, actT, logpT, advT, retT]);

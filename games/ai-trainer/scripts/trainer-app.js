@@ -149,7 +149,6 @@ const ACT_DIM = 6;  // steer, throttle/brake + 4 memory-cell deltas
 
 // Full training config — architecture fields require restart, others are live
 const simCfg = {
-  algo: 'ppo',           // restart required — 'ppo' | 'es'
   hiddenLayers: 1,       // restart required
   hiddenSize: 64,        // restart required
   backend: 'auto',       // restart required — 'auto' | 'gpu' | 'wasm' | 'js'
@@ -158,12 +157,15 @@ const simCfg = {
   speedMult: 1,
   episodeLen: 60,
   randomSpawn: true,
-  lr: 3e-4,              // PPO only
-  entropyCoef: 0.003,    // PPO only
-  gammaAuto: true,       // PPO only — γ rises while the reward stagnates
-  horizon: 512,          // PPO only — restart required
-  esSigma: 0.1,          // ES only — parameter noise (live)
-  esLr: 0.02,            // ES only — learning rate (live)
+  lr: 3e-4,
+  entropyCoef: 0.003,
+  horizon: 512,          // restart required
+  // PPO mods
+  groupSize: 1,          // restart required — GRPO-style agent groups
+  mirror: false,         // live — left↔right symmetry augmentation
+  klStop: true,          // live — KL-based early stop of update epochs
+  neuronRepair: false,   // live — dead-neuron recycle + dominant split
+  failRate: 0,           // live — defect-weight fraction per agent
   progressReward: 0.2,
   gravelPenalty: 1.0,
   wallPenalty: 2.0,
@@ -227,7 +229,7 @@ function onMsg(e) {
     const blob = new Blob([JSON.stringify(d.model, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `ai-trainer-${d.model.algo || 'ppo'}-model.json`; a.click();
+    a.href = url; a.download = 'ai-trainer-ppo-model.json'; a.click();
     URL.revokeObjectURL(url);
   }
 }
@@ -254,7 +256,6 @@ function refreshHUD(d) {
   document.getElementById('hudAvg').textContent  = 'BEST LAP ' + fmtLap(bestLap);
   document.getElementById('hudTime').textContent = fmtSteps(totalSteps) + ' steps';
 
-  const es = d.algo === 'es';
   const bar = document.getElementById('genBar');
   const wrap = document.getElementById('genBarWrap');
   if (phase === 'updating') {
@@ -264,9 +265,7 @@ function refreshHUD(d) {
   } else {
     bar.style.width = (Math.min(1, bufferFill) * 100).toFixed(1) + '%';
     bar.style.background = 'linear-gradient(90deg, #4af, #4f4)';
-    wrap.title = es
-      ? 'Generation progress — fraction of cars that finished their episode'
-      : 'Collecting rollout — bar fills then policy updates';
+    wrap.title = 'Collecting rollout — bar fills then policy updates';
   }
   const threads = d.gradThreads || 0;
   const phaseEl = document.getElementById('hudPhase');
@@ -277,37 +276,24 @@ function refreshHUD(d) {
     phaseEl.textContent = '● COLLECTING';
     phaseEl.style.color = '#4f4';
   }
-  // Compute-backend badge: GPU / WASM / JS / SIM, tooltip carries failure reasons
+  // Compute-backend badge: GPU / WASM / JS, tooltip carries failure reasons
   const backendEl = document.getElementById('hudWasm');
   if (backendEl && d.backend) {
     const labels = {
       'gpu': 'GPU ✓', 'gpu-init': 'GPU …', 'gpu-failed': 'GPU ✗→CPU',
       'wasm': `WASM ×${threads}`, 'js': `JS ×${threads || 1}`,
-      'sim': 'SIM ONLY',
     };
     const colors = {
       'gpu': '#c9f', 'gpu-init': '#fa4', 'gpu-failed': '#f66',
-      'wasm': '#4fa', 'js': '#888', 'sim': '#4fa',
+      'wasm': '#4fa', 'js': '#888',
     };
     backendEl.textContent = labels[d.backend] || d.backend;
     backendEl.style.color = colors[d.backend] || '#888';
     backendEl.title = d.backendInfo || 'Gradient compute backend';
   }
 
-  const sigmaEl = document.getElementById('hudSigma');
   if (d.sigma) {
-    if (es) {
-      sigmaEl.textContent = 'σₚ ' + d.sigma[0].toFixed(2);
-      sigmaEl.title = 'Parameter-noise σ — how different each car’s perturbed brain is from the base network';
-    } else {
-      sigmaEl.textContent = 'σ ' + d.sigma.map(s => s.toFixed(2)).join('/');
-      sigmaEl.title = 'Policy exploration noise σ (steer/throttle) — shrinks as AI gets confident';
-    }
-  }
-  const gammaEl = document.getElementById('hudGamma');
-  if (gammaEl) {
-    gammaEl.style.display = es ? 'none' : '';
-    if (d.gamma != null) gammaEl.textContent = 'γ ' + d.gamma.toFixed(4);
+    document.getElementById('hudSigma').textContent = 'σ ' + d.sigma.map(s => s.toFixed(2)).join('/');
   }
 
   const bestEl = document.getElementById('bestStatus');
@@ -324,6 +310,20 @@ function refreshHUD(d) {
       bestEl.textContent = 'no snapshot yet — needs ~12 finished episodes';
       bestEl.style.color = '#667';
     }
+  }
+
+  const modsEl = document.getElementById('modsStatus');
+  if (modsEl && d.mods) {
+    const m = d.mods;
+    const parts = [];
+    if (m.groupSize > 1) parts.push(`groups ×${m.groupSize}`);
+    if (m.mirror) parts.push('mirror ×2');
+    if (m.klStop && m.epochsMax) {
+      parts.push(`epochs ${m.epochs || '—'}/${m.epochsMax} · KL ${m.kl.toFixed(3)}`);
+    }
+    if (m.repair) parts.push(`♻ ${m.repair.recycled} recycled · ${m.repair.splits} split`);
+    if (m.masked) parts.push(`⚡ ${m.masked} defect agents`);
+    modsEl.textContent = parts.length ? parts.join('  ·  ') : 'no mods active';
   }
 
   if (lastCars.length) {
@@ -397,34 +397,10 @@ function netParams(hiddenLayers, hiddenSize, outDim) {
 
 function updateConfigParamCount() {
   const l = simCfg.hiddenLayers, h = simCfg.hiddenSize;
-  const act = netParams(l, h, ACT_DIM);
-  const el = document.getElementById('configParamCount');
-  if (simCfg.algo === 'es') {
-    el.textContent = `${act.toLocaleString()} parameters (actor only — evolution needs no critic)`;
-  } else {
-    const crit = netParams(l, h, 1);
-    el.textContent =
-      `${(act + crit).toLocaleString()} total parameters  (actor ${act.toLocaleString()} · critic ${crit.toLocaleString()})`;
-  }
-}
-
-// Show/hide algorithm-specific controls (config menu + live sidebar + HUD).
-function updateAlgoUI() {
-  const es = simCfg.algo === 'es';
-  for (const [id, showInEs] of [
-    ['configBackendRow', false], ['configThreadRow', false],
-    ['configHorizonRow', false], ['configLrRow', false], ['configEntRow', false],
-    ['configEsLrRow', true], ['configEsSigmaRow', true],
-    ['lrRow', false], ['entRow', false], ['gammaRow', false],
-    ['esLrRow', true], ['esSigmaRow', true],
-  ]) {
-    document.getElementById(id).style.display = (es === showInEs) ? '' : 'none';
-  }
-  document.getElementById('liveTitle').textContent = es ? '⚡ LIVE — EVOLUTION' : '⚡ LIVE — PPO';
-  document.getElementById('hudGamma').style.display = es ? 'none' : '';
-  // imports can switch the algorithm outside the button group's own clicks
-  document.getElementById('configAlgoBtns').querySelectorAll('.opt-btn')
-    .forEach(el => el.classList.toggle('sel', el.dataset.val === simCfg.algo));
+  const act  = netParams(l, h, ACT_DIM);
+  const crit = netParams(l, h, 1);
+  document.getElementById('configParamCount').textContent =
+    `${(act + crit).toLocaleString()} total parameters  (actor ${act.toLocaleString()} · critic ${crit.toLocaleString()})`;
 }
 
 function makeOptBtnGroup(containerId, options, key, onChange) {
@@ -456,9 +432,9 @@ function wireConfigSlider(sliderId, valId, key, fmtFn) {
 }
 
 function initConfigMenu() {
-  makeOptBtnGroup('configAlgoBtns',
-    [{ label: 'PPO', val: 'ppo' }, { label: 'EVOLUTION', val: 'es' }],
-    'algo', () => { updateAlgoUI(); updateConfigParamCount(); });
+  makeOptBtnGroup('configGroupBtns',
+    [{ label: 'OFF', val: 1 }, { label: '×2', val: 2 }, { label: '×4', val: 4 }, { label: '×8', val: 8 }],
+    'groupSize');
 
   makeOptBtnGroup('configLayerBtns',
     [{ val: 1 }, { val: 2 }, { val: 3 }],
@@ -482,8 +458,6 @@ function initConfigMenu() {
   wireConfigSlider('configEpLenSlider',  'configEpLenVal',  'episodeLen', v => v + 's');
   wireConfigSlider('configLrSlider',     'configLrVal',     'lr',        v => v.toExponential(1));
   wireConfigSlider('configEntSlider',    'configEntVal',    'entropyCoef', v => v.toFixed(4));
-  wireConfigSlider('configEsLrSlider',   'configEsLrVal',   'esLr',      v => v.toFixed(3));
-  wireConfigSlider('configEsSigmaSlider','configEsSigmaVal','esSigma',   v => v.toFixed(2));
 
   const spawnTog = document.getElementById('configSpawnToggle');
   spawnTog.checked = simCfg.randomSpawn;
@@ -494,7 +468,6 @@ function initConfigMenu() {
   });
   document.getElementById('configStartBtn').addEventListener('click', startFromConfigMenu);
 
-  updateAlgoUI();
   updateConfigParamCount();
 }
 
@@ -508,6 +481,11 @@ function hideConfigMenu() {
 }
 
 function startFromConfigMenu() {
+  // groups need a whole number of groups — snap the agent count
+  const G = simCfg.groupSize | 0;
+  if (G > 1) {
+    simCfg.numEnvs = Math.max(G, Math.round(simCfg.numEnvs / G) * G);
+  }
   hideConfigMenu();
   sendInit();
   setTimeout(() => {
@@ -584,15 +562,24 @@ function initUI() {
   wireSlider('speedSlider',   'speedVal',   'speedMult',       v => v + '×');
   wireSlider('lrSlider',      'lrVal',      'lr',              v => v.toExponential(1));
   wireSlider('entSlider',     'entVal',     'entropyCoef',     v => v.toFixed(4));
-  wireSlider('esLrSlider',    'esLrVal',    'esLr',            v => v.toFixed(3));
-  wireSlider('esSigmaSlider', 'esSigmaVal', 'esSigma',         v => v.toFixed(2));
   wireSlider('epLenSlider',   'epLenVal',   'episodeLen',      v => v + 's');
+  wireSlider('failSlider',    'failVal',    'failRate',        v => Math.round(v * 100) + '%');
 
-  const gammaTog = document.getElementById('gammaToggle');
-  gammaTog.checked = simCfg.gammaAuto;
-  gammaTog.addEventListener('change', () => {
-    simCfg.gammaAuto = gammaTog.checked;
-    if (worker) worker.postMessage({ type: 'setConfig', config: { gammaAuto: gammaTog.checked } });
+  // live PPO-mod toggles
+  const wireToggle = (id, key) => {
+    const el = document.getElementById(id);
+    el.checked = simCfg[key];
+    el.addEventListener('change', () => {
+      simCfg[key] = el.checked;
+      if (worker) worker.postMessage({ type: 'setConfig', config: { [key]: el.checked } });
+    });
+  };
+  wireToggle('mirrorToggle', 'mirror');
+  wireToggle('klToggle', 'klStop');
+  wireToggle('repairToggle', 'neuronRepair');
+
+  document.getElementById('repairNowBtn').addEventListener('click', () => {
+    if (worker) worker.postMessage({ type: 'repairNow' });
   });
   wireSlider('progSlider',    'progVal',    'progressReward',  v => v.toFixed(2));
   wireSlider('gravelSlider',  'gravelVal',  'gravelPenalty',   v => v.toFixed(1));
@@ -634,13 +621,8 @@ function initUI() {
     if (!this.files[0]) return;
     try {
       const model = JSON.parse(await this.files[0].text());
-      const okPpo = model.algo === 'ppo' && model.actor && model.critic;
-      const okEs  = model.algo === 'es' && model.actor;
-      if (!okPpo && !okEs)
-        throw new Error('Not a PPO/ES trainer export — older genetic trainer exports are not compatible');
-      // the model carries its algorithm — switch the trainer to match
-      simCfg.algo = model.algo;
-      updateAlgoUI();
+      if (model.algo !== 'ppo' || !model.actor || !model.critic)
+        throw new Error('Not a PPO model — older genetic trainer exports are not compatible');
       const was = simRunning; simRunning = false;
       sendInit(model);
       setTimeout(() => { if (was) { worker.postMessage({ type: 'start' }); simRunning = true; } updateStartBtn(); }, 80);

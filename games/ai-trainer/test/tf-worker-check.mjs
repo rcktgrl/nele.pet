@@ -74,7 +74,19 @@ console.log('\nPPO update round (tf cpu backend)');
   const N = 64;
   const obs = new Float32Array(N * OBS).map(() => Math.random() * 2 - 1);
   const act = new Float32Array(N * ACT).map(() => Math.random() * 2 - 1);
-  const logp = new Float32Array(N).fill(-2);
+  // genuine behavior log-probs under the initial actor — the KL-stop baseline
+  // (kl0 ≈ 0) only holds when the stored logp matches the starting policy
+  const LOG_2PI = Math.log(2 * Math.PI);
+  const logp = new Float32Array(N);
+  for (let k = 0; k < N; k++) {
+    const mu = actor.forward(obs.subarray(k * OBS, (k + 1) * OBS));
+    let lp = 0;
+    for (let d = 0; d < ACT; d++) {
+      const z = (act[k * ACT + d] - mu[d]) / Math.exp(-0.5);
+      lp += -0.5 * z * z - (-0.5) - 0.5 * LOG_2PI;
+    }
+    logp[k] = lp;
+  }
   const adv = new Float32Array(N).map(() => Math.random() * 2 - 1);
   const ret = new Float32Array(N).map(() => Math.random());
   send({
@@ -87,6 +99,18 @@ console.log('\nPPO update round (tf cpu backend)');
   check('update returns finite weights',
     r.type === 'updated' && finite(r.actorFlat) && finite(r.criticFlat) &&
     Number.isFinite(r.loss.pi) && Number.isFinite(r.loss.v));
+  check(`all epochs ran without KL stop (${r.epochs}/2)`, r.epochs === 2);
+
+  // KL early stop: with a near-zero limit any movement must end the update
+  // after the first epoch
+  send({
+    type: 'update', n: N, obs, act, logp, adv, ret,
+    hp: { clip: 0.2, entropyCoef: 0.003, vfCoef: 0.5, lr: 3e-4, klStop: true, klLimit: 1e-12 },
+    epochs: 4, minibatch: 32,
+  });
+  const r2 = await nextReply();
+  check(`KL stop ends the update after one epoch (${r2.epochs}/4, KL ${r2.kl.toExponential(2)})`,
+    r2.type === 'updated' && r2.epochs === 1 && Number.isFinite(r2.kl));
 }
 
 console.log(failures ? `\n${failures} CHECK(S) FAILED` : '\nall checks passed');
