@@ -14,6 +14,7 @@ import {
   loadEditorTracks, syncEditorTracksFromCloud,
   loadTracksFromFolder, getAllTracks, hexNumToCss, cssToHexNum
 } from './editor.js';
+import { syncDriveMapsFromCloud, drawDriveMapPreview } from './freedrive-custommap.js';
 import { VsNetwork, generateRoomCode, BOT_NAMES } from './vs-network.js';
 import { getArcadeUser } from './user.js';
 import { loadTrainedModel, saveTrainedModel, validateTrainedModel } from './ppo-ai.js';
@@ -408,42 +409,67 @@ function _drawIslandPreview(canvas) {
   ctx.fillText('ISLAND', cx, H - 10); ctx.textAlign = 'left';
 }
 
-function _buildFdMapCards(tracks) {
+function _buildFdMapCards(tracks, driveMaps) {
   const COLORS = ['#4488ff', '#44cc66', '#ffaa22', '#ff4488', '#22ddaa', '#dd66ff', '#66bbff'];
   const container = document.getElementById('fdMapCards');
   container.innerHTML = '';
 
+  const selIsDriveMap = state.fdCustomMapData != null;
+
   // Island card (always first)
   const islandCard = document.createElement('div');
-  islandCard.className = 'tcard' + (state.fdSelMap === 'island' ? ' sel' : '');
+  islandCard.className = 'tcard' + (!selIsDriveMap && state.fdSelMap === 'island' ? ' sel' : '');
   const islandCanvas = document.createElement('canvas'); islandCanvas.width = 280; islandCanvas.height = 230; islandCanvas.style.borderRadius = '6px';
   const islandH3 = document.createElement('h3'); islandH3.textContent = 'Island';
   const islandP = document.createElement('p'); islandP.textContent = 'Open-world island · three cities · cruise freely';
   islandCard.appendChild(islandCanvas); islandCard.appendChild(islandH3); islandCard.appendChild(islandP);
   islandCard.onclick = () => {
     container.querySelectorAll('.tcard').forEach(x => x.classList.remove('sel'));
-    islandCard.classList.add('sel'); state.fdSelMap = 'island';
+    islandCard.classList.add('sel');
+    state.fdSelMap = 'island'; state.fdCustomMapData = null;
     document.getElementById('fdMapNextBtn').disabled = false;
   };
   container.appendChild(islandCard);
   _drawIslandPreview(islandCanvas);
 
+  // Race track cards
   tracks.forEach((t, i) => {
-    const card = document.createElement('div'); card.className = 'tcard' + (String(state.fdSelMap) === String(t.id) ? ' sel' : '');
+    const card = document.createElement('div');
+    card.className = 'tcard' + (!selIsDriveMap && String(state.fdSelMap) === String(t.id) ? ' sel' : '');
     const canvas = document.createElement('canvas'); canvas.width = 280; canvas.height = 230; canvas.style.borderRadius = '6px';
     const h3 = document.createElement('h3'); h3.textContent = t.name;
     const p = document.createElement('p'); p.textContent = t.desc + ' · ' + t.rw + 'm wide' + (t.builtin ? '' : ' · Custom');
     card.appendChild(canvas); card.appendChild(h3); card.appendChild(p);
     card.onclick = () => {
       container.querySelectorAll('.tcard').forEach(x => x.classList.remove('sel'));
-      card.classList.add('sel'); state.fdSelMap = t.id;
+      card.classList.add('sel');
+      state.fdSelMap = t.id; state.fdCustomMapData = null;
       document.getElementById('fdMapNextBtn').disabled = false;
     };
     container.appendChild(card);
     drawTrackPreview(canvas, t, t.previewColor || COLORS[i % COLORS.length]);
   });
 
-  if (!state.fdSelMap) {
+  // Drive-map-editor custom map cards
+  (driveMaps || []).forEach(dm => {
+    const card = document.createElement('div');
+    card.className = 'tcard' + (selIsDriveMap && state.fdCustomMapData.id === dm.id ? ' sel' : '');
+    const canvas = document.createElement('canvas'); canvas.width = 280; canvas.height = 230; canvas.style.borderRadius = '6px';
+    const h3 = document.createElement('h3'); h3.textContent = dm.name || 'Custom Map';
+    const nodeCount = (dm.nodes || []).length, roadCount = (dm.roads || []).length;
+    const p = document.createElement('p'); p.textContent = (dm.desc || '') + (dm.desc ? ' · ' : '') + nodeCount + ' nodes · ' + roadCount + ' roads · Free Ride Map';
+    card.appendChild(canvas); card.appendChild(h3); card.appendChild(p);
+    card.onclick = () => {
+      container.querySelectorAll('.tcard').forEach(x => x.classList.remove('sel'));
+      card.classList.add('sel');
+      state.fdSelMap = dm.id; state.fdCustomMapData = dm;
+      document.getElementById('fdMapNextBtn').disabled = false;
+    };
+    container.appendChild(card);
+    drawDriveMapPreview(canvas, dm);
+  });
+
+  if (!state.fdSelMap && !state.fdCustomMapData) {
     state.fdSelMap = 'island';
     islandCard.classList.add('sel');
     document.getElementById('fdMapNextBtn').disabled = false;
@@ -465,9 +491,12 @@ export async function showFdMapOnlineTracks() {
   const container = document.getElementById('fdMapCards');
   const loadingEl = document.createElement('p'); loadingEl.textContent = 'Loading online tracks…'; loadingEl.style.color = '#778'; loadingEl.style.width = '100%'; loadingEl.style.textAlign = 'center';
   container.innerHTML = ''; container.appendChild(loadingEl);
-  await syncEditorTracksFromCloud().catch(() => {});
+  await Promise.all([
+    syncEditorTracksFromCloud().catch(() => {}),
+    syncDriveMapsFromCloud().catch(() => {}),
+  ]);
   const allOnline = state.editorTracks.filter(t => !state.folderTracks.some(f => String(f.id) === String(t.id)));
-  _buildFdMapCards([...state.folderTracks, ...allOnline]);
+  _buildFdMapCards([...state.folderTracks, ...allOnline], state.driveMaps);
 }
 
 // ═══════════════════════════════════════════════════════
