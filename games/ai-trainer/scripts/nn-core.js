@@ -1,6 +1,6 @@
 'use strict';
 // ─────────────────────────────────────────────────────────────────────────────
-//  nn-core.js — shared neural-net + PPO/SAC gradient math
+//  nn-core.js — shared neural-net + PPO gradient math
 //
 //  Used by sim-worker.js (coordinator + fallback) and grad-worker.js
 //  (parallel gradient computation). No DOM, no Three.js.
@@ -86,30 +86,6 @@ export class Net {
         delta = dPrev;
       }
     }
-  }
-
-  // Gradient of the (scalar-weighted) output w.r.t. the INPUT vector, without
-  // touching the weight gradients. Needed by SAC's actor loss, where dQ/da
-  // flows through the critic into the actor but must not update the critic.
-  backwardToInput(cache, dOut) {
-    let delta = dOut;
-    for (let l = this.W.length - 1; l >= 0; l--) {
-      const nIn = this.sizes[l], nOut = this.sizes[l + 1];
-      const aIn = cache.acts[l];
-      const W = this.W[l];
-      const dPrev = new Float64Array(nIn);
-      for (let j = 0; j < nOut; j++) {
-        const d = delta[j];
-        if (d === 0) continue;
-        const off = j * nIn;
-        for (let i = 0; i < nIn; i++) dPrev[i] += d * W[off + i];
-      }
-      if (l > 0) {
-        for (let i = 0; i < nIn; i++) dPrev[i] *= (1 - aIn[i] * aIn[i]);
-      }
-      delta = dPrev;
-    }
-    return delta;
   }
 
   zeroGrad() {
@@ -251,114 +227,4 @@ export function accumulatePPOGrads(actor, critic, logStd, hp, data) {
   }
 
   return { gLs, pi: sumPi, v: sumV, ent: sumEnt };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  SAC per-sample gradient accumulation
-//
-//  Actor outputs [mu(A), logStd(A)] (state-dependent std); the policy action
-//  is a = tanh(mu + σ·ε) — bounded by construction, so unlike the PPO path no
-//  clamping bias exists at the action limits. Twin Q critics take [obs, act]
-//  and target critics provide the bootstrap; entropy temperature α is learned
-//  against a target entropy (loss form matches Stable-Baselines3:
-//  dJ/dlogα = −(logπ + H̄) per sample).
-//
-//  nets: { actor, q1, q2, tq1, tq2 } — Net instances (tq* are read-only here)
-//  hp:   { gamma, logAlpha, targetEntropy }
-//  data: { n, obsDim, actDim, obs, act, rew, obs2, done, noise, noise2 }
-//        noise / noise2: n×actDim standard-normal draws for the reparametrised
-//        actions at s and s' (passed in so WASM and JS paths can share them)
-//  Accumulates into actor/q1/q2 .gW/.gb (call zeroGrad first).
-//  Returns { gLa, q, pi, ent, std } — logα gradient sum + loss/stat sums.
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const SAC_LOGSTD_MIN = -5;
-export const SAC_LOGSTD_MAX = 2;
-const TANH_EPS = 1e-6;
-
-export function accumulateSACGrads(nets, hp, data) {
-  const { actor, q1, q2, tq1, tq2 } = nets;
-  const { n, obsDim, actDim, obs, act, rew, obs2, done, noise, noise2 } = data;
-  const alpha = Math.exp(hp.logAlpha);
-  const qIn = new Float64Array(obsDim + actDim);
-  let gLa = 0, sumQ = 0, sumPi = 0, sumEnt = 0, sumStd = 0;
-
-  for (let k = 0; k < n; k++) {
-    const o  = obs.subarray(k * obsDim, (k + 1) * obsDim);
-    const o2 = obs2.subarray(k * obsDim, (k + 1) * obsDim);
-    const a  = act.subarray(k * actDim, (k + 1) * actDim);
-    const e  = noise.subarray(k * actDim, (k + 1) * actDim);
-    const e2 = noise2.subarray(k * actDim, (k + 1) * actDim);
-
-    // ── Bootstrap target: y = r + γ(1−d)(min Q'(s',ã') − α·logπ(ã'|s')) ──
-    const out2 = actor.forward(o2);
-    qIn.set(o2, 0);
-    let logp2 = 0;
-    for (let d = 0; d < actDim; d++) {
-      const ls = Math.max(SAC_LOGSTD_MIN, Math.min(SAC_LOGSTD_MAX, out2[actDim + d]));
-      const u  = out2[d] + Math.exp(ls) * e2[d];
-      const ad = Math.tanh(u);
-      logp2 += -0.5 * e2[d] * e2[d] - ls - 0.5 * LOG_2PI - Math.log(1 - ad * ad + TANH_EPS);
-      qIn[obsDim + d] = ad;
-    }
-    const tqMin = Math.min(tq1.forward(qIn)[0], tq2.forward(qIn)[0]);
-    const y = rew[k] + hp.gamma * (1 - done[k]) * (tqMin - alpha * logp2);
-
-    // ── Critic: ½(Q1−y)² + ½(Q2−y)² on the REPLAYED action ──
-    qIn.set(o, 0);
-    qIn.set(a, obsDim);
-    const c1 = {}, c2 = {};
-    const q1v = q1.forward(qIn, c1)[0];
-    const q2v = q2.forward(qIn, c2)[0];
-    sumQ += 0.5 * ((q1v - y) ** 2 + (q2v - y) ** 2);
-    q1.backward(c1, Float64Array.of(q1v - y));
-    q2.backward(c2, Float64Array.of(q2v - y));
-
-    // ── Actor: α·logπ(ã|s) − min Q(s,ã), ã reparametrised ──
-    const aCache = {};
-    const out = actor.forward(o, aCache);
-    const dOut = new Float64Array(2 * actDim);
-    let logp = 0;
-    for (let d = 0; d < actDim; d++) {
-      const lsRaw = out[actDim + d];
-      const ls = Math.max(SAC_LOGSTD_MIN, Math.min(SAC_LOGSTD_MAX, lsRaw));
-      const sd = Math.exp(ls);
-      const u  = out[d] + sd * e[d];
-      const ad = Math.tanh(u);
-      logp += -0.5 * e[d] * e[d] - ls - 0.5 * LOG_2PI - Math.log(1 - ad * ad + TANH_EPS);
-      qIn[obsDim + d] = ad;
-      sumStd += sd / actDim;
-    }
-    const f1 = {}, f2 = {};
-    const q1a = q1.forward(qIn, f1)[0];
-    const q2a = q2.forward(qIn, f2)[0];
-    const qMinNet = q1a <= q2a ? q1 : q2;
-    const qMinCache = q1a <= q2a ? f1 : f2;
-    sumPi += alpha * logp - Math.min(q1a, q2a);
-    // dQ/d(input) through the argmin critic only — no critic weight grads
-    const dQin = qMinNet.backwardToInput(qMinCache, Float64Array.of(1));
-    for (let d = 0; d < actDim; d++) {
-      const lsRaw = out[actDim + d];
-      const ls = Math.max(SAC_LOGSTD_MIN, Math.min(SAC_LOGSTD_MAX, lsRaw));
-      const sd = Math.exp(ls);
-      const ad = qIn[obsDim + d];
-      const oneMinusA2 = 1 - ad * ad;
-      // dlogπ/du via the tanh correction (the Gaussian term cancels in u);
-      // dL/dã from the −minQ pathway
-      const dLdu = alpha * (2 * ad * oneMinusA2 / (oneMinusA2 + TANH_EPS))
-                 - dQin[obsDim + d] * oneMinusA2;
-      dOut[d] = dLdu;                                   // ∂u/∂mu = 1
-      // clamp gate: no gradient to logStd outside its bounds
-      dOut[actDim + d] = (lsRaw > SAC_LOGSTD_MIN && lsRaw < SAC_LOGSTD_MAX)
-        ? dLdu * sd * e[d] - alpha                       // ∂u/∂logσ = σε; ∂logπ/∂logσ = −1
-        : 0;
-    }
-    actor.backward(aCache, dOut);
-
-    // ── Temperature: dJ/dlogα = −(logπ + H̄), logπ detached ──
-    gLa += -(logp + hp.targetEntropy);
-    sumEnt += -logp;
-  }
-
-  return { gLa, q: sumQ, pi: sumPi, ent: sumEnt, std: sumStd };
 }

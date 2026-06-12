@@ -393,6 +393,7 @@
   <span class="hud-chip" id="hudBest">REWARD —</span>
   <span class="hud-chip" id="hudAvg">BEST LAP —</span>
   <span class="hud-chip" id="hudSigma" title="Policy exploration noise σ (steer/throttle) — shrinks as AI gets confident">σ —</span>
+  <span class="hud-chip" id="hudGamma" title="Discount factor γ — rises automatically when the reward stagnates (longer planning horizon), eases back on progress" style="color:#8af;">γ —</span>
   <span class="hud-chip" id="hudWasm" title="Gradient compute backend — GPU = TensorFlow.js on WebGL, WASM = compiled native code, JS = fallback" style="color:#888;font-size:.65rem;">…</span>
   <span class="hud-sep">│</span>
   <span class="hud-chip" id="hudTrack" style="color:#4af;">—</span>
@@ -419,7 +420,7 @@
       <span class="ctrl-val" id="speedVal">1×</span>
       <input type="range" id="speedSlider" min="1" max="200" value="1" step="1">
     </div>
-    <div class="ctrl-row">
+    <div class="ctrl-row" id="lrRow">
       <span class="ctrl-label">LEARN RATE</span>
       <span class="ctrl-val" id="lrVal">3.0e-4</span>
       <input type="range" id="lrSlider" min="0.00002" max="0.001" value="0.0003" step="0.00002" style="accent-color:#c8f;">
@@ -429,16 +430,25 @@
       <span class="ctrl-val" id="entVal">0.0030</span>
       <input type="range" id="entSlider" min="0" max="0.02" value="0.003" step="0.0005" style="accent-color:#c8f;">
     </div>
-    <div class="ctrl-row" id="utdRow" style="display:none" title="SAC gradient steps per collected transition — higher learns faster per sample but costs more compute (entropy is auto-tuned, no slider needed)">
-      <span class="ctrl-label">TRAIN INTENSITY</span>
-      <span class="ctrl-val" id="utdVal">1.0</span>
-      <input type="range" id="utdSlider" min="0.1" max="2" value="1" step="0.1" style="accent-color:#c8f;">
+    <div class="ctrl-row" id="esLrRow" style="display:none" title="ES learning rate — how far the weights move along the rank-weighted noise direction each generation">
+      <span class="ctrl-label">ES LEARN RATE</span>
+      <span class="ctrl-val" id="esLrVal">0.020</span>
+      <input type="range" id="esLrSlider" min="0.002" max="0.1" value="0.02" step="0.002" style="accent-color:#c8f;">
+    </div>
+    <div class="ctrl-row" id="esSigmaRow" style="display:none" title="Parameter-noise σ — how different each car's perturbed brain is from the base network (applies from the next generation)">
+      <span class="ctrl-label">NOISE σ</span>
+      <span class="ctrl-val" id="esSigmaVal">0.10</span>
+      <input type="range" id="esSigmaSlider" min="0.02" max="0.4" value="0.1" step="0.01" style="accent-color:#c8f;">
     </div>
     <div class="ctrl-row">
       <span class="ctrl-label">EPISODE LEN</span>
       <span class="ctrl-val" id="epLenVal">60s</span>
       <input type="range" id="epLenSlider" min="15" max="120" value="60" step="5" style="accent-color:#4fa;">
     </div>
+    <label class="toggle-row" id="gammaRow" title="Adapt the discount γ to training progress — it rises a bit whenever the reward has stagnated for a long time (longer planning horizon), and eases back once the reward improves again">
+      <span>AUTO γ (HORIZON)</span>
+      <input type="checkbox" id="gammaToggle" checked>
+    </label>
     <label class="toggle-row" title="Spawn each episode at a random point on the track — much better state coverage">
       <span>RANDOM SPAWN</span>
       <input type="checkbox" id="spawnToggle" checked>
@@ -511,7 +521,7 @@
 <!-- ── Map selection menu (shown before the trainer) ─────────────────────── -->
 <div id="mapMenu">
   <div id="mapMenuTitle">🧠 AI TRAINER</div>
-  <div id="mapMenuSub">PPO / SAC REINFORCEMENT LEARNING · SELECT A MAP TO TRAIN ON</div>
+  <div id="mapMenuSub">PPO / EVOLUTION TRAINING · SELECT A MAP TO TRAIN ON</div>
   <div id="mapCards"></div>
   <div class="map-menu-actions">
     <button class="btn btn-big" id="mapBackBtn">← ARCADE</button>
@@ -550,8 +560,8 @@
           <span class="config-label">PARALLEL AGENTS</span>
           <span class="config-val" id="configAgentVal">8 agents</span>
         </div>
-        <input type="range" id="configAgentSlider" min="2" max="16" value="8" step="1" style="accent-color:#4af;">
-        <span style="color:#445;font-size:.58rem;">more agents = more diverse experience per update</span>
+        <input type="range" id="configAgentSlider" min="2" max="32" value="8" step="2" style="accent-color:#4af;">
+        <span style="color:#445;font-size:.58rem;">more agents = more diverse experience per update — EVOLUTION wants 16+ (its population size)</span>
       </div>
       <div class="config-row">
         <div style="display:flex;justify-content:space-between">
@@ -575,14 +585,14 @@
       <div class="config-row">
         <span class="config-label">ALGORITHM</span>
         <div class="opt-group" id="configAlgoBtns"></div>
-        <span style="color:#445;font-size:.58rem;" id="configAlgoHint">PPO = on-policy, compute-light, best at high speed multipliers · SAC = off-policy replay, learns from far fewer laps and tunes its own exploration</span>
+        <span style="color:#445;font-size:.58rem;">PPO = gradient learning, smooth progress · EVOLUTION = forward passes only, near-zero update cost — wants many agents and a high speed multiplier</span>
       </div>
-      <div class="config-row">
+      <div class="config-row" id="configBackendRow">
         <span class="config-label">COMPUTE BACKEND</span>
         <div class="opt-group" id="configBackendBtns"></div>
         <span style="color:#445;font-size:.58rem;">AUTO = multi-core WASM · GPU = TensorFlow.js on WebGL (stable everywhere, no WebGPU) · JS = plain fallback</span>
       </div>
-      <div class="config-row">
+      <div class="config-row" id="configThreadRow">
         <div style="display:flex;justify-content:space-between">
           <span class="config-label">GRADIENT THREADS</span>
           <span class="config-val" id="configThreadVal">4 threads</span>
@@ -595,15 +605,7 @@
         <div class="opt-group" id="configHorizonBtns"></div>
         <span style="color:#445;font-size:.58rem;">more steps = better gradient estimate, slower update</span>
       </div>
-      <div class="config-row" id="configUtdRow" style="display:none">
-        <div style="display:flex;justify-content:space-between">
-          <span class="config-label">TRAIN INTENSITY (UTD)</span>
-          <span class="config-val" id="configUtdVal">1.0</span>
-        </div>
-        <input type="range" id="configUtdSlider" min="0.1" max="2" value="1" step="0.1" style="accent-color:#c8f;">
-        <span style="color:#445;font-size:.58rem;">gradient steps per collected transition — higher learns faster per lap, costs more compute</span>
-      </div>
-      <div class="config-row">
+      <div class="config-row" id="configLrRow">
         <div style="display:flex;justify-content:space-between">
           <span class="config-label">LEARNING RATE</span>
           <span class="config-val" id="configLrVal">3.0e-4</span>
@@ -617,7 +619,23 @@
           <span class="config-val" id="configEntVal">0.0030</span>
         </div>
         <input type="range" id="configEntSlider" min="0" max="0.02" value="0.003" step="0.0005" style="accent-color:#c8f;">
-        <span style="color:#445;font-size:.58rem;">higher = more random actions early on, helps explore (SAC tunes this automatically)</span>
+        <span style="color:#445;font-size:.58rem;">higher = more random actions early on, helps explore</span>
+      </div>
+      <div class="config-row" id="configEsLrRow" style="display:none">
+        <div style="display:flex;justify-content:space-between">
+          <span class="config-label">ES LEARNING RATE</span>
+          <span class="config-val" id="configEsLrVal">0.020</span>
+        </div>
+        <input type="range" id="configEsLrSlider" min="0.002" max="0.1" value="0.02" step="0.002" style="accent-color:#c8f;">
+        <span style="color:#445;font-size:.58rem;">step size along the rank-weighted noise direction each generation</span>
+      </div>
+      <div class="config-row" id="configEsSigmaRow" style="display:none">
+        <div style="display:flex;justify-content:space-between">
+          <span class="config-label">PARAMETER NOISE σ</span>
+          <span class="config-val" id="configEsSigmaVal">0.10</span>
+        </div>
+        <input type="range" id="configEsSigmaSlider" min="0.02" max="0.4" value="0.1" step="0.01" style="accent-color:#c8f;">
+        <span style="color:#445;font-size:.58rem;">how different each car's perturbed brain is — exploration lives here</span>
       </div>
     </div>
 
@@ -630,7 +648,7 @@
 </div>
 
 <!-- ── Hint ──────────────────────────────────────────────────────────────── -->
-<div id="hint">DRAG=PAN · SCROLL=ZOOM · SIM ON WORKER THREAD · RENDERING ON MAIN THREAD · TRAINING ON GPU OR MULTI-CORE WORKER POOL</div>
+<div id="hint">DRAG=PAN · SCROLL=ZOOM · SIM ON WORKER THREAD · RENDERING ON MAIN THREAD · PPO UPDATES ON MULTI-CORE WORKER POOL · ES UPDATES INLINE</div>
 
 <script type="module" src="./scripts/trainer-app.js"></script>
 </body>

@@ -1,24 +1,22 @@
 'use strict';
 
-import {
-  Net, gauss, LOG_2PI, accumulatePPOGrads, accumulateSACGrads,
-  SAC_LOGSTD_MIN, SAC_LOGSTD_MAX,
-} from './nn-core.js';
+import { Net, gauss, LOG_2PI, accumulatePPOGrads } from './nn-core.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  AI Trainer — Simulation Worker (PPO / SAC)
+//  AI Trainer — Simulation Worker (PPO / ES)
 //
 //  Runs entirely off the main thread. No DOM, no Three.js.
 //  Two selectable algorithms (cfg.algo, restart required):
-//    · PPO — on-policy: GAE(λ), clipped surrogate + entropy bonus, one big
-//      update per filled horizon. Compute-cheap; strongest at high speed
-//      multipliers where data is nearly free.
-//    · SAC — off-policy: replay buffer, squashed-Gaussian actor, twin Q
-//      critics with polyak targets, learned entropy temperature α. Far more
-//      sample-efficient and self-tuning, so it learns faster in wall-clock
-//      terms when collection (not gradient compute) is the bottleneck.
-//  Both share the actor MLP shape (tanh hidden, linear output), manual
-//  backprop with Adam, and N parallel environments feeding one policy.
+//    · PPO — gradient-based: actor-critic MLPs with manual backprop, Adam,
+//      GAE(λ), clipped surrogate + entropy bonus. The discount γ adapts to
+//      training progress (rises when the reward stagnates — see adaptGamma).
+//    · ES  — evolution strategies (OpenAI-style, antithetic + rank shaping):
+//      each parallel car runs one episode with parameter-noise-perturbed
+//      weights; the update is a rank-weighted sum of the noise. Forward
+//      passes only — no critic, no backprop, no gradient workers, no GPU —
+//      so nearly all compute goes into the simulation itself.
+//  Both share the actor MLP (tanh hidden, linear output) and N parallel
+//  environments.
 //
 //  Observations include fixed centerline look-ahead probes (relative angle +
 //  slope at several distances ahead), so the policy can anticipate corners
@@ -49,26 +47,25 @@ let cfg = {
   randomSpawn: true,     // spawn each episode at a random centerline point
   actionRepeat: 2,       // physics ticks per agent decision (restart required)
   // algorithm
-  algo: 'ppo',           // 'ppo' | 'sac' — restart required
-  // shared hyperparameters
-  lr: 3e-4,
-  gamma: 0.99,
-  minibatch: 256,        // PPO minibatch / SAC batch size
-  hiddenSize: 64,        // restart required
-  hiddenLayers: 1,       // restart required
-  backend: 'auto',       // 'auto' | 'gpu' | 'wasm' | 'js' — restart required
-  threads: 0,            // gradient worker count, 0 = auto (cores − 2, max 6)
+  algo: 'ppo',           // 'ppo' | 'es' — restart required
+  // ES hyperparameters (both live; σ applies from the next generation)
+  esSigma: 0.1,          // parameter-noise std
+  esLr: 0.02,            // ES learning rate (Adam on the rank-weighted noise sum)
   // PPO hyperparameters
+  lr: 3e-4,
+  gamma: 0.99,           // base discount; the live value adapts when gammaAuto
+  gammaAuto: true,       // raise γ while the reward stagnates (live)
   lam: 0.95,
   clip: 0.2,
   entropyCoef: 0.003,
   vfCoef: 0.5,
   horizon: 512,          // agent steps per env per update (restart required)
   epochs: 6,
-  // SAC hyperparameters
-  tau: 0.005,            // polyak averaging rate for the target critics
-  utd: 1.0,              // gradient steps per collected transition (live)
-  bufferSize: 150000,    // replay capacity in transitions (restart required)
+  minibatch: 256,
+  hiddenSize: 64,        // restart required
+  hiddenLayers: 1,       // restart required
+  backend: 'auto',       // 'auto' | 'gpu' | 'wasm' | 'js' — restart required
+  threads: 0,            // gradient worker count, 0 = auto (cores − 2, max 6)
   // reward shaping
   progressReward: 0.2,   // per metre of forward progress along the centerline
   gravelPenalty: 1.0,    // per second on gravel
@@ -524,87 +521,44 @@ function buildObs(car, out) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Agent (PPO actor-critic, or SAC actor + twin critics)
+//  Agent — actor MLP shared by both algorithms; critic/logStd are PPO-only
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ACT_DIM = 2 + MEM_DIM; // [steer, throttle/brake, 4 memory-cell deltas]
 
-let actor  = null;          // PPO: [OBS,h,ACT] → means · SAC: [OBS,h,2·ACT] → mean+logStd
-let critic = null;          // PPO only: Net [OBS_DIM, h, 1] → state value
-let logStd = null;          // PPO only: Float64Array(ACT_DIM), learnable
+let actor  = null;          // Net [OBS_DIM, h, ACT_DIM] → action means (ES: base θ)
+let critic = null;          // PPO: Net [OBS_DIM, h, 1] → state value
+let logStd = null;          // PPO: Float64Array(ACT_DIM), learnable
 let lsM = null, lsV = null; // Adam moments for logStd
 let lsT = 0;
 
-// SAC networks + temperature
-let q1 = null, q2 = null;   // twin critics, Net [OBS+ACT, h, 1]
-let tq1 = null, tq2 = null; // polyak-averaged target critics
-let logAlpha = 0;           // learned entropy temperature (log α)
-let laM = 0, laV = 0, laT = 0; // Adam state for logAlpha
-const TARGET_ENTROPY = -ACT_DIM;
-const SAC_INIT_ALPHA = 0.2;
-const SAC_WARMUP     = 2000;  // transitions before gradient steps start
-
-const isSAC = () => cfg.algo === 'sac';
-
-function cloneNet(src) {
-  const n = new Net(src.sizes, 1);
-  n.loadFlat(src.flatF64());
-  return n;
-}
+const isES = () => cfg.algo === 'es';
 
 function initAgent(modelOverride) {
   const h = cfg.hiddenSize, nl = Math.max(1, cfg.hiddenLayers | 0);
-  if (isSAC()) {
-    const actSizes = [OBS_DIM, ...Array(nl).fill(h), 2 * ACT_DIM];
-    const qSizes   = [OBS_DIM + ACT_DIM, ...Array(nl).fill(h), 1];
-    actor = new Net(actSizes, 0.01);
-    // logStd head starts at −0.5 (σ≈0.6) — same starting noise as PPO
-    const lb = actor.b[actor.b.length - 1];
-    for (let d = 0; d < ACT_DIM; d++) lb[ACT_DIM + d] = -0.5;
-    q1 = new Net(qSizes, 1);
-    q2 = new Net(qSizes, 1);
-    tq1 = cloneNet(q1);
-    tq2 = cloneNet(q2);
-    logAlpha = Math.log(SAC_INIT_ALPHA);
-    laM = 0; laV = 0; laT = 0;
-    critic = null; logStd = null;
-  } else {
-    const actSizes  = [OBS_DIM, ...Array(nl).fill(h), ACT_DIM];
-    const critSizes = [OBS_DIM, ...Array(nl).fill(h), 1];
-    actor  = new Net(actSizes,  0.01);
-    critic = new Net(critSizes, 1);
-    logStd = new Float64Array(ACT_DIM).fill(-0.5);
-    lsM = new Float64Array(ACT_DIM);
-    lsV = new Float64Array(ACT_DIM);
-    lsT = 0;
-    q1 = q2 = tq1 = tq2 = null;
-  }
+  const actSizes  = [OBS_DIM, ...Array(nl).fill(h), ACT_DIM];
+  const critSizes = [OBS_DIM, ...Array(nl).fill(h), 1];
+  actor  = new Net(actSizes,  0.01);
+  critic = new Net(critSizes, 1);
+  logStd = new Float64Array(ACT_DIM).fill(-0.5);
+  lsM = new Float64Array(ACT_DIM);
+  lsV = new Float64Array(ACT_DIM);
+  lsT = 0;
   if (modelOverride) {
     try {
-      if (modelOverride.algo !== cfg.algo) {
-        throw new Error(`model is ${modelOverride.algo || 'unknown'} but the trainer is set to ${cfg.algo}`);
+      // The actor transfers freely between PPO and ES (same network shape);
+      // PPO's critic/logStd are restored only from a PPO export.
+      if (modelOverride.algo !== 'ppo' && modelOverride.algo !== 'es') {
+        throw new Error(`unsupported model type '${modelOverride.algo}'`);
       }
       const mSizes = modelOverride.actor.sizes;
-      const wantOut = isSAC() ? 2 * ACT_DIM : ACT_DIM;
-      if (modelOverride.obsDim !== OBS_DIM || mSizes[mSizes.length - 1] !== wantOut) {
-        throw new Error(`incompatible model: expects obs ${modelOverride.obsDim}/act-out ${mSizes[mSizes.length - 1]}, ` +
-                        `current layout is obs ${OBS_DIM}/act-out ${wantOut}`);
+      if (modelOverride.obsDim !== OBS_DIM || mSizes[mSizes.length - 1] !== ACT_DIM) {
+        throw new Error(`incompatible model: expects obs ${modelOverride.obsDim}/act ${mSizes[mSizes.length - 1]}, ` +
+                        `current layout is obs ${OBS_DIM}/act ${ACT_DIM} (memory cells added)`);
       }
-      actor = new Net(modelOverride.actor.sizes, 1);
+      actor  = new Net(modelOverride.actor.sizes, 1);
       actor.loadFlat(modelOverride.actor.flat);
-      if (isSAC()) {
-        q1 = new Net(modelOverride.q1.sizes, 1);
-        q1.loadFlat(modelOverride.q1.flat);
-        q2 = new Net(modelOverride.q2.sizes, 1);
-        q2.loadFlat(modelOverride.q2.flat);
-        tq1 = modelOverride.tq1 ? new Net(modelOverride.tq1.sizes, 1) : cloneNet(q1);
-        if (modelOverride.tq1) tq1.loadFlat(modelOverride.tq1.flat);
-        tq2 = modelOverride.tq2 ? new Net(modelOverride.tq2.sizes, 1) : cloneNet(q2);
-        if (modelOverride.tq2) tq2.loadFlat(modelOverride.tq2.flat);
-        logAlpha = Number.isFinite(modelOverride.logAlpha)
-          ? modelOverride.logAlpha : Math.log(SAC_INIT_ALPHA);
-        laM = 0; laV = 0; laT = 0;
-      } else {
+      if (modelOverride.algo === 'ppo') {
         critic = new Net(modelOverride.critic.sizes, 1);
         critic.loadFlat(modelOverride.critic.flat);
         logStd = Float64Array.from(modelOverride.logStd);
@@ -612,9 +566,43 @@ function initAgent(modelOverride) {
         lsV = new Float64Array(ACT_DIM);
         lsT = 0;
       }
+      // es → ppo: the fresh critic/logStd above stay (value net retrains)
     } catch (err) {
       postMessage({ type: 'error', message: 'Model import failed: ' + err.message });
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Adaptive discount γ (PPO) — the configured cfg.gamma is the BASE; the live
+//  value gammaNow drifts up toward GAMMA_MAX while the average return has
+//  stagnated for a while (a longer credit-assignment horizon often breaks a
+//  plateau, e.g. when the policy must brake NOW for a reward many seconds
+//  away), and eases back toward the base once the reward improves again.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GAMMA_MAX = 0.998;            // effective horizon cap ≈ 500 decisions
+const GAMMA_STAGNATION_UPDATES = 8; // updates without improvement per raise
+
+let gammaNow = cfg.gamma;
+let gammaBestAvg = -Infinity;       // best windowed avg return seen so far
+let gammaLastProgress = 0;          // iteration of the last improvement/raise
+
+function adaptGamma() {
+  if (!cfg.gammaAuto) { gammaNow = cfg.gamma; return; }
+  if (curAvg == null) return;       // not enough finished episodes yet
+  const thr = gammaBestAvg === -Infinity
+    ? -Infinity
+    : Math.max(0.5, Math.abs(gammaBestAvg) * 0.01);
+  if (curAvg > gammaBestAvg + thr) {
+    gammaBestAvg = curAvg;
+    gammaLastProgress = iteration;
+    // reward is moving again — ease back toward the configured base
+    gammaNow += (cfg.gamma - gammaNow) * 0.25;
+  } else if (iteration - gammaLastProgress >= GAMMA_STAGNATION_UPDATES) {
+    // long stagnation — push the horizon out a bit (γ: 0.990 → 0.992 → …)
+    gammaNow = Math.min(GAMMA_MAX, 1 - (1 - gammaNow) * 0.8);
+    gammaLastProgress = iteration;  // at most one raise per stagnation window
   }
 }
 
@@ -628,64 +616,17 @@ function logProb(act, mean) {
   return lp;
 }
 
-// SAC action: a = tanh(μ + σ·ε) — bounded by construction.
-function sacSampleAction(obs, out) {
-  const v = actor.forward(obs);
-  for (let d = 0; d < ACT_DIM; d++) {
-    const ls = Math.max(SAC_LOGSTD_MIN, Math.min(SAC_LOGSTD_MAX, v[ACT_DIM + d]));
-    out[d] = Math.tanh(v[d] + Math.exp(ls) * gauss());
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  SAC replay buffer — Float32 ring buffer in this worker (the canonical
-//  store; GPU rounds ship pre-sampled minibatches, never the whole buffer)
-// ─────────────────────────────────────────────────────────────────────────────
-
-let rb = null;
-
-function initReplay() {
-  const cap = Math.max(10000, cfg.bufferSize | 0);
-  rb = {
-    cap, size: 0, idx: 0,
-    obs:  new Float32Array(cap * OBS_DIM),
-    act:  new Float32Array(cap * ACT_DIM),
-    rew:  new Float32Array(cap),
-    obs2: new Float32Array(cap * OBS_DIM),
-    done: new Uint8Array(cap),
-  };
-}
-
-function rbPush(obs, act, rew, obs2, done) {
-  const i = rb.idx;
-  rb.obs.set(obs, i * OBS_DIM);
-  rb.act.set(act, i * ACT_DIM);
-  rb.rew[i] = rew;
-  rb.obs2.set(obs2, i * OBS_DIM);
-  rb.done[i] = done;
-  rb.idx = (i + 1) % rb.cap;
-  if (rb.size < rb.cap) rb.size++;
-  sacNewSamples++;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  Environments
 // ─────────────────────────────────────────────────────────────────────────────
 
 let envs = [];              // per-env state
-let iteration   = 0;        // PPO update count / SAC gradient-step count
+let iteration   = 0;        // PPO update count
 let totalSteps  = 0;        // total physics steps across envs
-let agentSteps  = 0;        // PPO transitions collected since last update
+let agentSteps  = 0;        // transitions collected since last update
 let recentReturns = [];     // last completed episode returns
 let bestLap = Infinity;
 let lastLoss = { pi: 0, v: 0, ent: 0 };
-
-// SAC scheduling: rounds of G async gradient steps, G ≈ new transitions × UTD
-let sacNewSamples = 0;      // transitions since the last round was launched
-let _sacRunning   = false;
-let lastSacStats  = null;   // { alpha, std } for the HUD
-const SAC_MIN_ROUND = 8;    // don't launch a round for fewer steps than this
-const SAC_MAX_ROUND = 128;  // cap per round so weights stay fresh-ish
 
 // ── Best-network snapshot ────────────────────────────────────────────────────
 // A network is judged by the AVERAGE return over the recent episodes of ALL
@@ -739,8 +680,14 @@ function makeEnv(i) {
     curAct: new Float64Array(ACT_DIM),
     // pending transition (written to buffer when the repeat window closes)
     pendObs: null, pendLogp: 0, pendVal: 0, rewAcc: 0,
-    // per-env rollout chain
+    // per-env rollout chain (PPO)
     buf: { obs: [], act: [], logp: [], val: [], rew: [], done: [] },
+    // ES: per-env perturbed policy + episode result
+    esNet: null,    // Net with θ + σ·sign·ε loaded for this generation
+    esEps: null,    // Float64Array(paramCount) — shared with the antithetic twin
+    esSign: 1,
+    esDone: false,  // episode finished, waiting for the generation to close
+    esFit: 0,
   };
 }
 
@@ -758,17 +705,16 @@ function resetEnv(env, i) {
 function initSim(modelOverride) {
   buildArcTable();
   initAgent(modelOverride || null);
-  if (isSAC()) initReplay(); else rb = null;
   envs = Array.from({ length: cfg.numEnvs }, (_, i) => makeEnv(i));
   iteration = 0; totalSteps = 0; agentSteps = 0;
-  // NOTE: _sacRunning is NOT reset here — an in-flight round clears it when
-  // it finishes (its weight writes are discarded via the myActor guard), and
-  // resetting early would let a new round race it on the gradient pool.
-  sacNewSamples = 0; lastSacStats = null;
   recentReturns = []; bestLap = Infinity;
   simTime = 0;
   lastLoss = { pi: 0, v: 0, ent: 0 };
   best = null; curAvg = null; _loadBestPending = false;
+  gammaNow = cfg.gamma;
+  gammaBestAvg = -Infinity;
+  gammaLastProgress = 0;
+  if (isES()) esStartGeneration();
 }
 
 // Finalize the pending transition of an env into its rollout chain.
@@ -786,30 +732,26 @@ function commitTransition(env, done) {
 }
 
 function terminateEnv(env, i, penalty, truncated) {
+  if (isES()) {
+    // fitness = undiscounted episode return; the car parks until every env
+    // in the generation has finished, then esUpdate() respawns them all
+    env.esFit = env.epReturn;
+    env.esDone = true;
+    recentReturns.push(env.epReturn);
+    if (recentReturns.length > 50) recentReturns.shift();
+    return;
+  }
   // per-tick rewards are already in epReturn; only the penalty/bootstrap
   // terms are added to the stored transition reward here
   if (penalty) env.rewAcc -= penalty;
-  if (isSAC()) {
-    if (env.pendObs) {
-      // store the post-step observation; truncation keeps done=0 so the
-      // critic bootstraps through the time limit (no value estimate needed
-      // at collection time — the replayed target handles it)
-      const obs2 = new Float64Array(OBS_DIM);
-      buildObs(env.car, obs2);
-      rbPush(env.pendObs, env.curAct, env.rewAcc, obs2, truncated ? 0 : 1);
-      env.pendObs = null;
-      env.rewAcc = 0;
-    }
-  } else {
-    if (truncated && env.pendObs) {
-      // bootstrap the value of the post-step state so truncation isn't
-      // mistaken for a real terminal
-      const obs = new Float64Array(OBS_DIM);
-      buildObs(env.car, obs);
-      env.rewAcc += cfg.gamma * critic.forward(obs)[0];
-    }
-    commitTransition(env, true);
+  if (truncated && env.pendObs) {
+    // bootstrap the value of the post-step state so truncation isn't
+    // mistaken for a real terminal
+    const obs = new Float64Array(OBS_DIM);
+    buildObs(env.car, obs);
+    env.rewAcc += gammaNow * critic.forward(obs)[0];
   }
+  commitTransition(env, true);
   recentReturns.push(env.epReturn);
   if (recentReturns.length > 50) recentReturns.shift();
   resetEnv(env, i);
@@ -817,29 +759,26 @@ function terminateEnv(env, i, penalty, truncated) {
 
 // One physics tick for every env (dt = FIXED_DT).
 function stepOnce(dt) {
-  // Back-pressure (PPO only): if an update is in flight and the next batch is
-  // already twice the horizon, pause collection so batches can't grow without
-  // bound at high speed multipliers. SAC never pauses — off-policy data stays
-  // valid, and the round size cap bounds the gradient-step backlog instead.
-  if (!isSAC() && _ppoRunning && agentSteps >= cfg.horizon * cfg.numEnvs * 2) return;
+  // Back-pressure (PPO): if an update is in flight and the next batch is
+  // already twice the horizon, pause collection so batches can't grow
+  // without bound at high speed multipliers.
+  if (_ppoRunning && agentSteps >= cfg.horizon * cfg.numEnvs * 2) return;
 
   simTime += dt;
+  const es = isES();
   for (let i = 0; i < envs.length; i++) {
     const env = envs[i];
+    if (es && env.esDone) continue;  // parked until the generation closes
     const car = env.car;
 
     // ── New agent decision at the start of each repeat window ──
     if (env.repCount <= 0) {
       const obs = new Float64Array(OBS_DIM);
       buildObs(car, obs);
-      if (isSAC()) {
-        // close the previous transition with this obs as its successor state
-        if (env.pendObs) {
-          rbPush(env.pendObs, env.curAct, env.rewAcc, obs, 0);
-          env.rewAcc = 0;
-        }
-        sacSampleAction(obs, env.curAct);
-        env.pendObs = obs;
+      if (es) {
+        // deterministic perturbed policy — exploration is in parameter space
+        const mean = env.esNet.forward(obs);
+        for (let d = 0; d < ACT_DIM; d++) env.curAct[d] = mean[d];
       } else {
         commitTransition(env, false); // finalize previous window (non-terminal)
         const mean = actor.forward(obs);
@@ -925,16 +864,13 @@ function stepOnce(dt) {
     }
   }
 
-  // ── Trigger async updates ──
-  if (isSAC()) {
-    // a round of ≈ newTransitions × UTD gradient steps, whenever the
-    // previous round has finished and enough fresh data arrived
-    if (!_sacRunning && rb && rb.size >= SAC_WARMUP &&
-        Math.round(sacNewSamples * cfg.utd) >= SAC_MIN_ROUND) {
-      const G = Math.min(SAC_MAX_ROUND, Math.round(sacNewSamples * cfg.utd));
-      sacNewSamples = 0;
-      _sacRunning = true;
-      _runSAC(G);
+  // ── Trigger updates ──
+  if (es) {
+    // a generation closes when every env has finished its episode; the ES
+    // update is O(params·N) — instant, so it runs synchronously
+    if (envs.length && envs.every(e => e.esDone)) {
+      esUpdate();
+      esStartGeneration();
     }
   } else if (agentSteps >= cfg.horizon * cfg.numEnvs && !_ppoRunning) {
     _ppoRunning = true;
@@ -942,6 +878,74 @@ function stepOnce(dt) {
     agentSteps = 0;
     if (batch.N >= 8) _runPPO(batch); else _ppoRunning = false;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Evolution strategies — OpenAI-ES with antithetic sampling + centered-rank
+//  fitness shaping, Adam on the estimated ascent direction. The entire
+//  update is a few hundred thousand multiply-adds; the expensive part of ES
+//  is the simulation, which this trainer runs anyway.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let esSigmaUsed = 0.1;   // σ the current generation was drawn with (cfg.esSigma
+                         // is live and may change while episodes run)
+
+function esStartGeneration() {
+  const base = actor.flatF64();
+  const P = base.length;
+  esSigmaUsed = Math.max(0.005, cfg.esSigma);
+  for (let i = 0; i < envs.length; i++) {
+    const env = envs[i];
+    if (i % 2 === 0) {
+      // fresh noise; the next env mirrors it (antithetic pair)
+      const eps = new Float64Array(P);
+      for (let k = 0; k < P; k++) eps[k] = gauss();
+      env.esEps = eps;
+      env.esSign = 1;
+    } else {
+      env.esEps = envs[i - 1].esEps;
+      env.esSign = -1;
+    }
+    const w = new Float64Array(P);
+    const s = esSigmaUsed * env.esSign;
+    for (let k = 0; k < P; k++) w[k] = base[k] + s * env.esEps[k];
+    if (!env.esNet) env.esNet = new Net(actor.sizes, 1);
+    env.esNet.loadFlat(w);
+    env.esDone = false;
+    env.esFit = 0;
+    resetEnv(env, i);
+  }
+}
+
+function esUpdate() {
+  const n = envs.length;
+  // centered ranks in [−0.5, 0.5] — robust to the reward scale and to the
+  // huge fitness outliers a single lap bonus produces
+  const order = envs.map((_, i) => i).sort((a, b) => envs[a].esFit - envs[b].esFit);
+  const u = new Float64Array(n);
+  for (let r = 0; r < n; r++) u[order[r]] = n > 1 ? r / (n - 1) - 0.5 : 0;
+
+  const P = actor.paramCount();
+  const g = new Float64Array(P);
+  for (let i = 0; i < n; i++) {
+    const env = envs[i];
+    const w = u[i] * env.esSign;
+    if (!w) continue;
+    const eps = env.esEps;
+    for (let k = 0; k < P; k++) g[k] += w * eps[k];
+  }
+  // Adam minimizes, so feed it the NEGATED ascent estimate
+  const scale = -1 / (n * esSigmaUsed);
+  for (let k = 0; k < P; k++) g[k] *= scale;
+  actor.loadGradFlat(g);
+  actor.adamStep(cfg.esLr, 1);
+
+  iteration++;
+  let mean = 0, best = -Infinity;
+  for (const e of envs) { mean += e.esFit / n; if (e.esFit > best) best = e.esFit; }
+  lastLoss = { pi: mean, v: best, ent: 0 };  // repurposed: generation mean/best
+  if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
+  else updateBestSnapshot();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1019,24 +1023,12 @@ function _tfFail(msg) {
 // outside a GPU update (CPU-path updates during init, reset, load-best).
 function sendTfWeights() {
   if (!tfWorker || gpuState !== 'ready' || !actor) return;
-  if (isSAC()) {
-    tfWorker.postMessage({
-      type: 'setWeights',
-      actorFlat: Float32Array.from(actor.flatF64()),
-      q1Flat:    Float32Array.from(q1.flatF64()),
-      q2Flat:    Float32Array.from(q2.flatF64()),
-      tq1Flat:   Float32Array.from(tq1.flatF64()),
-      tq2Flat:   Float32Array.from(tq2.flatF64()),
-      logAlpha,
-    });
-  } else {
-    tfWorker.postMessage({
-      type: 'setWeights',
-      actorFlat:  Float32Array.from(actor.flatF64()),
-      criticFlat: Float32Array.from(critic.flatF64()),
-      logStd:     Float32Array.from(logStd),
-    });
-  }
+  tfWorker.postMessage({
+    type: 'setWeights',
+    actorFlat:  Float32Array.from(actor.flatF64()),
+    criticFlat: Float32Array.from(critic.flatF64()),
+    logStd:     Float32Array.from(logStd),
+  });
 }
 
 function initGpu() {
@@ -1073,29 +1065,14 @@ function initGpu() {
         }
       }
     };
-    if (isSAC()) {
-      tfWorker.postMessage({
-        type: 'init', algo: 'sac',
-        actorSizes: actor.sizes, qSizes: q1.sizes,
-        actorFlat: Float32Array.from(actor.flatF64()),
-        q1Flat:    Float32Array.from(q1.flatF64()),
-        q2Flat:    Float32Array.from(q2.flatF64()),
-        tq1Flat:   Float32Array.from(tq1.flatF64()),
-        tq2Flat:   Float32Array.from(tq2.flatF64()),
-        logAlpha,
-        lr: cfg.lr, gamma: cfg.gamma,
-        targetEntropy: TARGET_ENTROPY, tau: cfg.tau,
-      });
-    } else {
-      tfWorker.postMessage({
-        type: 'init',
-        actorSizes: actor.sizes, criticSizes: critic.sizes,
-        actorFlat:  Float32Array.from(actor.flatF64()),
-        criticFlat: Float32Array.from(critic.flatF64()),
-        logStd:     Float32Array.from(logStd),
-        lr: cfg.lr,
-      });
-    }
+    tfWorker.postMessage({
+      type: 'init',
+      actorSizes: actor.sizes, criticSizes: critic.sizes,
+      actorFlat:  Float32Array.from(actor.flatF64()),
+      criticFlat: Float32Array.from(critic.flatF64()),
+      logStd:     Float32Array.from(logStd),
+      lr: cfg.lr,
+    });
   } catch (err) {
     _tfFail(String(err && err.message || err));
   }
@@ -1137,8 +1114,8 @@ function _flushBatch() {
     for (let t = T - 1; t >= 0; t--) {
       const nonTerm = 1 - b.done[t];
       const nextV = t === T - 1 ? nextVal : b.val[t + 1];
-      const delta = b.rew[t] + cfg.gamma * nextV * nonTerm - b.val[t];
-      gae = delta + cfg.gamma * cfg.lam * nonTerm * gae;
+      const delta = b.rew[t] + gammaNow * nextV * nonTerm - b.val[t];
+      gae = delta + gammaNow * cfg.lam * nonTerm * gae;
       adv[t] = gae;
     }
     for (let t = 0; t < T; t++) {
@@ -1202,15 +1179,8 @@ function updateBestSnapshot() {
   let avg = 0; for (const r of tail) avg += r; avg /= tail.length;
   curAvg = avg;
   if (!best || avg > best.avg) {
-    best = isSAC()
-      ? {
-        algo: 'sac',
-        aFlat: actor.flatF64(),
-        q1Flat: q1.flatF64(), q2Flat: q2.flatF64(),
-        tq1Flat: tq1.flatF64(), tq2Flat: tq2.flatF64(),
-        logAlpha,
-        avg, iter: iteration,
-      }
+    best = isES()
+      ? { algo: 'es', aFlat: actor.flatF64(), avg, iter: iteration }
       : {
         algo: 'ppo',
         aFlat: actor.flatF64(), cFlat: critic.flatF64(),
@@ -1226,35 +1196,30 @@ function loadBestSnapshot() {
   if (!best) return;
   actor.loadFlat(best.aFlat);
   actor.resetAdam();
-  if (isSAC()) {
-    q1.loadFlat(best.q1Flat);   q1.resetAdam();
-    q2.loadFlat(best.q2Flat);   q2.resetAdam();
-    tq1.loadFlat(best.tq1Flat);
-    tq2.loadFlat(best.tq2Flat);
-    logAlpha = best.logAlpha;
-    laM = 0; laV = 0; laT = 0;
-    // The replay buffer is KEPT — off-policy data stays valid for the
-    // restored policy, and α re-opens exploration on its own if needed.
-    for (const env of envs) { env.pendObs = null; env.rewAcc = 0; env.repCount = 0; }
-    sacNewSamples = 0;
-  } else {
-    critic.loadFlat(best.cFlat);
-    logStd.set(best.logStd);
-    critic.resetAdam();
-    lsM.fill(0); lsV.fill(0); lsT = 0;
-    // Re-open exploration a little: the abandoned direction was a dead end, so
-    // the restored policy needs noise to find a DIFFERENT improvement.
-    for (let d = 0; d < ACT_DIM; d++) logStd[d] = Math.min(0.3, logStd[d] + 0.25);
-    // Drop rollouts and episode stats gathered under the abandoned policy —
-    // stale transitions would train the restored weights toward it again.
-    for (const env of envs) {
-      const b = env.buf;
-      b.obs.length = 0; b.act.length = 0; b.logp.length = 0;
-      b.val.length = 0; b.rew.length = 0; b.done.length = 0;
-      env.pendObs = null; env.rewAcc = 0; env.repCount = 0;
-    }
-    agentSteps = 0;
+  if (isES()) {
+    // exploration is parameter noise — nothing to re-open; abandon the
+    // running generation and re-perturb every env from the restored θ
+    recentReturns = [];
+    curAvg = null;
+    esStartGeneration();
+    return;
   }
+  critic.loadFlat(best.cFlat);
+  logStd.set(best.logStd);
+  critic.resetAdam();
+  lsM.fill(0); lsV.fill(0); lsT = 0;
+  // Re-open exploration a little: the abandoned direction was a dead end, so
+  // the restored policy needs noise to find a DIFFERENT improvement.
+  for (let d = 0; d < ACT_DIM; d++) logStd[d] = Math.min(0.3, logStd[d] + 0.25);
+  // Drop rollouts and episode stats gathered under the abandoned policy —
+  // stale transitions would train the restored weights toward it again.
+  for (const env of envs) {
+    const b = env.buf;
+    b.obs.length = 0; b.act.length = 0; b.logp.length = 0;
+    b.val.length = 0; b.rew.length = 0; b.done.length = 0;
+    env.pendObs = null; env.rewAcc = 0; env.repCount = 0;
+  }
+  agentSteps = 0;
   recentReturns = [];
   curAvg = null;
   sendTfWeights();  // keep the GPU backend's resident weights in sync
@@ -1401,212 +1366,9 @@ async function _runPPO(batch) {
   iteration++;
   if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
   else updateBestSnapshot();
+  adaptGamma();  // raise γ on long reward stagnation, ease back on progress
   _ppoRunning = false;
   if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  SAC update rounds — asynchronous, G sequential gradient steps per round.
-//
-//  GPU path: all G minibatches are sampled up-front (uniform replay sampling
-//  does not depend on the weights, so pre-sampling is exact) and shipped in
-//  ONE message; the tf worker runs the whole round and returns the weights.
-//  CPU path: each step's minibatch is split across the gradient worker pool,
-//  Adam + polyak run here between steps. Falls back to local single-thread
-//  computation when nested workers are unavailable.
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Fill flat batch arrays (Float32 or Float64) with `count` uniformly sampled
-// replay transitions starting at row `off`.
-function fillSacBatch(obs, act, rew, obs2, done, off, count) {
-  for (let k = 0; k < count; k++) {
-    const j = Math.floor(Math.random() * rb.size);
-    const r = off + k;
-    obs.set(rb.obs.subarray(j * OBS_DIM, (j + 1) * OBS_DIM), r * OBS_DIM);
-    act.set(rb.act.subarray(j * ACT_DIM, (j + 1) * ACT_DIM), r * ACT_DIM);
-    rew[r] = rb.rew[j];
-    obs2.set(rb.obs2.subarray(j * OBS_DIM, (j + 1) * OBS_DIM), r * OBS_DIM);
-    done[r] = rb.done[j];
-  }
-}
-
-function polyakInto(tq, q, tau) {
-  for (let l = 0; l < q.W.length; l++) {
-    const tW = tq.W[l], qW = q.W[l];
-    for (let i = 0; i < qW.length; i++) tW[i] += tau * (qW[i] - tW[i]);
-    const tb = tq.b[l], qb = q.b[l];
-    for (let i = 0; i < qb.length; i++) tb[i] += tau * (qb[i] - tb[i]);
-  }
-}
-
-function logAlphaAdamStep(g) {
-  laT++;
-  const b1 = 0.9, b2 = 0.999, eps = 1e-8;
-  laM = b1 * laM + (1 - b1) * g;
-  laV = b2 * laV + (1 - b2) * g * g;
-  logAlpha -= cfg.lr * (laM / (1 - Math.pow(b1, laT))) /
-              (Math.sqrt(laV / (1 - Math.pow(b2, laT))) + eps);
-  logAlpha = Math.max(-8, Math.min(1, logAlpha));
-}
-
-// One CPU gradient step. `myActor` guards against the agent being re-created
-// (reset / re-init) while a task is in flight. Returns loss sums or null.
-async function sacCpuStep(B, myActor) {
-  const obs  = new Float64Array(B * OBS_DIM);
-  const act  = new Float64Array(B * ACT_DIM);
-  const rew  = new Float64Array(B);
-  const obs2 = new Float64Array(B * OBS_DIM);
-  const done = new Float64Array(B);
-  fillSacBatch(obs, act, rew, obs2, done, 0, B);
-  const hp = { gamma: cfg.gamma, targetEntropy: TARGET_ENTROPY };
-
-  let stats;
-  const pool = gradPool && gradPool.length ? gradPool : null;
-  if (pool) {
-    const K = Math.min(pool.length, Math.max(1, Math.floor(B / 64)));
-    const per = Math.ceil(B / K);
-    const aFlat = actor.flatF64();
-    const q1F = q1.flatF64(), q2F = q2.flatF64();
-    const t1F = tq1.flatF64(), t2F = tq2.flatF64();
-    const tasks = [];
-    for (let c = 0; c < K; c++) {
-      const s0 = c * per, s1 = Math.min(B, s0 + per);
-      if (s0 >= s1) break;
-      const slice = {
-        n: s1 - s0, obsDim: OBS_DIM, actDim: ACT_DIM,
-        obs:  obs.slice(s0 * OBS_DIM, s1 * OBS_DIM),
-        act:  act.slice(s0 * ACT_DIM, s1 * ACT_DIM),
-        rew:  rew.slice(s0, s1),
-        obs2: obs2.slice(s0 * OBS_DIM, s1 * OBS_DIM),
-        done: done.slice(s0, s1),
-      };
-      tasks.push(gradTask(pool[c], {
-        type: 'sacGrad',
-        force: cfg.backend === 'js' ? 'js' : 'auto',
-        actorSizes: actor.sizes, qSizes: q1.sizes,
-        actorFlat: aFlat, q1Flat: q1F, q2Flat: q2F, tq1Flat: t1F, tq2Flat: t2F,
-        logAlpha, hp, ...slice,
-      }, [slice.obs.buffer, slice.act.buffer, slice.rew.buffer, slice.obs2.buffer, slice.done.buffer]));
-    }
-    let results;
-    try {
-      results = await Promise.all(tasks);
-    } catch {
-      // pool died mid-update (e.g. nested workers unsupported) → disable
-      for (const x of gradPool) { try { x.terminate(); } catch { /* dead */ } }
-      gradPool = [];
-      return actor === myActor ? sacCpuStep(B, myActor) : null;
-    }
-    if (actor !== myActor) return null;
-    const aG  = new Float64Array(aFlat.length);
-    const q1G = new Float64Array(q1F.length);
-    const q2G = new Float64Array(q2F.length);
-    stats = { gLa: 0, q: 0, pi: 0, ent: 0, std: 0 };
-    for (const r of results) {
-      for (let k = 0; k < aG.length; k++) aG[k] += r.aG[k];
-      for (let k = 0; k < q1G.length; k++) q1G[k] += r.q1G[k];
-      for (let k = 0; k < q2G.length; k++) q2G[k] += r.q2G[k];
-      stats.gLa += r.gLa; stats.q += r.q; stats.pi += r.pi;
-      stats.ent += r.ent; stats.std += r.std;
-      if (r.mode === 'wasm') _wasmOk = true;
-    }
-    actor.loadGradFlat(aG);
-    q1.loadGradFlat(q1G);
-    q2.loadGradFlat(q2G);
-  } else {
-    // ── Local fallback: single-threaded gradient computation ──
-    actor.zeroGrad(); q1.zeroGrad(); q2.zeroGrad();
-    const noise  = new Float64Array(B * ACT_DIM);
-    const noise2 = new Float64Array(B * ACT_DIM);
-    for (let i = 0; i < noise.length; i++) { noise[i] = gauss(); noise2[i] = gauss(); }
-    stats = accumulateSACGrads(
-      { actor, q1, q2, tq1, tq2 },
-      { gamma: cfg.gamma, logAlpha, targetEntropy: TARGET_ENTROPY },
-      { n: B, obsDim: OBS_DIM, actDim: ACT_DIM, obs, act, rew, obs2, done, noise, noise2 },
-    );
-    // yield so simLoop can tick between steps
-    await new Promise(res => setTimeout(res, 0));
-    if (actor !== myActor) return null;
-  }
-
-  actor.adamStep(cfg.lr, 1 / B);
-  q1.adamStep(cfg.lr, 1 / B);
-  q2.adamStep(cfg.lr, 1 / B);
-  logAlphaAdamStep(stats.gLa / B);
-  polyakInto(tq1, q1, cfg.tau);
-  polyakInto(tq2, q2, cfg.tau);
-  return stats;
-}
-
-async function _runSAC(G) {
-  const myActor = actor;
-  const B = Math.max(32, cfg.minibatch | 0);
-  try {
-    if (gpuState === 'ready' && tfWorker) {
-      // ── GPU round: G pre-sampled minibatches in one message ──
-      const n = G * B;
-      const obs  = new Float32Array(n * OBS_DIM);
-      const act  = new Float32Array(n * ACT_DIM);
-      const rew  = new Float32Array(n);
-      const obs2 = new Float32Array(n * OBS_DIM);
-      const done = new Float32Array(n);
-      fillSacBatch(obs, act, rew, obs2, done, 0, n);
-      const r = await new Promise((resolve, reject) => {
-        _tfPending = {
-          resolve, reject,
-          timer: setTimeout(() => {
-            _tfPending = null;
-            reject(new Error('GPU update timeout (>60s)'));
-          }, 60000),
-        };
-        tfWorker.postMessage(
-          { type: 'update', steps: G, batchSize: B, obs, act, rew, obs2, done, lr: cfg.lr },
-          [obs.buffer, act.buffer, rew.buffer, obs2.buffer, done.buffer],
-        );
-      });
-      // sanity: never load NaN/Inf weights into the live policy
-      let finite = Number.isFinite(r.loss.q) && Number.isFinite(r.loss.pi) &&
-                   Number.isFinite(r.logAlpha);
-      for (let k = 0; finite && k < r.actorFlat.length; k += 97) {
-        finite = Number.isFinite(r.actorFlat[k]);
-      }
-      if (!finite) throw new Error('non-finite weights returned');
-      if (actor === myActor) {
-        actor.loadFlat(r.actorFlat);
-        q1.loadFlat(r.q1Flat);
-        q2.loadFlat(r.q2Flat);
-        tq1.loadFlat(r.tq1Flat);
-        tq2.loadFlat(r.tq2Flat);
-        logAlpha = r.logAlpha;
-        lastLoss = { pi: r.loss.pi, v: r.loss.q, ent: r.loss.ent };
-        lastSacStats = { alpha: Math.exp(logAlpha), std: r.loss.std };
-        iteration += G;
-      }
-    } else {
-      // ── CPU round: sequential steps, pool-parallel within each ──
-      let sq = 0, spi = 0, sent = 0, sstd = 0, nS = 0;
-      for (let g = 0; g < G && actor === myActor; g++) {
-        const s = await sacCpuStep(B, myActor);
-        if (!s) break;
-        sq += s.q / B; spi += s.pi / B; sent += s.ent / B; sstd += s.std / B;
-        nS++;
-        iteration++;
-      }
-      if (nS && actor === myActor) {
-        lastLoss = { pi: spi / nS, v: sq / nS, ent: sent / nS };
-        lastSacStats = { alpha: Math.exp(logAlpha), std: sstd / nS };
-      }
-    }
-  } catch (err) {
-    // GPU round failed — record it and let the CPU path take the next round
-    _tfFail(String(err && err.message || err));
-  }
-  if (actor === myActor) {
-    if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
-    else updateBestSnapshot();
-  }
-  _sacRunning = false;
-  if (_poolRebuild && !_ppoRunning) { _poolRebuild = false; initGradPool(true); }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1629,26 +1391,26 @@ function buildSnapshot() {
     const tail = recentReturns.slice(-20);
     avgReturn = tail.reduce((s, v) => s + v, 0) / tail.length;
   }
-  const sac = isSAC();
+  const es = isES();
   const snap = {
     type: 'frame',
     cars: carData,
     algo: cfg.algo,
     iteration,
     totalSteps,
-    bufferFill: sac
-      ? (rb ? (rb.size < SAC_WARMUP ? rb.size / SAC_WARMUP : rb.size / rb.cap) : 0)
+    bufferFill: es
+      ? (envs.length ? envs.filter(e => e.esDone).length / envs.length : 0)
       : Math.min(1, agentSteps / (cfg.horizon * cfg.numEnvs)),
-    phase: sac
-      ? (rb && rb.size >= SAC_WARMUP ? 'training' : 'collecting')
-      : (_ppoRunning ? 'updating' : 'collecting'),
+    phase: _ppoRunning ? 'updating' : 'collecting',
     gradThreads: gradPool ? gradPool.length : 0,
-    backend: gpuState === 'ready'  ? 'gpu'
+    backend: es ? 'sim'
+           : gpuState === 'ready'  ? 'gpu'
            : gpuState === 'init'   ? 'gpu-init'
            : gpuState === 'failed' ? 'gpu-failed'
            : (gradPool && gradPool.length && _wasmOk && cfg.backend !== 'js') ? 'wasm'
            : 'js',
-    backendInfo: gpuState === 'failed' ? gpuInfo
+    backendInfo: es ? 'ES needs no gradient compute — all CPU goes into the simulation'
+               : gpuState === 'failed' ? gpuInfo
                : gpuState === 'init'   ? gpuInfo
                : gpuState === 'ready'  ? gpuInfo
                : _wasmErr ? 'WASM unavailable: ' + _wasmErr
@@ -1657,10 +1419,9 @@ function buildSnapshot() {
     bestLap: Number.isFinite(bestLap) ? bestLap : null,
     episodes: recentReturns.length,
     loss: lastLoss,
-    sigma: sac
-      ? (lastSacStats ? [lastSacStats.std, lastSacStats.std] : null)
-      : (logStd ? [Math.exp(logStd[0]), Math.exp(logStd[1])] : null),
-    alpha: sac ? Math.exp(logAlpha) : null,
+    sigma: es ? [cfg.esSigma, cfg.esSigma]
+         : logStd ? [Math.exp(logStd[0]), Math.exp(logStd[1])] : null,
+    gamma: es ? null : gammaNow,
     best: best ? { avg: best.avg, iter: best.iter, cur: curAvg } : null,
   };
   // actor weights for the visualiser — heavy, send ~once per second
@@ -1737,9 +1498,15 @@ self.onmessage = function (e) {
 
     running = false;
     stopLoop();
-    initGradPool();
+    // ES does all its math inline — no gradient pool, no GPU worker
+    if (!isES()) initGradPool();
     initSim(model || null);
-    initGpu();
+    if (isES()) {
+      if (tfWorker) { try { tfWorker.terminate(); } catch { /* dead */ } tfWorker = null; }
+      gpuState = 'off'; gpuInfo = '';
+    } else {
+      initGpu();
+    }
     postMessage({
       type: 'ready', obsDim: OBS_DIM, actorSizes: actor.sizes,
       numEnvs: cfg.numEnvs, gradThreads: gradPool ? gradPool.length : 0,
@@ -1772,6 +1539,7 @@ self.onmessage = function (e) {
   if (type === 'setConfig') {
     const prevThreads = desiredThreads();
     Object.assign(cfg, e.data.config);
+    if (!cfg.gammaAuto) gammaNow = cfg.gamma;  // auto-γ off → pin to the base
     if (gradPool !== null && desiredThreads() !== prevThreads) {
       // resize the pool — deferred while an update has tasks in flight
       if (_ppoRunning) _poolRebuild = true;
@@ -1787,7 +1555,7 @@ self.onmessage = function (e) {
 
   if (type === 'loadBest') {
     if (!best) return;
-    if (_ppoRunning || _sacRunning) _loadBestPending = true;  // applied when the update finishes
+    if (_ppoRunning) _loadBestPending = true;  // applied when the update finishes
     else loadBestSnapshot();
     return;
   }
@@ -1809,18 +1577,8 @@ self.onmessage = function (e) {
       snapshot: useBest ? 'best-average' : 'current',
       avgReturn: useBest ? best.avg : curAvg,
     };
-    const model = isSAC()
-      ? {
-        id: 'ai-trainer-sac',
-        name: 'AI Trainer SAC Export',
-        algo: 'sac',
-        ...common,
-        q1:  { sizes: q1.sizes,  flat: useBest ? Array.from(best.q1Flat)  : q1.flat()  },
-        q2:  { sizes: q2.sizes,  flat: useBest ? Array.from(best.q2Flat)  : q2.flat()  },
-        tq1: { sizes: tq1.sizes, flat: useBest ? Array.from(best.tq1Flat) : tq1.flat() },
-        tq2: { sizes: tq2.sizes, flat: useBest ? Array.from(best.tq2Flat) : tq2.flat() },
-        logAlpha: useBest ? best.logAlpha : logAlpha,
-      }
+    const model = isES()
+      ? { id: 'ai-trainer-es', name: 'AI Trainer ES Export', algo: 'es', ...common }
       : {
         id: 'ai-trainer-ppo',
         name: 'AI Trainer PPO Export',
