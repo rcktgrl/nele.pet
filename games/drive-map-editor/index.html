@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Drive Map Editor</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<!-- ── Top bar ───────────────────────────────────────────────── -->
+<div id="topbar">
+  <h1>Drive Map Editor</h1>
+
+  <div class="toolGroup">
+    <button class="toolBtn active" data-tool="select" title="Select / Move (S)">&#9654; SELECT</button>
+    <button class="toolBtn"        data-tool="node"   title="Add Node (N)">&#9711; NODE</button>
+    <button class="toolBtn"        data-tool="road"   title="Draw Road (R)">&#9135; ROAD</button>
+    <button class="toolBtn"        data-tool="erase"  title="Erase (E)">&#10007; ERASE</button>
+    <button class="toolBtn"        data-tool="brush"  title="Paint Assets (B)">&#9998; BRUSH</button>
+  </div>
+
+  <div class="toolSep"></div>
+
+  <div class="toolGroup" style="font-size:11px;color:#4a5870;letter-spacing:1px;">
+    S·N·R·E·B keys&nbsp;·&nbsp;Del deletes&nbsp;·&nbsp;G toggles snap&nbsp;·&nbsp;Scroll zooms&nbsp;·&nbsp;Right-drag pans
+  </div>
+
+  <div id="topRight">
+    <a id="backLink" href="../index.html">&#8592; ARCADE</a>
+  </div>
+</div>
+
+<!-- ── Main ──────────────────────────────────────────────────── -->
+<div id="main">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────── -->
+  <aside id="sidebar">
+
+    <!-- Map list -->
+    <div class="editorSection">
+      <div class="editorLabel">Maps</div>
+      <div class="editorList" id="mapList"></div>
+      <div class="editorRow">
+        <button class="btn btn-p" id="btnNewMap">NEW</button>
+        <button class="btn btn-s" id="btnDupeMap">DUPLICATE</button>
+        <button class="btn btn-danger" id="btnDeleteMap">DELETE</button>
+      </div>
+    </div>
+
+    <!-- Map properties -->
+    <div class="editorSection">
+      <div class="editorLabel">Map Properties</div>
+      <label class="editorField">
+        <span>Name</span>
+        <input id="mapName" type="text" maxlength="50" placeholder="My City">
+      </label>
+      <label class="editorField">
+        <span>Description</span>
+        <input id="mapDesc" type="text" maxlength="120" placeholder="A short description">
+      </label>
+      <div class="editorGrid2">
+        <label class="editorField">
+          <span>Time of Day</span>
+          <select id="mapTimeOfDay">
+            <option value="day">Day</option>
+            <option value="sunset">Sunset</option>
+            <option value="night">Night</option>
+          </select>
+        </label>
+        <label class="editorField">
+          <span>Fog Distance <strong id="mapFogDistVal">1200</strong></span>
+          <input id="mapFogDist" type="range" min="100" max="2000" step="50" value="1200">
+        </label>
+      </div>
+      <div class="editorGrid2">
+        <label class="editorField">
+          <span>Ground Color</span>
+          <input id="mapGroundColor" type="color" value="#1a3018">
+        </label>
+        <label class="editorField">
+          <span>Sky Color</span>
+          <input id="mapSkyColor" type="color" value="#0d1a2e">
+        </label>
+      </div>
+    </div>
+
+    <!-- New road defaults (used when drawing roads) -->
+    <div class="editorSection">
+      <div class="editorLabel">New Road Defaults</div>
+      <div class="editorGrid2">
+        <label class="editorField">
+          <span>Road Type</span>
+          <select id="newRoadType">
+            <option value="highway">Highway</option>
+            <option value="street" selected>Street</option>
+            <option value="country">Country</option>
+            <option value="lane">Lane</option>
+          </select>
+        </label>
+        <label class="editorField">
+          <span>Width (m)</span>
+          <input id="newRoadWidth" type="number" min="4" max="40" value="12">
+        </label>
+      </div>
+      <div class="editorHint">These defaults apply to newly drawn roads. You can change each road's properties individually after selecting it.</div>
+    </div>
+
+    <!-- Selected element: Node -->
+    <div class="editorSection" id="selNodePanel">
+      <div class="editorLabel">Selected Node</div>
+      <div class="selInfo" id="selNodeInfo">Node info</div>
+      <div class="editorGrid2">
+        <label class="editorField">
+          <span>X position</span>
+          <input id="selNodeX" type="number" step="1">
+        </label>
+        <label class="editorField">
+          <span>Z position</span>
+          <input id="selNodeZ" type="number" step="1">
+        </label>
+      </div>
+      <div class="editorHint">Drag the node in the canvas to reposition it. Connecting 1 road = dead end, 3+ = intersection.</div>
+      <div class="editorRow">
+        <button class="btn btn-danger" id="btnDeleteNode">DELETE NODE</button>
+      </div>
+    </div>
+
+    <!-- Selected element: Road -->
+    <div class="editorSection" id="selRoadPanel">
+      <div class="editorLabel">Selected Road</div>
+      <div class="selInfo" id="selRoadInfo">Road info</div>
+      <div class="editorGrid2">
+        <label class="editorField">
+          <span>Road Type</span>
+          <select id="selRoadType">
+            <option value="highway">Highway</option>
+            <option value="street">Street</option>
+            <option value="country">Country</option>
+            <option value="lane">Lane</option>
+          </select>
+        </label>
+        <label class="editorField">
+          <span>Width <strong id="selRoadWidthVal">12</strong>m</span>
+          <input id="selRoadWidth" type="range" min="4" max="40" step="1" value="12">
+        </label>
+      </div>
+      <div class="editorHint">Drag the midpoint handle (gold dot) on a selected road to curve it. Clear removes all curves.</div>
+      <div class="editorRow">
+        <button class="btn btn-s" id="btnClearCurve">CLEAR CURVE</button>
+        <button class="btn btn-danger" id="btnDeleteRoad">DELETE ROAD</button>
+      </div>
+    </div>
+
+    <!-- Selected element: Asset -->
+    <div class="editorSection" id="selAssetPanel">
+      <div class="editorLabel">Selected Asset</div>
+      <div class="selInfo" id="selAssetInfo">Asset info</div>
+      <label class="editorField">
+        <span>Asset Type</span>
+        <select id="selAssetType">
+          <option value="tree">Tree</option>
+          <option value="building">Building</option>
+          <option value="park">Park</option>
+          <option value="stand">Stand</option>
+        </select>
+      </label>
+      <div class="editorRow">
+        <button class="btn btn-danger" id="btnDeleteAsset">DELETE ASSET</button>
+      </div>
+    </div>
+
+    <!-- Asset brush -->
+    <div class="editorSection">
+      <div class="editorLabel">Asset Brush</div>
+      <div class="assetPalette">
+        <div class="assetChip" data-asset="tree">&#127794; Tree</div>
+        <div class="assetChip" data-asset="building">&#127970; Building</div>
+        <div class="assetChip" data-asset="park">&#129358; Park</div>
+        <div class="assetChip" data-asset="stand">&#127967; Stand</div>
+      </div>
+      <label class="editorField">
+        <span>Brush Asset</span>
+        <select id="brushAsset">
+          <option value="tree">Tree</option>
+          <option value="building">Building</option>
+          <option value="park">Park</option>
+          <option value="stand">Stand</option>
+        </select>
+      </label>
+      <label class="editorField">
+        <span>Brush Count <strong id="brushCountVal">1</strong></span>
+        <input id="brushCount" type="range" min="1" max="25" step="1" value="1">
+      </label>
+      <label class="editorField">
+        <span>Spacing <strong id="brushSpacingVal">20</strong>m</span>
+        <input id="brushSpacing" type="range" min="8" max="80" step="1" value="20">
+      </label>
+    </div>
+
+    <!-- Grid snap -->
+    <div class="editorSection">
+      <div class="editorLabel">Canvas</div>
+      <label class="toggleRow">
+        <span>Grid Snap (G)</span>
+        <input type="checkbox" id="snapToggle">
+      </label>
+      <div class="editorRow" style="margin-top:10px;">
+        <button class="btn btn-s" id="btnResetView">RESET VIEW</button>
+      </div>
+    </div>
+
+    <!-- Save & Export -->
+    <div class="editorSection">
+      <div class="editorLabel">Save &amp; Export</div>
+      <div class="editorRow">
+        <button class="btn btn-p" id="btnSaveMap">SAVE MAP</button>
+        <button class="btn btn-s" id="btnExport">EXPORT JSON</button>
+      </div>
+      <div class="editorRow">
+        <button class="btn btn-s" id="btnImport">IMPORT JSON</button>
+        <input type="file" id="importFileInput" accept=".json,application/json" style="display:none">
+      </div>
+      <div class="editorHint">Maps are stored in browser localStorage. Export to JSON for backup or sharing.</div>
+    </div>
+
+  </aside>
+
+  <!-- ── Canvas ─────────────────────────────────────────────── -->
+  <div id="canvasWrap">
+    <canvas id="editorCanvas"></canvas>
+    <div id="canvasHint">
+      SELECT drag nodes &amp; roads &nbsp;·&nbsp; NODE click to place &nbsp;·&nbsp; ROAD click two nodes &nbsp;·&nbsp; ERASE click to delete &nbsp;·&nbsp; BRUSH click to paint
+    </div>
+    <!-- Node color legend -->
+    <div id="legend">
+      <div><span class="leg-node" style="background:#f55"></span>ORPHAN (0 roads)</div>
+      <div><span class="leg-node" style="background:#4af"></span>DEAD END (1 road)</div>
+      <div><span class="leg-node" style="background:#7df"></span>INTERSECTION (2+ roads)</div>
+      <div><span class="leg-node" style="background:#ffd700"></span>SELECTED</div>
+      <div><span class="leg-node" style="background:#ff5500"></span>CONNECTING…</div>
+    </div>
+  </div>
+</div>
+
+<div id="notif"></div>
+
+<script type="module" src="./editor.js"></script>
+</body>
+</html>
