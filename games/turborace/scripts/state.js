@@ -87,10 +87,12 @@ export const state = {
     vsPosSendTimer: 0,
     vsPosSendInterval: 0.033, // 30 Hz
 
-    // ── Free Drive (open-world island) ──────────────────────────────────────
-    fdMode: false,           // true while free-driving on the island
-    fdOnline: true,          // menu toggle: share the island with other players
+    // ── Free Drive (open-world island or race track) ────────────────────────
+    fdMode: false,           // true while free-driving
+    fdOnline: true,          // menu toggle: share the world with other players
     fdNetwork: null,         // FreeDriveNetwork instance (null = solo)
     fdPosTimer: 0,           // broadcast throttle
     fdCleanup: null,         // set by freedrive.js; called by showMain on exit
+    fdSelMap: 'island',      // 'island' or a track ID string
+    fdTrackData: null,       // null for island mode, track data object for track mode
 };

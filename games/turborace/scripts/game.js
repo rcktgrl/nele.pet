@@ -50,7 +50,8 @@ import {
   showDiffSel, showOnlineTrkSel, showSettings, closeSettings,
   showVsLobby, vsCreateRoom, vsJoinRoom, vsStartRace, vsLeaveLobby,
   vsCopyCode, vsCopyInviteLink, vsLoadOnlineTracks,
-  onCarColorInput, resetCarColor, onVsColorInput
+  onCarColorInput, resetCarColor, onVsColorInput,
+  showFdMapSel, showFdMapOnlineTracks
 } from './menu.js';
 import {
   closeTrackLeaderboardModal
@@ -278,8 +279,11 @@ document.getElementById('settingsCloseBtn').addEventListener('click',closeSettin
 document.getElementById('introStartBtn').addEventListener('click',function(){tryStartMenuMusic();showMain();});
 document.getElementById('gameStartBtn').addEventListener('click',function(){tryStartMenuMusic();showTrkSel();});
 document.getElementById('vsModeBtn').addEventListener('click',function(){tryStartMenuMusic();showVsLobby();});
-document.getElementById('freeDriveBtn').addEventListener('click',function(){tryStartMenuMusic();showFreeDriveMenu();});
-document.getElementById('fdBackBtn').addEventListener('click',showMain);
+document.getElementById('freeDriveBtn').addEventListener('click',function(){tryStartMenuMusic();void showFdMapSel();});
+document.getElementById('fdMapBackBtn').addEventListener('click',showMain);
+document.getElementById('fdMapLoadOnlineBtn').addEventListener('click',function(){void showFdMapOnlineTracks();});
+document.getElementById('fdMapNextBtn').addEventListener('click',showFreeDriveMenu);
+document.getElementById('fdBackBtn').addEventListener('click',function(){void showFdMapSel();});
 document.getElementById('fdStartBtn').addEventListener('click',function(){tryStartMenuMusic();void startFreeDrive();});
 document.getElementById('fdColor').addEventListener('input',e=>onFdColorInput(e.target.value));
 document.getElementById('fdOnlineToggle').addEventListener('change',e=>{ state.fdOnline=e.target.checked; });

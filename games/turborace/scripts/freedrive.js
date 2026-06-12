@@ -16,7 +16,8 @@ import {
 import { buildCarChipRow, refreshCarChipColors, disposeCarCardPreviews } from './menu.js';
 import { clearGhostVisual } from './ghost.js';
 import { getArcadeUser } from './user.js';
-import { hexNumToCss, cssToHexNum } from './editor.js';
+import { hexNumToCss, cssToHexNum, getTrackById } from './editor.js';
+import { buildTrack } from './track-gen.js';
 import { notify } from './notify.js';
 
 // ═══════════════════════════════════════════════════════
@@ -62,6 +63,15 @@ export function showFreeDriveMenu(){
   const lbl = document.getElementById('fdMyNameLabel');
   if(lbl) lbl.textContent = getArcadeUser().name || 'Anonymous';
   _setFdStatus('');
+  const subEl = document.getElementById('fdModeSub');
+  if(subEl){
+    if(!state.fdSelMap || state.fdSelMap === 'island'){
+      subEl.textContent = 'Open-world island · three cities · cruise together';
+    } else {
+      const trk = getTrackById(state.fdSelMap);
+      subEl.textContent = trk ? `${trk.name} · race track · drive freely` : 'Race track · drive freely';
+    }
+  }
 }
 
 export function onFdColorInput(css){
@@ -78,21 +88,48 @@ export async function startFreeDrive(){
   for(const ctrl of state.aiControllers) if(ctrl.destroy) ctrl.destroy();
   for(const c of state.allCars) scene.remove(c.mesh);
   state.allCars = []; state.aiCars = []; state.aiControllers = []; state.pCar = null;
+  state.fdTrackData = null;
   clearGhostVisual();
   document.querySelectorAll('.screen,#results').forEach(s => s.style.display = 'none');
 
-  const world = buildFreeDriveWorld();
-  setupLights();
+  const selMap = state.fdSelMap || 'island';
+  let spawnPos, spawnHdg, notifyMsg, fdWorldId;
 
-  const sp = world.spawnPoints[Math.floor(Math.random() * world.spawnPoints.length)];
-  const pos = new THREE.Vector3(sp.x + (Math.random() - 0.5) * 18, 0, sp.z + (Math.random() - 0.5) * 5);
-  const car = new Car(CARS[state.selCar ?? 0], pos, sp.hdg, true, scene, state.carColor);
+  if(selMap === 'island'){
+    const world = buildFreeDriveWorld();
+    setupLights();
+    const sp = world.spawnPoints[Math.floor(Math.random() * world.spawnPoints.length)];
+    spawnPos = new THREE.Vector3(sp.x + (Math.random() - 0.5) * 18, 0, sp.z + (Math.random() - 0.5) * 5);
+    spawnHdg = sp.hdg;
+    notifyMsg = `Free Drive — spawned in ${sp.city}. Explore the island!`;
+    fdWorldId = FD_WORLD_ID;
+    _buildStaticMinimap(world);
+  } else {
+    const trackData = getTrackById(selMap);
+    if(!trackData){
+      notify('Map not found — falling back to island.');
+      state.fdSelMap = 'island';
+      return startFreeDrive();
+    }
+    buildTrack(trackData);
+    state.fdTrackData = trackData;
+    setupLights();
+    const sp0 = state.trkPts[0] || new THREE.Vector3(0, 0, 0);
+    const sp1 = state.trkPts[1] || new THREE.Vector3(0, 0, 5);
+    spawnPos = new THREE.Vector3(sp0.x + (Math.random() - 0.5) * 8, sp0.y, sp0.z + (Math.random() - 0.5) * 4);
+    spawnHdg = Math.atan2(sp1.x - sp0.x, sp1.z - sp0.z);
+    notifyMsg = `Free Drive — ${trackData.name}. Drive freely!`;
+    fdWorldId = `track-fd-${String(selMap).replace(/[^a-z0-9_-]/gi, '-')}`;
+    _buildTrackMinimap(trackData);
+  }
+
+  const car = new Car(CARS[state.selCar ?? 0], spawnPos, spawnHdg, true, scene, state.carColor);
   state.pCar = car; state.allCars = [car];
 
   state.fdMode = true; state.raceTime = 0; state.fdPosTimer = 0;
   state.fdCleanup = _quitCleanup;
 
-  // HUD: speed + gear + island map — no laps, checkpoints or positions
+  // HUD: speed + gear + minimap — no laps, checkpoints or positions
   document.getElementById('hud').style.display = 'block';
   document.getElementById('raceTop').style.display = 'none';
   document.getElementById('pos').style.display = 'none';
@@ -101,22 +138,35 @@ export async function startFreeDrive(){
   document.getElementById('camLabel').textContent = '[ C ] COCKPIT VIEW';
   document.getElementById('hint').style.display = isTouchControlsEnabled() ? 'none' : 'block';
   state.camMode = 'chase'; dc.style.display = 'none';
-  _buildStaticMinimap(world);
 
   state.gState = 'freedrive';
   updateTouchControlsVisibility(state.gState);
   initAudio(); startMusic();
-  notify(`Free Drive — spawned in ${sp.city}. Explore the island!`);
+  notify(notifyMsg);
   _updateOnlineHudTag();
 
-  if(state.fdOnline) await _joinIsland();
+  if(state.fdOnline) await _joinIsland(fdWorldId);
 }
 
-// Respawn on the nearest city spawn point (pause-menu RESTART).
+// Respawn on the nearest spawn point (pause-menu RESTART).
 export function fdRespawn(){
-  const world = getFreeDriveWorld();
   const car = state.pCar;
-  if(!world || !car) return;
+  if(!car) return;
+  if(state.fdTrackData){
+    const sp0 = state.trkPts[0] || new THREE.Vector3(0, 0, 0);
+    const sp1 = state.trkPts[1] || new THREE.Vector3(0, 0, 5);
+    car.pos.set(sp0.x + (Math.random() - 0.5) * 8, sp0.y, sp0.z + (Math.random() - 0.5) * 4);
+    car.hdg = Math.atan2(sp1.x - sp0.x, sp1.z - sp0.z);
+    car.spd = 0; car.revSpd = 0; car.isReversing = false;
+    car.mesh.position.copy(car.pos); car.mesh.rotation.y = car.hdg;
+    state.gState = 'freedrive';
+    updateTouchControlsVisibility(state.gState);
+    initAudio(); startMusic();
+    notify('Respawned at start/finish.');
+    return;
+  }
+  const world = getFreeDriveWorld();
+  if(!world) return;
   let best = world.spawnPoints[0], bd = Infinity;
   for(const sp of world.spawnPoints){
     const d = (car.pos.x - sp.x) ** 2 + (car.pos.z - sp.z) ** 2;
@@ -142,7 +192,7 @@ function _teardownSession(){
 // Registered as state.fdCleanup — called by showMain when leaving the mode.
 function _quitCleanup(){
   _teardownSession();
-  state.fdMode = false; state.fdCleanup = null;
+  state.fdMode = false; state.fdCleanup = null; state.fdTrackData = null;
   document.getElementById('raceTop').style.display = '';
   document.getElementById('pos').style.display = '';
   const tag = document.getElementById('fdOnlineTag');
@@ -152,17 +202,17 @@ function _quitCleanup(){
 // ═══════════════════════════════════════════════════════
 //  NETWORK
 // ═══════════════════════════════════════════════════════
-async function _joinIsland(){
+async function _joinIsland(worldId){
   const user = getArcadeUser();
   const net = new FreeDriveNetwork();
   state.fdNetwork = net;
   net.onRoster = _onRoster;
   net.onPos = _onPos;
   try {
-    await net.join(FD_WORLD_ID, user.name || 'Anonymous', state.selCar ?? 0, state.carColor);
+    await net.join(worldId, user.name || 'Anonymous', state.selCar ?? 0, state.carColor);
   } catch(e) {
     if(state.fdNetwork === net) state.fdNetwork = null;
-    notify('Island online unavailable — driving solo. (' + e.message + ')');
+    notify('Online unavailable — driving solo. (' + e.message + ')');
     _updateOnlineHudTag();
     return;
   }
@@ -231,12 +281,13 @@ function _updateOnlineHudTag(){
   if(!el) return;
   if(!state.fdMode){ el.style.display = 'none'; return; }
   el.style.display = 'block';
+  const label = state.fdTrackData ? (state.fdTrackData.name || 'TRACK') : 'ISLAND';
   if(state.fdNetwork){
     const n = 1 + Object.keys(fdRemote).length;
-    el.textContent = `🏝 ISLAND ONLINE · ${n} DRIVER${n > 1 ? 'S' : ''}`;
+    el.textContent = `🏁 ${label.toUpperCase()} ONLINE · ${n} DRIVER${n > 1 ? 'S' : ''}`;
     el.style.color = '#4f9';
   } else {
-    el.textContent = '🏝 ISLAND · SOLO DRIVE';
+    el.textContent = `🏁 ${label.toUpperCase()} · SOLO DRIVE`;
     el.style.color = '#789';
   }
 }
@@ -303,9 +354,10 @@ function _updateTags(){
 //  PER-FRAME UPDATE (called from the game loop)
 // ═══════════════════════════════════════════════════════
 export function updateFreeDrive(dt){
-  const world = getFreeDriveWorld();
   const car = state.pCar;
-  if(!world || !car) return;
+  if(!car) return;
+  const world = state.fdTrackData ? null : getFreeDriveWorld();
+  if(!state.fdTrackData && !world) return;
   state.raceTime += dt;
 
   const autoTouchThrottle = isTouchControlsVisibleInState(state.gState)
@@ -320,13 +372,17 @@ export function updateFreeDrive(dt){
   const sliderSteer = getTouchSliderSteer();
   const str = Math.abs(gyroSteer) > 0.01 ? gyroSteer : Math.abs(sliderSteer) > 0.01 ? sliderSteer : keySteer;
 
-  // Off-road: Rally Storm (green) drives freely. All other cars get reduced thrust
-  // (set via onGravel) — slower acceleration but no hard speed cap.
-  const offroad = world.roadEdgeDist(car.pos.x, car.pos.z) > 1.5;
-  const isRally = car.data.id === 2;
-  car.onGravel = offroad && !isRally;
+  if(world){
+    // Island: off-road check — Rally Storm drives freely, others slow down
+    const offroad = world.roadEdgeDist(car.pos.x, car.pos.z) > 1.5;
+    const isRally = car.data.id === 2;
+    car.onGravel = offroad && !isRally;
+  } else {
+    // Track: use gravel zones baked into the track (same as race mode)
+    car.checkGravel();
+  }
   car.update({ thr, brk, str }, dt);
-  _applyWorldBounds(car, world);
+  if(world) _applyWorldBounds(car, world);
 
   _updateRemoteCars(dt);
   _broadcastPos(dt);
@@ -356,14 +412,15 @@ function _applyWorldBounds(car, world){
 }
 
 // ═══════════════════════════════════════════════════════
-//  ISLAND MINIMAP
+//  MINIMAP (shared by island and track modes)
 // ═══════════════════════════════════════════════════════
-let _mapCanvas = null, _mapScale = 1;
+let _mapCanvas = null, _mapScale = 1, _mapCenterX = 0, _mapCenterZ = 0;
 
 function _buildStaticMinimap(world){
   const S = 150, half = S / 2;
   _mapCanvas = document.createElement('canvas');
   _mapCanvas.width = S; _mapCanvas.height = S;
+  _mapCenterX = 0; _mapCenterZ = 0;
   _mapScale = half / (world.waterR + 60);
   const ctx = _mapCanvas.getContext('2d');
   const toM = (x, z) => [half + x * _mapScale, half + z * _mapScale];
@@ -397,6 +454,43 @@ function _buildStaticMinimap(world){
   }
 }
 
+function _buildTrackMinimap(trackData){
+  const S = 150, half = S / 2;
+  _mapCanvas = document.createElement('canvas');
+  _mapCanvas.width = S; _mapCanvas.height = S;
+  const xs = trackData.wp.map(p => p[0]), zs = trackData.wp.map(p => p[2]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  _mapCenterX = (minX + maxX) / 2; _mapCenterZ = (minZ + maxZ) / 2;
+  const rangeX = maxX - minX || 1, rangeZ = maxZ - minZ || 1;
+  _mapScale = (half - 12) / Math.max(rangeX / 2, rangeZ / 2);
+  const toM = (x, z) => [half + (x - _mapCenterX) * _mapScale, half + (z - _mapCenterZ) * _mapScale];
+  // Catmull-Rom curve
+  const n = trackData.wp.length;
+  const curve = [];
+  for(let s = 0; s < n; s++){
+    const p0 = trackData.wp[(s - 1 + n) % n], p1 = trackData.wp[s], p2 = trackData.wp[(s + 1) % n], p3 = trackData.wp[(s + 2) % n];
+    for(let i = 0; i < 8; i++){
+      const t = i / 8, t2 = t * t, t3 = t2 * t;
+      curve.push([
+        0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+        0.5 * ((2 * p1[2]) + (-p0[2] + p2[2]) * t + (2 * p0[2] - 5 * p1[2] + 4 * p2[2] - p3[2]) * t2 + (-p0[2] + 3 * p1[2] - 3 * p2[2] + p3[2]) * t3)
+      ]);
+    }
+  }
+  const ctx = _mapCanvas.getContext('2d');
+  ctx.fillStyle = 'rgba(4,10,24,.85)'; ctx.fillRect(0, 0, S, S);
+  const col = trackData.previewColor || '#4488ff';
+  ctx.strokeStyle = col + '33'; ctx.lineWidth = Math.max(2, trackData.rw * _mapScale * 1.4);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); curve.forEach(([x, z], i) => { const [mx, mz] = toM(x, z); i ? ctx.lineTo(mx, mz) : ctx.moveTo(mx, mz); }); ctx.closePath(); ctx.stroke();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+  ctx.beginPath(); curve.forEach(([x, z], i) => { const [mx, mz] = toM(x, z); i ? ctx.lineTo(mx, mz) : ctx.moveTo(mx, mz); }); ctx.closePath(); ctx.stroke();
+  const [sfx, sfz] = toM(trackData.wp[0][0], trackData.wp[0][2]);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.setLineDash([2, 2]);
+  ctx.beginPath(); ctx.moveTo(sfx - 5, sfz); ctx.lineTo(sfx + 5, sfz); ctx.stroke(); ctx.setLineDash([]);
+}
+
 function _drawFdMinimap(){
   if(!_mapCanvas || !state.pCar) return;
   const ctx = mmctx, S = 150, half = S / 2;
@@ -405,10 +499,11 @@ function _drawFdMinimap(){
   for(const r of Object.values(fdRemote)){
     if(!r.hasPos) continue;
     ctx.beginPath();
-    ctx.arc(half + r.car.pos.x * _mapScale, half + r.car.pos.z * _mapScale, 3, 0, Math.PI * 2);
+    ctx.arc(half + (r.car.pos.x - _mapCenterX) * _mapScale, half + (r.car.pos.z - _mapCenterZ) * _mapScale, 3, 0, Math.PI * 2);
     ctx.fillStyle = '#44aaff'; ctx.fill();
   }
-  const px = half + state.pCar.pos.x * _mapScale, pz = half + state.pCar.pos.z * _mapScale;
+  const px = half + (state.pCar.pos.x - _mapCenterX) * _mapScale;
+  const pz = half + (state.pCar.pos.z - _mapCenterZ) * _mapScale;
   const hdg = state.pCar.hdg;
   ctx.beginPath(); ctx.arc(px, pz, 4, 0, Math.PI * 2);
   ctx.fillStyle = '#ffd700'; ctx.fill();
