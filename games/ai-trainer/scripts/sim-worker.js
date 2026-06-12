@@ -3,20 +3,29 @@
 import { Net, gauss, LOG_2PI, accumulatePPOGrads } from './nn-core.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  AI Trainer — Simulation Worker (PPO / ES)
+//  AI Trainer — Simulation Worker (PPO + optional mods)
 //
 //  Runs entirely off the main thread. No DOM, no Three.js.
-//  Two selectable algorithms (cfg.algo, restart required):
-//    · PPO — gradient-based: actor-critic MLPs with manual backprop, Adam,
-//      GAE(λ), clipped surrogate + entropy bonus. The discount γ adapts to
-//      training progress (rises when the reward stagnates — see adaptGamma).
-//    · ES  — evolution strategies (OpenAI-style, antithetic + rank shaping):
-//      each parallel car runs one episode with parameter-noise-perturbed
-//      weights; the update is a rank-weighted sum of the noise. Forward
-//      passes only — no critic, no backprop, no gradient workers, no GPU —
-//      so nearly all compute goes into the simulation itself.
-//  Both share the actor MLP (tanh hidden, linear output) and N parallel
-//  environments.
+//  Implements Proximal Policy Optimization with:
+//    · actor-critic MLPs (tanh hidden, linear output) with manual backprop
+//    · Adam optimizer
+//    · GAE(λ) advantage estimation
+//    · clipped surrogate objective + entropy bonus
+//    · N parallel environments sharing one policy
+//
+//  Optional PPO mods (cfg flags, see each section):
+//    · groupSize    — GRPO-style agent groups: members spawn together, the
+//                     advantage is each member's return relative to the group
+//                     average (no critic / GAE needed)
+//    · mirror       — left↔right symmetry augmentation: every transition is
+//                     also trained mirrored, doubling data per physics step
+//    · klStop       — stop update epochs early once the policy has moved a
+//                     KL-threshold away from the data (saves wasted epochs)
+//    · neuronRepair — periodically recycle dead hidden neurons and split
+//                     dominant ones into a useless slot (function-preserving)
+//    · failRate     — fraction of actor weights that are "defect" (zeroed)
+//                     for each agent's own acting copy during collection;
+//                     the real network trains unmasked
 //
 //  Observations include fixed centerline look-ahead probes (relative angle +
 //  slope at several distances ahead), so the policy can anticipate corners
@@ -46,15 +55,9 @@ let cfg = {
   episodeLen: 60,        // seconds before truncation
   randomSpawn: true,     // spawn each episode at a random centerline point
   actionRepeat: 2,       // physics ticks per agent decision (restart required)
-  // algorithm
-  algo: 'ppo',           // 'ppo' | 'es' — restart required
-  // ES hyperparameters (both live; σ applies from the next generation)
-  esSigma: 0.1,          // parameter-noise std
-  esLr: 0.02,            // ES learning rate (Adam on the rank-weighted noise sum)
   // PPO hyperparameters
   lr: 3e-4,
-  gamma: 0.99,           // base discount; the live value adapts when gammaAuto
-  gammaAuto: true,       // raise γ while the reward stagnates (live)
+  gamma: 0.99,
   lam: 0.95,
   clip: 0.2,
   entropyCoef: 0.003,
@@ -66,6 +69,13 @@ let cfg = {
   hiddenLayers: 1,       // restart required
   backend: 'auto',       // 'auto' | 'gpu' | 'wasm' | 'js' — restart required
   threads: 0,            // gradient worker count, 0 = auto (cores − 2, max 6)
+  // PPO mods
+  groupSize: 1,          // >1: GRPO-style agent groups (restart required)
+  mirror: false,         // left↔right symmetry augmentation (live)
+  klStop: true,          // KL-based early stop of update epochs (live)
+  klLimit: 0.025,        // KL movement allowed per update before stopping
+  neuronRepair: false,   // periodic dead-neuron recycle + dominant split (live)
+  failRate: 0,           // fraction of "defect" actor weights per agent (live)
   // reward shaping
   progressReward: 0.2,   // per metre of forward progress along the centerline
   gravelPenalty: 1.0,    // per second on gravel
@@ -521,18 +531,56 @@ function buildObs(car, out) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Agent — actor MLP shared by both algorithms; critic/logStd are PPO-only
+//  Mirror augmentation (cfg.mirror) — the track problem is left↔right
+//  symmetric, so every real transition has an equally valid mirror twin:
+//  reflect the observation, negate the steering. Trained alongside the
+//  original it doubles the data per physics step and bakes the symmetry
+//  into the policy instead of waiting for it to be learned twice.
+//
+//  Index map (must match the buildObs layout above):
+//    0..10   long rays    — symmetric fan → reverse
+//    11..17  edge rays    — symmetric fan → reverse
+//    18 speed · 20 |centerline dist| · 21 gravel · 22 reversing · 23 slope — keep
+//    19      heading error — negate
+//    24+2k   probe angle   — negate;  25+2k probe slope — keep
+//    36..39  memory cells  — keep (no spatial meaning; their actions are
+//            kept too, so the mirrored pair stays self-consistent)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function mirrorObsInto(src, dst) {
+  for (let k = 0; k <= 10; k++) dst[k] = src[10 - k];
+  for (let k = 11; k <= 17; k++) dst[k] = src[28 - k];
+  dst[18] = src[18];
+  dst[19] = -src[19];
+  dst[20] = src[20];
+  dst[21] = src[21];
+  dst[22] = src[22];
+  dst[23] = src[23];
+  for (let p = 0; p < PROBE_DISTS.length; p++) {
+    dst[24 + 2 * p] = -src[24 + 2 * p];
+    dst[25 + 2 * p] = src[25 + 2 * p];
+  }
+  for (let d = 0; d < MEM_DIM; d++) dst[MEM_OBS + d] = src[MEM_OBS + d];
+  return dst;
+}
+
+export function mirrorActInto(src, dst) {
+  dst[0] = -src[0];                                   // steer flips
+  for (let d = 1; d < ACT_DIM; d++) dst[d] = src[d];  // throttle + memory keep
+  return dst;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PPO agent
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ACT_DIM = 2 + MEM_DIM; // [steer, throttle/brake, 4 memory-cell deltas]
 
-let actor  = null;          // Net [OBS_DIM, h, ACT_DIM] → action means (ES: base θ)
-let critic = null;          // PPO: Net [OBS_DIM, h, 1] → state value
-let logStd = null;          // PPO: Float64Array(ACT_DIM), learnable
+let actor  = null;          // Net [OBS_DIM, h, ACT_DIM] → action means
+let critic = null;          // Net [OBS_DIM, h, 1] → state value
+let logStd = null;          // Float64Array(ACT_DIM), learnable
 let lsM = null, lsV = null; // Adam moments for logStd
 let lsT = 0;
-
-const isES = () => cfg.algo === 'es';
 
 function initAgent(modelOverride) {
   const h = cfg.hiddenSize, nl = Math.max(1, cfg.hiddenLayers | 0);
@@ -544,13 +592,8 @@ function initAgent(modelOverride) {
   lsM = new Float64Array(ACT_DIM);
   lsV = new Float64Array(ACT_DIM);
   lsT = 0;
-  if (modelOverride) {
+  if (modelOverride && modelOverride.algo === 'ppo') {
     try {
-      // The actor transfers freely between PPO and ES (same network shape);
-      // PPO's critic/logStd are restored only from a PPO export.
-      if (modelOverride.algo !== 'ppo' && modelOverride.algo !== 'es') {
-        throw new Error(`unsupported model type '${modelOverride.algo}'`);
-      }
       const mSizes = modelOverride.actor.sizes;
       if (modelOverride.obsDim !== OBS_DIM || mSizes[mSizes.length - 1] !== ACT_DIM) {
         throw new Error(`incompatible model: expects obs ${modelOverride.obsDim}/act ${mSizes[mSizes.length - 1]}, ` +
@@ -558,51 +601,15 @@ function initAgent(modelOverride) {
       }
       actor  = new Net(modelOverride.actor.sizes, 1);
       actor.loadFlat(modelOverride.actor.flat);
-      if (modelOverride.algo === 'ppo') {
-        critic = new Net(modelOverride.critic.sizes, 1);
-        critic.loadFlat(modelOverride.critic.flat);
-        logStd = Float64Array.from(modelOverride.logStd);
-        lsM = new Float64Array(ACT_DIM);
-        lsV = new Float64Array(ACT_DIM);
-        lsT = 0;
-      }
-      // es → ppo: the fresh critic/logStd above stay (value net retrains)
+      critic = new Net(modelOverride.critic.sizes, 1);
+      critic.loadFlat(modelOverride.critic.flat);
+      logStd = Float64Array.from(modelOverride.logStd);
+      lsM = new Float64Array(ACT_DIM);
+      lsV = new Float64Array(ACT_DIM);
+      lsT = 0;
     } catch (err) {
       postMessage({ type: 'error', message: 'Model import failed: ' + err.message });
     }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Adaptive discount γ (PPO) — the configured cfg.gamma is the BASE; the live
-//  value gammaNow drifts up toward GAMMA_MAX while the average return has
-//  stagnated for a while (a longer credit-assignment horizon often breaks a
-//  plateau, e.g. when the policy must brake NOW for a reward many seconds
-//  away), and eases back toward the base once the reward improves again.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const GAMMA_MAX = 0.998;            // effective horizon cap ≈ 500 decisions
-const GAMMA_STAGNATION_UPDATES = 8; // updates without improvement per raise
-
-let gammaNow = cfg.gamma;
-let gammaBestAvg = -Infinity;       // best windowed avg return seen so far
-let gammaLastProgress = 0;          // iteration of the last improvement/raise
-
-function adaptGamma() {
-  if (!cfg.gammaAuto) { gammaNow = cfg.gamma; return; }
-  if (curAvg == null) return;       // not enough finished episodes yet
-  const thr = gammaBestAvg === -Infinity
-    ? -Infinity
-    : Math.max(0.5, Math.abs(gammaBestAvg) * 0.01);
-  if (curAvg > gammaBestAvg + thr) {
-    gammaBestAvg = curAvg;
-    gammaLastProgress = iteration;
-    // reward is moving again — ease back toward the configured base
-    gammaNow += (cfg.gamma - gammaNow) * 0.25;
-  } else if (iteration - gammaLastProgress >= GAMMA_STAGNATION_UPDATES) {
-    // long stagnation — push the horizon out a bit (γ: 0.990 → 0.992 → …)
-    gammaNow = Math.min(GAMMA_MAX, 1 - (1 - gammaNow) * 0.8);
-    gammaLastProgress = iteration;  // at most one raise per stagnation window
   }
 }
 
@@ -617,6 +624,171 @@ function logProb(act, mean) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Weight-failure mode (cfg.failRate) — each agent acts through its own copy
+//  of the actor in which a random fraction of weights is "defect" (zeroed).
+//  The defects last for the agent's current episode; the REAL network is
+//  trained unmasked (PPO's importance ratio absorbs the behavior mismatch,
+//  since the stored log-prob comes from the masked acting copy). Forces the
+//  policy not to rely on any single connection — like dropout, but in the
+//  world instead of the optimizer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function rollFailMask(env) {
+  const P = actor.paramCount();
+  if (!env.failMask || env.failMask.length !== P) env.failMask = new Uint8Array(P);
+  else env.failMask.fill(0);
+  const p = Math.min(0.5, cfg.failRate);
+  for (let k = 0; k < P; k++) if (Math.random() < p) env.failMask[k] = 1;
+  applyFailMask(env);
+}
+
+// (Re)build the agent's acting copy from the CURRENT weights + its mask.
+function applyFailMask(env) {
+  const flat = actor.flatF64();
+  for (let k = 0; k < flat.length; k++) if (env.failMask[k]) flat[k] = 0;
+  if (!env.actNet || env.actNet.paramCount() !== flat.length) env.actNet = new Net(actor.sizes, 1);
+  env.actNet.loadFlat(flat);
+}
+
+// Weights changed (update / repair / restore) → defect copies must follow.
+function refreshFailNets() {
+  for (const env of envs) {
+    if (cfg.failRate > 0 && env.failMask) applyFailMask(env);
+    else env.actNet = null;
+  }
+}
+
+// The policy network an env ACTS with (true actor unless failure mode is on).
+function actingNet(env) {
+  if (cfg.failRate > 0) {
+    if (!env.actNet) rollFailMask(env);
+    return env.actNet;
+  }
+  return actor;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Neuron repair (cfg.neuronRepair) — every REPAIR_EVERY updates:
+//   1. Score each hidden neuron by influence = std(activation) × ‖W_out‖₁,
+//      measured over a reservoir of recently seen observations.
+//   2. DEAD neurons (≈ no influence — constant output or unused downstream)
+//      are recycled ReDo-style: fresh random incoming weights, outgoing
+//      zeroed. Output is unchanged, but gradient can regrow the slot.
+//   3. The most OVERTUNED neuron (influence ≫ layer mean) is split into the
+//      most useless slot: the clone gets the same incoming weights and both
+//      get half the outgoing weights — the summed output is identical, so
+//      nothing breaks, but the dominant feature gains redundancy and its
+//      per-neuron gradient pressure halves. Stabilizes top-heavy networks.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const REPAIR_EVERY   = 10;    // updates between repair passes
+const REPAIR_RES_CAP = 256;   // observation reservoir size
+const DEAD_FRAC      = 0.05;  // dead if influence < 5 % of the layer mean
+const OVER_FRAC      = 3.0;   // overtuned if influence > 3× the layer mean
+const RECYCLE_CAP    = 0.25;  // recycle at most a quarter of a layer per pass
+
+let repairObs   = [];         // reservoir of Float64Array observations
+let repairSeen  = 0;          // total observations offered to the reservoir
+let repairStats = { recycled: 0, splits: 0 };
+let _repairPending = false;   // requested while an update was in flight
+
+function reservoirOffer(obs) {
+  repairSeen++;
+  if (repairObs.length < REPAIR_RES_CAP) {
+    repairObs.push(Float64Array.from(obs));
+  } else if (Math.random() < REPAIR_RES_CAP / repairSeen) {
+    repairObs[(Math.random() * REPAIR_RES_CAP) | 0] = Float64Array.from(obs);
+  }
+}
+
+function repairPass() {
+  if (repairObs.length < 32) return;  // not enough data to judge neurons
+
+  // activation statistics per hidden layer over the reservoir
+  const L = actor.W.length;            // weight-layer count; hidden layers L−1
+  const sums = [], sqs = [];
+  for (let l = 0; l < L - 1; l++) {
+    sums.push(new Float64Array(actor.sizes[l + 1]));
+    sqs.push(new Float64Array(actor.sizes[l + 1]));
+  }
+  const cache = {};
+  for (const o of repairObs) {
+    actor.forward(o, cache);
+    for (let l = 0; l < L - 1; l++) {
+      const a = cache.acts[l + 1];
+      for (let j = 0; j < a.length; j++) { sums[l][j] += a[j]; sqs[l][j] += a[j] * a[j]; }
+    }
+  }
+
+  for (let l = 0; l < L - 1; l++) {
+    const nH = actor.sizes[l + 1];           // neurons in this hidden layer
+    const nIn = actor.sizes[l], nOut = actor.sizes[l + 2];
+    const Win = actor.W[l], bIn = actor.b[l], Wout = actor.W[l + 1];
+
+    const score = new Float64Array(nH);
+    let mean = 0;
+    for (let j = 0; j < nH; j++) {
+      const m = sums[l][j] / repairObs.length;
+      const v = Math.max(0, sqs[l][j] / repairObs.length - m * m);
+      let outNorm = 0;
+      for (let o = 0; o < nOut; o++) outNorm += Math.abs(Wout[o * nH + j]);
+      score[j] = Math.sqrt(v) * outNorm;
+      mean += score[j] / nH;
+    }
+    if (!(mean > 0)) continue;  // layer entirely silent — nothing to rank
+
+    const zeroAdam = j => {
+      for (let i = 0; i < nIn; i++) {
+        actor.mW[l][j * nIn + i] = 0; actor.vW[l][j * nIn + i] = 0;
+      }
+      actor.mb[l][j] = 0; actor.vb[l][j] = 0;
+      for (let o = 0; o < nOut; o++) {
+        actor.mW[l + 1][o * nH + j] = 0; actor.vW[l + 1][o * nH + j] = 0;
+      }
+    };
+
+    // ── recycle dead neurons ──
+    const lim = Math.sqrt(6 / (nIn + nH));
+    let recycled = 0;
+    for (let j = 0; j < nH && recycled < Math.max(1, nH * RECYCLE_CAP); j++) {
+      if (score[j] >= mean * DEAD_FRAC) continue;
+      for (let i = 0; i < nIn; i++) Win[j * nIn + i] = (Math.random() * 2 - 1) * lim;
+      bIn[j] = 0;
+      for (let o = 0; o < nOut; o++) Wout[o * nH + j] = 0;
+      zeroAdam(j);
+      score[j] = mean;  // freshly recycled — don't pick it as the split target
+      recycled++;
+      repairStats.recycled++;
+    }
+
+    // ── split the most overtuned neuron into the most useless slot ──
+    let jMax = 0, jMin = 0;
+    for (let j = 1; j < nH; j++) {
+      if (score[j] > score[jMax]) jMax = j;
+      if (score[j] < score[jMin]) jMin = j;
+    }
+    if (jMax !== jMin && score[jMax] > mean * OVER_FRAC && score[jMin] < mean) {
+      for (let i = 0; i < nIn; i++) {
+        // tiny jitter so the twins don't stay numerically identical forever
+        Win[jMin * nIn + i] = Win[jMax * nIn + i] * (1 + (Math.random() * 2 - 1) * 0.01);
+      }
+      bIn[jMin] = bIn[jMax];
+      for (let o = 0; o < nOut; o++) {
+        const half = Wout[o * nH + jMax] * 0.5;
+        Wout[o * nH + jMax] = half;
+        Wout[o * nH + jMin] = half;
+      }
+      zeroAdam(jMax);
+      zeroAdam(jMin);
+      repairStats.splits++;
+    }
+  }
+
+  refreshFailNets();   // acting copies must see the repaired weights
+  sendTfWeights();     // keep the GPU backend's resident weights in sync
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Environments
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -627,6 +799,8 @@ let agentSteps  = 0;        // transitions collected since last update
 let recentReturns = [];     // last completed episode returns
 let bestLap = Infinity;
 let lastLoss = { pi: 0, v: 0, ent: 0 };
+let lastEpochs = 0;         // epochs the last update actually ran (KL stop)
+let lastKl = 0;             // KL movement of the last update
 
 // ── Best-network snapshot ────────────────────────────────────────────────────
 // A network is judged by the AVERAGE return over the recent episodes of ALL
@@ -680,26 +854,91 @@ function makeEnv(i) {
     curAct: new Float64Array(ACT_DIM),
     // pending transition (written to buffer when the repeat window closes)
     pendObs: null, pendLogp: 0, pendVal: 0, rewAcc: 0,
-    // per-env rollout chain (PPO)
-    buf: { obs: [], act: [], logp: [], val: [], rew: [], done: [] },
-    // ES: per-env perturbed policy + episode result
-    esNet: null,    // Net with θ + σ·sign·ε loaded for this generation
-    esEps: null,    // Float64Array(paramCount) — shared with the antithetic twin
-    esSign: 1,
-    esDone: false,  // episode finished, waiting for the generation to close
-    esFit: 0,
+    // mirror twin of the pending transition (cfg.mirror)
+    pendObsM: null, pendActM: null, pendLogpM: 0, pendValM: 0,
+    // per-env rollout chains (M = mirrored twin; shares rew/done values)
+    buf:  { obs: [], act: [], logp: [], val: [], rew: [], done: [] },
+    bufM: { obs: [], act: [], logp: [], val: [], rew: [], done: [] },
+    // weight-failure mode
+    failMask: null, actNet: null,
+    // agent groups
+    gDone: false, gFit: 0,
   };
 }
 
-function resetEnv(env, i) {
-  const sp = spawnPose(i);
+function clearChains(env) {
+  for (const b of [env.buf, env.bufM]) {
+    b.obs.length = 0; b.act.length = 0; b.logp.length = 0;
+    b.val.length = 0; b.rew.length = 0; b.done.length = 0;
+  }
+}
+
+function resetEnv(env, i, pose = null) {
+  const sp = pose || spawnPose(i);
   env.car.reset(sp.pos, sp.hdg);
   env.prevS = carArc(env.car).s;
   env.lapAcc = 0; env.lapTime = 0;
   env.epTime = 0; env.epReturn = 0;
   env.offTrackTime = 0; env.noProgTime = 0; env.prevStuck = 0;
   env.repCount = 0;
-  env.pendObs = null; env.rewAcc = 0;
+  env.pendObs = null; env.pendObsM = null; env.rewAcc = 0;
+  env.gDone = false; env.gFit = 0;
+  // fresh episode → fresh defects
+  if (cfg.failRate > 0) rollFailMask(env);
+  else env.actNet = null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Agent groups (cfg.groupSize > 1) — GRPO-style baseline. Every group of G
+//  agents spawns at the SAME pose and runs the same shared policy with
+//  independent noise. When the whole group has finished, each member's
+//  advantage is its episode return relative to the group: the group average
+//  IS the baseline, so no critic / GAE is involved. Finished members park
+//  until the slowest one is done.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const groupOn = () => (cfg.groupSize | 0) > 1;
+
+// Episode-complete transitions waiting for the next group-mode update.
+let readyBatch = { OBS: [], ACT: [], LOGP: [], ADV: [], RET: [] };
+
+function groupMembers(g) {
+  const G = cfg.groupSize | 0;
+  return envs.slice(g * G, Math.min(envs.length, (g + 1) * G));
+}
+
+function respawnGroup(g) {
+  const members = groupMembers(g);
+  if (!members.length) return;
+  const pose = spawnPose(g * (cfg.groupSize | 0));
+  for (let m = 0; m < members.length; m++) {
+    resetEnv(members[m], 0, pose);
+    clearChains(members[m]);
+  }
+}
+
+// All members done → group-relative advantages → ready buffer → respawn.
+function finalizeGroup(g) {
+  const members = groupMembers(g);
+  const n = members.length;
+  let mean = 0;
+  for (const m of members) mean += m.gFit / n;
+  let varr = 0;
+  for (const m of members) varr += (m.gFit - mean) ** 2;
+  const std = Math.sqrt(varr / n) + 1e-6;
+  for (const m of members) {
+    const adv = (m.gFit - mean) / std;
+    for (const b of [m.buf, m.bufM]) {
+      for (let t = 0; t < b.obs.length; t++) {
+        readyBatch.OBS.push(b.obs[t]);
+        readyBatch.ACT.push(b.act[t]);
+        readyBatch.LOGP.push(b.logp[t]);
+        readyBatch.ADV.push(adv);
+        readyBatch.RET.push(m.gFit);  // unused for learning (vfCoef forced 0)
+      }
+    }
+  }
+  respawnGroup(g);
 }
 
 function initSim(modelOverride) {
@@ -711,84 +950,111 @@ function initSim(modelOverride) {
   simTime = 0;
   lastLoss = { pi: 0, v: 0, ent: 0 };
   best = null; curAvg = null; _loadBestPending = false;
-  gammaNow = cfg.gamma;
-  gammaBestAvg = -Infinity;
-  gammaLastProgress = 0;
-  if (isES()) esStartGeneration();
+  readyBatch = { OBS: [], ACT: [], LOGP: [], ADV: [], RET: [] };
+  repairObs = []; repairSeen = 0;
+  repairStats = { recycled: 0, splits: 0 };
+  _repairPending = false;
+  lastEpochs = 0; lastKl = 0;
+  if (groupOn()) {
+    const nGroups = Math.ceil(envs.length / (cfg.groupSize | 0));
+    for (let g = 0; g < nGroups; g++) respawnGroup(g);
+  } else if (cfg.failRate > 0) {
+    for (const env of envs) rollFailMask(env);
+  }
 }
 
 // Finalize the pending transition of an env into its rollout chain.
-function commitTransition(env, done) {
+// extra / extraM: bootstrap value added to this transition's reward only
+// (the mirrored twin bootstraps from the mirrored terminal observation).
+function commitTransition(env, done, extra = 0, extraM = 0) {
   if (!env.pendObs) return;
   env.buf.obs.push(env.pendObs);
   env.buf.act.push(Float64Array.from(env.curAct));
   env.buf.logp.push(env.pendLogp);
   env.buf.val.push(env.pendVal);
-  env.buf.rew.push(env.rewAcc);
+  env.buf.rew.push(env.rewAcc + extra);
   env.buf.done.push(done ? 1 : 0);
+  if (env.pendObsM) {
+    env.bufM.obs.push(env.pendObsM);
+    env.bufM.act.push(env.pendActM);
+    env.bufM.logp.push(env.pendLogpM);
+    env.bufM.val.push(env.pendValM);
+    env.bufM.rew.push(env.rewAcc + extraM);
+    env.bufM.done.push(done ? 1 : 0);
+  }
   env.pendObs = null;
+  env.pendObsM = null;
   env.rewAcc = 0;
   agentSteps++;
 }
 
 function terminateEnv(env, i, penalty, truncated) {
-  if (isES()) {
-    // fitness = undiscounted episode return; the car parks until every env
-    // in the generation has finished, then esUpdate() respawns them all
-    env.esFit = env.epReturn;
-    env.esDone = true;
-    recentReturns.push(env.epReturn);
-    if (recentReturns.length > 50) recentReturns.shift();
-    return;
-  }
   // per-tick rewards are already in epReturn; only the penalty/bootstrap
   // terms are added to the stored transition reward here
   if (penalty) env.rewAcc -= penalty;
-  if (truncated && env.pendObs) {
+  let boot = 0, bootM = 0;
+  if (truncated && env.pendObs && !groupOn()) {
     // bootstrap the value of the post-step state so truncation isn't
-    // mistaken for a real terminal
+    // mistaken for a real terminal (groups skip this — no critic there)
     const obs = new Float64Array(OBS_DIM);
     buildObs(env.car, obs);
-    env.rewAcc += gammaNow * critic.forward(obs)[0];
+    boot = cfg.gamma * critic.forward(obs)[0];
+    if (env.pendObsM) {
+      const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
+      bootM = cfg.gamma * critic.forward(obsM)[0];
+    }
   }
-  commitTransition(env, true);
+  commitTransition(env, true, boot, bootM);
   recentReturns.push(env.epReturn);
   if (recentReturns.length > 50) recentReturns.shift();
+  if (groupOn()) {
+    // park; the group respawns together once its last member finishes
+    env.gFit = env.epReturn;
+    env.gDone = true;
+    const g = (i / (cfg.groupSize | 0)) | 0;
+    if (groupMembers(g).every(m => m.gDone)) finalizeGroup(g);
+    return;
+  }
   resetEnv(env, i);
 }
 
 // One physics tick for every env (dt = FIXED_DT).
 function stepOnce(dt) {
-  // Back-pressure (PPO): if an update is in flight and the next batch is
-  // already twice the horizon, pause collection so batches can't grow
-  // without bound at high speed multipliers.
+  // Back-pressure: if an update is in flight and the next batch is already
+  // twice the horizon, pause collection so batches can't grow without bound
+  // at high speed multipliers.
   if (_ppoRunning && agentSteps >= cfg.horizon * cfg.numEnvs * 2) return;
 
   simTime += dt;
-  const es = isES();
   for (let i = 0; i < envs.length; i++) {
     const env = envs[i];
-    if (es && env.esDone) continue;  // parked until the generation closes
+    if (env.gDone) continue;  // parked until its group's last member finishes
     const car = env.car;
 
     // ── New agent decision at the start of each repeat window ──
     if (env.repCount <= 0) {
+      commitTransition(env, false); // finalize previous window (non-terminal)
       const obs = new Float64Array(OBS_DIM);
       buildObs(car, obs);
-      if (es) {
-        // deterministic perturbed policy — exploration is in parameter space
-        const mean = env.esNet.forward(obs);
-        for (let d = 0; d < ACT_DIM; d++) env.curAct[d] = mean[d];
-      } else {
-        commitTransition(env, false); // finalize previous window (non-terminal)
-        const mean = actor.forward(obs);
-        for (let d = 0; d < ACT_DIM; d++) {
-          env.curAct[d] = mean[d] + Math.exp(logStd[d]) * gauss();
-        }
-        env.pendObs  = obs;
-        env.pendLogp = logProb(env.curAct, mean);
-        env.pendVal  = critic.forward(obs)[0];
+      const pol = actingNet(env);   // true actor, or the defect-masked copy
+      const mean = pol.forward(obs);
+      for (let d = 0; d < ACT_DIM; d++) {
+        env.curAct[d] = mean[d] + Math.exp(logStd[d]) * gauss();
       }
+      env.pendObs  = obs;
+      env.pendLogp = logProb(env.curAct, mean);
+      env.pendVal  = groupOn() ? 0 : critic.forward(obs)[0];
+      if (cfg.mirror) {
+        // synthetic twin: mirrored observation + mirrored action, with its
+        // own behavior log-prob/value so PPO's ratio and GAE stay exact
+        const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
+        const actM = mirrorActInto(env.curAct, new Float64Array(ACT_DIM));
+        env.pendObsM  = obsM;
+        env.pendActM  = actM;
+        env.pendLogpM = logProb(actM, pol.forward(obsM));
+        env.pendValM  = groupOn() ? 0 : critic.forward(obsM)[0];
+      }
+      if (cfg.neuronRepair && (totalSteps & 31) === 0) reservoirOffer(obs);
       env.repCount = cfg.actionRepeat;
       // Memory write: rate-limited delta from the memory actions. Applied
       // after the observation snapshot, so the new value appears in the
@@ -864,13 +1130,15 @@ function stepOnce(dt) {
     }
   }
 
-  // ── Trigger updates ──
-  if (es) {
-    // a generation closes when every env has finished its episode; the ES
-    // update is O(params·N) — instant, so it runs synchronously
-    if (envs.length && envs.every(e => e.esDone)) {
-      esUpdate();
-      esStartGeneration();
+  // ── Trigger async PPO update when the rollout buffer is full ──
+  if (groupOn()) {
+    // group mode: only whole finished groups are trainable
+    if (readyBatch.OBS.length >= cfg.horizon * cfg.numEnvs && !_ppoRunning) {
+      _ppoRunning = true;
+      const batch = { ...readyBatch, N: readyBatch.OBS.length, grouped: true };
+      readyBatch = { OBS: [], ACT: [], LOGP: [], ADV: [], RET: [] };
+      agentSteps = 0;
+      _runPPO(batch);
     }
   } else if (agentSteps >= cfg.horizon * cfg.numEnvs && !_ppoRunning) {
     _ppoRunning = true;
@@ -878,74 +1146,6 @@ function stepOnce(dt) {
     agentSteps = 0;
     if (batch.N >= 8) _runPPO(batch); else _ppoRunning = false;
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Evolution strategies — OpenAI-ES with antithetic sampling + centered-rank
-//  fitness shaping, Adam on the estimated ascent direction. The entire
-//  update is a few hundred thousand multiply-adds; the expensive part of ES
-//  is the simulation, which this trainer runs anyway.
-// ─────────────────────────────────────────────────────────────────────────────
-
-let esSigmaUsed = 0.1;   // σ the current generation was drawn with (cfg.esSigma
-                         // is live and may change while episodes run)
-
-function esStartGeneration() {
-  const base = actor.flatF64();
-  const P = base.length;
-  esSigmaUsed = Math.max(0.005, cfg.esSigma);
-  for (let i = 0; i < envs.length; i++) {
-    const env = envs[i];
-    if (i % 2 === 0) {
-      // fresh noise; the next env mirrors it (antithetic pair)
-      const eps = new Float64Array(P);
-      for (let k = 0; k < P; k++) eps[k] = gauss();
-      env.esEps = eps;
-      env.esSign = 1;
-    } else {
-      env.esEps = envs[i - 1].esEps;
-      env.esSign = -1;
-    }
-    const w = new Float64Array(P);
-    const s = esSigmaUsed * env.esSign;
-    for (let k = 0; k < P; k++) w[k] = base[k] + s * env.esEps[k];
-    if (!env.esNet) env.esNet = new Net(actor.sizes, 1);
-    env.esNet.loadFlat(w);
-    env.esDone = false;
-    env.esFit = 0;
-    resetEnv(env, i);
-  }
-}
-
-function esUpdate() {
-  const n = envs.length;
-  // centered ranks in [−0.5, 0.5] — robust to the reward scale and to the
-  // huge fitness outliers a single lap bonus produces
-  const order = envs.map((_, i) => i).sort((a, b) => envs[a].esFit - envs[b].esFit);
-  const u = new Float64Array(n);
-  for (let r = 0; r < n; r++) u[order[r]] = n > 1 ? r / (n - 1) - 0.5 : 0;
-
-  const P = actor.paramCount();
-  const g = new Float64Array(P);
-  for (let i = 0; i < n; i++) {
-    const env = envs[i];
-    const w = u[i] * env.esSign;
-    if (!w) continue;
-    const eps = env.esEps;
-    for (let k = 0; k < P; k++) g[k] += w * eps[k];
-  }
-  // Adam minimizes, so feed it the NEGATED ascent estimate
-  const scale = -1 / (n * esSigmaUsed);
-  for (let k = 0; k < P; k++) g[k] *= scale;
-  actor.loadGradFlat(g);
-  actor.adamStep(cfg.esLr, 1);
-
-  iteration++;
-  let mean = 0, best = -Infinity;
-  for (const e of envs) { mean += e.esFit / n; if (e.esFit > best) best = e.esFit; }
-  lastLoss = { pi: mean, v: best, ent: 0 };  // repurposed: generation mean/best
-  if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
-  else updateBestSnapshot();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1100,22 +1300,18 @@ function _flushBatch() {
   for (const env of envs) { commitTransition(env, false); env.repCount = 0; }
 
   const OBS = [], ACT = [], LOGP = [], ADV = [], RET = [];
-  for (const env of envs) {
-    const b = env.buf, T = b.obs.length;
-    if (!T) continue;
-    let nextVal = 0;
-    if (!b.done[T - 1]) {
-      const obs = new Float64Array(OBS_DIM);
-      buildObs(env.car, obs);
-      nextVal = critic.forward(obs)[0];
-    }
+
+  // GAE over one rollout chain; nextVal bootstraps an unfinished tail.
+  const flushChain = (b, nextVal) => {
+    const T = b.obs.length;
+    if (!T) return;
     let gae = 0;
     const adv = new Float64Array(T);
     for (let t = T - 1; t >= 0; t--) {
       const nonTerm = 1 - b.done[t];
       const nextV = t === T - 1 ? nextVal : b.val[t + 1];
-      const delta = b.rew[t] + gammaNow * nextV * nonTerm - b.val[t];
-      gae = delta + gammaNow * cfg.lam * nonTerm * gae;
+      const delta = b.rew[t] + cfg.gamma * nextV * nonTerm - b.val[t];
+      gae = delta + cfg.gamma * cfg.lam * nonTerm * gae;
       adv[t] = gae;
     }
     for (let t = 0; t < T; t++) {
@@ -1124,6 +1320,22 @@ function _flushBatch() {
     }
     b.obs.length = 0; b.act.length = 0; b.logp.length = 0;
     b.val.length = 0; b.rew.length = 0; b.done.length = 0;
+  };
+
+  for (const env of envs) {
+    let nextVal = 0, nextValM = 0;
+    const open = env.buf.obs.length && !env.buf.done[env.buf.obs.length - 1];
+    if (open) {
+      const obs = new Float64Array(OBS_DIM);
+      buildObs(env.car, obs);
+      nextVal = critic.forward(obs)[0];
+      if (env.bufM.obs.length) {
+        const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
+        nextValM = critic.forward(obsM)[0];
+      }
+    }
+    flushChain(env.buf, nextVal);
+    flushChain(env.bufM, nextValM);
   }
   return { OBS, ACT, LOGP, ADV, RET, N: OBS.length };
 }
@@ -1179,33 +1391,22 @@ function updateBestSnapshot() {
   let avg = 0; for (const r of tail) avg += r; avg /= tail.length;
   curAvg = avg;
   if (!best || avg > best.avg) {
-    best = isES()
-      ? { algo: 'es', aFlat: actor.flatF64(), avg, iter: iteration }
-      : {
-        algo: 'ppo',
-        aFlat: actor.flatF64(), cFlat: critic.flatF64(),
-        logStd: Float64Array.from(logStd),
-        avg, iter: iteration,
-      };
+    best = {
+      aFlat: actor.flatF64(), cFlat: critic.flatF64(),
+      logStd: Float64Array.from(logStd),
+      avg, iter: iteration,
+    };
   }
 }
 
-// Restore the best snapshot. Only call between updates (weights must not
+// Restore the best snapshot. Only call between PPO updates (weights must not
 // change while gradient tasks are in flight).
 function loadBestSnapshot() {
   if (!best) return;
   actor.loadFlat(best.aFlat);
-  actor.resetAdam();
-  if (isES()) {
-    // exploration is parameter noise — nothing to re-open; abandon the
-    // running generation and re-perturb every env from the restored θ
-    recentReturns = [];
-    curAvg = null;
-    esStartGeneration();
-    return;
-  }
   critic.loadFlat(best.cFlat);
   logStd.set(best.logStd);
+  actor.resetAdam();
   critic.resetAdam();
   lsM.fill(0); lsV.fill(0); lsT = 0;
   // Re-open exploration a little: the abandoned direction was a dead end, so
@@ -1214,15 +1415,15 @@ function loadBestSnapshot() {
   // Drop rollouts and episode stats gathered under the abandoned policy —
   // stale transitions would train the restored weights toward it again.
   for (const env of envs) {
-    const b = env.buf;
-    b.obs.length = 0; b.act.length = 0; b.logp.length = 0;
-    b.val.length = 0; b.rew.length = 0; b.done.length = 0;
-    env.pendObs = null; env.rewAcc = 0; env.repCount = 0;
+    clearChains(env);
+    env.pendObs = null; env.pendObsM = null; env.rewAcc = 0; env.repCount = 0;
   }
+  readyBatch = { OBS: [], ACT: [], LOGP: [], ADV: [], RET: [] };
   agentSteps = 0;
   recentReturns = [];
   curAvg = null;
   sendTfWeights();  // keep the GPU backend's resident weights in sync
+  refreshFailNets();  // defect copies must act with the restored weights
 }
 
 async function _runPPO(batch) {
@@ -1236,9 +1437,30 @@ async function _runPPO(batch) {
   for (let k = 0; k < N; k++) ADV[k] = (ADV[k] - mean) / std;
 
   const idx = Array.from({ length: N }, (_, k) => k);
-  const hp = { clip: cfg.clip, entropyCoef: cfg.entropyCoef, vfCoef: cfg.vfCoef };
+  const hp = {
+    clip: cfg.clip, entropyCoef: cfg.entropyCoef,
+    // group mode has no critic to train — advantages came from the group
+    vfCoef: batch.grouped ? 0 : cfg.vfCoef,
+    klStop: !!cfg.klStop, klLimit: cfg.klLimit,
+  };
   let sumPi = 0, sumV = 0, sumEnt = 0, nMB = 0;
   let gpuDone = false;
+
+  // KL movement estimate (k3, always ≥ 0) of the live actor vs the stored
+  // behavior log-probs, on a fixed subsample. Used to stop epochs early once
+  // the policy has drifted klLimit past where it started this update.
+  const klSample = Math.min(512, N);
+  const klEstimate = () => {
+    let kl = 0;
+    for (let t = 0; t < klSample; t++) {
+      const s = ((t * 2654435761) >>> 0) % N;  // fixed quasi-random subsample
+      const d = Math.min(20, logProb(ACT[s], actor.forward(OBS[s])) - LOGP[s]);
+      kl += (Math.exp(d) - 1) - d;
+    }
+    return kl / klSample;
+  };
+  const kl0 = cfg.klStop ? klEstimate() : 0;
+  let epochsRan = 0;
 
   // ── GPU path: the COMPLETE update (all epochs, shuffling, Adam) runs on the
   //    TF.js worker; the new weights come back in one message ────────────────
@@ -1272,6 +1494,8 @@ async function _runPPO(batch) {
       critic.loadFlat(r.criticFlat);
       for (let d2 = 0; d2 < ACT_DIM; d2++) logStd[d2] = r.logStd[d2];
       lastLoss = r.loss;
+      lastEpochs = r.epochs || cfg.epochs;
+      lastKl = r.kl || 0;
       gpuDone = true;
     } catch (err) {
       _tfFail(String(err && err.message || err));
@@ -1360,13 +1584,26 @@ async function _runPPO(batch) {
 
       sumPi += mbPi / bs; sumV += mbV / bs; sumEnt += mbEnt / bs; nMB++;
     }
+
+    epochsRan = ep + 1;
+    if (cfg.klStop) {
+      const kl = klEstimate() - kl0;
+      lastKl = kl;
+      if (kl > cfg.klLimit) break;  // policy moved far enough — extra epochs
+                                    // would only overfit this batch
+    }
   }
+  if (!gpuDone) lastEpochs = epochsRan;
 
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
   iteration++;
   if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
   else updateBestSnapshot();
-  adaptGamma();  // raise γ on long reward stagnation, ease back on progress
+  if (_repairPending || (cfg.neuronRepair && iteration % REPAIR_EVERY === 0)) {
+    _repairPending = false;
+    repairPass();
+  }
+  if (cfg.failRate > 0) refreshFailNets();  // defect copies track new weights
   _ppoRunning = false;
   if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
 }
@@ -1391,26 +1628,32 @@ function buildSnapshot() {
     const tail = recentReturns.slice(-20);
     avgReturn = tail.reduce((s, v) => s + v, 0) / tail.length;
   }
-  const es = isES();
   const snap = {
     type: 'frame',
     cars: carData,
-    algo: cfg.algo,
     iteration,
     totalSteps,
-    bufferFill: es
-      ? (envs.length ? envs.filter(e => e.esDone).length / envs.length : 0)
-      : Math.min(1, agentSteps / (cfg.horizon * cfg.numEnvs)),
+    bufferFill: Math.min(1, (groupOn() ? readyBatch.OBS.length : agentSteps) /
+                            (cfg.horizon * cfg.numEnvs)),
     phase: _ppoRunning ? 'updating' : 'collecting',
+    // PPO-mod status for the HUD
+    mods: {
+      groupSize: cfg.groupSize | 0,
+      mirror: !!cfg.mirror,
+      klStop: !!cfg.klStop,
+      epochs: lastEpochs,
+      epochsMax: cfg.epochs,
+      kl: lastKl,
+      repair: cfg.neuronRepair ? { ...repairStats } : null,
+      masked: cfg.failRate > 0 ? envs.filter(e => e.actNet).length : 0,
+    },
     gradThreads: gradPool ? gradPool.length : 0,
-    backend: es ? 'sim'
-           : gpuState === 'ready'  ? 'gpu'
+    backend: gpuState === 'ready'  ? 'gpu'
            : gpuState === 'init'   ? 'gpu-init'
            : gpuState === 'failed' ? 'gpu-failed'
            : (gradPool && gradPool.length && _wasmOk && cfg.backend !== 'js') ? 'wasm'
            : 'js',
-    backendInfo: es ? 'ES needs no gradient compute — all CPU goes into the simulation'
-               : gpuState === 'failed' ? gpuInfo
+    backendInfo: gpuState === 'failed' ? gpuInfo
                : gpuState === 'init'   ? gpuInfo
                : gpuState === 'ready'  ? gpuInfo
                : _wasmErr ? 'WASM unavailable: ' + _wasmErr
@@ -1419,9 +1662,7 @@ function buildSnapshot() {
     bestLap: Number.isFinite(bestLap) ? bestLap : null,
     episodes: recentReturns.length,
     loss: lastLoss,
-    sigma: es ? [cfg.esSigma, cfg.esSigma]
-         : logStd ? [Math.exp(logStd[0]), Math.exp(logStd[1])] : null,
-    gamma: es ? null : gammaNow,
+    sigma: logStd ? [Math.exp(logStd[0]), Math.exp(logStd[1])] : null,
     best: best ? { avg: best.avg, iter: best.iter, cur: curAvg } : null,
   };
   // actor weights for the visualiser — heavy, send ~once per second
@@ -1498,15 +1739,9 @@ self.onmessage = function (e) {
 
     running = false;
     stopLoop();
-    // ES does all its math inline — no gradient pool, no GPU worker
-    if (!isES()) initGradPool();
+    initGradPool();
     initSim(model || null);
-    if (isES()) {
-      if (tfWorker) { try { tfWorker.terminate(); } catch { /* dead */ } tfWorker = null; }
-      gpuState = 'off'; gpuInfo = '';
-    } else {
-      initGpu();
-    }
+    initGpu();
     postMessage({
       type: 'ready', obsDim: OBS_DIM, actorSizes: actor.sizes,
       numEnvs: cfg.numEnvs, gradThreads: gradPool ? gradPool.length : 0,
@@ -1538,13 +1773,26 @@ self.onmessage = function (e) {
 
   if (type === 'setConfig') {
     const prevThreads = desiredThreads();
+    const prevFail = cfg.failRate;
     Object.assign(cfg, e.data.config);
-    if (!cfg.gammaAuto) gammaNow = cfg.gamma;  // auto-γ off → pin to the base
     if (gradPool !== null && desiredThreads() !== prevThreads) {
       // resize the pool — deferred while an update has tasks in flight
       if (_ppoRunning) _poolRebuild = true;
       else initGradPool(true);
     }
+    // failure rate flipped — apply to the live agents right away
+    if (cfg.failRate > 0 && prevFail === 0 && envs.length) {
+      for (const env of envs) rollFailMask(env);
+    } else if (cfg.failRate === 0 && prevFail > 0) {
+      for (const env of envs) env.actNet = null;
+    }
+    return;
+  }
+
+  if (type === 'repairNow') {
+    // manual repair pass; deferred while gradient tasks hold the weights
+    if (_ppoRunning) _repairPending = true;
+    else repairPass();
     return;
   }
 
@@ -1566,28 +1814,25 @@ self.onmessage = function (e) {
     // weights may have drifted past their peak. { which: 'current' } forces
     // the live weights.
     const useBest = !!best && e.data.which !== 'current';
-    const common = {
-      version: 3,
-      obsDim: OBS_DIM,
-      actDim: ACT_DIM,
-      actor: { sizes: actor.sizes, flat: useBest ? Array.from(best.aFlat) : actor.flat() },
-      iteration: useBest ? best.iter : iteration,
-      totalSteps,
-      bestLap: Number.isFinite(bestLap) ? bestLap : null,
-      snapshot: useBest ? 'best-average' : 'current',
-      avgReturn: useBest ? best.avg : curAvg,
-    };
-    const model = isES()
-      ? { id: 'ai-trainer-es', name: 'AI Trainer ES Export', algo: 'es', ...common }
-      : {
+    postMessage({
+      type: 'modelExport',
+      model: {
         id: 'ai-trainer-ppo',
         name: 'AI Trainer PPO Export',
+        version: 3,
         algo: 'ppo',
-        ...common,
+        obsDim: OBS_DIM,
+        actDim: ACT_DIM,
+        actor:  { sizes: actor.sizes,  flat: useBest ? Array.from(best.aFlat) : actor.flat()  },
         critic: { sizes: critic.sizes, flat: useBest ? Array.from(best.cFlat) : critic.flat() },
         logStd: Array.from(useBest ? best.logStd : logStd),
-      };
-    postMessage({ type: 'modelExport', model });
+        iteration: useBest ? best.iter : iteration,
+        totalSteps,
+        bestLap: Number.isFinite(bestLap) ? bestLap : null,
+        snapshot: useBest ? 'best-average' : 'current',
+        avgReturn: useBest ? best.avg : curAvg,
+      },
+    });
     return;
   }
 };

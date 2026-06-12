@@ -6,9 +6,8 @@ import { state } from './state.js';
 //
 //  Reproduces the exact observation layout of ai-trainer/scripts/sim-worker.js
 //  (40 inputs: 11 track-edge rays, 7 wall rays, 6 state scalars, 6 centerline
-//  probes × 2, 4 memory cells) and runs the exported actor network
+//  probes × 2, 4 memory cells) and runs the exported PPO actor network
 //  deterministically (mean action, no exploration noise) on a real race Car.
-//  PPO and ES exports share the same actor shape, so both drive here.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'turborace_trained_ai_model';
@@ -53,9 +52,8 @@ function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
 
 /** Throws with a human-readable message if the model can't drive here. */
 export function validateTrainedModel(model) {
-  const okAlgo = model && (model.algo === 'ppo' || model.algo === 'es');
-  if (!okAlgo || !model.actor || !Array.isArray(model.actor.sizes) || !Array.isArray(model.actor.flat)) {
-    throw new Error('Not an AI Trainer PPO/ES export');
+  if (!model || model.algo !== 'ppo' || !model.actor || !Array.isArray(model.actor.sizes) || !Array.isArray(model.actor.flat)) {
+    throw new Error('Not an AI Trainer PPO export');
   }
   const sizes = model.actor.sizes;
   if (model.obsDim !== OBS_DIM || sizes[0] !== OBS_DIM || sizes[sizes.length - 1] !== ACT_DIM) {
