@@ -18,12 +18,14 @@
     <button class="toolBtn"        data-tool="road"   title="Draw Road (R)">&#9135; ROAD</button>
     <button class="toolBtn"        data-tool="erase"  title="Erase (E)">&#10007; ERASE</button>
     <button class="toolBtn"        data-tool="brush"  title="Paint Assets (B)">&#9998; BRUSH</button>
+    <button class="toolBtn"        data-tool="cure"   title="Cure / Cleanup (C)">&#10010; CURE</button>
+    <button class="toolBtn"        data-tool="city"   title="Spawn City Grid (Y)">&#8962; CITY</button>
   </div>
 
   <div class="toolSep"></div>
 
   <div class="toolGroup" style="font-size:11px;color:#4a5870;letter-spacing:1px;">
-    S·N·R·E·B keys&nbsp;·&nbsp;Del deletes&nbsp;·&nbsp;G toggles snap&nbsp;·&nbsp;Scroll zooms&nbsp;·&nbsp;Right-drag pans
+    S·N·R·E·B·C·Y keys&nbsp;·&nbsp;Del deletes&nbsp;·&nbsp;G toggles snap&nbsp;·&nbsp;Scroll zooms&nbsp;·&nbsp;Right-drag pans
   </div>
 
   <div id="topRight">
@@ -85,7 +87,7 @@
       </div>
     </div>
 
-    <!-- New road defaults (used when drawing roads) -->
+    <!-- New road defaults -->
     <div class="editorSection">
       <div class="editorLabel">New Road Defaults</div>
       <div class="editorGrid2">
@@ -103,7 +105,7 @@
           <input id="newRoadWidth" type="number" min="4" max="40" value="12">
         </label>
       </div>
-      <div class="editorHint">These defaults apply to newly drawn roads. You can change each road's properties individually after selecting it.</div>
+      <div class="editorHint">Defaults for newly drawn roads. Change each road individually after selecting.</div>
     </div>
 
     <!-- Selected element: Node -->
@@ -198,6 +200,67 @@
       </label>
     </div>
 
+    <!-- Cure tool -->
+    <div class="editorSection">
+      <div class="editorLabel">&#10010; Cure Tool <span class="toolKeyHint">C</span></div>
+      <div class="editorHint" style="margin-bottom:10px;">Click an orphan node (red) to remove it. Click any road to auto-curve or straighten it. Orphan nodes are highlighted with a dashed ring.</div>
+      <div class="editorRow">
+        <button class="btn btn-s" id="btnCureOrphans">REMOVE ORPHANS</button>
+        <button class="btn btn-s" id="btnStraightenAll">STRAIGHTEN ALL</button>
+      </div>
+    </div>
+
+    <!-- City spawner -->
+    <div class="editorSection">
+      <div class="editorLabel">&#8962; City Spawner <span class="toolKeyHint">Y</span></div>
+      <div class="editorGrid2">
+        <label class="editorField">
+          <span>Grid Size <strong id="citySizeVal">3&times;3</strong></span>
+          <input id="citySize" type="range" min="2" max="8" step="1" value="3">
+        </label>
+        <label class="editorField">
+          <span>Block <strong id="cityBlockSizeVal">80</strong>m</span>
+          <input id="cityBlockSize" type="range" min="30" max="200" step="10" value="80">
+        </label>
+      </div>
+      <label class="editorField">
+        <span>Road Type</span>
+        <select id="cityRoadType">
+          <option value="street" selected>Street</option>
+          <option value="highway">Highway</option>
+          <option value="country">Country</option>
+          <option value="lane">Lane</option>
+        </select>
+      </label>
+      <div class="editorHint">Switch to CITY tool then click the canvas to place a city grid. A live preview follows your cursor.</div>
+    </div>
+
+    <!-- Road scenery -->
+    <div class="editorSection">
+      <div class="editorLabel">Road Scenery</div>
+      <label class="editorField">
+        <span>Density <strong id="sceneryDensityVal">3</strong> per 100m</span>
+        <input id="sceneryDensity" type="range" min="1" max="10" step="1" value="3">
+      </label>
+      <label class="editorField">
+        <span>Side Offset <strong id="sceneryOffsetVal">8</strong>m</span>
+        <input id="sceneryOffset" type="range" min="2" max="30" step="1" value="8">
+      </label>
+      <label class="editorField">
+        <span>Asset Mix</span>
+        <select id="sceneryMix">
+          <option value="trees">Trees Only</option>
+          <option value="mixed" selected>Trees &amp; Buildings</option>
+          <option value="dense">Dense (All Types)</option>
+        </select>
+      </label>
+      <div class="editorRow">
+        <button class="btn btn-p" id="btnGenScenery">GENERATE</button>
+        <button class="btn btn-danger" id="btnClearScenery">CLEAR</button>
+      </div>
+      <div class="editorHint">Auto-places assets along all roads respecting road width. CLEAR only removes auto-generated scenery, not hand-placed assets.</div>
+    </div>
+
     <!-- Grid snap -->
     <div class="editorSection">
       <div class="editorLabel">Canvas</div>
@@ -230,7 +293,7 @@
   <div id="canvasWrap">
     <canvas id="editorCanvas"></canvas>
     <div id="canvasHint">
-      SELECT drag nodes &amp; roads &nbsp;·&nbsp; NODE click to place &nbsp;·&nbsp; ROAD click two nodes &nbsp;·&nbsp; ERASE click to delete &nbsp;·&nbsp; BRUSH click to paint
+      SELECT drag nodes &amp; roads &nbsp;·&nbsp; NODE click to place &nbsp;·&nbsp; ROAD click two nodes &nbsp;·&nbsp; ERASE click to delete &nbsp;·&nbsp; BRUSH click to paint &nbsp;·&nbsp; CURE click to fix &nbsp;·&nbsp; CITY click to spawn grid
     </div>
     <!-- Node color legend -->
     <div id="legend">
