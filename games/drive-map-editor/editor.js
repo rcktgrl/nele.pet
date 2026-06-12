@@ -2,15 +2,12 @@
 
 // ════════════════════════════════════════════════════════════════
 //  DRIVE MAP EDITOR
-//  Node-based road network editor. Nodes are junctions/dead-ends;
-//  roads connect pairs of nodes and each carries its own width,
-//  type, and optional bezier control points.
 // ════════════════════════════════════════════════════════════════
 
 const STORAGE_KEY = 'drive_maps_v1';
-const HIT_NODE    = 14;   // px — pointer hit radius for nodes
-const HIT_ASSET   = 12;   // px
-const NODE_R      = 8;    // display radius (base)
+const HIT_NODE    = 14;
+const HIT_ASSET   = 12;
+const NODE_R      = 8;
 
 const ROAD_TYPES = {
   highway: { col: '#28283a', dash: '#48485a', label: 'Highway', defW: 22 },
@@ -46,6 +43,12 @@ let wptDrag = null;    // { roadId, ptIdx } — bezier handle drag
 
 // Brush settings
 let brushType = 'tree', brushCount = 1, brushSpacing = 20;
+
+// City spawner settings
+let citySize = 3, cityBlockSize = 80, cityRoadType = 'street';
+
+// Road scenery settings
+let sceneryDensity = 3, sceneryOffset = 8, sceneryMix = 'mixed';
 
 // Snap
 let snapSize = 0;
@@ -110,7 +113,6 @@ function drawGrid() {
     const [, sy] = w2s(0, wz);
     ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(canvas.width, sy); ctx.stroke();
   }
-  // Origin cross
   const [ox, oy] = w2s(0, 0);
   ctx.strokeStyle = 'rgba(255,255,255,.08)';
   ctx.lineWidth = 1;
@@ -127,12 +129,10 @@ function drawRoadPath(pts) {
     const [x1, y1] = w2s(pts[1].x, pts[1].z);
     ctx.lineTo(x1, y1);
   } else if (pts.length === 3) {
-    // Single control point → quadratic bezier
     const [cx, cy] = w2s(pts[1].x, pts[1].z);
     const [x2, y2] = w2s(pts[2].x, pts[2].z);
     ctx.quadraticCurveTo(cx, cy, x2, y2);
   } else {
-    // Multiple waypoints → polyline (Catmull-Rom could replace this)
     for (let i = 1; i < pts.length; i++) {
       const [xi, yi] = w2s(pts[i].x, pts[i].z);
       ctx.lineTo(xi, yi);
@@ -149,7 +149,6 @@ function drawRoads() {
     const isSel  = road.id === selRoad;
     const isHov  = road.id === hoverRoad && !isSel;
 
-    // Selection / hover glow
     if (isSel || isHov) {
       ctx.save();
       ctx.strokeStyle = isSel ? 'rgba(255,85,0,.5)' : 'rgba(255,215,0,.35)';
@@ -159,13 +158,11 @@ function drawRoads() {
       ctx.restore();
     }
 
-    // Road surface
     ctx.strokeStyle = rStyle.col;
     ctx.lineWidth   = rw;
     ctx.lineCap = ctx.lineJoin = 'round';
     drawRoadPath(pts); ctx.stroke();
 
-    // Center line (only when large enough to see)
     if (rw > 12) {
       ctx.strokeStyle = rStyle.dash;
       ctx.lineWidth   = Math.max(1, rw * 0.07);
@@ -174,20 +171,17 @@ function drawRoads() {
       ctx.setLineDash([]);
     }
 
-    // Waypoint handles on selected road
     if (isSel) drawWaypointHandles(road, pts);
   }
 }
 
 function drawWaypointHandles(road, pts) {
-  // Existing waypoint handles
   for (let i = 1; i < pts.length - 1; i++) {
     const [sx, sy] = w2s(pts[i].x, pts[i].z);
     ctx.beginPath(); ctx.arc(sx, sy, 6, 0, Math.PI * 2);
     ctx.fillStyle = '#ffd700'; ctx.fill();
     ctx.strokeStyle = '#050a14'; ctx.lineWidth = 1.5; ctx.stroke();
   }
-  // Mid-point handle when no waypoints (invites the user to curve the road)
   if (road.waypoints.length === 0 && pts.length === 2) {
     const mx = (pts[0].x + pts[1].x) / 2, mz = (pts[0].z + pts[1].z) / 2;
     const [sx, sy] = w2s(mx, mz);
@@ -206,24 +200,32 @@ function drawNodes() {
     const [sx, sy] = w2s(node.x, node.z);
     const r = NODE_R + (conns > 2 ? 2 : 0);
 
-    // Glow ring
     if (isSel || isHov || isConn) {
       ctx.beginPath(); ctx.arc(sx, sy, r + 6, 0, Math.PI * 2);
       ctx.fillStyle = isConn ? 'rgba(255,85,0,.3)' : isSel ? 'rgba(255,215,0,.28)' : 'rgba(100,200,255,.2)';
       ctx.fill();
     }
 
+    // Cure tool: highlight orphans with a pulsing ring
+    if (tool === 'cure' && conns === 0) {
+      ctx.beginPath(); ctx.arc(sx, sy, r + 9, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,80,80,.55)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2);
     ctx.fillStyle = isConn ? '#ff5500' :
                     isSel   ? '#ffd700' :
                     isHov   ? '#9de'    :
-                    conns === 0 ? '#f55' :  // orphan
-                    conns === 1 ? '#4af' :  // dead end
-                                 '#7df';   // intersection
+                    conns === 0 ? '#f55' :
+                    conns === 1 ? '#4af' :
+                                 '#7df';
     ctx.fill();
     ctx.strokeStyle = '#050a14'; ctx.lineWidth = 2; ctx.stroke();
 
-    // Connection count label for multi-way intersections
     if (conns >= 3 && zoom > 1.1) {
       ctx.fillStyle = '#050a14';
       ctx.font = 'bold 8px Orbitron,monospace';
@@ -258,6 +260,9 @@ function drawAssets() {
 }
 
 function drawOverlay() {
+  // City grid preview
+  if (tool === 'city' && map) drawCityPreview(snp(mouseWX), snp(mouseWZ));
+
   // Dashed preview line when drawing a road
   if (tool === 'road' && connectFrom >= 0) {
     const from = getNode(connectFrom);
@@ -274,11 +279,37 @@ function drawOverlay() {
     }
   }
   // Snap cursor indicator
-  if (snapSize > 0 && (tool === 'node' || (tool === 'road' && connectFrom < 0))) {
+  if (snapSize > 0 && (tool === 'node' || (tool === 'road' && connectFrom < 0) || tool === 'city')) {
     const [sx, sy] = w2s(snp(mouseWX), snp(mouseWZ));
     ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(255,255,100,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
   }
+}
+
+function drawCityPreview(wx, wz) {
+  const blocks = citySize;
+  const bs     = cityBlockSize;
+  const half   = blocks / 2;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(100,200,255,.3)';
+  ctx.lineWidth   = Math.max(1.5, bs * zoom * 0.05);
+  ctx.lineCap = ctx.lineJoin = 'round';
+  ctx.setLineDash([6, 6]);
+  for (let r = 0; r <= blocks; r++) {
+    const [x0, y0] = w2s(wx - half * bs,             wz + (r - half) * bs);
+    const [x1, y1] = w2s(wx + (blocks - half) * bs,  wz + (r - half) * bs);
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  for (let c = 0; c <= blocks; c++) {
+    const [x0, y0] = w2s(wx + (c - half) * bs, wz - half * bs);
+    const [x1, y1] = w2s(wx + (c - half) * bs, wz + (blocks - half) * bs);
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  const [cx, cy] = w2s(wx, wz);
+  ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(100,200,255,.5)'; ctx.fill();
+  ctx.restore();
 }
 
 // ── Hit testing ────────────────────────────────────────────────
@@ -318,12 +349,10 @@ function hitWaypointHandle(sx, sy) {
   if (!road) return null;
   const pts = roadPts(road);
   if (!pts || pts.length < 2) return null;
-  // Existing waypoint handles
   for (let i = 1; i < pts.length - 1; i++) {
     const [hx, hy] = w2s(pts[i].x, pts[i].z);
     if (Math.hypot(sx - hx, sy - hy) < 12) return { roadId: road.id, ptIdx: i - 1 };
   }
-  // Mid-point create-handle when no waypoints
   if (road.waypoints.length === 0 && pts.length === 2) {
     const mx = (pts[0].x + pts[1].x) / 2, mz = (pts[0].z + pts[1].z) / 2;
     const [hx, hy] = w2s(mx, mz);
@@ -361,7 +390,6 @@ canvas.addEventListener('pointerdown', e => {
   if (!map) return;
 
   if (tool === 'select') {
-    // Bezier handle has highest priority
     const wph = hitWaypointHandle(sx, sy);
     if (wph) { wptDrag = wph; return; }
 
@@ -398,7 +426,6 @@ canvas.addEventListener('pointerdown', e => {
         finishRoad(connectFrom, nHit);
         connectFrom = -1;
       } else if (nHit < 0) {
-        // Place a new node and immediately connect
         const newId = nextNid;
         addNode(snp(wx), snp(wz));
         finishRoad(connectFrom, newId);
@@ -419,6 +446,12 @@ canvas.addEventListener('pointerdown', e => {
   } else if (tool === 'brush') {
     paintAssets(wx, wz);
     drag = { kind: 'brush' };
+
+  } else if (tool === 'cure') {
+    cureElement(sx, sy);
+
+  } else if (tool === 'city') {
+    spawnCity(snp(wx), snp(wz));
   }
 });
 
@@ -460,7 +493,7 @@ canvas.addEventListener('pointermove', e => {
   }
 
   // Hover updates
-  if (tool !== 'brush') {
+  if (tool !== 'brush' && tool !== 'city') {
     hoverNode  = hitNode(sx, sy);
     hoverAsset = hoverNode < 0 ? hitAsset(sx, sy) : -1;
     hoverRoad  = hoverNode < 0 && hoverAsset < 0 ? hitRoad(sx, sy) : -1;
@@ -636,6 +669,202 @@ function paintAssets(wx, wz) {
   }
 }
 
+// ── Cure tool ──────────────────────────────────────────────────
+function cureElement(sx, sy) {
+  const nHit = hitNode(sx, sy);
+  if (nHit >= 0) {
+    const conns = roadConnections(nHit);
+    if (conns === 0) {
+      deleteNode(nHit);
+      notify('ORPHAN REMOVED');
+    } else {
+      notify('NODE HAS ' + conns + ' CONNECTION(S)');
+    }
+    return;
+  }
+  const rHit = hitRoad(sx, sy);
+  if (rHit >= 0) {
+    cureRoad(rHit);
+  }
+}
+
+function cureRoad(roadId) {
+  const road = getRoad(roadId);
+  if (!road) return;
+  const a = getNode(road.nodeA), b = getNode(road.nodeB);
+  if (!a || !b) return;
+  if (road.waypoints.length > 0) {
+    road.waypoints = [];
+    notify('ROAD STRAIGHTENED');
+    return;
+  }
+  const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+  const dx = b.x - a.x, dz = b.z - a.z;
+  const len = Math.hypot(dx, dz);
+  if (len < 1) return;
+  // Alternate curve side based on road id for variety
+  const side   = ((road.id % 2) === 0) ? 1 : -1;
+  const offset = len * 0.18 * side;
+  road.waypoints = [{ x: mx + (-dz / len) * offset, z: mz + (dx / len) * offset }];
+  notify('ROAD CURVED');
+}
+
+function cureAllOrphans() {
+  if (!map) return;
+  const orphans = map.nodes.filter(n => roadConnections(n.id) === 0);
+  if (orphans.length === 0) { notify('NO ORPHANS FOUND'); return; }
+  orphans.forEach(n => deleteNode(n.id));
+  if (selNode >= 0 && !getNode(selNode)) { selNode = -1; syncSelectedUI(); }
+  notify('REMOVED ' + orphans.length + ' ORPHAN(S)');
+}
+
+function straightenAllRoads() {
+  if (!map) return;
+  let count = 0;
+  map.roads.forEach(r => { if (r.waypoints.length > 0) { r.waypoints = []; count++; } });
+  notify(count > 0 ? 'STRAIGHTENED ' + count + ' ROAD(S)' : 'ROADS ALREADY STRAIGHT');
+}
+
+// ── City spawner ───────────────────────────────────────────────
+function spawnCity(wx, wz) {
+  if (!map) return;
+  const blocks = citySize;
+  const bs     = cityBlockSize;
+  const half   = blocks / 2;
+  const rw     = ROAD_TYPES[cityRoadType]?.defW || 12;
+
+  // Build node grid
+  const grid = [];
+  for (let r = 0; r <= blocks; r++) {
+    grid[r] = [];
+    for (let c = 0; c <= blocks; c++) {
+      const node = { id: nextNid++, x: wx + (c - half) * bs, z: wz + (r - half) * bs };
+      map.nodes.push(node);
+      grid[r][c] = node.id;
+    }
+  }
+
+  // Horizontal roads
+  for (let r = 0; r <= blocks; r++) {
+    for (let c = 0; c < blocks; c++) {
+      map.roads.push({ id: nextRid++, nodeA: grid[r][c], nodeB: grid[r][c + 1],
+        width: rw, type: cityRoadType, waypoints: [] });
+    }
+  }
+  // Vertical roads
+  for (let r = 0; r < blocks; r++) {
+    for (let c = 0; c <= blocks; c++) {
+      map.roads.push({ id: nextRid++, nodeA: grid[r][c], nodeB: grid[r + 1][c],
+        width: rw, type: cityRoadType, waypoints: [] });
+    }
+  }
+
+  notify('CITY SPAWNED (' + blocks + '\xd7' + blocks + ')');
+}
+
+// ── Road scenery generation ────────────────────────────────────
+function bezierSample(pts, t) {
+  if (pts.length === 2) {
+    return { x: pts[0].x + (pts[1].x - pts[0].x) * t,
+             z: pts[0].z + (pts[1].z - pts[0].z) * t };
+  }
+  if (pts.length === 3) {
+    const u = 1 - t;
+    return { x: u*u*pts[0].x + 2*u*t*pts[1].x + t*t*pts[2].x,
+             z: u*u*pts[0].z + 2*u*t*pts[1].z + t*t*pts[2].z };
+  }
+  // Polyline fallback
+  let total = 0;
+  for (let i = 1; i < pts.length; i++)
+    total += Math.hypot(pts[i].x - pts[i-1].x, pts[i].z - pts[i-1].z);
+  const target = t * total;
+  let accum = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const seg = Math.hypot(pts[i].x - pts[i-1].x, pts[i].z - pts[i-1].z);
+    if (accum + seg >= target || i === pts.length - 1) {
+      const st = seg > 0 ? Math.min(1, (target - accum) / seg) : 0;
+      return { x: pts[i-1].x + (pts[i].x - pts[i-1].x) * st,
+               z: pts[i-1].z + (pts[i].z - pts[i-1].z) * st };
+    }
+    accum += seg;
+  }
+  return pts[pts.length - 1];
+}
+
+function bezierTangent(pts, t) {
+  const eps = 0.001;
+  const a = bezierSample(pts, Math.max(0, t - eps));
+  const b = bezierSample(pts, Math.min(1, t + eps));
+  const dx = b.x - a.x, dz = b.z - a.z;
+  const len = Math.hypot(dx, dz) || 1;
+  return { x: dx / len, z: dz / len };
+}
+
+function roadApproxLength(road) {
+  const pts = roadPts(road);
+  if (!pts || pts.length < 2) return 0;
+  if (pts.length === 2) return Math.hypot(pts[1].x - pts[0].x, pts[1].z - pts[0].z);
+  let len = 0;
+  const steps = 20;
+  for (let i = 0; i < steps; i++) {
+    const a = bezierSample(pts, i / steps);
+    const b = bezierSample(pts, (i + 1) / steps);
+    len += Math.hypot(b.x - a.x, b.z - a.z);
+  }
+  return len;
+}
+
+function getSceneryPalette(mix) {
+  switch (mix) {
+    case 'trees':  return ['tree', 'tree', 'tree', 'tree'];
+    case 'dense':  return ['tree', 'tree', 'building', 'park', 'stand', 'tree'];
+    default:       return ['tree', 'tree', 'tree', 'building', 'tree'];
+  }
+}
+
+function generateRoadScenery() {
+  if (!map) return;
+  const palette  = getSceneryPalette(sceneryMix);
+  const spacing  = Math.max(10, 100 / sceneryDensity);
+  let   count    = 0;
+  let   seed     = 0;
+
+  for (const road of map.roads) {
+    const pts    = roadPts(road);
+    if (!pts)    continue;
+    const len    = roadApproxLength(road);
+    if (len < 1) continue;
+    const steps  = Math.max(2, Math.ceil(len / spacing));
+    const sideOff = road.width / 2 + sceneryOffset;
+
+    for (let i = 0; i <= steps; i++) {
+      const t   = i / steps;
+      const pos = bezierSample(pts, t);
+      const tan = bezierTangent(pts, t);
+      const px  = -tan.z, pz = tan.x; // perpendicular
+
+      for (const side of [-1, 1]) {
+        const ax = pos.x + px * sideOff * side;
+        const az = pos.z + pz * sideOff * side;
+        if (map.assets.some(a => Math.hypot(a.x - ax, a.z - az) < spacing * 0.6)) continue;
+        const type = palette[(seed++) % palette.length];
+        map.assets.push({ type, x: ax, z: az, generated: true });
+        count++;
+      }
+    }
+  }
+  notify(count > 0 ? 'SCENERY: ' + count + ' ASSETS PLACED' : 'NO ROADS TO DECORATE');
+}
+
+function clearRoadScenery() {
+  if (!map) return;
+  const before = map.assets.length;
+  map.assets = map.assets.filter(a => !a.generated);
+  const removed = before - map.assets.length;
+  if (selAsset >= map.assets.length) { selAsset = -1; syncSelectedUI(); }
+  notify(removed > 0 ? 'CLEARED ' + removed + ' SCENERY ASSET(S)' : 'NO GENERATED SCENERY');
+}
+
 // ── UI helpers ─────────────────────────────────────────────────
 let _notifTimer = 0;
 function notify(msg) {
@@ -716,10 +945,12 @@ function setTool(t) {
   tool = t; connectFrom = -1;
   document.querySelectorAll('.toolBtn').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
   canvas.style.cursor =
-    t === 'node'  ? 'cell'         :
-    t === 'road'  ? 'crosshair'    :
-    t === 'erase' ? 'not-allowed'  :
-    t === 'brush' ? 'copy'         : 'default';
+    t === 'node'  ? 'cell'        :
+    t === 'road'  ? 'crosshair'   :
+    t === 'erase' ? 'not-allowed' :
+    t === 'brush' ? 'copy'        :
+    t === 'cure'  ? 'help'        :
+    t === 'city'  ? 'crosshair'   : 'default';
 }
 
 function syncBrushUI() {
@@ -832,6 +1063,38 @@ function bindUI() {
     el.addEventListener('click', () => { brushType = el.dataset.asset; setTool('brush'); syncBrushUI(); });
   });
 
+  // Cure tool
+  document.getElementById('btnCureOrphans').addEventListener('click', cureAllOrphans);
+  document.getElementById('btnStraightenAll').addEventListener('click', straightenAllRoads);
+
+  // City spawner
+  document.getElementById('citySize').addEventListener('input', e => {
+    citySize = +e.target.value;
+    document.getElementById('citySizeVal').textContent = citySize + '\xd7' + citySize;
+  });
+  document.getElementById('cityBlockSize').addEventListener('input', e => {
+    cityBlockSize = +e.target.value;
+    document.getElementById('cityBlockSizeVal').textContent = e.target.value;
+  });
+  document.getElementById('cityRoadType').addEventListener('change', e => {
+    cityRoadType = e.target.value;
+  });
+
+  // Road scenery
+  document.getElementById('sceneryDensity').addEventListener('input', e => {
+    sceneryDensity = +e.target.value;
+    document.getElementById('sceneryDensityVal').textContent = e.target.value;
+  });
+  document.getElementById('sceneryOffset').addEventListener('input', e => {
+    sceneryOffset = +e.target.value;
+    document.getElementById('sceneryOffsetVal').textContent = e.target.value;
+  });
+  document.getElementById('sceneryMix').addEventListener('change', e => {
+    sceneryMix = e.target.value;
+  });
+  document.getElementById('btnGenScenery').addEventListener('click', generateRoadScenery);
+  document.getElementById('btnClearScenery').addEventListener('click', clearRoadScenery);
+
   // Snap
   document.getElementById('snapToggle').addEventListener('change', e => {
     snapSize = e.target.checked ? 20 : 0;
@@ -846,6 +1109,8 @@ function bindUI() {
       case 'KeyR': setTool('road');    break;
       case 'KeyE': setTool('erase');   break;
       case 'KeyB': setTool('brush');   break;
+      case 'KeyC': setTool('cure');    break;
+      case 'KeyY': setTool('city');    break;
       case 'KeyG':
         snapSize = snapSize > 0 ? 0 : 20;
         document.getElementById('snapToggle').checked = snapSize > 0;
