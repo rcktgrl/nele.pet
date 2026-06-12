@@ -51,6 +51,9 @@ let citySize = 3, cityBlockSize = 80, cityRoadType = 'street';
 // Road scenery settings
 let sceneryDensity = 3, sceneryOffset = 8, sceneryMix = 'mixed';
 
+// Curvy road settings
+let curvyEnabled = false, curvyAmount = 3;
+
 // Snap
 let snapSize = 0;
 
@@ -698,6 +701,20 @@ function finishRoad(aId, bId) {
     type:   typeEl?.value  || 'street',
     waypoints: [],
   };
+  if (curvyEnabled) {
+    const a = getNode(aId), b = getNode(bId);
+    if (a && b) {
+      const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+      const dx = b.x - a.x, dz = b.z - a.z;
+      const len = Math.hypot(dx, dz);
+      if (len > 1) {
+        const maxOff = len * 0.08 * curvyAmount;
+        const side = Math.random() < 0.5 ? 1 : -1;
+        const offDist = maxOff * (0.4 + Math.random() * 0.6) * side;
+        road.waypoints = [{ x: mx + (-dz / len) * offDist, z: mz + (dx / len) * offDist }];
+      }
+    }
+  }
   map.roads.push(road);
   selRoad = road.id; selNode = selAsset = -1;
   syncSelectedUI();
@@ -817,7 +834,41 @@ function spawnCity(wx, wz) {
     }
   }
 
-  notify('CITY SPAWNED (' + blocks + '\xd7' + blocks + ')');
+  // Auto-place buildings and parks in each block
+  let seed = ((wx * 1234 + wz * 5678) | 0) || 1;
+  function rng() {
+    seed = (Math.imul(seed + 1, 1664525) + 1013904223) | 0;
+    return ((seed >>> 0) & 0xffff) / 0xffff;
+  }
+  const inset = rw / 2 + 5;
+  const usable = bs - inset * 2;
+  let assetCount = 0;
+  for (let r = 0; r < blocks; r++) {
+    for (let c = 0; c < blocks; c++) {
+      const bx = wx + (c - half + 0.5) * bs;
+      const bz = wz + (r - half + 0.5) * bs;
+      if (rng() < 0.22 && usable > 12) {
+        map.assets.push({ type: 'park', x: bx, z: bz, generated: true });
+        assetCount++;
+        for (let ti = 0; ti < 3; ti++) {
+          const ang = (ti / 3) * Math.PI * 2 + rng() * 0.5;
+          const rad = Math.max(4, usable * 0.22);
+          map.assets.push({ type: 'tree', x: bx + Math.cos(ang) * rad, z: bz + Math.sin(ang) * rad, generated: true });
+          assetCount++;
+        }
+      } else if (usable > 10) {
+        const num = 2 + Math.floor(rng() * 3);
+        for (let b = 0; b < num; b++) {
+          const bldX = bx + (rng() - 0.5) * usable;
+          const bldZ = bz + (rng() - 0.5) * usable;
+          map.assets.push({ type: 'building', x: bldX, z: bldZ, generated: true, tall: true });
+          assetCount++;
+        }
+      }
+    }
+  }
+
+  notify('CITY SPAWNED ' + blocks + '\xd7' + blocks + ' + ' + assetCount + ' ASSETS');
 }
 
 // ── Road scenery generation ────────────────────────────────────
@@ -1154,6 +1205,16 @@ function bindUI() {
   });
   document.getElementById('btnGenScenery').addEventListener('click', generateRoadScenery);
   document.getElementById('btnClearScenery').addEventListener('click', clearRoadScenery);
+
+  // Curvy roads
+  document.getElementById('curvyToggle').addEventListener('change', e => {
+    curvyEnabled = e.target.checked;
+    document.getElementById('curvyAmountRow').style.display = curvyEnabled ? '' : 'none';
+  });
+  document.getElementById('curvyAmount').addEventListener('input', e => {
+    curvyAmount = +e.target.value;
+    document.getElementById('curvyAmountVal').textContent = e.target.value;
+  });
 
   // Snap
   document.getElementById('snapToggle').addEventListener('change', e => {

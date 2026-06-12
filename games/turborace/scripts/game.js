@@ -287,6 +287,12 @@ document.getElementById('fdBackBtn').addEventListener('click',function(){void sh
 document.getElementById('fdStartBtn').addEventListener('click',function(){tryStartMenuMusic();void startFreeDrive();});
 document.getElementById('fdColor').addEventListener('input',e=>onFdColorInput(e.target.value));
 document.getElementById('fdOnlineToggle').addEventListener('change',e=>{ state.fdOnline=e.target.checked; });
+document.getElementById('fdTrafficToggle').addEventListener('change',e=>{
+  state.fdTrafficEnabled=e.target.checked;
+  const collRow=document.getElementById('fdTrafficCollisionsRow');
+  if(collRow) collRow.style.display=e.target.checked?'':'none';
+});
+document.getElementById('fdTrafficCollisionsToggle').addEventListener('change',e=>{ state.fdTrafficCollisions=e.target.checked; });
 document.getElementById('trackEditorBtn').addEventListener('click',function(){tryStartMenuMusic();showTrackEditor();});
 document.getElementById('mainSettingsBtn').addEventListener('click',function(){tryStartMenuMusic();showSettings();});
 document.getElementById('backToSelectionBtn').addEventListener('click',()=>{ window.location.href='../index.html'; });
