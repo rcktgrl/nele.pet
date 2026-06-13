@@ -243,9 +243,18 @@
       <div class="editorHint">Switch to CITY tool then click the canvas to place a city grid. A live preview follows your cursor.</div>
     </div>
 
+    <!-- Populate map with scenery -->
+    <div class="editorSection">
+      <div class="editorLabel">&#127807; Populate Map with Scenery</div>
+      <div class="editorHint" style="margin-bottom:10px;">Automatically places road-appropriate scenery. Highways get 3D walls (no clutter). Country &amp; lane roads get trees only. Streets get a mix based on the Asset Mix setting below.</div>
+      <div class="editorRow">
+        <button class="btn btn-p" id="btnPopulateMap" style="flex:1">POPULATE MAP</button>
+      </div>
+    </div>
+
     <!-- Road scenery -->
     <div class="editorSection">
-      <div class="editorLabel">Road Scenery</div>
+      <div class="editorLabel">Road Scenery (Manual)</div>
       <label class="editorField">
         <span>Density <strong id="sceneryDensityVal">3</strong> per 100m</span>
         <input id="sceneryDensity" type="range" min="1" max="10" step="1" value="3">
@@ -255,7 +264,7 @@
         <input id="sceneryOffset" type="range" min="2" max="30" step="1" value="8">
       </label>
       <label class="editorField">
-        <span>Asset Mix</span>
+        <span>Asset Mix (streets only)</span>
         <select id="sceneryMix">
           <option value="trees">Trees Only</option>
           <option value="mixed" selected>Trees &amp; Buildings</option>
@@ -266,7 +275,7 @@
         <button class="btn btn-p" id="btnGenScenery">GENERATE</button>
         <button class="btn btn-danger" id="btnClearScenery">CLEAR</button>
       </div>
-      <div class="editorHint">Auto-places assets along all roads respecting road width. CLEAR only removes auto-generated scenery, not hand-placed assets.</div>
+      <div class="editorHint">CLEAR only removes auto-generated scenery, not hand-placed assets. Country &amp; lane roads always get trees only regardless of mix.</div>
     </div>
 
     <!-- Grid snap -->

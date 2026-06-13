@@ -72,6 +72,91 @@ function _roadPath(road, nodeMap) {
 
 // ── Ribbon geometry ───────────────────────────────────────────────
 
+function _mat(color) { return new THREE.MeshLambertMaterial({ color }); }
+
+const _TREE_GREENS  = [0x1e4a0a, 0x2d5c14, 0x3a6618, 0x4a7820, 0x3d6e1a, 0x2a5010, 0x456c1c];
+const _HOUSE_COLS   = [0xc4b090, 0xb0a07a, 0x9a8e78, 0x8c8070, 0x786860, 0x645850, 0x524840, 0x3e3430];
+const _CITY_COLS    = [0x524840, 0x3e3430, 0x4a4438, 0x383230, 0x6a6058, 0x504844, 0x403c38, 0x302c28];
+const _NEON_COLS    = [0xff2244, 0x2244ff, 0x22ff88, 0xff8822];
+const _WIN_MAT      = new THREE.MeshLambertMaterial({ color: 0x445566, emissive: 0x223344, transparent: true, opacity: 0.6 });
+const _WARM_WIN_MAT = new THREE.MeshLambertMaterial({ color: 0x554422, emissive: 0x332211 });
+
+function _buildSideWalls(pts, halfRoadW, wallH, wallColor) {
+  const wMat  = _mat(wallColor);
+  const capMat = _mat(0xaaaaaa);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i], p1 = pts[i + 1];
+    const dx = p1.x - p0.x, dz = p1.z - p0.z;
+    const sLen = Math.sqrt(dx * dx + dz * dz) || 1;
+    const nx = -dz / sLen, nz = dx / sLen;
+    const cx = (p0.x + p1.x) / 2, cz = (p0.z + p1.z) / 2;
+    const ang = Math.atan2(dx, dz);
+    for (const s of [-1, 1]) {
+      const wx = cx + nx * halfRoadW * s;
+      const wz = cz + nz * halfRoadW * s;
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.5, wallH, sLen + 0.2), wMat);
+      wall.position.set(wx, wallH / 2, wz); wall.rotation.y = ang;
+      wall.castShadow = true; wall.receiveShadow = true; wall.userData.trk = true; scene.add(wall);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.25, sLen + 0.2), capMat);
+      cap.position.set(wx, wallH + 0.125, wz); cap.rotation.y = ang;
+      cap.userData.trk = true; scene.add(cap);
+    }
+  }
+}
+
+function _buildSidewalks(pts, halfRoadW, swColor) {
+  const swW = 2.2, swMat = _mat(swColor), curbMat = _mat(0x48484e);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i], p1 = pts[i + 1];
+    const dx = p1.x - p0.x, dz = p1.z - p0.z;
+    const sLen = Math.sqrt(dx * dx + dz * dz) || 1;
+    const nx = -dz / sLen, nz = dx / sLen;
+    const cx = (p0.x + p1.x) / 2, cz = (p0.z + p1.z) / 2;
+    const ang = Math.atan2(dx, dz);
+    for (const s of [-1, 1]) {
+      const off = halfRoadW + swW / 2;
+      const swx = cx + nx * off * s, swz = cz + nz * off * s;
+      const sw = new THREE.Mesh(new THREE.BoxGeometry(sLen, 0.12, swW), swMat);
+      sw.position.set(swx, 0.06, swz); sw.rotation.y = ang; sw.userData.trk = true; scene.add(sw);
+      const curb = new THREE.Mesh(new THREE.BoxGeometry(sLen, 0.14, 0.15), curbMat);
+      curb.position.set(cx + nx * halfRoadW * s, 0.07, cz + nz * halfRoadW * s);
+      curb.rotation.y = ang; curb.userData.trk = true; scene.add(curb);
+    }
+  }
+}
+
+function _buildStreetLamps(pts, halfRoadW) {
+  const poleMat = _mat(0x444455);
+  const bulbMat = new THREE.MeshLambertMaterial({ color: 0xffeedd, emissive: 0xaa8844 });
+  const poolMat = new THREE.MeshBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0.12, depthWrite: false });
+  const poolGeo = new THREE.CircleGeometry(8, 12);
+  const interval = 18;
+  let acc = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i], p1 = pts[i + 1];
+    const dx = p1.x - p0.x, dz = p1.z - p0.z;
+    const sLen = Math.sqrt(dx * dx + dz * dz) || 1;
+    acc += sLen;
+    if (acc < interval) continue;
+    acc -= interval;
+    const nx = -dz / sLen, nz = dx / sLen;
+    const s = 1; // right side only
+    const lx = p1.x + nx * (halfRoadW + 1.8) * s;
+    const lz = p1.z + nz * (halfRoadW + 1.8) * s;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 6.5, 5), poleMat);
+    pole.position.set(lx, 3.25, lz); pole.userData.trk = true; scene.add(pole);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 2.8), poleMat);
+    arm.position.set(lx + nx * -1.0 * s, 6.3, lz + nz * -1.0 * s);
+    arm.rotation.y = Math.atan2(dx, dz); arm.userData.trk = true; scene.add(arm);
+    const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.35), bulbMat);
+    bulb.position.set(lx + nx * -1.8 * s, 6.2, lz + nz * -1.8 * s);
+    bulb.userData.trk = true; scene.add(bulb);
+    const pool = new THREE.Mesh(poolGeo, poolMat);
+    pool.rotation.x = -Math.PI / 2; pool.position.set(p1.x, 0.07, p1.z);
+    pool.userData.trk = true; scene.add(pool);
+  }
+}
+
 function _buildRibbon(pts, width) {
   if (!pts || pts.length < 2) return null;
   const pos = [], idx = [];
@@ -127,6 +212,16 @@ export function buildDriveMap(mapData) {
       color: ROAD_COLORS_3D[road.type] || ROAD_COLORS_3D.street,
     }));
     mesh.receiveShadow = true; mesh.userData.trk = true; scene.add(mesh);
+
+    const hw = (road.width || 10) / 2;
+    if (road.type === 'highway') {
+      _buildSideWalls(pts, hw + 0.3, 3.8, 0x888888);
+    } else if (road.type === 'street') {
+      _buildSidewalks(pts, hw, 0x28283a);
+      _buildStreetLamps(pts, hw);
+    } else if (road.type === 'lane') {
+      _buildSidewalks(pts, hw, 0x222230);
+    }
   }
 
   // Assets — render all (including auto-generated scenery)
@@ -136,31 +231,50 @@ export function buildDriveMap(mapData) {
     let mesh = null;
     if (asset.type === 'tree') {
       const h = 5 + t * 9;
-      const grn = 0x1a5c1a + Math.floor(t2 * 0x305010);
+      const grn = _TREE_GREENS[Math.floor(t2 * _TREE_GREENS.length)];
       const trunk = new THREE.Mesh(
         new THREE.CylinderGeometry(0.3, 0.5, h * 0.35, 5),
-        new THREE.MeshLambertMaterial({ color: 0x5c3a1a })
+        _mat(0x5c3a1a)
       );
       trunk.position.y = h * 0.175;
       const crown = new THREE.Mesh(
         new THREE.ConeGeometry(2 + t2 * 1.5, h * 0.75, 6),
-        new THREE.MeshLambertMaterial({ color: grn })
+        _mat(grn)
       );
       crown.position.y = h * 0.55;
       mesh = new THREE.Group();
       mesh.add(trunk); mesh.add(crown);
       mesh.position.set(asset.x, 0, asset.z);
     } else if (asset.type === 'building') {
-      const isTall = asset.tall;
-      const h = isTall ? 18 + t * 32 : 8 + t * 14;
-      const w = 7 + t2 * 6, d = 7 + _assetHash(i + 2000) * 6;
-      const col = 0x303050 + Math.floor(t * 0x202020);
-      const emv = 0x060612 + Math.floor(t2 * 0x0a0a08);
-      mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(w, h, d),
-        new THREE.MeshLambertMaterial({ color: col, emissive: emv })
-      );
-      mesh.position.set(asset.x, h / 2, asset.z);
+      const isCity = asset.tall || asset.city;
+      const t3 = _assetHash(i + 2000), t4 = _assetHash(i + 3000);
+      const h = isCity ? 18 + t * 40 : 5 + t * 12;
+      const w = 6 + t2 * 8, d = 6 + t3 * 8;
+      const palette = isCity ? _CITY_COLS : _HOUSE_COLS;
+      const col = palette[Math.floor(t4 * palette.length)];
+      const g = new THREE.Group();
+      const bld = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _mat(col));
+      bld.position.y = h / 2; bld.castShadow = true; g.add(bld);
+      if (h > 14) {
+        const wh = h * 0.55;
+        const wm = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, wh, d + 0.1), _WIN_MAT);
+        wm.position.y = h * 0.3 + wh / 2; g.add(wm);
+      }
+      if (h > 12 && t2 > 0.6) {
+        const wy = 3 + Math.floor(t4 * (h - 4) / 4.5) * 4.5;
+        const wn = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.8, 0.1), _WARM_WIN_MAT);
+        wn.position.set((t3 - 0.5) * w * 0.6, wy, d / 2 + 0.06); g.add(wn);
+      }
+      if (isCity && h > 22 && t4 > 0.78) {
+        const nCol = _NEON_COLS[Math.floor(t * _NEON_COLS.length)];
+        const nSign = new THREE.Mesh(
+          new THREE.BoxGeometry(w * 0.55, 0.6, 0.1),
+          new THREE.MeshLambertMaterial({ color: nCol, emissive: (nCol & 0xfefefe) >> 1 })
+        );
+        nSign.position.set(0, h * 0.6, d / 2 + 0.12); g.add(nSign);
+      }
+      mesh = g;
+      mesh.position.set(asset.x, 0, asset.z);
     } else if (asset.type === 'park') {
       const g = new THREE.Group();
       const ground = new THREE.Mesh(
@@ -172,9 +286,10 @@ export function buildDriveMap(mapData) {
       for (let ti = 0; ti < 4; ti++) {
         const th = _assetHash(i * 13 + ti);
         const ang = (ti / 4) * Math.PI * 2;
+        const grn = _TREE_GREENS[Math.floor(th * _TREE_GREENS.length)];
         const tr = new THREE.Mesh(
           new THREE.ConeGeometry(1.2 + th * 0.8, 4 + th * 4, 5),
-          new THREE.MeshLambertMaterial({ color: 0x1e6b1e })
+          _mat(grn)
         );
         tr.position.set(Math.cos(ang) * 5.5, 2 + th * 2, Math.sin(ang) * 5.5);
         g.add(tr);

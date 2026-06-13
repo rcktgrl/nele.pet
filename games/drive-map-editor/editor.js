@@ -861,7 +861,7 @@ function spawnCity(wx, wz) {
         for (let b = 0; b < num; b++) {
           const bldX = bx + (rng() - 0.5) * usable;
           const bldZ = bz + (rng() - 0.5) * usable;
-          map.assets.push({ type: 'building', x: bldX, z: bldZ, generated: true, tall: true });
+          map.assets.push({ type: 'building', x: bldX, z: bldZ, generated: true, tall: true, city: true });
           assetCount++;
         }
       }
@@ -933,24 +933,32 @@ function getSceneryPalette(mix) {
 
 function generateRoadScenery() {
   if (!map) return;
-  const palette  = getSceneryPalette(sceneryMix);
   const spacing  = Math.max(10, 100 / sceneryDensity);
   let   count    = 0;
   let   seed     = 0;
+  const mixPalette = getSceneryPalette(sceneryMix);
 
   for (const road of map.roads) {
+    const rType = road.type || 'street';
+    // Highways get 3D walls — no roadside asset scatter
+    if (rType === 'highway') continue;
+
     const pts    = roadPts(road);
     if (!pts)    continue;
     const len    = roadApproxLength(road);
     if (len < 1) continue;
-    const steps  = Math.max(2, Math.ceil(len / spacing));
-    const sideOff = road.width / 2 + sceneryOffset;
+
+    // Country / lane roads: trees only, slightly wider offset
+    const isCountry = rType === 'country' || rType === 'lane';
+    const palette   = isCountry ? ['tree', 'tree', 'tree', 'tree'] : mixPalette;
+    const sideOff   = road.width / 2 + sceneryOffset + (isCountry ? 4 : 0);
+    const steps     = Math.max(2, Math.ceil(len / spacing));
 
     for (let i = 0; i <= steps; i++) {
       const t   = i / steps;
       const pos = bezierSample(pts, t);
       const tan = bezierTangent(pts, t);
-      const px  = -tan.z, pz = tan.x; // perpendicular
+      const px  = -tan.z, pz = tan.x;
 
       for (const side of [-1, 1]) {
         const ax = pos.x + px * sideOff * side;
@@ -963,6 +971,12 @@ function generateRoadScenery() {
     }
   }
   notify(count > 0 ? 'SCENERY: ' + count + ' ASSETS PLACED' : 'NO ROADS TO DECORATE');
+}
+
+function populateMapWithScenery() {
+  if (!map) return;
+  clearRoadScenery();
+  generateRoadScenery();
 }
 
 function clearRoadScenery() {
@@ -1205,6 +1219,7 @@ function bindUI() {
   });
   document.getElementById('btnGenScenery').addEventListener('click', generateRoadScenery);
   document.getElementById('btnClearScenery').addEventListener('click', clearRoadScenery);
+  document.getElementById('btnPopulateMap').addEventListener('click', populateMapWithScenery);
 
   // Curvy roads
   document.getElementById('curvyToggle').addEventListener('change', e => {
