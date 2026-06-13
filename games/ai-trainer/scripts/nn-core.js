@@ -63,6 +63,31 @@ export class Net {
     return a;
   }
 
+  // Forward pass into preallocated per-net buffers — no allocations, for hot
+  // per-tick callers (action selection, value bootstraps, KL probes).
+  // The returned array is REUSED by the next call: copy it if you keep it.
+  forwardScratch(x) {
+    if (!this._scratch) {
+      this._scratch = [];
+      for (let l = 1; l < this.sizes.length; l++) this._scratch.push(new Float64Array(this.sizes[l]));
+    }
+    let a = x;
+    for (let l = 0; l < this.W.length; l++) {
+      const nIn = this.sizes[l], nOut = this.sizes[l + 1];
+      const W = this.W[l], b = this.b[l];
+      const out = this._scratch[l];
+      const isLast = l === this.W.length - 1;
+      for (let j = 0; j < nOut; j++) {
+        let s = b[j];
+        const off = j * nIn;
+        for (let i = 0; i < nIn; i++) s += W[off + i] * a[i];
+        out[j] = isLast ? s : Math.tanh(s);
+      }
+      a = out;
+    }
+    return a;
+  }
+
   // Accumulates gradients; dOut = dLoss/dOutput for the cached forward pass.
   backward(cache, dOut) {
     let delta = dOut;
