@@ -29,6 +29,17 @@ function _sampleRoad(road, nodeMap) {
   const a = nodeMap.get(road.nodeA), b = nodeMap.get(road.nodeB);
   if (!a || !b) return null;
   const raw = [{ x: a.x, z: a.z }, ...(road.waypoints || []), { x: b.x, z: b.z }];
+  if (raw.length === 3) {
+    // Quadratic bezier matching the editor
+    const [A, C, B] = raw;
+    const result = [];
+    const N = SAMPLE_STEPS * 6;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, u = 1 - t;
+      result.push({ x: u*u*A.x + 2*u*t*C.x + t*t*B.x, z: u*u*A.z + 2*u*t*C.z + t*t*B.z });
+    }
+    return result;
+  }
   const result = [];
   const segs = raw.length - 1;
   for (let i = 0; i <= segs * SAMPLE_STEPS; i++) {
@@ -135,7 +146,7 @@ export function buildTraffic(mapData) {
     mesh.rotation.y = hdg;
     scene.add(mesh);
 
-    _agents.push({ mesh, roadId: entry.roadId, ptIdx: entry.ptIdx, forward: entry.forward, speed, hdg, prevRoadId: -1 });
+    _agents.push({ mesh, roadId: entry.roadId, ptIdx: entry.ptIdx, ptFrac: 0, forward: entry.forward, speed, hdg, prevRoadId: -1 });
   }
 }
 
@@ -152,57 +163,66 @@ export function updateTraffic(dt, playerCar, enableCollisions) {
   if (!_agents.length || !_roads) return;
 
   for (const a of _agents) {
-    const rd = _roads.get(a.roadId);
+    let rd = _roads.get(a.roadId);
     if (!rd) continue;
-    const pts = rd.pts;
 
-    // Advance along road
-    const dist = a.speed * dt;
-    let rem = dist;
+    // Advance using fractional position within segments so cars move smoothly
+    // regardless of segment length vs per-frame distance
+    let rem = a.speed * dt;
     while (rem > 0) {
-      const next = a.forward ? a.ptIdx + 1 : a.ptIdx - 1;
-      if (next < 0 || next >= pts.length) {
+      const pts = rd.pts;
+      const nextIdx = a.forward ? a.ptIdx + 1 : a.ptIdx - 1;
+      if (nextIdx < 0 || nextIdx >= pts.length) {
         // Reached end of road — pick next road
         const endNode = a.forward ? rd.nodeB : rd.nodeA;
         const conns = _graph ? (_graph.get(endNode) || []) : [];
         const choices = conns.filter(e => e.roadId !== a.prevRoadId || conns.length === 1);
-        if (!choices.length) {
-          // Dead end — reverse
-          a.forward = !a.forward;
-          break;
-        }
+        if (!choices.length) { a.forward = !a.forward; a.ptFrac = 0; break; }
         const pick = choices[Math.floor(Math.random() * choices.length)];
         a.prevRoadId = a.roadId;
         a.roadId = pick.roadId;
-        const newRd = _roads.get(pick.roadId);
-        if (!newRd) break;
-        a.forward = (newRd.nodeA === endNode);
-        a.ptIdx   = a.forward ? 0 : newRd.pts.length - 1;
+        rd = _roads.get(pick.roadId);
+        if (!rd) break;
+        a.forward = (rd.nodeA === endNode);
+        a.ptIdx   = a.forward ? 0 : rd.pts.length - 1;
+        a.ptFrac  = 0;
         break;
       }
-      const cur  = pts[a.ptIdx];
-      const nxt  = pts[next];
+      const cur = rd.pts[a.ptIdx], nxt = rd.pts[nextIdx];
       const segD = Math.hypot(nxt.x - cur.x, nxt.z - cur.z);
-      if (rem >= segD) { rem -= segD; a.ptIdx = next; }
-      else { break; }
+      if (segD < 0.001) { a.ptIdx = nextIdx; a.ptFrac = 0; continue; }
+      const remInSeg = (1 - a.ptFrac) * segD;
+      if (rem >= remInSeg) {
+        rem -= remInSeg;
+        a.ptIdx = nextIdx;
+        a.ptFrac = 0;
+      } else {
+        a.ptFrac += rem / segD;
+        break;
+      }
     }
 
+    // Current interpolated position
+    const pts = rd.pts;
+    const curIdx = a.ptIdx;
+    const nxtIdx = a.forward ? Math.min(curIdx + 1, pts.length - 1) : Math.max(curIdx - 1, 0);
+    const cur = pts[curIdx], nxt = pts[nxtIdx];
+    const px = cur.x + (nxt.x - cur.x) * a.ptFrac;
+    const pz = cur.z + (nxt.z - cur.z) * a.ptFrac;
+
     // Steer toward lookahead point
-    const targetIdx = a.forward
-      ? Math.min(a.ptIdx + LOOKAHEAD, pts.length - 1)
-      : Math.max(a.ptIdx - LOOKAHEAD, 0);
-    const tp = pts[targetIdx];
-    const cur = pts[a.ptIdx];
-    const desiredHdg = Math.atan2(tp.x - cur.x, tp.z - cur.z);
+    const lapIdx = a.forward
+      ? Math.min(curIdx + LOOKAHEAD, pts.length - 1)
+      : Math.max(curIdx - LOOKAHEAD, 0);
+    const tp = pts[lapIdx];
+    const desiredHdg = Math.atan2(tp.x - px, tp.z - pz);
 
     let dh = desiredHdg - a.hdg;
     if (dh >  Math.PI) dh -= Math.PI * 2;
     if (dh < -Math.PI) dh += Math.PI * 2;
     a.hdg += Math.sign(dh) * Math.min(Math.abs(dh), STEER_RATE * dt);
 
-    // Move car
-    const p = pts[a.ptIdx];
-    a.mesh.position.set(p.x, 0, p.z);
+    a.mesh.position.set(px, 0, pz);
     a.mesh.rotation.y = a.hdg;
   }
 

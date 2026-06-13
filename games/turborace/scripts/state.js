@@ -62,6 +62,7 @@ export const state = {
     cityCorridors: null,
     cityAiPts: null,
     gravelProfile: null,
+    sceneryColliders: [],
     renderer: null,
 
     // ── VS Mode ──────────────────────────────────────────────────────────────

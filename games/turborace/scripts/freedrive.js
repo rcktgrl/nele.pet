@@ -237,6 +237,8 @@ function _teardownSession(){
 function _quitCleanup(){
   _teardownSession();
   destroyTraffic();
+  scene.fog = null; scene.background = null;
+  state.sceneryColliders = [];
   state.fdMode = false; state.fdCleanup = null; state.fdTrackData = null; state.fdCustomMapData = null;
   document.getElementById('raceTop').style.display = '';
   document.getElementById('pos').style.display = '';

@@ -931,6 +931,29 @@ function getSceneryPalette(mix) {
   }
 }
 
+function assetOnAnyRoad(ax, az) {
+  for (const road of map.roads) {
+    const pts = roadPts(road);
+    if (!pts) continue;
+    const hw = (road.width || 10) / 2 + 2;
+    const steps = 20;
+    for (let si = 0; si < steps; si++) {
+      const p0 = bezierSample(pts, si / steps);
+      const p1 = bezierSample(pts, (si + 1) / steps);
+      const dx = p1.x - p0.x, dz = p1.z - p0.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const ux = dx/len, uz = dz/len;
+      const tx = ax - p0.x, tz = az - p0.z;
+      const proj = tx*ux + tz*uz;
+      if (proj >= 0 && proj <= len) {
+        const perp = Math.abs(tx*uz - tz*ux);
+        if (perp < hw) return true;
+      }
+    }
+  }
+  return false;
+}
+
 function generateRoadScenery() {
   if (!map) return;
   const spacing  = Math.max(10, 100 / sceneryDensity);
@@ -964,6 +987,7 @@ function generateRoadScenery() {
         const ax = pos.x + px * sideOff * side;
         const az = pos.z + pz * sideOff * side;
         if (map.assets.some(a => Math.hypot(a.x - ax, a.z - az) < spacing * 0.6)) continue;
+        if (assetOnAnyRoad(ax, az)) continue;
         const type = palette[(seed++) % palette.length];
         map.assets.push({ type, x: ax, z: az, generated: true });
         count++;
