@@ -98,23 +98,181 @@ let carSpec    = null;
 //  Geometry helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function nearestPointOnSegment(px, pz, ax, az, bx, bz) {
-  const abx = bx - ax, abz = bz - az;
-  const apx = px - ax, apz = pz - az;
-  const ab2 = abx * abx + abz * abz || 1;
-  const t = Math.max(0, Math.min(1, (apx * abx + apz * abz) / ab2));
-  return { x: ax + abx * t, z: az + abz * t };
+// ─────────────────────────────────────────────────────────────────────────────
+//  Wall spatial index — uniform grid over packed segment arrays. The wall
+//  set is static per track, but the previous code scanned EVERY segment on
+//  every physics tick (boundary nearest-wall) and every decision (ray fans),
+//  which dominated the whole simulation on dense tracks. The grid turns both
+//  into local queries.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const WALL_CELL = 16;      // metres per grid cell
+
+let wallIdx = { left: null, right: null, all: null };
+
+function packWallSide(walls) {
+  const n = walls ? walls.length : 0;
+  const segs = new Float64Array(n * 4);
+  let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const w = walls[i];
+    segs[i * 4] = w.x0; segs[i * 4 + 1] = w.z0;
+    segs[i * 4 + 2] = w.x1; segs[i * 4 + 3] = w.z1;
+    minX = Math.min(minX, w.x0, w.x1); maxX = Math.max(maxX, w.x0, w.x1);
+    minZ = Math.min(minZ, w.z0, w.z1); maxZ = Math.max(maxZ, w.z0, w.z1);
+  }
+  if (!n) return { n, segs, minX: 0, minZ: 0, gw: 1, gh: 1, cells: [null], scratch: new Int32Array(0), stamp: new Int32Array(0), gen: 0, span: 0 };
+  const gw = Math.max(1, Math.ceil((maxX - minX) / WALL_CELL) + 1);
+  const gh = Math.max(1, Math.ceil((maxZ - minZ) / WALL_CELL) + 1);
+  const cells = new Array(gw * gh).fill(null);
+  for (let i = 0; i < n; i++) {
+    // insert into every cell the segment's bbox overlaps — exact superset
+    // guarantee for circle queries regardless of segment length
+    const cx0 = ((Math.min(segs[i * 4], segs[i * 4 + 2]) - minX) / WALL_CELL) | 0;
+    const cx1 = ((Math.max(segs[i * 4], segs[i * 4 + 2]) - minX) / WALL_CELL) | 0;
+    const cz0 = ((Math.min(segs[i * 4 + 1], segs[i * 4 + 3]) - minZ) / WALL_CELL) | 0;
+    const cz1 = ((Math.max(segs[i * 4 + 1], segs[i * 4 + 3]) - minZ) / WALL_CELL) | 0;
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const c = cz * gw + cx;
+        (cells[c] || (cells[c] = [])).push(i);
+      }
+    }
+  }
+  return {
+    n, segs, minX, minZ, gw, gh, cells,
+    scratch: new Int32Array(n),   // query result buffer (segment indices)
+    stamp: new Int32Array(n),     // dedupe marker, compared against gen
+    gen: 0,
+    span: Math.max(gw, gh) * WALL_CELL,  // radius that covers the whole grid
+  };
 }
 
-function nearestWallPoint(px, pz, walls) {
-  if (!walls || !walls.length) return null;
-  let best = null, bestD2 = Infinity;
-  for (const w of walls) {
-    const pt = nearestPointOnSegment(px, pz, w.x0, w.z0, w.x1, w.z1);
-    const d2 = (px - pt.x) ** 2 + (pz - pt.z) ** 2;
-    if (d2 < bestD2) { bestD2 = d2; best = pt; }
+function buildWallIndex() {
+  wallIdx = {
+    left: packWallSide(trkWallLeft),
+    right: packWallSide(trkWallRight),
+    // combined index for the ray fans — rays don't care about sides
+    all: packWallSide([...(trkWallLeft || []), ...(trkWallRight || [])]),
+  };
+}
+
+// First wall hit along a ray — Amanatides–Woo grid marching. Each ray only
+// visits the cells it passes through and stops as soon as no closer hit is
+// possible, instead of testing every wall segment on the track (the previous
+// behavior whenever the fan radius covered the whole track).
+function rayThroughGrid(g, ox, oz, dx, dz, maxT) {
+  if (!g || !g.n) return maxT;
+  const cs = WALL_CELL;
+  const gx0 = g.minX, gz0 = g.minZ;
+  const gx1 = gx0 + g.gw * cs, gz1 = gz0 + g.gh * cs;
+  // clip the ray to the grid bbox
+  let t0 = 0, t1 = maxT;
+  if (dx !== 0) {
+    const ta = (gx0 - ox) / dx, tb = (gx1 - ox) / dx;
+    t0 = Math.max(t0, Math.min(ta, tb));
+    t1 = Math.min(t1, Math.max(ta, tb));
+  } else if (ox < gx0 || ox > gx1) return maxT;
+  if (dz !== 0) {
+    const ta = (gz0 - oz) / dz, tb = (gz1 - oz) / dz;
+    t0 = Math.max(t0, Math.min(ta, tb));
+    t1 = Math.min(t1, Math.max(ta, tb));
+  } else if (oz < gz0 || oz > gz1) return maxT;
+  if (t0 > t1) return maxT;
+
+  // entry cell (nudged inside the bbox)
+  const ex = ox + dx * (t0 + 1e-9), ez = oz + dz * (t0 + 1e-9);
+  let cx = ((ex - gx0) / cs) | 0, cz = ((ez - gz0) / cs) | 0;
+  if (cx < 0) cx = 0; else if (cx >= g.gw) cx = g.gw - 1;
+  if (cz < 0) cz = 0; else if (cz >= g.gh) cz = g.gh - 1;
+  const stepX = dx > 0 ? 1 : -1, stepZ = dz > 0 ? 1 : -1;
+  let tMaxX = dx !== 0 ? ((gx0 + (cx + (dx > 0 ? 1 : 0)) * cs) - ox) / dx : Infinity;
+  let tMaxZ = dz !== 0 ? ((gz0 + (cz + (dz > 0 ? 1 : 0)) * cs) - oz) / dz : Infinity;
+  const tDx = dx !== 0 ? cs / Math.abs(dx) : Infinity;
+  const tDz = dz !== 0 ? cs / Math.abs(dz) : Infinity;
+
+  const { cells, segs, stamp, gw, gh } = g;
+  const gen = ++g.gen;
+  let bestT = maxT;
+  for (;;) {
+    const cell = cells[cz * gw + cx];
+    if (cell) {
+      for (let k = 0; k < cell.length; k++) {
+        const i = cell[k];
+        if (stamp[i] === gen) continue;
+        stamp[i] = gen;
+        const t = raySegment(ox, oz, dx, dz,
+                             segs[i * 4], segs[i * 4 + 1], segs[i * 4 + 2], segs[i * 4 + 3]);
+        if (t > 0 && t < bestT) bestT = t;
+      }
+    }
+    // a hit at t < tNext would lie in an already-visited cell (segments are
+    // registered in every cell their bbox overlaps), so stopping is exact
+    const tNext = Math.min(tMaxX, tMaxZ);
+    if (tNext > bestT || tNext > t1) break;
+    if (tMaxX < tMaxZ) { tMaxX += tDx; cx += stepX; if (cx < 0 || cx >= gw) break; }
+    else               { tMaxZ += tDz; cz += stepZ; if (cz < 0 || cz >= gh) break; }
   }
-  return best;
+  return bestT;
+}
+
+// Collect unique segment indices whose cells overlap the circle bbox.
+function gatherWallSegs(side, px, pz, r) {
+  const { minX, minZ, gw, gh, cells, scratch, stamp } = side;
+  const gen = ++side.gen;
+  let cx0 = ((px - r - minX) / WALL_CELL) | 0;
+  let cx1 = ((px + r - minX) / WALL_CELL) | 0;
+  let cz0 = ((pz - r - minZ) / WALL_CELL) | 0;
+  let cz1 = ((pz + r - minZ) / WALL_CELL) | 0;
+  if (cx1 < 0 || cz1 < 0 || cx0 >= gw || cz0 >= gh) return 0;
+  if (cx0 < 0) cx0 = 0; if (cz0 < 0) cz0 = 0;
+  if (cx1 >= gw) cx1 = gw - 1; if (cz1 >= gh) cz1 = gh - 1;
+  let cnt = 0;
+  for (let cz = cz0; cz <= cz1; cz++) {
+    for (let cx = cx0; cx <= cx1; cx++) {
+      const cell = cells[cz * gw + cx];
+      if (!cell) continue;
+      for (let k = 0; k < cell.length; k++) {
+        const i = cell[k];
+        if (stamp[i] !== gen) { stamp[i] = gen; scratch[cnt++] = i; }
+      }
+    }
+  }
+  return cnt;
+}
+
+// Nearest point on any wall segment of one side. Expanding-radius search:
+// a candidate found at distance d is only accepted once d ≤ search radius
+// (nothing outside the gathered cells can be closer), so the result is
+// EXACTLY the global nearest — the old full scan, minus the full scan.
+function nearestWallPoint(px, pz, side) {
+  if (!side || !side.n) return null;
+  const segs = side.segs;
+  // cars sit within a road half-width of a wall almost always — one cell
+  // usually suffices, and the radius-acceptance rule keeps expansion exact
+  for (let r = WALL_CELL; ; r *= 4) {
+    const all = r >= side.span;
+    const m = all ? side.n : gatherWallSegs(side, px, pz, r);
+    let bestI = -1, bestT = 0, bestD2 = Infinity;
+    for (let k = 0; k < m; k++) {
+      const i = all ? k : side.scratch[k];
+      const ax = segs[i * 4], az = segs[i * 4 + 1];
+      const abx = segs[i * 4 + 2] - ax, abz = segs[i * 4 + 3] - az;
+      const ab2 = abx * abx + abz * abz || 1;
+      let t = ((px - ax) * abx + (pz - az) * abz) / ab2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = px - (ax + abx * t), dz = pz - (az + abz * t);
+      const d2 = dx * dx + dz * dz;
+      if (d2 < bestD2) { bestD2 = d2; bestI = i; bestT = t; }
+    }
+    if (bestI >= 0 && (all || bestD2 <= r * r)) {
+      return {
+        x: segs[bestI * 4] + (segs[bestI * 4 + 2] - segs[bestI * 4]) * bestT,
+        z: segs[bestI * 4 + 1] + (segs[bestI * 4 + 3] - segs[bestI * 4 + 1]) * bestT,
+      };
+    }
+    if (all) return null;  // unreachable while side.n > 0 — kept for safety
+  }
 }
 
 function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
@@ -340,8 +498,8 @@ class SimCar {
     const tLen = Math.hypot(tx, tz) || 1;
     const nx = -tz / tLen, nz = tx / tLen;
     const sideSign = ((this.pos.x - np.x) * nx + (this.pos.z - np.z) * nz) >= 0 ? 1 : -1;
-    const targetWalls = sideSign > 0 ? trkWallRight : trkWallLeft;
-    const wallPt = nearestWallPoint(this.pos.x, this.pos.z, targetWalls);
+    const wallPt = nearestWallPoint(this.pos.x, this.pos.z,
+                                    sideSign > 0 ? wallIdx.right : wallIdx.left);
 
     if (wallPt) {
       const toWallX = wallPt.x - this.pos.x;
@@ -424,31 +582,12 @@ const EDGE_RAY_ANGLES = [
 ];
 const EDGE_RAY_DIST = 35;
 
-function castRayFan(car, angles, maxDist, out, offset) {
+export function castRayFan(car, angles, maxDist, out, offset) {
   const ox = car.pos.x, oz = car.pos.z;
-  const rr = maxDist * maxDist * 1.5;
-  const near = [];
-  for (const segs of [trkWallLeft, trkWallRight]) {
-    for (const w of segs) {
-      // Check midpoint AND both endpoints: midpoint-only misses wall segments
-      // where the car is near one end but the segment midpoint is far away.
-      const cx = (w.x0 + w.x1) * 0.5 - ox, cz = (w.z0 + w.z1) * 0.5 - oz;
-      const e0x = w.x0 - ox, e0z = w.z0 - oz;
-      const e1x = w.x1 - ox, e1z = w.z1 - oz;
-      if (cx * cx + cz * cz < rr ||
-          e0x * e0x + e0z * e0z < rr ||
-          e1x * e1x + e1z * e1z < rr) near.push(w);
-    }
-  }
   for (let k = 0; k < angles.length; k++) {
     const angle = car.hdg + angles[k];
-    const dx = Math.sin(angle), dz = Math.cos(angle);
-    let minT = maxDist;
-    for (const w of near) {
-      const t = raySegment(ox, oz, dx, dz, w.x0, w.z0, w.x1, w.z1);
-      if (t > 0 && t < minT) minT = t;
-    }
-    out[offset + k] = minT / maxDist;
+    out[offset + k] = rayThroughGrid(wallIdx.all, ox, oz,
+                                     Math.sin(angle), Math.cos(angle), maxDist) / maxDist;
   }
 }
 
@@ -941,8 +1080,14 @@ function finalizeGroup(g) {
   respawnGroup(g);
 }
 
+// Node test harness access — nearest-wall queries against the spatial index.
+export function nearestWallForTest(px, pz, sideName) {
+  return nearestWallPoint(px, pz, wallIdx[sideName]);
+}
+
 function initSim(modelOverride) {
   buildArcTable();
+  buildWallIndex();
   initAgent(modelOverride || null);
   envs = Array.from({ length: cfg.numEnvs }, (_, i) => makeEnv(i));
   iteration = 0; totalSteps = 0; agentSteps = 0;
@@ -998,10 +1143,10 @@ function terminateEnv(env, i, penalty, truncated) {
     // mistaken for a real terminal (groups skip this — no critic there)
     const obs = new Float64Array(OBS_DIM);
     buildObs(env.car, obs);
-    boot = cfg.gamma * critic.forward(obs)[0];
+    boot = cfg.gamma * critic.forwardScratch(obs)[0];
     if (env.pendObsM) {
       const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
-      bootM = cfg.gamma * critic.forward(obsM)[0];
+      bootM = cfg.gamma * critic.forwardScratch(obsM)[0];
     }
   }
   commitTransition(env, true, boot, bootM);
@@ -1037,22 +1182,23 @@ function stepOnce(dt) {
       const obs = new Float64Array(OBS_DIM);
       buildObs(car, obs);
       const pol = actingNet(env);   // true actor, or the defect-masked copy
-      const mean = pol.forward(obs);
+      const mean = pol.forwardScratch(obs);
       for (let d = 0; d < ACT_DIM; d++) {
         env.curAct[d] = mean[d] + Math.exp(logStd[d]) * gauss();
       }
       env.pendObs  = obs;
       env.pendLogp = logProb(env.curAct, mean);
-      env.pendVal  = groupOn() ? 0 : critic.forward(obs)[0];
+      env.pendVal  = groupOn() ? 0 : critic.forwardScratch(obs)[0];
       if (cfg.mirror) {
         // synthetic twin: mirrored observation + mirrored action, with its
         // own behavior log-prob/value so PPO's ratio and GAE stay exact
+        // (forwardScratch reuses pol's buffer — `mean` is consumed above)
         const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
         const actM = mirrorActInto(env.curAct, new Float64Array(ACT_DIM));
         env.pendObsM  = obsM;
         env.pendActM  = actM;
-        env.pendLogpM = logProb(actM, pol.forward(obsM));
-        env.pendValM  = groupOn() ? 0 : critic.forward(obsM)[0];
+        env.pendLogpM = logProb(actM, pol.forwardScratch(obsM));
+        env.pendValM  = groupOn() ? 0 : critic.forwardScratch(obsM)[0];
       }
       if (cfg.neuronRepair && (totalSteps & 31) === 0) reservoirOffer(obs);
       env.repCount = cfg.actionRepeat;
@@ -1328,10 +1474,10 @@ function _flushBatch() {
     if (open) {
       const obs = new Float64Array(OBS_DIM);
       buildObs(env.car, obs);
-      nextVal = critic.forward(obs)[0];
+      nextVal = critic.forwardScratch(obs)[0];
       if (env.bufM.obs.length) {
         const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
-        nextValM = critic.forward(obsM)[0];
+        nextValM = critic.forwardScratch(obsM)[0];
       }
     }
     flushChain(env.buf, nextVal);
@@ -1363,22 +1509,6 @@ function packSlice(OBS, ACT, LOGP, ADV, RET, idx, s0, s1) {
     logp[k] = LOGP[s]; adv[k] = ADV[s]; ret[k] = RET[s];
   }
   return { n, obsDim: OBS_DIM, actDim: ACT_DIM, obs, act, logp, adv, ret };
-}
-
-// Pack an entire shuffled epoch into flat Float64Arrays for computeEpoch().
-function packEpochData(OBS, ACT, LOGP, ADV, RET, idx, N) {
-  const obs  = new Float64Array(N * OBS_DIM);
-  const act  = new Float64Array(N * ACT_DIM);
-  const logp = new Float64Array(N);
-  const adv  = new Float64Array(N);
-  const ret  = new Float64Array(N);
-  for (let k = 0; k < N; k++) {
-    const s = idx[k];
-    obs.set(OBS[s], k * OBS_DIM);
-    act.set(ACT[s], k * ACT_DIM);
-    logp[k] = LOGP[s]; adv[k] = ADV[s]; ret[k] = RET[s];
-  }
-  return { N, obs, act, logp, adv, ret };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1454,7 +1584,7 @@ async function _runPPO(batch) {
     let kl = 0;
     for (let t = 0; t < klSample; t++) {
       const s = ((t * 2654435761) >>> 0) % N;  // fixed quasi-random subsample
-      const d = Math.min(20, logProb(ACT[s], actor.forward(OBS[s])) - LOGP[s]);
+      const d = Math.min(20, logProb(ACT[s], actor.forwardScratch(OBS[s])) - LOGP[s]);
       kl += (Math.exp(d) - 1) - d;
     }
     return kl / klSample;
@@ -1466,7 +1596,21 @@ async function _runPPO(batch) {
   //    TF.js worker; the new weights come back in one message ────────────────
   if (gpuState === 'ready' && tfWorker) {
     try {
-      const data = packEpochData(OBS, ACT, LOGP, ADV, RET, idx, N);  // natural order
+      // Truncate to a whole number of minibatches. Constant tensor shapes
+      // are what lets the WebGL backend REUSE its textures — per-update
+      // shape jitter made every update allocate fresh GPU memory instead.
+      const mbs = Math.max(8, cfg.minibatch | 0);
+      const nGpu = N >= mbs ? (N / mbs | 0) * mbs : N;
+      const obs  = new Float32Array(nGpu * OBS_DIM);
+      const act  = new Float32Array(nGpu * ACT_DIM);
+      const logp = new Float32Array(nGpu);
+      const adv  = new Float32Array(nGpu);
+      const ret  = new Float32Array(nGpu);
+      for (let k = 0; k < nGpu; k++) {
+        obs.set(OBS[k], k * OBS_DIM);
+        act.set(ACT[k], k * ACT_DIM);
+        logp[k] = LOGP[k]; adv[k] = ADV[k]; ret[k] = RET[k];
+      }
       const r = await new Promise((resolve, reject) => {
         _tfPending = {
           resolve, reject,
@@ -1475,13 +1619,10 @@ async function _runPPO(batch) {
             reject(new Error('GPU update timeout (>60s)'));
           }, 60000),
         };
-        const obs  = Float32Array.from(data.obs),  act = Float32Array.from(data.act);
-        const logp = Float32Array.from(data.logp), adv = Float32Array.from(data.adv);
-        const ret  = Float32Array.from(data.ret);
         tfWorker.postMessage({
-          type: 'update', n: N, obs, act, logp, adv, ret,
+          type: 'update', n: nGpu, obs, act, logp, adv, ret,
           hp: { ...hp, lr: cfg.lr },
-          epochs: cfg.epochs, minibatch: cfg.minibatch,
+          epochs: cfg.epochs, minibatch: mbs,
         }, [obs.buffer, act.buffer, logp.buffer, adv.buffer, ret.buffer]);
       });
       // sanity: never load NaN/Inf weights into the live policy
@@ -1496,6 +1637,12 @@ async function _runPPO(batch) {
       lastLoss = r.loss;
       lastEpochs = r.epochs || cfg.epochs;
       lastKl = r.kl || 0;
+      if (r.mem) {
+        // live VRAM telemetry — a leak shows up here long before the OS chokes
+        gpuInfo = `TF.js GPU active · ${r.mem.numTensors} tensors · ` +
+                  `${(r.mem.numBytesInGPU / 1048576).toFixed(0)} MB GPU` +
+                  ` (${r.epochs}/${cfg.epochs} epochs, ${r.ms | 0} ms)`;
+      }
       gpuDone = true;
     } catch (err) {
       _tfFail(String(err && err.message || err));

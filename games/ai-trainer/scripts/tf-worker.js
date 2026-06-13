@@ -147,10 +147,10 @@ async function runUpdate(d) {
     return v;
   };
   const klStop = !!(hp.klStop);
-  const kl0 = klStop ? await klEstimate() : 0;
-  let epochsRan = 0, lastKl = 0;
+  let kl0 = 0, epochsRan = 0, lastKl = 0;
 
   try {
+    if (klStop) kl0 = await klEstimate();
     for (let ep = 0; ep < d.epochs; ep++) {
       for (let k = n - 1; k > 0; k--) {  // Fisher-Yates shuffle
         const j = (Math.random() * (k + 1)) | 0;
@@ -185,9 +185,12 @@ async function runUpdate(d) {
     const actorFlat  = await flattenVars(aVars);
     const criticFlat = await flattenVars(cVars);
     const logStd     = new Float32Array(await lsVar.data());
+    // memory telemetry — numBytesInGPU only exists on the webgl backend
+    const m = tf.memory();
     postMessage({
       type: 'updated', actorFlat, criticFlat, logStd,
       loss: { pi, v, ent }, epochs: epochsRan, kl: lastKl,
+      mem: { numTensors: m.numTensors, numBytes: m.numBytes, numBytesInGPU: m.numBytesInGPU || 0 },
       ms: performance.now() - t0,
     }, [actorFlat.buffer, criticFlat.buffer, logStd.buffer]);
   } finally {
@@ -213,6 +216,17 @@ self.onmessage = async function (e) {
       if (want === 'webgl' && !tf.env().getBool('WEBGL_RENDER_FLOAT32_ENABLED')) {
         postMessage({ type: 'fail', error: 'GPU lacks float32 render support — CPU backend will be more precise' });
         return;
+      }
+      if (want === 'webgl') {
+        // The WebGL backend's default texture pool NEVER frees disposed
+        // textures (threshold −1). Combined with tensor shapes that vary a
+        // little between updates, every new shape allocated fresh VRAM
+        // forever — observed as tens of GB of leaked GPU memory in long
+        // sessions. Cap the pool: above this many bytes, disposed textures
+        // are actually deleted instead of kept for reuse.
+        try {
+          tf.env().set('WEBGL_DELETE_TEXTURE_THRESHOLD', 256 * 1024 * 1024);
+        } catch { /* flag missing in this tf build — better pooled than dead */ }
       }
       aVars = buildVars(AS, d.actorFlat, 'a');
       cVars = buildVars(CS, d.criticFlat, 'c');
