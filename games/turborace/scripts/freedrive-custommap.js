@@ -52,6 +52,18 @@ export function getDriveMapWorld() { return _dmWorld; }
 
 function _samplePath(pts, steps) {
   if (pts.length < 2) return pts;
+  if (pts.length === 3) {
+    // Quadratic bezier matching the editor's draw mode (1 waypoint = control point)
+    const [A, C, B] = pts;
+    const N = steps * 6;
+    const result = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, u = 1 - t;
+      result.push({ x: u*u*A.x + 2*u*t*C.x + t*t*B.x, z: u*u*A.z + 2*u*t*C.z + t*t*B.z });
+    }
+    return result;
+  }
+  // Linear polyline for 2-point roads or roads with many waypoints
   const result = [];
   const segs = pts.length - 1;
   for (let i = 0; i <= segs * steps; i++) {
@@ -116,9 +128,10 @@ function _buildSidewalks(pts, halfRoadW, swColor) {
     for (const s of [-1, 1]) {
       const off = halfRoadW + swW / 2;
       const swx = cx + nx * off * s, swz = cz + nz * off * s;
-      const sw = new THREE.Mesh(new THREE.BoxGeometry(sLen, 0.12, swW), swMat);
+      // BoxGeometry(width=X, height=Y, depth=Z): depth must be sLen so it aligns with road after rotation.y=ang
+      const sw = new THREE.Mesh(new THREE.BoxGeometry(swW, 0.12, sLen), swMat);
       sw.position.set(swx, 0.06, swz); sw.rotation.y = ang; sw.userData.trk = true; scene.add(sw);
-      const curb = new THREE.Mesh(new THREE.BoxGeometry(sLen, 0.14, 0.15), curbMat);
+      const curb = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.14, sLen), curbMat);
       curb.position.set(cx + nx * halfRoadW * s, 0.07, cz + nz * halfRoadW * s);
       curb.rotation.y = ang; curb.userData.trk = true; scene.add(curb);
     }
@@ -157,6 +170,8 @@ function _buildStreetLamps(pts, halfRoadW) {
   }
 }
 
+const ROAD_Y = 0.04; // raised above ground to prevent Z-fighting
+
 function _buildRibbon(pts, width) {
   if (!pts || pts.length < 2) return null;
   const pos = [], idx = [];
@@ -167,12 +182,12 @@ function _buildRibbon(pts, width) {
     const len = Math.sqrt(dx * dx + dz * dz) || 1;
     const nx = (-dz / len) * width / 2, nz = (dx / len) * width / 2;
     if (i === 0) {
-      pos.push(p0.x + nx, 0.01, p0.z + nz,
-               p0.x - nx, 0.01, p0.z - nz);
+      pos.push(p0.x + nx, ROAD_Y, p0.z + nz,
+               p0.x - nx, ROAD_Y, p0.z - nz);
       verts += 2;
     }
-    pos.push(p1.x + nx, 0.01, p1.z + nz,
-             p1.x - nx, 0.01, p1.z - nz);
+    pos.push(p1.x + nx, ROAD_Y, p1.z + nz,
+             p1.x - nx, ROAD_Y, p1.z - nz);
     const b = verts - 2;
     idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
     verts += 2;
@@ -184,11 +199,120 @@ function _buildRibbon(pts, width) {
   return geo;
 }
 
+function _buildRoadMarkings(pts, width, roadType) {
+  const markY = ROAD_Y + 0.01;
+  if (roadType === 'highway') {
+    // Solid white edge lines on both sides
+    for (const side of [-1, 1]) {
+      const offset = width / 2 - 1.2;
+      const lw = 0.35;
+      const pos = [], idx = [];
+      let v = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i], p1 = pts[i + 1];
+        const dx = p1.x - p0.x, dz = p1.z - p0.z;
+        const len = Math.sqrt(dx*dx + dz*dz) || 1;
+        const nx = (-dz/len), nz = (dx/len);
+        if (i === 0) {
+          pos.push(p0.x + nx*(offset+lw)*side, markY, p0.z + nz*(offset+lw)*side,
+                   p0.x + nx*(offset-lw)*side, markY, p0.z + nz*(offset-lw)*side);
+          v += 2;
+        }
+        pos.push(p1.x + nx*(offset+lw)*side, markY, p1.z + nz*(offset+lw)*side,
+                 p1.x + nx*(offset-lw)*side, markY, p1.z + nz*(offset-lw)*side);
+        const b = v - 2; idx.push(b, b+2, b+1, b+1, b+2, b+3); v += 2;
+      }
+      if (pos.length) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geo.setIndex(idx);
+        const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        mesh.userData.trk = true; scene.add(mesh);
+      }
+    }
+    // Yellow center dashes
+    _buildDashLine(pts, markY, 0, 0.25, 8, 6, 0xffee00);
+  } else if (roadType === 'street') {
+    // Yellow dashed center line
+    _buildDashLine(pts, markY, 0, 0.22, 5, 4, 0xddcc22);
+  } else if (roadType === 'country') {
+    // White dashed center line
+    _buildDashLine(pts, markY, 0, 0.20, 8, 6, 0xdddddd);
+  }
+  // 'lane' gets no markings
+}
+
+function _buildDashLine(pts, y, lateralOffset, halfW, dashLen, gapLen, color) {
+  const pos = [], idx = [];
+  let v = 0, acc = 0, isDash = true;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i], p1 = pts[i + 1];
+    const dx = p1.x - p0.x, dz = p1.z - p0.z;
+    const sLen = Math.sqrt(dx*dx + dz*dz) || 1;
+    const ux = dx/sLen, uz = dz/sLen;
+    const rx = -dz/sLen, rz = dx/sLen;
+    let t = 0;
+    while (t < sLen) {
+      const remain = isDash ? (dashLen - acc) : (gapLen - acc);
+      const advance = Math.min(remain, sLen - t);
+      if (isDash && advance > 0.05) {
+        const sx = p0.x + ux*t + rx*lateralOffset, sz = p0.z + uz*t + rz*lateralOffset;
+        const ex = p0.x + ux*(t+advance) + rx*lateralOffset, ez = p0.z + uz*(t+advance) + rz*lateralOffset;
+        pos.push(sx - rx*halfW, y, sz - rz*halfW,
+                 sx + rx*halfW, y, sz + rz*halfW,
+                 ex - rx*halfW, y, ez - rz*halfW,
+                 ex + rx*halfW, y, ez + rz*halfW);
+        idx.push(v, v+2, v+1, v+1, v+2, v+3); v += 4;
+      }
+      acc += advance; t += advance;
+      if (acc >= (isDash ? dashLen : gapLen)) { acc = 0; isDash = !isDash; }
+    }
+  }
+  if (pos.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color }));
+    mesh.userData.trk = true; scene.add(mesh);
+  }
+}
+
+// ── Road-exclusion helper ─────────────────────────────────────────
+
+function _pointOnRoad(x, z, roads, nodeMap) {
+  for (const road of roads) {
+    const raw = _roadPath(road, nodeMap);
+    if (!raw) continue;
+    const pts = _samplePath(raw, 6);
+    const hw = (road.width || 10) / 2 + 2; // small margin
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i], p1 = pts[i + 1];
+      const dx = p1.x - p0.x, dz = p1.z - p0.z;
+      const len = Math.sqrt(dx*dx + dz*dz) || 1;
+      const ux = dx/len, uz = dz/len;
+      const tx = x - p0.x, tz = z - p0.z;
+      const proj = tx*ux + tz*uz;
+      if (proj >= 0 && proj <= len) {
+        const perp = Math.abs(tx*uz - tz*ux);
+        if (perp < hw) return true;
+      }
+    }
+  }
+  return false;
+}
+
 // ── Scene builder ─────────────────────────────────────────────────
 
 export function buildDriveMap(mapData) {
   // Remove existing trk-tagged scene objects
   const rm = []; scene.traverse(o => { if (o.userData.trk) rm.push(o); }); rm.forEach(o => scene.remove(o));
+  state.sceneryColliders = [];
+
+  // Fog + sky
+  const skyHex = parseInt((mapData.skyColor || '#0d1a2e').replace('#', ''), 16);
+  const fogDist = mapData.fogDist || 800;
+  scene.fog = new THREE.Fog(skyHex, fogDist * 0.35, fogDist);
+  scene.background = new THREE.Color(skyHex);
 
   const nodeMap = new Map();
   for (const n of (mapData.nodes || [])) nodeMap.set(n.id, n);
@@ -202,16 +326,21 @@ export function buildDriveMap(mapData) {
   gnd.receiveShadow = true; gnd.userData.trk = true; scene.add(gnd);
 
   // Roads
-  for (const road of (mapData.roads || [])) {
+  const roadList = mapData.roads || [];
+  for (const road of roadList) {
     const raw = _roadPath(road, nodeMap);
     if (!raw) continue;
     const pts = _samplePath(raw, 8);
     const geo = _buildRibbon(pts, road.width || 10);
     if (!geo) continue;
-    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+    const roadMat = new THREE.MeshLambertMaterial({
       color: ROAD_COLORS_3D[road.type] || ROAD_COLORS_3D.street,
-    }));
+    });
+    roadMat.polygonOffset = true; roadMat.polygonOffsetFactor = -1; roadMat.polygonOffsetUnits = -2;
+    const mesh = new THREE.Mesh(geo, roadMat);
     mesh.receiveShadow = true; mesh.userData.trk = true; scene.add(mesh);
+
+    _buildRoadMarkings(pts, road.width || 10, road.type || 'street');
 
     const hw = (road.width || 10) / 2;
     if (road.type === 'highway') {
@@ -224,8 +353,9 @@ export function buildDriveMap(mapData) {
     }
   }
 
-  // Assets — render all (including auto-generated scenery)
+  // Assets — skip any that land on a road, add colliders for trees/buildings
   (mapData.assets || []).forEach((asset, i) => {
+    if (_pointOnRoad(asset.x, asset.z, roadList, nodeMap)) return;
     const t = _assetHash(i);
     const t2 = _assetHash(i + 1000);
     let mesh = null;
@@ -255,16 +385,23 @@ export function buildDriveMap(mapData) {
       const g = new THREE.Group();
       const bld = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _mat(col));
       bld.position.y = h / 2; bld.castShadow = true; g.add(bld);
-      if (h > 14) {
-        const wh = h * 0.55;
-        const wm = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, wh, d + 0.1), _WIN_MAT);
-        wm.position.y = h * 0.3 + wh / 2; g.add(wm);
+
+      // Interlaced window/wall floors — every other floor gets a window band
+      const floorH = isCity ? 3.5 : 3.0;
+      const winBandH = floorH * 0.55;
+      const numFloors = Math.max(1, Math.floor(h / floorH));
+      const winMat = (t4 > 0.5) ? _WIN_MAT : _WARM_WIN_MAT;
+      for (let f = 0; f < numFloors; f++) {
+        if (f % 2 !== 0) continue; // only every other floor has windows
+        const wy = f * floorH + (floorH - winBandH) / 2 + winBandH / 2;
+        if (wy + winBandH / 2 > h) continue;
+        const band = new THREE.Mesh(
+          new THREE.BoxGeometry(w + 0.06, winBandH, d + 0.06),
+          winMat
+        );
+        band.position.y = wy; g.add(band);
       }
-      if (h > 12 && t2 > 0.6) {
-        const wy = 3 + Math.floor(t4 * (h - 4) / 4.5) * 4.5;
-        const wn = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.8, 0.1), _WARM_WIN_MAT);
-        wn.position.set((t3 - 0.5) * w * 0.6, wy, d / 2 + 0.06); g.add(wn);
-      }
+
       if (isCity && h > 22 && t4 > 0.78) {
         const nCol = _NEON_COLS[Math.floor(t * _NEON_COLS.length)];
         const nSign = new THREE.Mesh(
@@ -304,7 +441,15 @@ export function buildDriveMap(mapData) {
       );
       mesh.position.set(asset.x, h / 2, asset.z);
     }
-    if (mesh) { mesh.castShadow = true; mesh.userData.trk = true; scene.add(mesh); }
+    if (mesh) {
+      mesh.castShadow = true; mesh.userData.trk = true; scene.add(mesh);
+      // Colliders for solid objects
+      if (asset.type === 'tree') {
+        state.sceneryColliders.push({ x: asset.x, z: asset.z, r: 1.2 });
+      } else if (asset.type === 'building') {
+        state.sceneryColliders.push({ x: asset.x, z: asset.z, r: 4.5 });
+      }
+    }
   });
 
   // Compute bounding box for physics
@@ -342,6 +487,20 @@ export function applyDriveMapBounds(car) {
     car.spd *= 0.8; if (car.isReversing) car.revSpd *= 0.7;
     car.mesh.position.copy(car.pos);
   }
+
+  // Scenery collisions
+  const carR = 1.3;
+  for (const col of state.sceneryColliders) {
+    const cdx = car.pos.x - col.x, cdz = car.pos.z - col.z;
+    const cd = Math.sqrt(cdx*cdx + cdz*cdz);
+    const minD = col.r + carR;
+    if (cd < minD && cd > 0.01) {
+      const f2 = minD / cd;
+      car.pos.x = col.x + cdx * f2; car.pos.z = col.z + cdz * f2;
+      car.spd *= 0.5; if (car.isReversing) car.revSpd *= 0.5;
+      car.mesh.position.copy(car.pos);
+    }
+  }
 }
 
 // ── Minimap canvas ────────────────────────────────────────────────
@@ -364,7 +523,7 @@ export function buildDriveMapMinimap(mapData) {
   const minX = Math.min(...allX, 0), maxX = Math.max(...allX, 0);
   const minZ = Math.min(...allZ, 0), maxZ = Math.max(...allZ, 0);
   const rangeX = maxX - minX || 200, rangeZ = maxZ - minZ || 200;
-  const scale = (half - 10) / Math.max(rangeX / 2, rangeZ / 2);
+  const scale = (half - 18) / Math.max(rangeX, rangeZ) * 2;
   const ocx = (minX + maxX) / 2, ocz = (minZ + maxZ) / 2;
   const toM = (x, z) => [half + (x - ocx) * scale, half + (z - ocz) * scale];
 
@@ -375,7 +534,7 @@ export function buildDriveMapMinimap(mapData) {
     if (!raw) continue;
     const pts = _samplePath(raw, 4);
     ctx.strokeStyle = MINIMAP_ROAD_COLORS[road.type] || '#444';
-    ctx.lineWidth = Math.max(2, (road.width || 10) * scale * 0.55);
+    ctx.lineWidth = Math.max(1.5, (road.width || 10) * scale * 0.45);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.beginPath();
     pts.forEach((p, i) => { const [mx, mz] = toM(p.x, p.z); i ? ctx.lineTo(mx, mz) : ctx.moveTo(mx, mz); });
