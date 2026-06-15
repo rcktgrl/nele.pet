@@ -1,6 +1,6 @@
 'use strict';
 
-import { Net, gauss, LOG_2PI, accumulatePPOGrads } from './nn-core.js';
+import { Net, GRUNet, gauss, LOG_2PI, accumulatePPOGrads, accumulatePPORecurrentGrads } from './nn-core.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  AI Trainer — Simulation Worker (PPO + optional mods)
@@ -67,6 +67,8 @@ let cfg = {
   minibatch: 256,
   hiddenSize: 64,        // restart required
   hiddenLayers: 1,       // restart required
+  recurrent: false,      // restart required — GRU recurrent policy/critic (BPTT)
+  bpttLen: 32,           // truncated-BPTT window (decisions per training chunk)
   backend: 'auto',       // 'auto' | 'gpu' | 'wasm' | 'js' — restart required
   threads: 0,            // gradient worker count, 0 = auto (cores − 2, max 6)
   // PPO mods
@@ -608,7 +610,10 @@ const SLOPE_NORM  = 0.30;   // |Δy/Δs| considered "max steep"
 // backprop-through-time is needed — this is the standard "external memory
 // as action" recurrence. The delta limit keeps the register stable under
 // the Gaussian exploration noise on the memory actions.
-const MEM_DIM  = 4;
+// MEM_DIM is the external "memory-as-action" register width. It is 4 in the
+// feed-forward policy and 0 in recurrent mode, where a GRU hidden state carries
+// memory instead. Set by configureDims() at init.
+let MEM_DIM  = 4;
 const MEM_RATE = 0.1;  // max register change per decision (≈5 % of range per tick)
 
 // Observation layout:
@@ -619,8 +624,8 @@ const MEM_RATE = 0.1;  // max register change per decision (≈5 % of range per 
 //  [22] reversing flag      [23] slope at the car
 //  [24..35] 6 probes × (relative angle, slope between probes)
 //  [36..39] 4 memory cells (written by the policy's memory actions)
-const OBS_DIM = 24 + PROBE_DISTS.length * 2 + MEM_DIM;
 const MEM_OBS = 24 + PROBE_DISTS.length * 2;   // base index of memory cells
+let OBS_DIM = MEM_OBS + MEM_DIM;               // recomputed by configureDims()
 
 // Arc position of a car, using and updating its locality hint.
 function carArc(car) {
@@ -713,16 +718,79 @@ export function mirrorActInto(src, dst) {
 //  PPO agent
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ACT_DIM = 2 + MEM_DIM; // [steer, throttle/brake, 4 memory-cell deltas]
+let ACT_DIM = 2 + MEM_DIM; // [steer, throttle/brake, (memory-cell deltas)]
 
-let actor  = null;          // Net [OBS_DIM, h, ACT_DIM] → action means
-let critic = null;          // Net [OBS_DIM, h, 1] → state value
+// Recompute the obs/action layout for the current mode. Recurrent mode drops
+// the external memory cells (the GRU hidden state replaces them); feed-forward
+// keeps the 4 memory-as-action channels.
+function configureDims() {
+  isRecurrent = !!cfg.recurrent;
+  MEM_DIM = isRecurrent ? 0 : 4;
+  OBS_DIM = MEM_OBS + MEM_DIM;
+  ACT_DIM = 2 + MEM_DIM;
+}
+
+let isRecurrent = false;    // true when the GRU policy/critic is active
+let actor  = null;          // Net or GRUNet → action means
+let critic = null;          // Net or GRUNet → state value
 let logStd = null;          // Float64Array(ACT_DIM), learnable
 let lsM = null, lsV = null; // Adam moments for logStd
 let lsT = 0;
 
+// ── Value (return) normalisation ─────────────────────────────────────────────
+// The critic predicts NORMALISED returns; its output is de-normalised wherever
+// it feeds GAE/bootstraps, and return targets are normalised before training.
+// A PopArt-style rescale of the critic's output layer keeps the learned value
+// function intact as the running statistics move. Without this the critic must
+// fit raw return magnitudes (progress + lap bonuses span a wide, drifting
+// range), which produces noisy advantages and an unstable policy.
+let valMean = 0, valStd = 1, valInit = false;
+function vDenorm(vn) { return vn * valStd + valMean; }   // critic output → value
+function updateValueStats(returns, n) {
+  let m = 0; for (let k = 0; k < n; k++) m += returns[k]; m /= n;
+  let v = 0; for (let k = 0; k < n; k++) v += (returns[k] - m) ** 2; v /= n;
+  const oldMean = valMean, oldStd = valStd;
+  if (!valInit) { valMean = m; valStd = Math.max(1e-3, Math.sqrt(v)); valInit = true; }
+  else {
+    const a = 0.05;  // slow EMA so the normalisation frame moves gently
+    valMean = (1 - a) * valMean + a * m;
+    const varEma = (1 - a) * (oldStd * oldStd) + a * v;
+    valStd = Math.max(1e-3, Math.sqrt(varEma));
+  }
+  // keep the critic's de-normalised outputs invariant under the frame shift
+  if (critic) critic.popartRescale(oldMean, oldStd, valMean, valStd);
+}
+
 function initAgent(modelOverride) {
+  configureDims();
+  // fresh value-normalisation frame for the new run
+  valMean = 0; valStd = 1; valInit = false;
   const h = cfg.hiddenSize, nl = Math.max(1, cfg.hiddenLayers | 0);
+
+  if (isRecurrent) {
+    // single GRU layer (hiddenLayers is ignored — the recurrent state is the
+    // depth) followed by a linear head, for both actor and critic.
+    actor  = new GRUNet([OBS_DIM, h, ACT_DIM], 0.01);
+    critic = new GRUNet([OBS_DIM, h, 1], 1);
+    logStd = new Float64Array(ACT_DIM).fill(-0.5);
+    lsM = new Float64Array(ACT_DIM);
+    lsV = new Float64Array(ACT_DIM);
+    lsT = 0;
+    if (modelOverride && modelOverride.algo === 'ppo-gru') {
+      try {
+        if (modelOverride.obsDim !== OBS_DIM || modelOverride.actDim !== ACT_DIM)
+          throw new Error(`incompatible recurrent model: obs ${modelOverride.obsDim}/act ${modelOverride.actDim} ` +
+                          `vs current obs ${OBS_DIM}/act ${ACT_DIM}`);
+        actor  = new GRUNet(modelOverride.actor.sizes, 1);  actor.loadFlat(modelOverride.actor.flat);
+        critic = new GRUNet(modelOverride.critic.sizes, 1); critic.loadFlat(modelOverride.critic.flat);
+        logStd = Float64Array.from(modelOverride.logStd);
+      } catch (err) {
+        postMessage({ type: 'error', message: 'Model import failed: ' + err.message });
+      }
+    }
+    return;
+  }
+
   const actSizes  = [OBS_DIM, ...Array(nl).fill(h), ACT_DIM];
   const critSizes = [OBS_DIM, ...Array(nl).fill(h), 1];
   actor  = new Net(actSizes,  0.01);
@@ -791,6 +859,7 @@ function applyFailMask(env) {
 
 // Weights changed (update / repair / restore) → defect copies must follow.
 function refreshFailNets() {
+  if (isRecurrent) return;  // failure mode is feed-forward only
   for (const env of envs) {
     if (cfg.failRate > 0 && env.failMask) applyFailMask(env);
     else env.actNet = null;
@@ -995,8 +1064,14 @@ function makeEnv(i) {
     pendObs: null, pendLogp: 0, pendVal: 0, rewAcc: 0,
     // mirror twin of the pending transition (cfg.mirror)
     pendObsM: null, pendActM: null, pendLogpM: 0, pendValM: 0,
-    // per-env rollout chains (M = mirrored twin; shares rew/done values)
-    buf:  { obs: [], act: [], logp: [], val: [], rew: [], done: [] },
+    // recurrent hidden state carried across decisions (null in feed-forward
+    // mode); pendH* snapshot the INPUT state of the pending transition
+    hActor:  isRecurrent ? new Float64Array(actor.H)  : null,
+    hCritic: isRecurrent ? new Float64Array(critic.H) : null,
+    pendHActor: null, pendHCritic: null,
+    // per-env rollout chains (M = mirrored twin; shares rew/done values).
+    // hA/hC hold each transition's input hidden state (recurrent only).
+    buf:  { obs: [], act: [], logp: [], val: [], rew: [], done: [], hA: [], hC: [] },
     bufM: { obs: [], act: [], logp: [], val: [], rew: [], done: [] },
     // weight-failure mode
     failMask: null, actNet: null,
@@ -1009,6 +1084,7 @@ function clearChains(env) {
   for (const b of [env.buf, env.bufM]) {
     b.obs.length = 0; b.act.length = 0; b.logp.length = 0;
     b.val.length = 0; b.rew.length = 0; b.done.length = 0;
+    if (b.hA) { b.hA.length = 0; b.hC.length = 0; }
   }
 }
 
@@ -1022,8 +1098,11 @@ function resetEnv(env, i, pose = null) {
   env.repCount = 0;
   env.pendObs = null; env.pendObsM = null; env.rewAcc = 0;
   env.gDone = false; env.gFit = 0;
-  // fresh episode → fresh defects
-  if (cfg.failRate > 0) rollFailMask(env);
+  // episode boundary → fresh recurrent state
+  if (env.hActor)  env.hActor.fill(0);
+  if (env.hCritic) env.hCritic.fill(0);
+  // fresh episode → fresh defects (feed-forward only)
+  if (!isRecurrent && cfg.failRate > 0) rollFailMask(env);
   else env.actNet = null;
 }
 
@@ -1036,7 +1115,9 @@ function resetEnv(env, i, pose = null) {
 //  until the slowest one is done.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const groupOn = () => (cfg.groupSize | 0) > 1;
+// Group (GRPO) mode and the feed-forward-only mods are mutually exclusive with
+// recurrent mode (the GRU trains by BPTT over per-env sequences instead).
+const groupOn = () => !isRecurrent && (cfg.groupSize | 0) > 1;
 
 // Episode-complete transitions waiting for the next group-mode update.
 let readyBatch = { OBS: [], ACT: [], LOGP: [], ADV: [], RET: [] };
@@ -1086,6 +1167,11 @@ export function nearestWallForTest(px, pz, sideName) {
 }
 
 function initSim(modelOverride) {
+  // Invalidate any PPO update still in flight from a previous run — re-init can
+  // change the obs/action layout and swap actor/critic, so a stale async update
+  // must not resume and mutate the new state.
+  simGen++;
+  _ppoRunning = false;
   buildArcTable();
   buildWallIndex();
   initAgent(modelOverride || null);
@@ -1119,6 +1205,10 @@ function commitTransition(env, done, extra = 0, extraM = 0) {
   env.buf.val.push(env.pendVal);
   env.buf.rew.push(env.rewAcc + extra);
   env.buf.done.push(done ? 1 : 0);
+  if (isRecurrent) {
+    env.buf.hA.push(env.pendHActor);
+    env.buf.hC.push(env.pendHCritic);
+  }
   if (env.pendObsM) {
     env.bufM.obs.push(env.pendObsM);
     env.bufM.act.push(env.pendActM);
@@ -1143,10 +1233,14 @@ function terminateEnv(env, i, penalty, truncated) {
     // mistaken for a real terminal (groups skip this — no critic there)
     const obs = new Float64Array(OBS_DIM);
     buildObs(env.car, obs);
-    boot = cfg.gamma * critic.forwardScratch(obs)[0];
-    if (env.pendObsM) {
-      const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
-      bootM = cfg.gamma * critic.forwardScratch(obsM)[0];
+    if (isRecurrent) {
+      boot = cfg.gamma * vDenorm(critic.step(obs, env.hCritic, new Float64Array(critic.H))[0]);
+    } else {
+      boot = cfg.gamma * vDenorm(critic.forwardScratch(obs)[0]);
+      if (env.pendObsM) {
+        const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
+        bootM = cfg.gamma * vDenorm(critic.forwardScratch(obsM)[0]);
+      }
     }
   }
   commitTransition(env, true, boot, bootM);
@@ -1181,30 +1275,49 @@ function stepOnce(dt) {
       commitTransition(env, false); // finalize previous window (non-terminal)
       const obs = new Float64Array(OBS_DIM);
       buildObs(car, obs);
-      const pol = actingNet(env);   // true actor, or the defect-masked copy
-      const mean = pol.forwardScratch(obs);
-      for (let d = 0; d < ACT_DIM; d++) {
-        env.curAct[d] = mean[d] + Math.exp(logStd[d]) * gauss();
-      }
-      env.pendObs  = obs;
-      env.pendLogp = logProb(env.curAct, mean);
-      env.pendVal  = groupOn() ? 0 : critic.forwardScratch(obs)[0];
-      if (cfg.mirror) {
-        // synthetic twin: mirrored observation + mirrored action, with its
-        // own behavior log-prob/value so PPO's ratio and GAE stay exact
-        // (forwardScratch reuses pol's buffer — `mean` is consumed above)
-        const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
-        const actM = mirrorActInto(env.curAct, new Float64Array(ACT_DIM));
-        env.pendObsM  = obsM;
-        env.pendActM  = actM;
-        env.pendLogpM = logProb(actM, pol.forwardScratch(obsM));
-        env.pendValM  = groupOn() ? 0 : critic.forwardScratch(obsM)[0];
+      let mean;
+      if (isRecurrent) {
+        // Recurrent: snapshot the INPUT hidden state, then advance the actor &
+        // critic GRUs (the value is de-normalised; the critic predicts a
+        // normalised return).
+        env.pendHActor  = Float64Array.from(env.hActor);
+        env.pendHCritic = Float64Array.from(env.hCritic);
+        const haNext = new Float64Array(actor.H);
+        mean = actor.step(obs, env.hActor, haNext);   // reused scratch — consumed below
+        env.hActor = haNext;
+        const hcNext = new Float64Array(critic.H);
+        const vNorm = critic.step(obs, env.hCritic, hcNext)[0];
+        env.hCritic = hcNext;
+        for (let d = 0; d < ACT_DIM; d++) env.curAct[d] = mean[d] + Math.exp(logStd[d]) * gauss();
+        env.pendObs  = obs;
+        env.pendLogp = logProb(env.curAct, mean);
+        env.pendVal  = vDenorm(vNorm);
+      } else {
+        const pol = actingNet(env);   // true actor, or the defect-masked copy
+        mean = pol.forwardScratch(obs);
+        for (let d = 0; d < ACT_DIM; d++) {
+          env.curAct[d] = mean[d] + Math.exp(logStd[d]) * gauss();
+        }
+        env.pendObs  = obs;
+        env.pendLogp = logProb(env.curAct, mean);
+        env.pendVal  = groupOn() ? 0 : vDenorm(critic.forwardScratch(obs)[0]);
+        if (cfg.mirror) {
+          // synthetic twin: mirrored observation + mirrored action, with its
+          // own behavior log-prob/value so PPO's ratio and GAE stay exact
+          // (forwardScratch reuses pol's buffer — `mean` is consumed above)
+          const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
+          const actM = mirrorActInto(env.curAct, new Float64Array(ACT_DIM));
+          env.pendObsM  = obsM;
+          env.pendActM  = actM;
+          env.pendLogpM = logProb(actM, pol.forwardScratch(obsM));
+          env.pendValM  = groupOn() ? 0 : vDenorm(critic.forwardScratch(obsM)[0]);
+        }
       }
       if (cfg.neuronRepair && (totalSteps & 31) === 0) reservoirOffer(obs);
       env.repCount = cfg.actionRepeat;
       // Memory write: rate-limited delta from the memory actions. Applied
       // after the observation snapshot, so the new value appears in the
-      // NEXT decision's observation.
+      // NEXT decision's observation. (no-op in recurrent mode: MEM_DIM = 0)
       for (let d = 0; d < MEM_DIM; d++) {
         const a = Math.max(-1, Math.min(1, env.curAct[2 + d]));
         car.mem[d] = Math.max(-1, Math.min(1, car.mem[d] + MEM_RATE * a));
@@ -1288,7 +1401,7 @@ function stepOnce(dt) {
     }
   } else if (agentSteps >= cfg.horizon * cfg.numEnvs && !_ppoRunning) {
     _ppoRunning = true;
-    const batch = _flushBatch();   // sync: GAE + clear env bufs
+    const batch = isRecurrent ? _flushBatchRecurrent() : _flushBatch();
     agentSteps = 0;
     if (batch.N >= 8) _runPPO(batch); else _ppoRunning = false;
   }
@@ -1380,6 +1493,9 @@ function sendTfWeights() {
 function initGpu() {
   if (tfWorker) { try { tfWorker.terminate(); } catch (_) { /* dead */ } tfWorker = null; }
   if (_tfPending) { clearTimeout(_tfPending.timer); _tfPending = null; }
+  // The TF.js per-sample kernel can't do BPTT — recurrent training stays on the
+  // CPU/WASM gradient pool.
+  if (isRecurrent) { gpuState = 'off'; gpuInfo = 'recurrent (GRU) — CPU/WASM BPTT'; return; }
   if (cfg.backend !== 'gpu') { gpuState = 'off'; gpuInfo = ''; return; }
   gpuState = 'init'; gpuInfo = 'GPU (TF.js WebGL) initializing…';
   try {
@@ -1440,6 +1556,7 @@ function gradTask(w, msg, transfers) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 let _ppoRunning = false;
+let simGen = 0;   // bumped on every re-init; stale async updates check it and bail
 
 function _flushBatch() {
   // Close any open repeat windows; envs get fresh decisions next tick.
@@ -1474,16 +1591,72 @@ function _flushBatch() {
     if (open) {
       const obs = new Float64Array(OBS_DIM);
       buildObs(env.car, obs);
-      nextVal = critic.forwardScratch(obs)[0];
+      nextVal = vDenorm(critic.forwardScratch(obs)[0]);
       if (env.bufM.obs.length) {
         const obsM = mirrorObsInto(obs, new Float64Array(OBS_DIM));
-        nextValM = critic.forwardScratch(obsM)[0];
+        nextValM = vDenorm(critic.forwardScratch(obsM)[0]);
       }
     }
     flushChain(env.buf, nextVal);
     flushChain(env.bufM, nextValM);
   }
   return { OBS, ACT, LOGP, ADV, RET, N: OBS.length };
+}
+
+// Recurrent batch: GAE over each env's full chain (same as feed-forward), then
+// slice the chain into truncated-BPTT chunks of cfg.bpttLen decisions. Each
+// chunk is a training sequence seeded with the rollout hidden state stored at
+// its first step. adv/ret are raw here; _runPPO normalises them.
+function _flushBatchRecurrent() {
+  for (const env of envs) { commitTransition(env, false); env.repCount = 0; }
+  const L = Math.max(1, cfg.bpttLen | 0);
+  const seqs = [];
+  let N = 0;
+
+  for (const env of envs) {
+    const b = env.buf;
+    const T = b.obs.length;
+    if (!T) continue;
+
+    // bootstrap an unfinished tail with the carried critic state
+    let nextVal = 0;
+    if (!b.done[T - 1]) {
+      const obs = new Float64Array(OBS_DIM);
+      buildObs(env.car, obs);
+      nextVal = vDenorm(critic.step(obs, env.hCritic, new Float64Array(critic.H))[0]);
+    }
+    // GAE over the whole chain
+    const adv = new Float64Array(T), ret = new Float64Array(T);
+    let gae = 0;
+    for (let t = T - 1; t >= 0; t--) {
+      const nonTerm = 1 - b.done[t];
+      const nextV = t === T - 1 ? nextVal : b.val[t + 1];
+      const delta = b.rew[t] + cfg.gamma * nextV * nonTerm - b.val[t];
+      gae = delta + cfg.gamma * cfg.lam * nonTerm * gae;
+      adv[t] = gae; ret[t] = gae + b.val[t];
+    }
+    // slice into BPTT chunks
+    for (let t0 = 0; t0 < T; t0 += L) {
+      const t1 = Math.min(T, t0 + L), len = t1 - t0;
+      const obs  = new Float64Array(len * OBS_DIM);
+      const act  = new Float64Array(len * ACT_DIM);
+      const logp = new Float64Array(len);
+      const cadv = new Float64Array(len);
+      const cret = new Float64Array(len);
+      const done = new Float64Array(len);
+      for (let k = 0; k < len; k++) {
+        obs.set(b.obs[t0 + k], k * OBS_DIM);
+        act.set(b.act[t0 + k], k * ACT_DIM);
+        logp[k] = b.logp[t0 + k]; cadv[k] = adv[t0 + k]; cret[k] = ret[t0 + k];
+        done[k] = b.done[t0 + k];
+      }
+      seqs.push({ T: len, obsDim: OBS_DIM, actDim: ACT_DIM, obs, act, logp,
+                  adv: cadv, ret: cret, done, h0a: b.hA[t0], h0c: b.hC[t0] });
+      N += len;
+    }
+    clearChains(env);
+  }
+  return { recurrent: true, seqs, N };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1547,6 +1720,9 @@ function loadBestSnapshot() {
   for (const env of envs) {
     clearChains(env);
     env.pendObs = null; env.pendObsM = null; env.rewAcc = 0; env.repCount = 0;
+    // restored policy → start fresh recurrent sequences
+    if (env.hActor)  env.hActor.fill(0);
+    if (env.hCritic) env.hCritic.fill(0);
   }
   readyBatch = { OBS: [], ACT: [], LOGP: [], ADV: [], RET: [] };
   agentSteps = 0;
@@ -1556,7 +1732,163 @@ function loadBestSnapshot() {
   refreshFailNets();  // defect copies must act with the restored weights
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Recurrent PPO update — sequence-based BPTT. Each training unit is a
+//  truncated-BPTT chunk (cfg.bpttLen decisions) seeded with its rollout hidden
+//  state. Minibatches are groups of chunks; gradients are computed by the
+//  worker pool (WASM/JS) or locally, then one Adam step per minibatch.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function _runPPORecurrent(batch) {
+  const gen = simGen;
+  const { seqs, N } = batch;
+  const actDim = ACT_DIM;
+
+  // advantage normalisation across every step in the batch
+  let mean = 0; for (const s of seqs) for (let t = 0; t < s.T; t++) mean += s.adv[t];
+  mean /= N;
+  let varr = 0; for (const s of seqs) for (let t = 0; t < s.T; t++) varr += (s.adv[t] - mean) ** 2;
+  const std = Math.sqrt(varr / N) + 1e-8;
+  for (const s of seqs) for (let t = 0; t < s.T; t++) s.adv[t] = (s.adv[t] - mean) / std;
+
+  // value normalisation: move the return frame (PopArt-rescale the critic),
+  // then normalise every chunk's return targets.
+  const allRet = new Float64Array(N);
+  { let k = 0; for (const s of seqs) for (let t = 0; t < s.T; t++) allRet[k++] = s.ret[t]; }
+  updateValueStats(allRet, N);
+  for (const s of seqs) for (let t = 0; t < s.T; t++) s.ret[t] = (s.ret[t] - valMean) / valStd;
+
+  const hp = { clip: cfg.clip, entropyCoef: cfg.entropyCoef, vfCoef: cfg.vfCoef };
+
+  // KL movement estimate over a few chunks (recurrent forward).
+  const klEstimate = () => {
+    let kl = 0, cnt = 0;
+    const sample = Math.min(8, seqs.length);
+    for (let si = 0; si < sample; si++) {
+      const s = seqs[si];
+      const { ys } = actor.seqForward(s.obs, s.T, s.h0a, s.done);
+      for (let t = 0; t < s.T; t++) {
+        let lp = 0;
+        for (let d = 0; d < actDim; d++) {
+          const sd = Math.exp(logStd[d]);
+          const z = (s.act[t * actDim + d] - ys[t * actDim + d]) / sd;
+          lp += -0.5 * z * z - logStd[d] - 0.5 * LOG_2PI;
+        }
+        const dd = Math.min(20, lp - s.logp[t]);
+        kl += (Math.exp(dd) - 1) - dd; cnt++;
+      }
+    }
+    return cnt ? kl / cnt : 0;
+  };
+  const kl0 = cfg.klStop ? klEstimate() : 0;
+
+  const order = Array.from({ length: seqs.length }, (_, k) => k);
+  const mbTarget = Math.max(1, cfg.minibatch | 0);
+  let sumPi = 0, sumV = 0, sumEnt = 0, nMB = 0, epochsRan = 0;
+
+  for (let ep = 0; ep < cfg.epochs; ep++) {
+    for (let k = order.length - 1; k > 0; k--) {
+      const j = Math.floor(Math.random() * (k + 1));
+      const tmp = order[k]; order[k] = order[j]; order[j] = tmp;
+    }
+
+    // greedily pack chunks into minibatches of ~mbTarget steps
+    let mi = 0;
+    while (mi < order.length) {
+      if (gen !== simGen) return;  // re-init happened → abandon this stale update
+      const mb = [];
+      let bs = 0;
+      while (mi < order.length && (bs === 0 || bs < mbTarget)) {
+        const s = seqs[order[mi++]];
+        mb.push(s); bs += s.T;
+      }
+
+      let gLs, mbPi, mbV, mbEnt;
+      const pool = gradPool && gradPool.length ? gradPool : null;
+      const aFlat = actor.flatF64(), cFlat = critic.flatF64();
+
+      if (pool) {
+        const K = Math.min(pool.length, mb.length);
+        const per = Math.ceil(mb.length / K);
+        const lsArr = Array.from(logStd);
+        const tasks = [];
+        for (let c = 0; c < K; c++) {
+          const slice = mb.slice(c * per, (c + 1) * per);
+          if (!slice.length) break;
+          tasks.push(gradTask(pool[c], {
+            type: 'gradRec',
+            force: cfg.backend === 'js' ? 'js' : 'auto',
+            actorSizes: actor.sizes, criticSizes: critic.sizes,
+            actorFlat: aFlat, criticFlat: cFlat, logStd: lsArr,
+            hp, actDim, seqs: slice,
+          }));
+        }
+        let results;
+        try {
+          results = await Promise.all(tasks);
+        } catch (err) {
+          for (const x of gradPool) { try { x.terminate(); } catch (_) { /* dead */ } }
+          gradPool = [];
+          mi -= mb.length;  // redo this minibatch locally
+          continue;
+        }
+        const aG = new Float64Array(aFlat.length), cG = new Float64Array(cFlat.length);
+        gLs = new Float64Array(actDim); mbPi = 0; mbV = 0; mbEnt = 0;
+        for (const r of results) {
+          for (let k = 0; k < aG.length; k++) aG[k] += r.aG[k];
+          for (let k = 0; k < cG.length; k++) cG[k] += r.cG[k];
+          for (let d = 0; d < actDim; d++) gLs[d] += r.gLs[d];
+          mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
+          if (r.mode && r.mode.indexOf('wasm') === 0) _wasmOk = true;
+        }
+        actor.loadGradFlat(aG); critic.loadGradFlat(cG);
+      } else {
+        actor.zeroGrad(); critic.zeroGrad();
+        gLs = new Float64Array(actDim); mbPi = 0; mbV = 0; mbEnt = 0;
+        for (const s of mb) {
+          const r = accumulatePPORecurrentGrads(actor, critic, logStd, hp, s);
+          for (let d = 0; d < actDim; d++) gLs[d] += r.gLs[d];
+          mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
+        }
+        await new Promise(res => setTimeout(res, 0));  // let simLoop tick
+      }
+
+      actor.adamStep(cfg.lr, 1 / bs);
+      critic.adamStep(cfg.lr, 1 / bs);
+      lsT++;
+      const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+      const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
+      for (let d = 0; d < actDim; d++) {
+        const g = gLs[d] / bs;
+        lsM[d] = b1 * lsM[d] + (1 - b1) * g;
+        lsV[d] = b2 * lsV[d] + (1 - b2) * g * g;
+        logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
+        logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
+      }
+      sumPi += mbPi / bs; sumV += mbV / bs; sumEnt += mbEnt / bs; nMB++;
+    }
+
+    epochsRan = ep + 1;
+    if (cfg.klStop) {
+      const kl = klEstimate() - kl0;
+      lastKl = kl;
+      if (kl > cfg.klLimit) break;
+    }
+  }
+
+  if (gen !== simGen) return;
+  lastEpochs = epochsRan;
+  if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
+  iteration++;
+  if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
+  else updateBestSnapshot();
+  _ppoRunning = false;
+  if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
+}
+
 async function _runPPO(batch) {
+  if (batch.recurrent) { await _runPPORecurrent(batch); return; }
+  const gen = simGen;
   const { OBS, ACT, LOGP, ADV, RET } = batch;
   const N = OBS.length;
 
@@ -1565,6 +1897,15 @@ async function _runPPO(batch) {
   let varr = 0; for (const a of ADV) varr += (a - mean) ** 2;
   const std = Math.sqrt(varr / N) + 1e-8;
   for (let k = 0; k < N; k++) ADV[k] = (ADV[k] - mean) / std;
+
+  // Value normalisation: move the return-statistics frame (with a PopArt
+  // rescale of the critic so its outputs stay put), then train the critic on
+  // NORMALISED return targets. Skipped in group mode (no critic).
+  if (!batch.grouped) {
+    updateValueStats(RET, N);
+    if (gpuState === 'ready') sendTfWeights();  // tf critic must match the rescale
+    for (let k = 0; k < N; k++) RET[k] = (RET[k] - valMean) / valStd;
+  }
 
   const idx = Array.from({ length: N }, (_, k) => k);
   const hp = {
@@ -1631,6 +1972,7 @@ async function _runPPO(batch) {
         finite = Number.isFinite(r.actorFlat[k]);
       }
       if (!finite) throw new Error('non-finite weights returned');
+      if (gen !== simGen) return;  // re-init during the GPU round-trip
       actor.loadFlat(r.actorFlat);
       critic.loadFlat(r.criticFlat);
       for (let d2 = 0; d2 < ACT_DIM; d2++) logStd[d2] = r.logStd[d2];
@@ -1659,6 +2001,7 @@ async function _runPPO(batch) {
 
     // ── CPU path (pool or local): per-minibatch ──────────────────────────────
     for (let start = 0; start < N; start += cfg.minibatch) {
+      if (gen !== simGen) return;  // re-init happened → abandon this stale update
       const end = Math.min(N, start + cfg.minibatch);
       const bs = end - start;
       let gLs, mbPi, mbV, mbEnt;
@@ -1740,17 +2083,18 @@ async function _runPPO(batch) {
                                     // would only overfit this batch
     }
   }
+  if (gen !== simGen) return;  // re-init during the GPU update → discard results
   if (!gpuDone) lastEpochs = epochsRan;
 
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
   iteration++;
   if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
   else updateBestSnapshot();
-  if (_repairPending || (cfg.neuronRepair && iteration % REPAIR_EVERY === 0)) {
+  if (!isRecurrent && (_repairPending || (cfg.neuronRepair && iteration % REPAIR_EVERY === 0))) {
     _repairPending = false;
     repairPass();
   }
-  if (cfg.failRate > 0) refreshFailNets();  // defect copies track new weights
+  if (!isRecurrent && cfg.failRate > 0) refreshFailNets();  // defect copies track new weights
   _ppoRunning = false;
   if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
 }
@@ -1812,11 +2156,13 @@ function buildSnapshot() {
     sigma: logStd ? [Math.exp(logStd[0]), Math.exp(logStd[1])] : null,
     best: best ? { avg: best.avg, iter: best.iter, cur: curAvg } : null,
   };
-  // actor weights for the visualiser — heavy, send ~once per second
-  if (vizCounter++ % POST_HZ === 0 && actor) {
+  // actor weights for the visualiser — heavy, send ~once per second. The MLP
+  // visualiser can't render the GRU layout, so recurrent mode skips it.
+  if (!isRecurrent && vizCounter++ % POST_HZ === 0 && actor) {
     snap.actorFlat = actor.flat();
     snap.actorSizes = actor.sizes;
   }
+  snap.recurrent = isRecurrent;
   return snap;
 }
 
@@ -1927,8 +2273,9 @@ self.onmessage = function (e) {
       if (_ppoRunning) _poolRebuild = true;
       else initGradPool(true);
     }
-    // failure rate flipped — apply to the live agents right away
-    if (cfg.failRate > 0 && prevFail === 0 && envs.length) {
+    // failure rate flipped — apply to the live agents right away (feed-forward
+    // only; recurrent mode has no defect-masked acting copies)
+    if (!isRecurrent && cfg.failRate > 0 && prevFail === 0 && envs.length) {
       for (const env of envs) rollFailMask(env);
     } else if (cfg.failRate === 0 && prevFail > 0) {
       for (const env of envs) env.actNet = null;
@@ -1938,6 +2285,8 @@ self.onmessage = function (e) {
 
   if (type === 'repairNow') {
     // manual repair pass; deferred while gradient tasks hold the weights
+    // (neuron repair is feed-forward only)
+    if (isRecurrent) return;
     if (_ppoRunning) _repairPending = true;
     else repairPass();
     return;
@@ -1965,9 +2314,9 @@ self.onmessage = function (e) {
       type: 'modelExport',
       model: {
         id: 'ai-trainer-ppo',
-        name: 'AI Trainer PPO Export',
+        name: isRecurrent ? 'AI Trainer Recurrent PPO Export' : 'AI Trainer PPO Export',
         version: 3,
-        algo: 'ppo',
+        algo: isRecurrent ? 'ppo-gru' : 'ppo',
         obsDim: OBS_DIM,
         actDim: ACT_DIM,
         actor:  { sizes: actor.sizes,  flat: useBest ? Array.from(best.aFlat) : actor.flat()  },

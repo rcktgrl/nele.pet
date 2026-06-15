@@ -559,6 +559,12 @@
         <div class="opt-group" id="configUnitBtns"></div>
         <span style="color:#445;font-size:.58rem;">more neurons = more capacity, heavier updates</span>
       </div>
+      <div class="config-row">
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#889;font-size:.65rem;">
+          <span>RECURRENT (GRU)<br><span style="color:#445;font-size:.9em">GRU memory cell trained by BPTT — replaces the memory-as-action register. Runs on CPU/WASM (no GPU).</span></span>
+          <input type="checkbox" id="configRecurrentToggle" style="accent-color:#fa4;">
+        </label>
+      </div>
       <div class="config-info" id="configParamCount">…</div>
     </div>
 
