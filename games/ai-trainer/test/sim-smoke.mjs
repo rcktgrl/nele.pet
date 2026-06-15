@@ -249,5 +249,39 @@ console.log('\n6. Neuron repair on a crafted network');
   check('weights finite after crafted repair', !!m && m.actor.flat.every(Number.isFinite));
 }
 
+// ── 7. Recurrent PPO (GRU policy/critic, BPTT) ───────────────────────────────
+console.log('\n7. Recurrent PPO (GRU)');
+{
+  inbox.length = 0;
+  send({ type: 'init', track: makeTrack(), carData, config: {
+    numEnvs: 4, speedMult: 200, episodeLen: 12,
+    backend: 'js', threads: 1, minibatch: 96, horizon: 64, epochs: 2,
+    recurrent: true, bpttLen: 16, klStop: false,
+  } });
+  const ready = await waitFor(m => m.type === 'ready', 5000);
+  check('recurrent worker ready', !!ready);
+  // memory-as-action cells are dropped → obs 36, act 2
+  check(`obs/act layout dropped memory cells (obs ${ready && ready.obsDim})`,
+    !!ready && ready.obsDim === 36 && ready.actorSizes[ready.actorSizes.length - 1] === 2);
+  send({ type: 'start' });
+  await new Promise(res => setTimeout(res, 18000));
+  send({ type: 'getSnapshot' });
+  await waitFor(m => m.type === 'frame', 3000);
+  let frame = null;
+  for (const m of inbox) if (m.type === 'frame') frame = m;
+  send({ type: 'stop' });
+  if (frame) {
+    check(`recurrent updates completed (${frame.iteration})`, frame.iteration > 0);
+    check('recurrent losses finite', Number.isFinite(frame.loss.pi) && Number.isFinite(frame.loss.v));
+    check('frame flagged recurrent', frame.recurrent === true);
+  } else {
+    check('recurrent snapshot', false);
+  }
+  const m = await exportModel();
+  check('export is a recurrent (GRU) model',
+    !!m && m.algo === 'ppo-gru' && m.obsDim === 36 && m.actDim === 2 &&
+    m.actor.flat.every(Number.isFinite) && m.critic.flat.every(Number.isFinite));
+}
+
 console.log(failures ? `\n${failures} CHECK(S) FAILED` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

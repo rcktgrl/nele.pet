@@ -12,7 +12,7 @@
 //  gradient sums in transferable buffers and `mode: 'wasm' | 'js'`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Net, accumulatePPOGrads } from './nn-core.js';
+import { Net, GRUNet, accumulatePPOGrads, accumulatePPORecurrentGrads } from './nn-core.js';
 
 // ── WASM loading ─────────────────────────────────────────────────────────────
 
@@ -201,10 +201,131 @@ function computeGradsJS(d) {
   };
 }
 
+// ── Recurrent (GRU/BPTT) gradient — WASM path ────────────────────────────────
+// compute_ppo_recurrent_grads handles one sequence per call and ACCUMULATES
+// into the grad/loss buffers, so we zero them once and loop the chunks. Returns
+// null (→ JS fallback) if a chunk exceeds the kernel's caps (T>64 or H>256).
+
+function gruParamCount(I, H, O) { return 3 * H * I + 3 * H * H + 3 * H + O * H + O; }
+
+function computeGradsRecWasm(d) {
+  const aSizes = d.actorSizes, cSizes = d.criticSizes;
+  const I = aSizes[0], H = aSizes[1], O = d.actDim;
+  let Tmax = 0;
+  for (const s of d.seqs) if (s.T > Tmax) Tmax = s.T;
+  if (H > 256 || Tmax > 64) return null;  // caps → JS path
+
+  const Pa = gruParamCount(I, H, O), Pc = gruParamCount(I, H, 1);
+  const a8 = n => (n + 7) & ~7;
+  const szSizes = a8(3 * 4), szO = a8(O * 8), szH = a8(H * 8), szLoss = a8(3 * 8);
+  const szPa = a8(Pa * 8), szPc = a8(Pc * 8);
+  const szObs = a8(Tmax * I * 8), szAct = a8(Tmax * O * 8), szT = a8(Tmax * 8);
+
+  if (arenaBase === 0) arenaBase = wasmInst.exports.get_heap_base();
+  const total = szSizes * 2 + szPa + szPc + szO + szObs + szAct + szT * 4 +
+                szH * 2 + szPa + szPc + szO + szLoss;
+  const mem = wasmInst.exports.memory;
+  let o = (arenaBase + 7) & ~7;
+  const needed = o + total;
+  if (needed > mem.buffer.byteLength) mem.grow(Math.ceil((needed - mem.buffer.byteLength) / 65536));
+
+  const take = sz => { const off = o; o += sz; return off; };
+  const aSizesOff = take(szSizes), cSizesOff = take(szSizes);
+  const aFlatOff = take(szPa), cFlatOff = take(szPc), lsOff = take(szO);
+  const obsOff = take(szObs), actOff = take(szAct);
+  const logpOff = take(szT), advOff = take(szT), retOff = take(szT), doneOff = take(szT);
+  const h0aOff = take(szH), h0cOff = take(szH);
+  const aGradOff = take(szPa), cGradOff = take(szPc), gLsOff = take(szO), lossOff = take(szLoss);
+
+  const B = mem.buffer;
+  new Int32Array(B, aSizesOff, 3).set(aSizes);
+  new Int32Array(B, cSizesOff, 3).set(cSizes);
+  new Float64Array(B, aFlatOff, Pa).set(d.actorFlat);
+  new Float64Array(B, cFlatOff, Pc).set(d.criticFlat);
+  new Float64Array(B, lsOff, O).set(d.logStd);
+  new Float64Array(B, aGradOff, Pa).fill(0);
+  new Float64Array(B, cGradOff, Pc).fill(0);
+  new Float64Array(B, gLsOff, O).fill(0);
+  new Float64Array(B, lossOff, 3).fill(0);
+
+  const hp = d.hp, ex = wasmInst.exports;
+  for (const s of d.seqs) {
+    new Float64Array(B, obsOff,  s.T * I).set(s.obs);
+    new Float64Array(B, actOff,  s.T * O).set(s.act);
+    new Float64Array(B, logpOff, s.T).set(s.logp);
+    new Float64Array(B, advOff,  s.T).set(s.adv);
+    new Float64Array(B, retOff,  s.T).set(s.ret);
+    new Float64Array(B, doneOff, s.T).set(s.done);
+    new Float64Array(B, h0aOff,  H).set(s.h0a);
+    new Float64Array(B, h0cOff,  H).set(s.h0c);
+    const ok = ex.compute_ppo_recurrent_grads(
+      s.T, I, O, aSizesOff, cSizesOff, aFlatOff, cFlatOff, lsOff,
+      hp.clip, hp.entropyCoef, hp.vfCoef,
+      obsOff, actOff, logpOff, advOff, retOff, doneOff, h0aOff, h0cOff,
+      aGradOff, cGradOff, gLsOff, lossOff);
+    if (!ok) return null;
+  }
+  const aG = new Float64Array(Pa); aG.set(new Float64Array(B, aGradOff, Pa));
+  const cG = new Float64Array(Pc); cG.set(new Float64Array(B, cGradOff, Pc));
+  const gLs = new Float64Array(O); gLs.set(new Float64Array(B, gLsOff, O));
+  const loss = new Float64Array(B, lossOff, 3);
+  return { aG, cG, gLs, pi: loss[0], v: loss[1], ent: loss[2] };
+}
+
+// ── Recurrent (GRU/BPTT) gradient — JS path ──────────────────────────────────
+
+let recActor = null, recCritic = null, recKey = '';
+
+function computeGradsRec(d) {
+  const key = JSON.stringify([d.actorSizes, d.criticSizes]);
+  if (key !== recKey) {
+    recActor  = new GRUNet(d.actorSizes);
+    recCritic = new GRUNet(d.criticSizes);
+    recKey = key;
+  }
+  recActor.loadFlat(d.actorFlat);
+  recCritic.loadFlat(d.criticFlat);
+  recActor.zeroGrad();
+  recCritic.zeroGrad();
+
+  const logStd = Float64Array.from(d.logStd);
+  const actDim = d.actDim;
+  const gLs = new Float64Array(actDim);
+  let pi = 0, v = 0, ent = 0;
+  for (const seq of d.seqs) {
+    const r = accumulatePPORecurrentGrads(recActor, recCritic, logStd, d.hp, seq);
+    for (let i = 0; i < actDim; i++) gLs[i] += r.gLs[i];
+    pi += r.pi; v += r.v; ent += r.ent;
+  }
+  return { aG: recActor.gradFlatF64(), cG: recCritic.gradFlatF64(), gLs, pi, v, ent };
+}
+
 // ── Message handler ──────────────────────────────────────────────────────────
 
 self.onmessage = function (e) {
   const d = e.data;
+
+  if (d.type === 'gradRec') {
+    let r = null, mode = 'js-rec';
+    if (wasmReady && d.force !== 'js') {
+      try {
+        r = computeGradsRecWasm(d);
+        if (r) mode = 'wasm-rec';
+      } catch (err) {
+        wasmReady = false;
+        postMessage({ type: 'wasmStatus', ok: false, error: 'rec runtime: ' + String(err && err.message || err) });
+        r = null;
+      }
+    }
+    if (!r) r = computeGradsRec(d);   // JS fallback (also when over WASM caps)
+    postMessage(
+      { type: 'gradResult', aG: r.aG, cG: r.cG, gLs: r.gLs,
+        pi: r.pi, v: r.v, ent: r.ent, mode },
+      [r.aG.buffer, r.cG.buffer, r.gLs.buffer],
+    );
+    return;
+  }
+
   if (d.type !== 'grad') return;
 
   let r, mode = 'js';

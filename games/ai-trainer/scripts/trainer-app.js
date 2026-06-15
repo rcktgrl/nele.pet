@@ -151,6 +151,8 @@ const ACT_DIM = 6;  // steer, throttle/brake + 4 memory-cell deltas
 const simCfg = {
   hiddenLayers: 1,       // restart required
   hiddenSize: 64,        // restart required
+  recurrent: false,      // restart required — GRU recurrent policy/critic (BPTT)
+  bpttLen: 32,           // truncated-BPTT window (decisions per training chunk)
   backend: 'auto',       // restart required — 'auto' | 'gpu' | 'wasm' | 'js'
   threads: Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 2)),
   numEnvs: 8,            // restart required
@@ -222,6 +224,7 @@ function onMsg(e) {
     if (lastCars[bi]) applyOrbitCamera(lastCars[bi]);
     refreshHUD(d);
     if (d.actorFlat && d.actorSizes) drawNN(d.actorFlat, d.actorSizes);
+    else if (d.recurrent && !_recNoteDrawn) { drawRecurrentNote(); _recNoteDrawn = true; }
     return;
   }
   if (d.type === 'error') { alert(d.message); return; }
@@ -344,7 +347,22 @@ function refreshHUD(d) {
 const nnCanvas = document.getElementById('nnCanvas');
 const nnCtx    = nnCanvas.getContext('2d');
 
+let _recNoteDrawn = false;
+function drawRecurrentNote() {
+  const W = nnCanvas.width, H = nnCanvas.height;
+  nnCtx.clearRect(0, 0, W, H);
+  nnCtx.fillStyle = '#fa4';
+  nnCtx.font = '13px monospace';
+  nnCtx.textAlign = 'center';
+  nnCtx.fillText('GRU recurrent policy', W / 2, H / 2 - 8);
+  nnCtx.fillStyle = '#668';
+  nnCtx.font = '10px monospace';
+  nnCtx.fillText('hidden state carried across decisions (BPTT)', W / 2, H / 2 + 10);
+  nnCtx.textAlign = 'left';
+}
+
 function drawNN(flat, layers) {
+  _recNoteDrawn = false;  // re-arm the recurrent note if the mode switches back
   const W = nnCanvas.width, H = nnCanvas.height;
   nnCtx.clearRect(0, 0, W, H);
   const nL  = layers.length;
@@ -395,12 +413,28 @@ function netParams(hiddenLayers, hiddenSize, outDim) {
   return n;
 }
 
+// GRU(I→H) + linear(H→O). Recurrent mode drops the 4 memory cells, so the
+// input is OBS_DIM−4 and the actor output is 2.
+function gruParams(hiddenSize, inDim, outDim) {
+  const H = hiddenSize, I = inDim, O = outDim;
+  return 3 * H * I + 3 * H * H + 3 * H + O * H + O;
+}
+
 function updateConfigParamCount() {
   const l = simCfg.hiddenLayers, h = simCfg.hiddenSize;
-  const act  = netParams(l, h, ACT_DIM);
-  const crit = netParams(l, h, 1);
+  let act, crit, note;
+  if (simCfg.recurrent) {
+    const I = OBS_DIM - 4, O = ACT_DIM - 4;  // memory cells dropped
+    act  = gruParams(h, I, O);
+    crit = gruParams(h, I, 1);
+    note = ' · GRU recurrent';
+  } else {
+    act  = netParams(l, h, ACT_DIM);
+    crit = netParams(l, h, 1);
+    note = '';
+  }
   document.getElementById('configParamCount').textContent =
-    `${(act + crit).toLocaleString()} total parameters  (actor ${act.toLocaleString()} · critic ${crit.toLocaleString()})`;
+    `${(act + crit).toLocaleString()} total parameters  (actor ${act.toLocaleString()} · critic ${crit.toLocaleString()})${note}`;
 }
 
 function makeOptBtnGroup(containerId, options, key, onChange) {
@@ -462,6 +496,15 @@ function initConfigMenu() {
   const spawnTog = document.getElementById('configSpawnToggle');
   spawnTog.checked = simCfg.randomSpawn;
   spawnTog.addEventListener('change', () => { simCfg.randomSpawn = spawnTog.checked; });
+
+  const recTog = document.getElementById('configRecurrentToggle');
+  if (recTog) {
+    recTog.checked = simCfg.recurrent;
+    recTog.addEventListener('change', () => {
+      simCfg.recurrent = recTog.checked;
+      updateConfigParamCount();
+    });
+  }
 
   document.getElementById('configBackBtn').addEventListener('click', () => {
     hideConfigMenu(); showMapMenu();
