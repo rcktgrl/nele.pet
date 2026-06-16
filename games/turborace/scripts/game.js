@@ -348,6 +348,7 @@ document.getElementById('closeLeaderboardModalBtn').addEventListener('click',clo
 document.getElementById('leaderboardModal').addEventListener('click',e=>{ if(e.target.id==='leaderboardModal') closeTrackLeaderboardModal(); });
 document.getElementById('menuBtn').addEventListener('click',showMain);
 document.getElementById('raceAgainBtn').addEventListener('click',restartRace);
+document.getElementById('changeMapBtn').addEventListener('click',()=>{showMain();showTrkSel();});
 
 // VS lobby buttons
 document.getElementById('vsCreateBtn').addEventListener('click', vsCreateRoom);
