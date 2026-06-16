@@ -160,7 +160,7 @@ function _buildStreetLamps(pts, halfRoadW) {
     pole.position.set(lx, 3.25, lz); pole.userData.trk = true; scene.add(pole);
     const arm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 2.8), poleMat);
     arm.position.set(lx + nx * -1.0 * s, 6.3, lz + nz * -1.0 * s);
-    arm.rotation.y = Math.atan2(dx, dz); arm.userData.trk = true; scene.add(arm);
+    arm.rotation.y = Math.atan2(-dz, dx); arm.userData.trk = true; scene.add(arm);
     const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.35), bulbMat);
     bulb.position.set(lx + nx * -1.8 * s, 6.2, lz + nz * -1.8 * s);
     bulb.userData.trk = true; scene.add(bulb);
@@ -171,6 +171,50 @@ function _buildStreetLamps(pts, halfRoadW) {
 }
 
 const ROAD_Y = 0.04; // raised above ground to prevent Z-fighting
+
+// Priority: lower number = rendered on top at intersections
+const _ROAD_TYPE_PRI = { street: 0, highway: 1, lane: 2, country: 3 };
+
+function _buildIntersectionCorners(nodeMap, roads) {
+  // Build per-node road list
+  const nodeToRoads = new Map();
+  for (const road of roads) {
+    for (const nid of [road.nodeA, road.nodeB]) {
+      if (!nodeToRoads.has(nid)) nodeToRoads.set(nid, []);
+      nodeToRoads.get(nid).push(road);
+    }
+  }
+
+  for (const [nid, rds] of nodeToRoads) {
+    if (rds.length < 2) continue;
+    const node = nodeMap.get(nid);
+    if (!node) continue;
+
+    // Dominant type = highest priority road at this intersection
+    const dom = rds.reduce((best, r) =>
+      (_ROAD_TYPE_PRI[r.type] ?? 3) < (_ROAD_TYPE_PRI[best.type] ?? 3) ? r : best);
+    const maxW = rds.reduce((m, r) => Math.max(m, r.width || 10), 0);
+
+    // Sidewalk corner fill behind road (street type only)
+    if (dom.type === 'street') {
+      const swW = 2.2, fullW = maxW + swW * 2;
+      const swMat = _mat(0x28283a);
+      swMat.polygonOffset = true; swMat.polygonOffsetFactor = -0.5; swMat.polygonOffsetUnits = -1;
+      const swMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(fullW, fullW).rotateX(-Math.PI / 2), swMat);
+      swMesh.position.set(node.x, ROAD_Y - 0.005, node.z);
+      swMesh.userData.trk = true; scene.add(swMesh);
+    }
+
+    // Road surface corner fill
+    const roadMat = new THREE.MeshLambertMaterial({ color: ROAD_COLORS_3D[dom.type] || ROAD_COLORS_3D.street });
+    roadMat.polygonOffset = true; roadMat.polygonOffsetFactor = -1; roadMat.polygonOffsetUnits = -2;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(maxW, maxW).rotateX(-Math.PI / 2), roadMat);
+    mesh.position.set(node.x, ROAD_Y + 0.001, node.z);
+    mesh.receiveShadow = true; mesh.userData.trk = true; scene.add(mesh);
+  }
+}
 
 function _buildRibbon(pts, width) {
   if (!pts || pts.length < 2) return null;
@@ -352,6 +396,9 @@ export function buildDriveMap(mapData) {
       _buildSidewalks(pts, hw, 0x222230);
     }
   }
+
+  // Intersection corner fills — prevent empty gaps where roads meet
+  _buildIntersectionCorners(nodeMap, roadList);
 
   // Assets — skip any that land on a road, add colliders for trees/buildings
   (mapData.assets || []).forEach((asset, i) => {

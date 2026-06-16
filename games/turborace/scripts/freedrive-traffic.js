@@ -10,9 +10,20 @@ import { scene } from './state.js';
 // ═══════════════════════════════════════════════════════
 
 const TRAFFIC_COUNT   = 8;
-const TRAFFIC_SPD_MIN = 4.0;  // m/s (~14 km/h)
-const TRAFFIC_SPD_MAX = 7.5;  // m/s (~27 km/h)
 const LOOKAHEAD       = 8;    // pts to look ahead for steering
+
+// Speed limits per road type (km/h converted to m/s)
+const ROAD_SPEED_MS = {
+  highway: 150 / 3.6,  // ~41.7 m/s
+  lane:    100 / 3.6,  // ~27.8 m/s
+  country:  80 / 3.6,  // ~22.2 m/s
+  street:   50 / 3.6,  // ~13.9 m/s
+};
+
+function _roadSpeed(type) {
+  const base = ROAD_SPEED_MS[type] || ROAD_SPEED_MS.street;
+  return base * (0.80 + Math.random() * 0.15); // 80-95% of limit for variety
+}
 const STEER_RATE      = 3.2;  // rad/s heading blend rate
 const SAMPLE_STEPS    = 16;   // pts sampled per road segment
 
@@ -71,7 +82,7 @@ function _buildGraph(mapData) {
   for (const road of (mapData.roads || [])) {
     const pts = _sampleRoad(road, nodeMap);
     if (!pts || pts.length < 2) continue;
-    _roads.set(road.id, { pts, len: _roadLen(pts), nodeA: road.nodeA, nodeB: road.nodeB });
+    _roads.set(road.id, { pts, len: _roadLen(pts), nodeA: road.nodeA, nodeB: road.nodeB, type: road.type || 'street' });
 
     if (!_graph.has(road.nodeA)) _graph.set(road.nodeA, []);
     if (!_graph.has(road.nodeB)) _graph.set(road.nodeB, []);
@@ -132,7 +143,7 @@ export function buildTraffic(mapData) {
     if (!entry) continue;
     const rd = _roads.get(entry.roadId);
     const pt = rd.pts[entry.ptIdx];
-    const speed = TRAFFIC_SPD_MIN + Math.random() * (TRAFFIC_SPD_MAX - TRAFFIC_SPD_MIN);
+    const speed = _roadSpeed(rd.type);
     const color = TRAFFIC_COLORS[i % TRAFFIC_COLORS.length];
     const mesh = _makeCarMesh(color);
 
@@ -186,6 +197,7 @@ export function updateTraffic(dt, playerCar, enableCollisions) {
         a.forward = (rd.nodeA === endNode);
         a.ptIdx   = a.forward ? 0 : rd.pts.length - 1;
         a.ptFrac  = 0;
+        a.speed   = _roadSpeed(rd.type);
         break;
       }
       const cur = rd.pts[a.ptIdx], nxt = rd.pts[nextIdx];
