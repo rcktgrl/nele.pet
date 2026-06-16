@@ -17,6 +17,9 @@ const ROAD_TYPES = {
   lane:    { col: '#181610', dash: '#22201a', label: 'Lane',    defW:  7 },
 };
 
+// Lower number = drawn on top (higher visual priority)
+const ROAD_PRIORITY = { street: 1, highway: 2, lane: 3, country: 4 };
+
 const ASSET_TYPES = {
   tree:     { col: '#55cc66', sel: '#88ee88', shape: 'circle', label: 'Tree'     },
   building: { col: '#c792ea', sel: '#ddaaff', shape: 'square', label: 'Building' },
@@ -98,6 +101,7 @@ function draw() {
   drawGrid();
   if (!map) return;
   drawRoads();
+  drawIntersections();
   drawAssets();
   drawNodes();
   drawOverlay();
@@ -145,7 +149,10 @@ function drawRoadPath(pts) {
 }
 
 function drawRoads() {
-  for (const road of map.roads) {
+  // Draw roads sorted by priority so higher-priority types appear on top
+  const sorted = [...map.roads].sort((a, b) =>
+    (ROAD_PRIORITY[b.type] ?? 4) - (ROAD_PRIORITY[a.type] ?? 4));
+  for (const road of sorted) {
     const pts = roadPts(road);
     if (!pts) continue;
     const rStyle = ROAD_TYPES[road.type] ?? ROAD_TYPES.street;
@@ -192,6 +199,24 @@ function drawWaypointHandles(road, pts) {
     ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,215,0,.45)'; ctx.fill();
     ctx.strokeStyle = 'rgba(255,215,0,.8)'; ctx.lineWidth = 1.2; ctx.stroke();
+  }
+}
+
+function drawIntersections() {
+  // Fill intersection nodes with the dominant road type's color to prevent visual overlap
+  for (const node of map.nodes) {
+    const conns = map.roads.filter(r => r.nodeA === node.id || r.nodeB === node.id);
+    if (conns.length < 2) continue;
+    // Highest-priority road (lowest priority number wins)
+    const top = conns.reduce((best, r) =>
+      (ROAD_PRIORITY[r.type] ?? 4) < (ROAD_PRIORITY[best.type] ?? 4) ? r : best);
+    const rStyle = ROAD_TYPES[top.type] ?? ROAD_TYPES.street;
+    const rw = Math.max(2, top.width * zoom);
+    const [sx, sy] = w2s(node.x, node.z);
+    ctx.beginPath();
+    ctx.arc(sx, sy, rw / 2, 0, Math.PI * 2);
+    ctx.fillStyle = rStyle.col;
+    ctx.fill();
   }
 }
 
@@ -997,10 +1022,42 @@ function generateRoadScenery() {
   notify(count > 0 ? 'SCENERY: ' + count + ' ASSETS PLACED' : 'NO ROADS TO DECORATE');
 }
 
+function generateStandaloneScenery() {
+  if (!map) return 0;
+  const allX = map.nodes.map(n => n.x);
+  const allZ = map.nodes.map(n => n.z);
+  if (!allX.length) return 0;
+  const minX = Math.min(...allX) - 150, maxX = Math.max(...allX) + 150;
+  const minZ = Math.min(...allZ) - 150, maxZ = Math.max(...allZ) + 150;
+  const area  = (maxX - minX) * (maxZ - minZ);
+  const target = Math.max(15, Math.floor(area / 3000));
+
+  let seed = ((map.scenerySeed || 12345) ^ 0xdeadbeef) >>> 0;
+  function rng() {
+    seed = (Math.imul(seed + 7, 1664525) + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  }
+  const palette = ['tree', 'tree', 'tree', 'tree', 'park', 'tree', 'tree', 'tree'];
+  let placed = 0;
+  for (let attempt = 0; attempt < target * 8 && placed < target; attempt++) {
+    const ax = minX + rng() * (maxX - minX);
+    const az = minZ + rng() * (maxZ - minZ);
+    if (assetOnAnyRoad(ax, az)) continue;
+    if (map.assets.some(a => Math.hypot(a.x - ax, a.z - az) < 30)) continue;
+    map.assets.push({ type: palette[Math.floor(rng() * palette.length)], x: ax, z: az, generated: true });
+    placed++;
+  }
+  return placed;
+}
+
 function populateMapWithScenery() {
   if (!map) return;
-  clearRoadScenery();
+  // Remove road-generated scenery but preserve city-placed assets (city:true)
+  map.assets = map.assets.filter(a => !a.generated || a.city);
+  if (selAsset >= map.assets.length) { selAsset = -1; syncSelectedUI(); }
   generateRoadScenery();
+  const extra = generateStandaloneScenery();
+  if (extra > 0) notify('+ ' + extra + ' STANDALONE ASSETS');
 }
 
 function clearRoadScenery() {
