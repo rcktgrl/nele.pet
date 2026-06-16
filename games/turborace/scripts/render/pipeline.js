@@ -17,6 +17,14 @@ export function createRenderPipeline({
 
   let _W = window.innerWidth, _H = window.innerHeight;
 
+  // Fixed-timestep physics: the game must advance at exactly 60 ticks/sec so it
+  // matches the AI trainer, which integrates physics with a constant dt of 1/60
+  // (see ai-trainer/scripts/sim-worker.js -> FIXED_DT). Stepping with the raw
+  // render-frame delta would tie physics to the display refresh rate and drift
+  // from the fixed-dt math the models were trained on.
+  const FIXED_DT = 1 / 60;
+  let _accumulator = 0;
+
   function onResize() {
     _W = window.innerWidth;
     _H = window.innerHeight;
@@ -30,8 +38,15 @@ export function createRenderPipeline({
 
   function animate() {
     requestAnimationFrame(animate);
-    const dt = Math.min(clock.getDelta(), 0.05);
-    frameUpdate(dt);
+    // Clamp the real elapsed time (e.g. after a backgrounded tab) so we never
+    // try to catch up an unbounded number of ticks ("spiral of death").
+    _accumulator += Math.min(clock.getDelta(), 0.25);
+    // Run as many fixed 1/60 ticks as the elapsed time allows — exactly 60
+    // physics ticks per second regardless of the display refresh rate.
+    while (_accumulator >= FIXED_DT) {
+      frameUpdate(FIXED_DT);
+      _accumulator -= FIXED_DT;
+    }
 
     const splitCams = getTrainSplitCams ? getTrainSplitCams() : [];
     if (getGState && getGState() === 'training' && splitCams.length > 0) {
