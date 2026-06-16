@@ -4,10 +4,17 @@ import { state } from './state.js';
 // ─────────────────────────────────────────────────────────────────────────────
 //  ppo-ai.js — race-opponent driver for models trained in the AI Trainer.
 //
-//  Reproduces the exact observation layout of ai-trainer/scripts/sim-worker.js
-//  (40 inputs: 11 track-edge rays, 7 wall rays, 6 state scalars, 6 centerline
-//  probes × 2, 4 memory cells) and runs the exported PPO actor network
-//  deterministically (mean action, no exploration noise) on a real race Car.
+//  Supports both AI Trainer export flavours:
+//    • 'ppo'      feed-forward actor — 40 inputs (11 track-edge rays, 7 wall
+//                 rays, 6 state scalars, 6 centerline probes × 2, 4 memory
+//                 cells), 6 outputs (steer, throttle, 4 memory deltas).
+//    • 'ppo-gru'  recurrent actor — 36 inputs (same layout WITHOUT the 4
+//                 memory cells; the GRU hidden state replaces them), 2 outputs
+//                 (steer, throttle).
+//
+//  The observation layout mirrors ai-trainer/scripts/sim-worker.js exactly and
+//  the actor network runs deterministically (mean action, no exploration noise)
+//  on a real race Car.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'turborace_trained_ai_model';
@@ -29,13 +36,29 @@ const EDGE_RAY_ANGLES = [
 const EDGE_RAY_DIST = 35;
 const PROBE_DISTS = [10, 20, 35, 55, 100, 200];
 const SLOPE_NORM  = 0.30;
-const MEM_DIM  = 4;
-const MEM_RATE = 0.1;
-const OBS_DIM  = 24 + PROBE_DISTS.length * 2 + MEM_DIM; // 40
-const ACT_DIM  = 2 + MEM_DIM;                           // 6
+const MEM_RATE    = 0.1;
 const ACTION_REPEAT = 2; // physics ticks per decision, same as training
 
+// Shared observation prefix (indices 0..35) common to both algorithms.
+const BASE_OBS = 24 + PROBE_DISTS.length * 2; // 36
+
+// Feed-forward PPO: 4 external memory cells appended → obs 40, act 6.
+const FF_MEM_DIM = 4;
+const FF_OBS_DIM = BASE_OBS + FF_MEM_DIM; // 40
+const FF_ACT_DIM = 2 + FF_MEM_DIM;        // 6
+
+// Recurrent PPO-GRU: GRU hidden state replaces the memory cells → obs 36, act 2.
+const GRU_OBS_DIM = BASE_OBS; // 36
+const GRU_ACT_DIM = 2;        // 2
+
+function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 function wrapPi(a) { return a - 2 * Math.PI * Math.round(a / (2 * Math.PI)); }
+
+// Parameter count for a single-layer GRU [I, H, O] — must match nn-core.js GRUNet:
+//   Wz Wr Wh (H×I) · Uz Ur Uh (H×H) · bz br bh (H) · Wy (O×H) · by (O)
+function gruParamCount([I, H, O]) {
+  return 3 * H * I + 3 * H * H + 3 * H + O * H + O;
+}
 
 function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
   const ex = bx - ax, ez = bz - az;
@@ -52,18 +75,40 @@ function raySegment(ox, oz, dx, dz, ax, az, bx, bz) {
 
 /** Throws with a human-readable message if the model can't drive here. */
 export function validateTrainedModel(model) {
-  if (!model || model.algo !== 'ppo' || !model.actor || !Array.isArray(model.actor.sizes) || !Array.isArray(model.actor.flat)) {
+  if (!model || !model.actor || !Array.isArray(model.actor.sizes) || !Array.isArray(model.actor.flat)) {
     throw new Error('Not an AI Trainer PPO export');
   }
   const sizes = model.actor.sizes;
-  if (model.obsDim !== OBS_DIM || sizes[0] !== OBS_DIM || sizes[sizes.length - 1] !== ACT_DIM) {
-    throw new Error(`incompatible model: obs ${model.obsDim}/act ${sizes[sizes.length - 1]}, ` +
-                    `the game expects obs ${OBS_DIM}/act ${ACT_DIM} — retrain and re-export in the AI Trainer`);
+  const outDim = sizes[sizes.length - 1];
+
+  if (model.algo === 'ppo-gru') {
+    // Recurrent actor: a single GRU layer + linear head → sizes is [I, H, O].
+    if (sizes.length !== 3) {
+      throw new Error('incompatible recurrent model: actor must be a single GRU layer [in, hidden, out] — retrain and re-export in the AI Trainer');
+    }
+    if (model.obsDim !== GRU_OBS_DIM || sizes[0] !== GRU_OBS_DIM || outDim !== GRU_ACT_DIM) {
+      throw new Error(`incompatible model: obs ${model.obsDim}/act ${outDim}, ` +
+                      `the game expects obs ${GRU_OBS_DIM}/act ${GRU_ACT_DIM} for a GRU policy — retrain and re-export in the AI Trainer`);
+    }
+    if (model.actor.flat.length !== gruParamCount(sizes)) {
+      throw new Error('actor weight count does not match its GRU layer sizes');
+    }
+    return model;
   }
-  let n = 0;
-  for (let l = 0; l < sizes.length - 1; l++) n += (sizes[l] + 1) * sizes[l + 1];
-  if (model.actor.flat.length !== n) throw new Error('actor weight count does not match its layer sizes');
-  return model;
+
+  if (model.algo === 'ppo') {
+    // Feed-forward actor: sizes is [in, ...hidden, out].
+    if (model.obsDim !== FF_OBS_DIM || sizes[0] !== FF_OBS_DIM || outDim !== FF_ACT_DIM) {
+      throw new Error(`incompatible model: obs ${model.obsDim}/act ${outDim}, ` +
+                      `the game expects obs ${FF_OBS_DIM}/act ${FF_ACT_DIM} — retrain and re-export in the AI Trainer`);
+    }
+    let n = 0;
+    for (let l = 0; l < sizes.length - 1; l++) n += (sizes[l] + 1) * sizes[l + 1];
+    if (model.actor.flat.length !== n) throw new Error('actor weight count does not match its layer sizes');
+    return model;
+  }
+
+  throw new Error('Not an AI Trainer PPO export (expected algo "ppo" or "ppo-gru")');
 }
 
 export function saveTrainedModel(model) {
@@ -90,26 +135,34 @@ export function loadTrainedModel() {
 export function clearTrainedModel() { localStorage.removeItem(STORAGE_KEY); }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  PPOAI — drives one Car with an imported actor network
+//  PPOAI — drives one Car with an imported actor network (feed-forward or GRU)
 // ─────────────────────────────────────────────────────────────────────────────
 export class PPOAI {
   /**
    * @param {object}   car      - Car instance
-   * @param {object}   model    - validated AI Trainer PPO export
+   * @param {object}   model    - validated AI Trainer PPO export ('ppo' or 'ppo-gru')
    * @param {function} context  - returns {trackPoints, cityAiPoints, trackData} each frame
    */
   constructor(car, model, context) {
     this.car = car;
     this.context = context;
-    this._unpackActor(model.actor);
-    this.mem = new Float64Array(MEM_DIM);
-    this.curAct = new Float64Array(ACT_DIM);
+
+    this.recurrent = model.algo === 'ppo-gru';
+    this.obsDim = this.recurrent ? GRU_OBS_DIM : FF_OBS_DIM;
+    this.actDim = this.recurrent ? GRU_ACT_DIM : FF_ACT_DIM;
+    this.memDim = this.recurrent ? 0 : FF_MEM_DIM;
+
+    if (this.recurrent) this._unpackGRU(model.actor);
+    else                this._unpackActor(model.actor);
+
+    this.mem = new Float64Array(this.memDim);
+    this.curAct = new Float64Array(this.actDim);
     this.repCount = 0;
     this._arcReady = false;
     this._arcHint = -1;
   }
 
-  // Flat layout per layer (nn-core.js Net.flat): nOut×nIn weights, then biases.
+  // ── Feed-forward actor (nn-core.js Net.flat: per layer nOut×nIn weights, then biases) ──
   _unpackActor(actor) {
     this.sizes = actor.sizes;
     this.W = []; this.b = [];
@@ -125,7 +178,7 @@ export class PPOAI {
     }
   }
 
-  _forward(x) {
+  _forwardFF(x) {
     let a = x;
     for (let l = 0; l < this.W.length; l++) {
       const nIn = this.sizes[l], nOut = this.sizes[l + 1];
@@ -142,6 +195,57 @@ export class PPOAI {
     }
     return a;
   }
+
+  // ── Recurrent actor (nn-core.js GRUNet) ─────────────────────────────────────
+  // Flat layout: Wz Wr Wh (H×I) · Uz Ur Uh (H×H) · bz br bh (H) · Wy (O×H) · by (O)
+  _unpackGRU(actor) {
+    const [I, H, O] = actor.sizes;
+    this.sizes = actor.sizes;
+    this.gI = I; this.gH = H; this.gO = O;
+    const f = actor.flat;
+    let k = 0;
+    const take = (n) => { const a = new Float64Array(n); for (let i = 0; i < n; i++) a[i] = f[k++]; return a; };
+    this.Wz = take(H * I); this.Wr = take(H * I); this.Wh = take(H * I);
+    this.Uz = take(H * H); this.Ur = take(H * H); this.Uh = take(H * H);
+    this.bz = take(H); this.br = take(H); this.bh = take(H);
+    this.Wy = take(O * H); this.by = take(O);
+    this.h = new Float64Array(H); // recurrent hidden state, carried across decisions
+  }
+
+  // One GRU step — advances the hidden state and returns the linear output.
+  _forwardGRU(x) {
+    const I = this.gI, H = this.gH, O = this.gO;
+    const hPrev = this.h;
+    const z = new Float64Array(H), r = new Float64Array(H);
+    const hh = new Float64Array(H), rh = new Float64Array(H), hOut = new Float64Array(H);
+    for (let j = 0; j < H; j++) {
+      let sz = this.bz[j], sr = this.br[j];
+      const xo = j * I, ho = j * H;
+      for (let i = 0; i < I; i++) { sz += this.Wz[xo + i] * x[i]; sr += this.Wr[xo + i] * x[i]; }
+      for (let k = 0; k < H; k++) { sz += this.Uz[ho + k] * hPrev[k]; sr += this.Ur[ho + k] * hPrev[k]; }
+      z[j] = sigmoid(sz); r[j] = sigmoid(sr);
+    }
+    for (let k = 0; k < H; k++) rh[k] = r[k] * hPrev[k];
+    for (let j = 0; j < H; j++) {
+      let sh = this.bh[j];
+      const xo = j * I, ho = j * H;
+      for (let i = 0; i < I; i++) sh += this.Wh[xo + i] * x[i];
+      for (let k = 0; k < H; k++) sh += this.Uh[ho + k] * rh[k];
+      hh[j] = Math.tanh(sh);
+      hOut[j] = (1 - z[j]) * hPrev[j] + z[j] * hh[j];
+    }
+    const y = new Float64Array(O);
+    for (let o = 0; o < O; o++) {
+      let s = this.by[o];
+      const off = o * H;
+      for (let j = 0; j < H; j++) s += this.Wy[off + j] * hOut[j];
+      y[o] = s;
+    }
+    this.h = hOut;
+    return y;
+  }
+
+  _forward(x) { return this.recurrent ? this._forwardGRU(x) : this._forwardFF(x); }
 
   // ── Centerline arc table (same construction as sim-worker buildArcTable) ────
 
@@ -241,7 +345,9 @@ export class PPOAI {
     }
   }
 
-  // Observation layout — see sim-worker.js buildObs
+  // Observation layout — see sim-worker.js buildObs.
+  // Fills the shared 36-element prefix (indices 0..35); for feed-forward models
+  // the 4 memory cells are appended at 36..39.
   _buildObs(out) {
     const c = this.car;
     const { trackData } = this.context();
@@ -277,7 +383,8 @@ export class PPOAI {
       out[24 + k * 2 + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
       prevY = p.y; prevD = d;
     }
-    for (let d = 0; d < MEM_DIM; d++) out[24 + PROBE_DISTS.length * 2 + d] = this.mem[d];
+    // Feed-forward only: external memory cells (the GRU has no memory inputs).
+    for (let d = 0; d < this.memDim; d++) out[BASE_OBS + d] = this.mem[d];
   }
 
   // ── Main update (called every physics tick) ──────────────────────────────────
@@ -288,12 +395,13 @@ export class PPOAI {
     if (!this._arcReady) this._buildArcTable();
 
     if (this.repCount <= 0) {
-      const obs = new Float64Array(OBS_DIM);
+      const obs = new Float64Array(this.obsDim);
       this._buildObs(obs);
       const mean = this._forward(obs);
-      for (let d = 0; d < ACT_DIM; d++) this.curAct[d] = mean[d];
+      for (let d = 0; d < this.actDim; d++) this.curAct[d] = mean[d];
       this.repCount = ACTION_REPEAT;
-      for (let d = 0; d < MEM_DIM; d++) {
+      // Feed-forward memory write (no-op for GRU: memDim = 0).
+      for (let d = 0; d < this.memDim; d++) {
         const a = Math.max(-1, Math.min(1, this.curAct[2 + d]));
         this.mem[d] = Math.max(-1, Math.min(1, this.mem[d] + MEM_RATE * a));
       }
