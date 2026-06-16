@@ -30,6 +30,19 @@ export function updateHUD(){
   const all=[state.pCar,...opponents].sort((a,b)=>b.totalProg-a.totalProg);
   const p=all.indexOf(state.pCar)+1;
   document.getElementById('posNum').innerHTML=`${p}<sup style="font-size:18px">${getOrd(p)}</sup>`;
+  const rplEl=document.getElementById('racePosList');
+  if(rplEl){
+    let vsMap=null;
+    if(state.vsMode){
+      vsMap=new Map();
+      for(const s of state.vsSlots){const c=state.vsCarsById[s.id];if(c)vsMap.set(c,s.name+(s.isAI?' 🤖':''));}
+    }
+    rplEl.innerHTML=all.map((car,i)=>{
+      const n=i+1,you=car===state.pCar;
+      const nm=you?'YOU':(vsMap?vsMap.get(car)||'?':car.data?.name||'?');
+      return `<div class="rpl-item${you?' rpl-you':''}"><span class="rpl-pos">${n}<sup>${getOrd(n)}</sup></span><span class="rpl-name">${nm}</span>${car.finished?'<span class="rpl-fin">✓</span>':''}</div>`;
+    }).join('');
+  }
 }
 
 // ═══════════════════════════════════════════════════════
