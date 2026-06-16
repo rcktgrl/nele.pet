@@ -47,6 +47,20 @@ let navPts   = [];       // [{x,y,z}]
 let arcLen   = [];       // cumulative arc length at navPts[i]
 let trackLen = 1;
 
+// ── Multi-track training (cfg.multiTrack) ────────────────────────────────────
+// All maps are shipped to the worker and each gets its own derived geometry
+// (arc-length table + wall spatial index + gravel/city data). Those per-track
+// fields live in the module globals above so the hot physics/observation code
+// stays global-based; a "context" just snapshots that whole set and useTrack()
+// swaps the globals to a given track before an env is processed. Cars only ever
+// change track at an episode reset — where the GRU hidden state is already
+// zeroed — so no recurrent state or BPTT gradient ever crosses a track
+// boundary (see resetEnv / the done-gated sequence handling in nn-core).
+let rawTracks   = [];    // [{pts,wallLeft,wallRight,data,gravelProfile,...}] from 'init'
+let trackCtxs   = [];    // [{trkPts,...,navPts,arcLen,trackLen,wallIdx}] per track
+let activeTrack = -1;    // index whose context is currently loaded into the globals
+let nextTrackCounter = 0;// rotating env→track cursor (balances data over all tracks)
+
 // ── Config (live-updateable unless noted) ─────────────────────────────────────
 let cfg = {
   // environment
@@ -54,6 +68,7 @@ let cfg = {
   speedMult: 1,
   episodeLen: 60,        // seconds before truncation
   randomSpawn: true,     // spawn each episode at a random centerline point
+  multiTrack: false,     // restart required — train across all maps in parallel
   actionRepeat: 2,       // physics ticks per agent decision (restart required)
   // PPO hyperparameters
   lr: 3e-4,
@@ -1044,10 +1059,13 @@ function spawnPose(envIdx) {
 }
 
 function makeEnv(i) {
+  const trackIdx = assignTrack();
+  useTrack(trackIdx);
   const sp = spawnPose(i);
   const car = new SimCar(carSpec, sp.pos, sp.hdg);
   return {
     car,
+    trackIdx,            // which track this env is currently running
     // arc tracking for progress reward + lap detection
     prevS: carArc(car).s,
     lapAcc: 0,            // accumulated forward metres this lap
@@ -1089,6 +1107,11 @@ function clearChains(env) {
 }
 
 function resetEnv(env, i, pose = null) {
+  // New episode → rotate to a fresh track (unless the caller pinned a pose, e.g.
+  // a group respawn, which sets env.trackIdx itself). The recurrent hidden state
+  // is zeroed below, so switching track here never leaks GRU memory across maps.
+  if (!pose) env.trackIdx = assignTrack();
+  useTrack(env.trackIdx);
   const sp = pose || spawnPose(i);
   env.car.reset(sp.pos, sp.hdg);
   env.prevS = carArc(env.car).s;
@@ -1130,6 +1153,11 @@ function groupMembers(g) {
 function respawnGroup(g) {
   const members = groupMembers(g);
   if (!members.length) return;
+  // The whole group shares one track + spawn pose so their returns stay
+  // comparable for the group-relative baseline.
+  const trackIdx = assignTrack();
+  for (const m of members) m.trackIdx = trackIdx;
+  useTrack(trackIdx);
   const pose = spawnPose(g * (cfg.groupSize | 0));
   for (let m = 0; m < members.length; m++) {
     resetEnv(members[m], 0, pose);
@@ -1166,14 +1194,62 @@ export function nearestWallForTest(px, pz, sideName) {
   return nearestWallPoint(px, pz, wallIdx[sideName]);
 }
 
+// Load a raw track payload into the geometry globals (no derived tables yet).
+function loadRawTrack(t) {
+  trkPts        = t.pts;
+  trkWallLeft   = t.wallLeft;
+  trkWallRight  = t.wallRight;
+  trkData       = t.data;
+  gravelProfile = t.gravelProfile || null;
+  cityCorridors = t.cityCorridors || null;
+  cityAiPts     = t.cityAiPts || null;
+}
+
+// Build the full derived context for one track (arc table + wall index) and
+// snapshot every per-track global into a reusable context object.
+function buildTrackCtx(t) {
+  loadRawTrack(t);
+  buildArcTable();   // → navPts, arcLen, trackLen (from the globals just set)
+  buildWallIndex();  // → wallIdx
+  return {
+    trkPts, trkWallLeft, trkWallRight, trkData,
+    gravelProfile, cityCorridors, cityAiPts,
+    navPts, arcLen, trackLen, wallIdx,
+  };
+}
+
+// Point the geometry globals at track `idx`. Cheap pointer swaps; a no-op when
+// the track is already active (the common case for consecutive same-track envs).
+function useTrack(idx) {
+  if (idx === activeTrack) return;
+  const c = trackCtxs[idx];
+  if (!c) return;
+  trkPts = c.trkPts; trkWallLeft = c.trkWallLeft; trkWallRight = c.trkWallRight;
+  trkData = c.trkData; gravelProfile = c.gravelProfile;
+  cityCorridors = c.cityCorridors; cityAiPts = c.cityAiPts;
+  navPts = c.navPts; arcLen = c.arcLen; trackLen = c.trackLen; wallIdx = c.wallIdx;
+  activeTrack = idx;
+}
+
+// Track for an env that is (re)spawning. A single global rotating cursor across
+// every reset event balances data over all tracks even when there are fewer
+// cars than tracks. Single-track training always returns 0.
+function assignTrack() {
+  if (trackCtxs.length <= 1) return 0;
+  return nextTrackCounter++ % trackCtxs.length;
+}
+
 function initSim(modelOverride) {
   // Invalidate any PPO update still in flight from a previous run — re-init can
   // change the obs/action layout and swap actor/critic, so a stale async update
   // must not resume and mutate the new state.
   simGen++;
   _ppoRunning = false;
-  buildArcTable();
-  buildWallIndex();
+  // Build a derived context per track (multi-track) or just the one selected
+  // map (single-track), then activate the first for spawning.
+  trackCtxs = rawTracks.map(buildTrackCtx);
+  activeTrack = -1; nextTrackCounter = 0;
+  useTrack(0);
   initAgent(modelOverride || null);
   envs = Array.from({ length: cfg.numEnvs }, (_, i) => makeEnv(i));
   iteration = 0; totalSteps = 0; agentSteps = 0;
@@ -1268,6 +1344,7 @@ function stepOnce(dt) {
   for (let i = 0; i < envs.length; i++) {
     const env = envs[i];
     if (env.gDone) continue;  // parked until its group's last member finishes
+    useTrack(env.trackIdx);   // point geometry at this env's track (multi-track)
     const car = env.car;
 
     // ── New agent decision at the start of each repeat window ──
@@ -1586,6 +1663,7 @@ function _flushBatch() {
   };
 
   for (const env of envs) {
+    useTrack(env.trackIdx);
     let nextVal = 0, nextValM = 0;
     const open = env.buf.obs.length && !env.buf.done[env.buf.obs.length - 1];
     if (open) {
@@ -1614,6 +1692,7 @@ function _flushBatchRecurrent() {
   let N = 0;
 
   for (const env of envs) {
+    useTrack(env.trackIdx);
     const b = env.buf;
     const T = b.obs.length;
     if (!T) continue;
@@ -2113,6 +2192,7 @@ function buildSnapshot() {
     ret: env.epReturn,
     lap: env.car.lap,
     onGravel: env.car.onGravel,
+    trk: env.trackIdx,
   }));
   let avgReturn = 0;
   if (recentReturns.length) {
@@ -2218,14 +2298,9 @@ self.onmessage = function (e) {
   const { type } = e.data;
 
   if (type === 'init') {
-    const { track, carData, config, model } = e.data;
-    trkPts        = track.pts;
-    trkWallLeft   = track.wallLeft;
-    trkWallRight  = track.wallRight;
-    trkData       = track.data;
-    gravelProfile = track.gravelProfile || null;
-    cityCorridors = track.cityCorridors || null;
-    cityAiPts     = track.cityAiPts || null;
+    const { track, tracks, carData, config, model } = e.data;
+    // Multi-track ships every map in `tracks`; single-track sends one `track`.
+    rawTracks     = (tracks && tracks.length) ? tracks : [track];
     carSpec       = carData;
 
     if (config) Object.assign(cfg, config);

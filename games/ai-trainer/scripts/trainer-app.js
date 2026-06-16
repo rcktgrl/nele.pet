@@ -119,8 +119,13 @@ let lastCars = [];
 const FIXED_DT = 1 / 60;
 
 function syncCarMeshes(cars, bestIdx) {
+  // Multi-track: each map has its own world coordinates, so only draw the cars
+  // on the track currently being viewed; the rest are hidden.
+  const filtering = simCfg.multiTrack && trackList.length > 1;
   for (let i = 0; i < carMeshes.length && i < cars.length; i++) {
     const c = cars[i], m = carMeshes[i];
+    if (filtering && c.trk !== selectedTrackIdx) { m.visible = false; continue; }
+    m.visible = true;
     m.position.set(c.x, c.y, c.z);
     m.rotation.y = c.hdg;
     m.traverse(o => {
@@ -134,9 +139,15 @@ function syncCarMeshes(cars, bestIdx) {
 }
 
 function bestCarIndex(cars) {
-  let bi = 0, bf = -Infinity;
-  for (let i = 0; i < cars.length; i++) if (cars[i].ret > bf) { bf = cars[i].ret; bi = i; }
-  return bi;
+  // When filtering to one viewed track, pick the leader among visible cars so
+  // the camera doesn't chase a car on a map you can't see.
+  const filtering = simCfg.multiTrack && trackList.length > 1;
+  let bi = -1, bf = -Infinity;
+  for (let i = 0; i < cars.length; i++) {
+    if (filtering && cars[i].trk !== selectedTrackIdx) continue;
+    if (cars[i].ret > bf) { bf = cars[i].ret; bi = i; }
+  }
+  return bi < 0 ? 0 : bi;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,6 +170,7 @@ const simCfg = {
   speedMult: 1,
   episodeLen: 60,
   randomSpawn: true,
+  multiTrack: false,     // restart required — train across all maps in parallel
   lr: 3e-4,
   entropyCoef: 0.003,
   horizon: 512,          // restart required
@@ -183,13 +195,9 @@ function mkWorker() {
   workerReady = false;
 }
 
-function sendInit(model = null) {
-  if (!worker || !state.trkPts || !state.trkPts.length) return;
-  const carData = {
-    accel: CAR_SPEC.accel, maxSpd: CAR_SPEC.maxSpd,
-    brake: CAR_SPEC.brake, hdl: CAR_SPEC.hdl, aiSpd: CAR_SPEC.aiSpd || 1.0,
-  };
-  const track = {
+// Serialize the track currently built into `state` into the worker payload.
+function serializeTrackFromState() {
+  return {
     pts:          state.trkPts.map(p => ({ x: p.x, y: p.y, z: p.z })),
     wallLeft:     (state.trkWallLeft  || []).map(w => ({ x0: w.x0, z0: w.z0, x1: w.x1, z1: w.z1 })),
     wallRight:    (state.trkWallRight || []).map(w => ({ x0: w.x0, z0: w.z0, x1: w.x1, z1: w.z1 })),
@@ -205,7 +213,31 @@ function sendInit(model = null) {
     cityAiPts: state.cityAiPts
       ? { pts: state.cityAiPts.pts.map(p => ({ x: p.x, z: p.z })) } : null,
   };
-  worker.postMessage({ type: 'init', track, carData, config: { ...simCfg }, model });
+}
+
+function sendInit(model = null) {
+  if (!worker || !state.trkPts || !state.trkPts.length) return;
+  const carData = {
+    accel: CAR_SPEC.accel, maxSpd: CAR_SPEC.maxSpd,
+    brake: CAR_SPEC.brake, hdl: CAR_SPEC.hdl, aiSpd: CAR_SPEC.aiSpd || 1.0,
+  };
+  let tracks;
+  if (simCfg.multiTrack && trackList.length > 1) {
+    // Build + serialize every map, then re-apply the displayed one so the scene
+    // mesh + camera end up back on the track the user is watching. Track order
+    // matches trackList, so a car's `trk` index lines up with selectedTrackIdx.
+    tracks = [];
+    for (let i = 0; i < trackList.length; i++) {
+      applyTrack(trackList[i].data);
+      tracks.push(serializeTrackFromState());
+    }
+    applyTrack(trackList[selectedTrackIdx].data);
+  } else {
+    tracks = [serializeTrackFromState()];
+  }
+  const displayIdx = (simCfg.multiTrack && trackList.length > 1) ? selectedTrackIdx : 0;
+  worker.postMessage({ type: 'init', track: tracks[displayIdx], tracks, carData, config: { ...simCfg }, model });
+  updateTrackView();
 }
 
 function onMsg(e) {
@@ -506,6 +538,12 @@ function initConfigMenu() {
     });
   }
 
+  const mtTog = document.getElementById('configMultiTrackToggle');
+  if (mtTog) {
+    mtTog.checked = simCfg.multiTrack;
+    mtTog.addEventListener('change', () => { simCfg.multiTrack = mtTog.checked; });
+  }
+
   document.getElementById('configBackBtn').addEventListener('click', () => {
     hideConfigMenu(); showMapMenu();
   });
@@ -575,8 +613,22 @@ function selectMapAndConfigure() {
   if (!entry) return;
   hideMapMenu();
   applyTrack(entry.data);
-  document.getElementById('hudTrack').textContent = entry.data.name || entry.filename;
+  updateTrackView();
   showConfigMenu();
+}
+
+// Refresh the HUD track label + the "view next track" button for the current
+// mode. In multi-track mode the label shows which of the N maps is on screen
+// and the button (which only cycles the *view*, not the training) is revealed.
+function updateTrackView() {
+  const multi = simCfg.multiTrack && trackList.length > 1;
+  const btn = document.getElementById('viewTrackBtn');
+  if (btn) btn.style.display = multi ? '' : 'none';
+  const entry = trackList[selectedTrackIdx];
+  if (!entry) return;
+  const name = entry.data.name || entry.filename;
+  document.getElementById('hudTrack').textContent =
+    multi ? `${name} · ${selectedTrackIdx + 1}/${trackList.length} · ALL` : name;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -622,6 +674,16 @@ function wireSlider(sliderId, valId, key, fmtFn, editable) {
 function initUI() {
   document.getElementById('mapsBtn').addEventListener('click', showMapMenu);
   document.getElementById('mapStartBtn').addEventListener('click', selectMapAndConfigure);
+
+  // Multi-track only: cycle which map is on screen without touching training,
+  // which keeps running across every track underneath.
+  const viewBtn = document.getElementById('viewTrackBtn');
+  if (viewBtn) viewBtn.addEventListener('click', () => {
+    if (trackList.length < 2) return;
+    selectedTrackIdx = (selectedTrackIdx + 1) % trackList.length;
+    applyTrack(trackList[selectedTrackIdx].data);
+    updateTrackView();
+  });
   document.getElementById('mapBackBtn').addEventListener('click', () => { window.location.href = '../index.html'; });
 
   initConfigMenu();
