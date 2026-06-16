@@ -57,10 +57,12 @@ export async function initRace(){
     cars: CARS,
     selectedCarIndex: state.selCar,
     aiCount: ghostModeEnabled ? 0 : trainedModel ? 1 : 4,
-    // The AI Trainer always trains with the red Viper (CARS id 0) physics — give
-    // the trained policy the car it was trained on (the Red Car), regardless of
-    // the player's pick.
-    aiCarModels: trainedModel ? [CARS.find(c => c.id === 0) || CARS[0]] : null,
+    // Give the trained policy the car it was trained on. The AI Trainer records
+    // that car's id in the exported model; if it's missing (older exports) we
+    // fall back to the red Viper (CARS id 0), regardless of the player's pick.
+    aiCarModels: trainedModel
+      ? [CARS.find(c => c.id === trainedModel.carId) || CARS.find(c => c.id === 0) || CARS[0]]
+      : null,
     scene,
     createAIController: (aiCar,i)=>{
       const ctx=()=>({

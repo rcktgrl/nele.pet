@@ -264,6 +264,11 @@ function onMsg(e) {
   }
   if (d.type === 'error') { alert(d.message); return; }
   if (d.type === 'modelExport' && d.model) {
+    // Record which car the agents trained with so the racing game can spawn the
+    // AI in the matching car. CARS ids line up with their array index.
+    const car = carSpec();
+    d.model.carId = car.id;
+    d.model.carName = car.name;
     const blob = new Blob([JSON.stringify(d.model, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

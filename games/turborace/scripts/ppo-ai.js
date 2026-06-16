@@ -121,6 +121,10 @@ export function saveTrainedModel(model) {
     iteration: model.iteration,
     totalSteps: model.totalSteps,
     bestLap: model.bestLap,
+    // Which car the model was trained with (CARS id). Used by the race so the
+    // AI drives the car it learned on; falls back to the red car when absent.
+    carId: model.carId,
+    carName: model.carName,
   }));
 }
 
