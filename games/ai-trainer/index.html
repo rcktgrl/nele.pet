@@ -396,6 +396,7 @@
   <span class="hud-chip" id="hudWasm" title="Gradient compute backend — GPU = TensorFlow.js on WebGL, WASM = compiled native code, JS = fallback" style="color:#888;font-size:.65rem;">…</span>
   <span class="hud-sep">│</span>
   <span class="hud-chip" id="hudTrack" style="color:#4af;">—</span>
+  <button class="btn" id="viewTrackBtn" title="Watch the next track — training keeps running on every track" style="display:none;">VIEW ▶</button>
   <button class="btn" id="mapsBtn" title="Choose a different map">MAPS</button>
   <span class="hud-sep">│</span>
   <button class="btn btn-start" id="startBtn">▶ START</button>
@@ -591,6 +592,12 @@
         <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#889;font-size:.65rem;">
           <span>RANDOM SPAWN<br><span style="color:#445;font-size:.9em">start each run at random track position</span></span>
           <input type="checkbox" id="configSpawnToggle" checked style="accent-color:#4af;">
+        </label>
+      </div>
+      <div class="config-row">
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#889;font-size:.65rem;">
+          <span>ALL TRACKS (PARALLEL)<br><span style="color:#445;font-size:.9em">cars train across every map at once, rotating tracks each run — generalises the policy instead of overfitting one map. Use the VIEW button to watch a different track.</span></span>
+          <input type="checkbox" id="configMultiTrackToggle" style="accent-color:#4fa;">
         </label>
       </div>
     </div>
