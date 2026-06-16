@@ -582,17 +582,41 @@ function selectMapAndConfigure() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  In-trainer controls sidebar
 // ─────────────────────────────────────────────────────────────────────────────
-function wireSlider(sliderId, valId, key, fmtFn) {
+function wireSlider(sliderId, valId, key, fmtFn, editable) {
   const sl = document.getElementById(sliderId);
   const vl = document.getElementById(valId);
   sl.value = simCfg[key];
   vl.textContent = fmtFn ? fmtFn(simCfg[key]) : simCfg[key];
-  sl.addEventListener('input', () => {
-    const v = parseFloat(sl.value);
+
+  // Apply a value from any source: store it, sync the slider (it clamps to its
+  // own min/max, but simCfg keeps the real value so typed values can exceed it).
+  const apply = (v) => {
     simCfg[key] = v;
+    sl.value = v;
     vl.textContent = fmtFn ? fmtFn(v) : v;
     if (worker) worker.postMessage({ type: 'setConfig', config: { [key]: v } });
-  });
+  };
+
+  sl.addEventListener('input', () => apply(parseFloat(sl.value)));
+
+  // Click the value to type any number directly — not limited to the slider range.
+  if (editable) {
+    vl.title = 'Click to type any value';
+    vl.contentEditable = 'true';
+    vl.addEventListener('focus', () => {
+      vl.textContent = String(simCfg[key]);
+      const r = document.createRange(); r.selectNodeContents(vl);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    });
+    vl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); vl.blur(); }
+    });
+    vl.addEventListener('blur', () => {
+      const v = parseFloat(vl.textContent);
+      if (isFinite(v)) apply(Math.max(0, v));
+      else vl.textContent = fmtFn ? fmtFn(simCfg[key]) : simCfg[key];
+    });
+  }
 }
 
 function initUI() {
@@ -624,11 +648,11 @@ function initUI() {
   document.getElementById('repairNowBtn').addEventListener('click', () => {
     if (worker) worker.postMessage({ type: 'repairNow' });
   });
-  wireSlider('progSlider',    'progVal',    'progressReward',  v => v.toFixed(2));
-  wireSlider('gravelSlider',  'gravelVal',  'gravelPenalty',   v => v.toFixed(1));
-  wireSlider('wallSlider',    'wallVal',    'wallPenalty',     v => v.toFixed(1));
-  wireSlider('termSlider',    'termVal',    'terminalPenalty', v => Math.round(v));
-  wireSlider('lapBonusSlider','lapBonusVal','lapBonus',        v => Math.round(v));
+  wireSlider('progSlider',    'progVal',    'progressReward',  v => v.toFixed(2), true);
+  wireSlider('gravelSlider',  'gravelVal',  'gravelPenalty',   v => v.toFixed(1), true);
+  wireSlider('wallSlider',    'wallVal',    'wallPenalty',     v => v.toFixed(1), true);
+  wireSlider('termSlider',    'termVal',    'terminalPenalty', v => Math.round(v), true);
+  wireSlider('lapBonusSlider','lapBonusVal','lapBonus',        v => Math.round(v), true);
 
   document.getElementById('loadBestBtn').addEventListener('click', () => {
     if (worker) worker.postMessage({ type: 'loadBest' });
