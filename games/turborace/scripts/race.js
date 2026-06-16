@@ -57,9 +57,10 @@ export async function initRace(){
     cars: CARS,
     selectedCarIndex: state.selCar,
     aiCount: ghostModeEnabled ? 0 : trainedModel ? 1 : 4,
-    // The AI Trainer always trains with CARS[0] physics — give the trained
-    // policy the car it was trained on, regardless of the player's pick.
-    aiCarModels: trainedModel ? [CARS[0]] : null,
+    // The AI Trainer always trains with the red Viper (CARS id 0) physics — give
+    // the trained policy the car it was trained on (the Red Car), regardless of
+    // the player's pick.
+    aiCarModels: trainedModel ? [CARS.find(c => c.id === 0) || CARS[0]] : null,
     scene,
     createAIController: (aiCar,i)=>{
       const ctx=()=>({
