@@ -688,8 +688,15 @@ function initUI() {
     if (!this.files[0]) return;
     try {
       const model = JSON.parse(await this.files[0].text());
-      if (model.algo !== 'ppo' || !model.actor || !model.critic)
+      if ((model.algo !== 'ppo' && model.algo !== 'ppo-gru') || !model.actor || !model.critic)
         throw new Error('Not a PPO model — older genetic trainer exports are not compatible');
+      // Match the network architecture to the imported model. A recurrent
+      // (GRU) export only loads when the worker is built in recurrent mode, so
+      // align simCfg + the UI toggle to the model's algo before re-init.
+      simCfg.recurrent = (model.algo === 'ppo-gru');
+      const recTog = document.getElementById('configRecurrentToggle');
+      if (recTog) recTog.checked = simCfg.recurrent;
+      updateConfigParamCount();
       const was = simRunning; simRunning = false;
       sendInit(model);
       setTimeout(() => { if (was) { worker.postMessage({ type: 'start' }); simRunning = true; } updateStartBtn(); }, 80);
