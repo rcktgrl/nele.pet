@@ -101,14 +101,16 @@ function applyTrack(data) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Car meshes
 // ─────────────────────────────────────────────────────────────────────────────
-const CAR_SPEC = CARS[0];
+// Which car (model + physics) the agents train with. Picked in the config menu.
+let selectedCarIdx = 0;
+function carSpec() { return CARS[selectedCarIdx] || CARS[0]; }
 let carMeshes = [], carWheelGroups = [];
 
 function rebuildCarMeshes(count) {
   for (const m of carMeshes) SCENE.remove(m);
   carMeshes = []; carWheelGroups = [];
   for (let i = 0; i < count; i++) {
-    const v = createCarVisual(CAR_SPEC);
+    const v = createCarVisual(carSpec());
     SCENE.add(v.mesh);
     carMeshes.push(v.mesh);
     carWheelGroups.push(v.wheels || []);
@@ -217,9 +219,10 @@ function serializeTrackFromState() {
 
 function sendInit(model = null) {
   if (!worker || !state.trkPts || !state.trkPts.length) return;
+  const car = carSpec();
   const carData = {
-    accel: CAR_SPEC.accel, maxSpd: CAR_SPEC.maxSpd,
-    brake: CAR_SPEC.brake, hdl: CAR_SPEC.hdl, aiSpd: CAR_SPEC.aiSpd || 1.0,
+    accel: car.accel, maxSpd: car.maxSpd,
+    brake: car.brake, hdl: car.hdl, aiSpd: car.aiSpd || 1.0,
   };
   let tracks;
   if (simCfg.multiTrack && trackList.length > 1) {
@@ -497,7 +500,47 @@ function wireConfigSlider(sliderId, valId, key, fmtFn) {
   });
 }
 
+// Build the car picker: one button per car, plus a stat readout that updates
+// when the selection changes. Picking a new car also rebuilds the on-screen
+// meshes so the preview matches the choice before training starts.
+function updateCarInfo() {
+  const el = document.getElementById('configCarInfo');
+  if (!el) return;
+  const c = carSpec();
+  const s = c.stats || {};
+  el.innerHTML =
+    `<span style="color:${c.hex}">${c.name}</span> — ${c.desc || ''}` +
+    `<br>SPEED ${s.s ?? '–'} · ACCEL ${s.a ?? '–'} · HANDLING ${s.h ?? '–'}`;
+}
+
+function initCarPicker() {
+  const wrap = document.getElementById('configCarBtns');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  CARS.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.className = 'opt-btn' + (i === selectedCarIdx ? ' sel' : '');
+    b.textContent = c.name;
+    b.dataset.idx = i;
+    b.style.borderColor = i === selectedCarIdx ? c.hex : '';
+    b.addEventListener('click', () => {
+      selectedCarIdx = i;
+      wrap.querySelectorAll('.opt-btn').forEach(el => {
+        const sel = el.dataset.idx === String(i);
+        el.classList.toggle('sel', sel);
+        el.style.borderColor = sel ? c.hex : '';
+      });
+      updateCarInfo();
+      if (workerReady) rebuildCarMeshes(simCfg.numEnvs);
+    });
+    wrap.appendChild(b);
+  });
+  updateCarInfo();
+}
+
 function initConfigMenu() {
+  initCarPicker();
+
   makeOptBtnGroup('configGroupBtns',
     [{ label: 'OFF', val: 1 }, { label: '×2', val: 2 }, { label: '×4', val: 4 }, { label: '×8', val: 8 }],
     'groupSize');
