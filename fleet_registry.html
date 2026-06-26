@@ -52,6 +52,7 @@
   .eyebrow{font-size:11px;letter-spacing:3px;color:var(--amber);margin:0 0 6px;}
   .title{font-size:28px;font-weight:bold;letter-spacing:1px;margin:0 0 6px;color:var(--white);}
   .subtitle{font-size:13px;color:var(--amber);margin:0 0 4px;}
+  .ranks{font-size:11px;color:var(--amber);margin:0 0 4px;letter-spacing:0.5px;}
   .squadron{font-size:11px;color:var(--muted);}
 
   .panel input[type="text"]{
@@ -62,10 +63,6 @@
 
   .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .controls input[type="text"]{width:150px;}
-
-  #profileEdit{display:none;flex-direction:column;gap:6px;min-width:260px;}
-  #profileEdit input[type="text"]{width:260px;}
-  #profileEdit .btn-row{display:flex;gap:6px;}
 
   button{
     background:transparent;border:1px solid var(--border);color:var(--amber);
@@ -114,6 +111,22 @@
   .footer .right{text-align:right;}
   .footer .right .count{font-size:13px;font-weight:bold;color:var(--amber);}
   .footer .right .sum{font-size:11px;color:var(--muted);margin-top:4px;}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,0.65);
+    display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;
+  }
+  .modal-panel{
+    background:linear-gradient(180deg,var(--panel-top),var(--panel-bot));
+    border:1px solid var(--orange);padding:24px;width:min(560px, 100%);
+    max-height:85vh;overflow-y:auto;
+  }
+  .modal-panel h3{margin:0 0 16px;font-size:13px;letter-spacing:2px;color:var(--amber);text-transform:uppercase;}
+  .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;}
+  .modal-grid label{display:flex;flex-direction:column;gap:4px;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;}
+  .modal-grid input{width:100%;}
+  .modal-grid .span2{grid-column:1 / -1;}
+  .modal-actions{display:flex;gap:8px;margin-top:18px;justify-content:flex-end;}
 </style>
 </head>
 <body>
@@ -128,18 +141,9 @@
     <div id="profileDisplay">
       <p class="eyebrow">FLEET REGISTRY</p>
       <p class="title" id="profileName">CMDR NAME</p>
-      <p class="subtitle" id="profileRole">RANK · ROLE</p>
-      <p class="squadron" id="profileSquadron">SQUADRON · POWER · ALLEGIANCE</p>
-    </div>
-    <div id="profileEdit">
-      <input type="text" id="editName" placeholder="Commander name">
-      <input type="text" id="editRole" placeholder="Rank · Role">
-      <input type="text" id="editSquadron" placeholder="Squadron · Power · Allegiance">
-      <input type="text" id="editCarrier" placeholder="Fleet carrier (optional)">
-      <div class="btn-row">
-        <button id="saveProfileBtn" class="primary">Save</button>
-        <button id="cancelProfileBtn">Cancel</button>
-      </div>
+      <p class="subtitle" id="profileRole"></p>
+      <p class="ranks" id="profileRanks"></p>
+      <p class="squadron" id="profileSquadron"></p>
     </div>
     <div class="controls">
       <input type="text" id="search" placeholder="filter ships...">
@@ -179,6 +183,45 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="profileModalOverlay">
+  <div class="modal-panel">
+    <h3>Edit Profile</h3>
+    <div class="modal-grid">
+      <label class="span2">Commander name
+        <input type="text" id="editName" placeholder="e.g. CMDR Archadder">
+      </label>
+      <label class="span2">Role
+        <input type="text" id="editRole" placeholder="e.g. Special Operative / Trader">
+      </label>
+      <label>Combat rank
+        <input type="text" id="editCombatRank" placeholder="e.g. Elite V">
+      </label>
+      <label>Trade rank
+        <input type="text" id="editTradeRank" placeholder="e.g. Elite">
+      </label>
+      <label>Exploration rank
+        <input type="text" id="editExplorationRank" placeholder="e.g. Elite III">
+      </label>
+      <label>Squadron
+        <input type="text" id="editSquadron" placeholder="e.g. Angel Special Operations Group">
+      </label>
+      <label>Power
+        <input type="text" id="editPower" placeholder="e.g. Li Yong-Rui">
+      </label>
+      <label>Allegiance
+        <input type="text" id="editAllegiance" placeholder="e.g. Alliance">
+      </label>
+      <label class="span2">Fleet carrier (optional)
+        <input type="text" id="editCarrier" placeholder="e.g. EFS Reiner Daubek [JBX-THN] · Shana Bei">
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button id="saveProfileBtn" class="primary">Save</button>
+      <button id="cancelProfileBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ===========================================================
    Generic fleet registry — works for any Elite Dangerous CMDR,
@@ -197,9 +240,14 @@ const SHIPS_KEY = 'edFleetRegistryShips';
 const PROFILE_KEY = 'edFleetRegistryProfile';
 
 const defaultProfile = {
-  name: 'CMDR NAME',
-  role: 'RANK · ROLE',
-  squadron: 'SQUADRON · POWER · ALLEGIANCE',
+  name: '',
+  role: '',
+  combatRank: '',
+  tradeRank: '',
+  explorationRank: '',
+  squadron: '',
+  power: '',
+  allegiance: '',
   carrier: ''
 };
 
@@ -233,33 +281,57 @@ function loadProfile(){
 function saveProfile(){
   try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); }catch(e){}
 }
+
+function setLine(id, text){
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.style.display = text ? '' : 'none';
+}
+
 function renderProfile(){
-  document.getElementById('profileName').textContent = profile.name;
-  document.getElementById('profileRole').textContent = profile.role;
-  document.getElementById('profileSquadron').textContent = profile.squadron;
+  document.getElementById('profileName').textContent = profile.name || 'CMDR NAME';
+  setLine('profileRole', profile.role);
+
+  const ranks = [];
+  if(profile.combatRank) ranks.push(`COMBAT ${profile.combatRank}`);
+  if(profile.tradeRank) ranks.push(`TRADE ${profile.tradeRank}`);
+  if(profile.explorationRank) ranks.push(`EXPLORATION ${profile.explorationRank}`);
+  setLine('profileRanks', ranks.join('   ·   '));
+
+  const affiliation = [profile.squadron, profile.power, profile.allegiance].filter(Boolean);
+  setLine('profileSquadron', affiliation.join(' · '));
+
   const carrierEl = document.getElementById('carrierLine');
   carrierEl.textContent = profile.carrier ? profile.carrier : 'No fleet carrier set';
   carrierEl.classList.toggle('pending', !profile.carrier);
-  document.title = (profile.name && profile.name !== defaultProfile.name)
-    ? `${profile.name} — Fleet Registry`
-    : 'Fleet Registry';
+
+  document.title = profile.name ? `${profile.name} — Fleet Registry` : 'Fleet Registry';
 }
+
 function startEditProfile(){
-  document.getElementById('editName').value = profile.name === defaultProfile.name ? '' : profile.name;
-  document.getElementById('editRole').value = profile.role === defaultProfile.role ? '' : profile.role;
-  document.getElementById('editSquadron').value = profile.squadron === defaultProfile.squadron ? '' : profile.squadron;
+  document.getElementById('editName').value = profile.name;
+  document.getElementById('editRole').value = profile.role;
+  document.getElementById('editCombatRank').value = profile.combatRank;
+  document.getElementById('editTradeRank').value = profile.tradeRank;
+  document.getElementById('editExplorationRank').value = profile.explorationRank;
+  document.getElementById('editSquadron').value = profile.squadron;
+  document.getElementById('editPower').value = profile.power;
+  document.getElementById('editAllegiance').value = profile.allegiance;
   document.getElementById('editCarrier').value = profile.carrier;
-  document.getElementById('profileDisplay').style.display = 'none';
-  document.getElementById('profileEdit').style.display = 'flex';
+  document.getElementById('profileModalOverlay').style.display = 'flex';
 }
 function cancelEditProfile(){
-  document.getElementById('profileDisplay').style.display = '';
-  document.getElementById('profileEdit').style.display = 'none';
+  document.getElementById('profileModalOverlay').style.display = 'none';
 }
 function saveEditProfile(){
-  profile.name = document.getElementById('editName').value.trim() || defaultProfile.name;
-  profile.role = document.getElementById('editRole').value.trim() || defaultProfile.role;
-  profile.squadron = document.getElementById('editSquadron').value.trim() || defaultProfile.squadron;
+  profile.name = document.getElementById('editName').value.trim();
+  profile.role = document.getElementById('editRole').value.trim();
+  profile.combatRank = document.getElementById('editCombatRank').value.trim();
+  profile.tradeRank = document.getElementById('editTradeRank').value.trim();
+  profile.explorationRank = document.getElementById('editExplorationRank').value.trim();
+  profile.squadron = document.getElementById('editSquadron').value.trim();
+  profile.power = document.getElementById('editPower').value.trim();
+  profile.allegiance = document.getElementById('editAllegiance').value.trim();
   profile.carrier = document.getElementById('editCarrier').value.trim();
   saveProfile();
   cancelEditProfile();
@@ -420,10 +492,21 @@ function importFleetJSON(jsonText){
   fleet = mapIncomingShips(incoming);
   editingUid = null;
   saveFleet();
-  if(data && data.commander && profile.name === defaultProfile.name){
-    profile.name = data.commander;
-    saveProfile();
+
+  let profileChanged = false;
+  const fillIfEmpty = (key, value) => {
+    if(value && !profile[key]){ profile[key] = value; profileChanged = true; }
+  };
+  if(data && typeof data === 'object'){
+    fillIfEmpty('name', data.commander);
+    fillIfEmpty('combatRank', data.combatRank);
+    fillIfEmpty('tradeRank', data.tradeRank);
+    fillIfEmpty('explorationRank', data.explorationRank);
+    fillIfEmpty('squadron', data.squadron);
+    fillIfEmpty('power', data.power);
   }
+  if(profileChanged) saveProfile();
+
   renderProfile();
   render();
 }
