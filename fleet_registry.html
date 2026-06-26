@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fleet Registry</title>
+<style>
+  :root{
+    --bg:#050709;
+    --panel-top:#10171F;
+    --panel-bot:#070A0E;
+    --border:#22303D;
+    --orange:#FF7A1A;
+    --amber:#D89A5C;
+    --white:#E8EDF2;
+    --muted:#5C6B7A;
+    --stripe:#0D1520;
+    --current-tint:#2A1B0E;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--white);
+    font-family:Arial, Helvetica, sans-serif;
+    padding:20px;
+  }
+  .panel{
+    max-width:1040px;
+    margin:0 auto;
+    background:linear-gradient(180deg,var(--panel-top),var(--panel-bot));
+    border:1px solid var(--border);
+    padding:34px;
+    position:relative;
+  }
+  .corner{position:absolute;width:30px;height:30px;border:3px solid var(--orange);}
+  .corner-tl{top:-1px;left:-1px;border-right:none;border-bottom:none;}
+  .corner-tr{top:-1px;right:-1px;border-left:none;border-bottom:none;}
+  .corner-bl{bottom:-1px;left:-1px;border-right:none;border-top:none;}
+  .corner-br{bottom:-1px;right:-1px;border-left:none;border-top:none;}
+
+  .header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:16px;
+    border-bottom:1px solid rgba(255,122,26,0.4);
+    padding-bottom:14px;
+    margin-bottom:14px;
+  }
+  .eyebrow{font-size:11px;letter-spacing:3px;color:var(--amber);margin:0 0 6px;}
+  .title{font-size:28px;font-weight:bold;letter-spacing:1px;margin:0 0 6px;color:var(--white);}
+  .subtitle{font-size:13px;color:var(--amber);margin:0 0 4px;}
+  .squadron{font-size:11px;color:var(--muted);}
+
+  .panel input[type="text"]{
+    background:#0A0F16;border:1px solid var(--border);color:var(--white);
+    padding:7px 10px;font-size:12px;letter-spacing:0.5px;font-family:inherit;
+  }
+  .panel input[type="text"]:focus{outline:none;border-color:var(--orange);}
+
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .controls input[type="text"]{width:150px;}
+
+  #profileEdit{display:none;flex-direction:column;gap:6px;min-width:260px;}
+  #profileEdit input[type="text"]{width:260px;}
+  #profileEdit .btn-row{display:flex;gap:6px;}
+
+  button{
+    background:transparent;border:1px solid var(--border);color:var(--amber);
+    font-size:11px;letter-spacing:1px;padding:7px 12px;cursor:pointer;
+    text-transform:uppercase;font-family:inherit;
+  }
+  button:hover{border-color:var(--orange);color:var(--orange);}
+  button.primary{border-color:var(--orange);color:var(--orange);}
+  button.danger:hover{border-color:#E0473D;color:#E0473D;}
+
+  table{width:100%;border-collapse:collapse;margin-top:6px;}
+  .table-wrap{overflow-x:auto;}
+  th{
+    text-align:left;font-size:11px;letter-spacing:1.5px;color:var(--amber);
+    border-bottom:1px solid rgba(216,154,92,0.6);padding:8px 10px;
+    cursor:pointer;user-select:none;white-space:nowrap;
+  }
+  th:hover{color:var(--orange);}
+  th.num,td.num{text-align:right;}
+  td{padding:7px 10px;font-size:14px;vertical-align:middle;}
+  tr.row:nth-child(even){background:var(--stripe);}
+  tr.row.current{background:var(--current-tint);}
+  tr.row:hover{background:rgba(255,122,26,0.08);}
+  .ident{font-family:Consolas,'Courier New',monospace;font-weight:bold;color:var(--orange);}
+  .type{font-size:13px;color:var(--amber);}
+  .value{font-family:Consolas,'Courier New',monospace;font-size:13px;}
+  .pending{font-family:Consolas,'Courier New',monospace;font-size:12px;font-style:italic;color:var(--muted);}
+  .toggle{
+    background:none;border:none;cursor:pointer;font-size:16px;line-height:1;
+    color:var(--muted);padding:0 4px;
+  }
+  .toggle.on{color:var(--orange);}
+  .actions-cell{white-space:nowrap;}
+  .actions-cell button{padding:4px 8px;font-size:10px;margin-right:4px;}
+  td input[type="text"], td input[type="number"]{padding:5px 7px;font-size:13px;width:100%;}
+  td input.mono{font-family:Consolas,'Courier New',monospace;}
+
+  .footer{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    border-top:1px solid rgba(255,122,26,0.4);margin-top:14px;padding-top:12px;
+    flex-wrap:wrap;gap:10px;
+  }
+  .footer .left .carrier{font-size:13px;color:var(--white);}
+  .footer .left .carrier.pending{font-size:13px;font-style:italic;color:var(--muted);}
+  .footer .left .legend{font-size:10px;color:var(--muted);margin-top:4px;}
+  .footer .right{text-align:right;}
+  .footer .right .count{font-size:13px;font-weight:bold;color:var(--amber);}
+  .footer .right .sum{font-size:11px;color:var(--muted);margin-top:4px;}
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <span class="corner corner-tl"></span>
+  <span class="corner corner-tr"></span>
+  <span class="corner corner-bl"></span>
+  <span class="corner corner-br"></span>
+
+  <div class="header">
+    <div id="profileDisplay">
+      <p class="eyebrow">FLEET REGISTRY</p>
+      <p class="title" id="profileName">CMDR NAME</p>
+      <p class="subtitle" id="profileRole">RANK · ROLE</p>
+      <p class="squadron" id="profileSquadron">SQUADRON · POWER · ALLEGIANCE</p>
+    </div>
+    <div id="profileEdit">
+      <input type="text" id="editName" placeholder="Commander name">
+      <input type="text" id="editRole" placeholder="Rank · Role">
+      <input type="text" id="editSquadron" placeholder="Squadron · Power · Allegiance">
+      <input type="text" id="editCarrier" placeholder="Fleet carrier (optional)">
+      <div class="btn-row">
+        <button id="saveProfileBtn" class="primary">Save</button>
+        <button id="cancelProfileBtn">Cancel</button>
+      </div>
+    </div>
+    <div class="controls">
+      <input type="text" id="search" placeholder="filter ships...">
+      <button id="importBtn">Import JSON</button>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
+      <button id="addBtn" class="primary">+ Add Ship</button>
+      <button id="editProfileBtn">Edit Profile</button>
+      <button id="resetBtn" class="danger">Reset</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:28px;"></th>
+          <th data-sort="ident">Ident</th>
+          <th data-sort="name">Vessel</th>
+          <th data-sort="type">Class</th>
+          <th data-sort="value" class="num">Value (Cr)</th>
+          <th style="width:90px;"></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <div class="left">
+      <div class="carrier" id="carrierLine">No fleet carrier set</div>
+      <div class="legend">click ● to set current ship · click Edit to update a row · changes save in this browser automatically</div>
+    </div>
+    <div class="right">
+      <div class="count" id="countLabel">0 VESSELS REGISTERED</div>
+      <div class="sum" id="sumLabel">HULL VALUE (APPRAISED) 0 CR</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===========================================================
+   Generic fleet registry — works for any Elite Dangerous CMDR,
+   and is safe to host as one shared page for multiple people:
+   everything lives in *your own browser's* localStorage, so
+   each visitor only ever sees and edits their own data.
+
+   Pairs with the EDFleetExporter EDMC plugin: each person opens
+   the page on their own device, clicks "Import JSON", and picks
+   their own local fleet_export.json. No server-side fleet data
+   or profile info is involved — nothing is shared between visitors.
+   No export file? Use "+ Add Ship" to build a roster by hand.
+   =========================================================== */
+
+const SHIPS_KEY = 'edFleetRegistryShips';
+const PROFILE_KEY = 'edFleetRegistryProfile';
+
+const defaultProfile = {
+  name: 'CMDR NAME',
+  role: 'RANK · ROLE',
+  squadron: 'SQUADRON · POWER · ALLEGIANCE',
+  carrier: ''
+};
+
+let fleet = loadFleet();
+let profile = loadProfile();
+let nextUid = fleet.length ? Math.max(...fleet.map(s => s.uid)) + 1 : 1;
+let editingUid = null;
+let sortCol = null;
+let sortDir = 1;
+let filterText = '';
+
+function loadFleet(){
+  try{
+    const raw = localStorage.getItem(SHIPS_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ /* storage unavailable in this context, start empty */ }
+  return [];
+}
+function saveFleet(){
+  try{ localStorage.setItem(SHIPS_KEY, JSON.stringify(fleet)); }
+  catch(e){ /* storage unavailable here — edits stay in-memory for this session */ }
+}
+
+function loadProfile(){
+  try{
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if(raw) return {...defaultProfile, ...JSON.parse(raw)};
+  }catch(e){ /* fall through to default */ }
+  return {...defaultProfile};
+}
+function saveProfile(){
+  try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); }catch(e){}
+}
+function renderProfile(){
+  document.getElementById('profileName').textContent = profile.name;
+  document.getElementById('profileRole').textContent = profile.role;
+  document.getElementById('profileSquadron').textContent = profile.squadron;
+  const carrierEl = document.getElementById('carrierLine');
+  carrierEl.textContent = profile.carrier ? profile.carrier : 'No fleet carrier set';
+  carrierEl.classList.toggle('pending', !profile.carrier);
+  document.title = (profile.name && profile.name !== defaultProfile.name)
+    ? `${profile.name} — Fleet Registry`
+    : 'Fleet Registry';
+}
+function startEditProfile(){
+  document.getElementById('editName').value = profile.name === defaultProfile.name ? '' : profile.name;
+  document.getElementById('editRole').value = profile.role === defaultProfile.role ? '' : profile.role;
+  document.getElementById('editSquadron').value = profile.squadron === defaultProfile.squadron ? '' : profile.squadron;
+  document.getElementById('editCarrier').value = profile.carrier;
+  document.getElementById('profileDisplay').style.display = 'none';
+  document.getElementById('profileEdit').style.display = 'flex';
+}
+function cancelEditProfile(){
+  document.getElementById('profileDisplay').style.display = '';
+  document.getElementById('profileEdit').style.display = 'none';
+}
+function saveEditProfile(){
+  profile.name = document.getElementById('editName').value.trim() || defaultProfile.name;
+  profile.role = document.getElementById('editRole').value.trim() || defaultProfile.role;
+  profile.squadron = document.getElementById('editSquadron').value.trim() || defaultProfile.squadron;
+  profile.carrier = document.getElementById('editCarrier').value.trim();
+  saveProfile();
+  cancelEditProfile();
+  renderProfile();
+}
+
+function fmt(v){
+  if(v === null || v === undefined || v === '') return '<span class="pending">— pending</span>';
+  return Number(v).toLocaleString('en-US');
+}
+
+function setCurrent(uid){
+  fleet.forEach(s => s.current = (s.uid === uid));
+  saveFleet();
+  render();
+}
+function startEdit(uid){ editingUid = uid; render(); }
+function cancelEdit(){ editingUid = null; render(); }
+
+function saveEdit(uid){
+  const row = document.querySelector(`tr[data-uid="${uid}"]`);
+  const ident = row.querySelector('[data-field="ident"]').value.trim();
+  const name = row.querySelector('[data-field="name"]').value.trim();
+  const type = row.querySelector('[data-field="type"]').value.trim();
+  const valRaw = row.querySelector('[data-field="value"]').value.trim();
+  const ship = fleet.find(s => s.uid === uid);
+  ship.ident = ident || ship.ident;
+  ship.name = name || ship.name;
+  ship.type = type || ship.type;
+  ship.value = valRaw === '' ? null : Number(valRaw.replace(/,/g,''));
+  editingUid = null;
+  saveFleet();
+  render();
+}
+
+function deleteShip(uid){
+  const ship = fleet.find(s => s.uid === uid);
+  if(!confirm(`Remove ${ship.name} (${ship.ident})?`)) return;
+  fleet = fleet.filter(s => s.uid !== uid);
+  saveFleet();
+  render();
+}
+
+function addShip(){
+  const uid = nextUid++;
+  fleet.push({uid, ident:'NEW-1', name:'New Ship', type:'', value:null, current:false});
+  editingUid = uid;
+  saveFleet();
+  render();
+  const row = document.querySelector(`tr[data-uid="${uid}"]`);
+  if(row) row.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function resetFleet(){
+  if(!confirm('Clear the whole roster? This discards every ship in this browser.')) return;
+  fleet = [];
+  nextUid = 1;
+  editingUid = null;
+  saveFleet();
+  render();
+}
+
+function sortBy(col){
+  if(sortCol === col){ sortDir *= -1; } else { sortCol = col; sortDir = 1; }
+  render();
+}
+
+function visibleRows(){
+  let rows = fleet.slice();
+  if(filterText){
+    const f = filterText.toLowerCase();
+    rows = rows.filter(s =>
+      s.ident.toLowerCase().includes(f) ||
+      s.name.toLowerCase().includes(f) ||
+      s.type.toLowerCase().includes(f)
+    );
+  }
+  if(sortCol){
+    rows.sort((a,b) => {
+      let av = a[sortCol], bv = b[sortCol];
+      if(sortCol === 'value'){ av = av ?? -1; bv = bv ?? -1; }
+      else { av = (av||'').toString().toLowerCase(); bv = (bv||'').toString().toLowerCase(); }
+      return av > bv ? sortDir : av < bv ? -sortDir : 0;
+    });
+  }
+  return rows;
+}
+
+function render(){
+  const tbody = document.getElementById('rows');
+  const rows = visibleRows();
+
+  if(fleet.length === 0){
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;font-size:13px;">
+      No ships yet — click <strong style="color:var(--amber);">+ Add Ship</strong> or
+      <strong style="color:var(--amber);">Import JSON</strong> to get started.
+    </td></tr>`;
+  } else if(rows.length === 0){
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;font-size:13px;">
+      No ships match "${filterText}".
+    </td></tr>`;
+  } else {
+    tbody.innerHTML = rows.map(s => {
+      const editing = s.uid === editingUid;
+      if(editing){
+        return `<tr class="row${s.current ? ' current' : ''}" data-uid="${s.uid}">
+          <td><button class="toggle ${s.current?'on':''}" onclick="setCurrent(${s.uid})">●</button></td>
+          <td><input class="mono" type="text" data-field="ident" value="${s.ident}"></td>
+          <td><input type="text" data-field="name" value="${s.name}"></td>
+          <td><input type="text" data-field="type" value="${s.type}"></td>
+          <td><input class="mono" type="text" data-field="value" value="${s.value ?? ''}" placeholder="leave blank if pending"></td>
+          <td class="actions-cell">
+            <button onclick="saveEdit(${s.uid})">Save</button>
+            <button onclick="cancelEdit()">Cancel</button>
+          </td>
+        </tr>`;
+      }
+      return `<tr class="row${s.current ? ' current' : ''}" data-uid="${s.uid}">
+        <td><button class="toggle ${s.current?'on':''}" onclick="setCurrent(${s.uid})" title="set as current ship">●</button></td>
+        <td class="ident">${s.ident}${s.current ? ' ●' : ''}</td>
+        <td>${s.name}</td>
+        <td class="type">${s.type}</td>
+        <td class="num value">${fmt(s.value)}</td>
+        <td class="actions-cell">
+          <button onclick="startEdit(${s.uid})">Edit</button>
+          <button class="danger" onclick="deleteShip(${s.uid})">×</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  const count = fleet.length;
+  const sum = fleet.reduce((acc,s) => acc + (typeof s.value === 'number' ? s.value : 0), 0);
+  document.getElementById('countLabel').textContent = `${count} VESSEL${count === 1 ? '' : 'S'} REGISTERED`;
+  document.getElementById('sumLabel').textContent = `HULL VALUE (APPRAISED) ${sum.toLocaleString('en-US')} CR`;
+}
+
+function mapIncomingShips(incoming){
+  return incoming.map(s => ({
+    uid: nextUid++,
+    ident: s.ident || 'UNSET',
+    name: s.name || 'Unnamed',
+    type: s.type || (s.rawType || ''),
+    value: (typeof s.value === 'number') ? s.value : null,
+    current: !!s.current
+  }));
+}
+
+function importFleetJSON(jsonText){
+  let data;
+  try{ data = JSON.parse(jsonText); }
+  catch(e){ alert('That file is not valid JSON.'); return; }
+
+  const incoming = Array.isArray(data) ? data : data.ships;
+  if(!Array.isArray(incoming)){ alert('No "ships" array found in that file.'); return; }
+  if(!confirm(`Import ${incoming.length} ship(s) from this file? This replaces your current roster.`)) return;
+
+  fleet = mapIncomingShips(incoming);
+  editingUid = null;
+  saveFleet();
+  if(data && data.commander && profile.name === defaultProfile.name){
+    profile.name = data.commander;
+    saveProfile();
+  }
+  renderProfile();
+  render();
+}
+
+document.getElementById('search').addEventListener('input', e => {
+  filterText = e.target.value;
+  render();
+});
+document.getElementById('addBtn').addEventListener('click', addShip);
+document.getElementById('resetBtn').addEventListener('click', resetFleet);
+document.getElementById('editProfileBtn').addEventListener('click', startEditProfile);
+document.getElementById('saveProfileBtn').addEventListener('click', saveEditProfile);
+document.getElementById('cancelProfileBtn').addEventListener('click', cancelEditProfile);
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => importFleetJSON(reader.result);
+  reader.readAsText(file);
+  e.target.value = '';
+});
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => sortBy(th.dataset.sort));
+});
+
+renderProfile();
+render();
+</script>
+
+</body>
+</html>
