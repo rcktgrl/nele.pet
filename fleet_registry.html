@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fleet Registry</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{
     --bg:#050709;
@@ -112,6 +113,13 @@
   .footer .right .count{font-size:13px;font-weight:bold;color:var(--amber);}
   .footer .right .sum{font-size:11px;color:var(--muted);margin-top:4px;}
 
+  .screenshot-mode .controls{visibility:hidden;}
+  .screenshot-mode .actions-cell{visibility:hidden;}
+  .screenshot-mode thead th:first-child,
+  .screenshot-mode thead th:last-child{visibility:hidden;}
+  .screenshot-mode td:first-child .toggle{visibility:hidden;}
+  .screenshot-mode .legend{visibility:hidden;}
+
   .modal-overlay{
     position:fixed;inset:0;background:rgba(0,0,0,0.65);
     display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;
@@ -150,6 +158,7 @@
       <button id="importBtn">Import JSON</button>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
       <button id="addBtn" class="primary">+ Add Ship</button>
+      <button id="screenshotBtn">📷 Screenshot</button>
       <button id="editProfileBtn">Edit Profile</button>
       <button id="resetBtn" class="danger">Reset</button>
     </div>
@@ -494,16 +503,16 @@ function importFleetJSON(jsonText){
   saveFleet();
 
   let profileChanged = false;
-  const fillIfEmpty = (key, value) => {
-    if(value && !profile[key]){ profile[key] = value; profileChanged = true; }
+  const overwriteIfPresent = (key, value) => {
+    if(value){ profile[key] = value; profileChanged = true; }
   };
   if(data && typeof data === 'object'){
-    fillIfEmpty('name', data.commander);
-    fillIfEmpty('combatRank', data.combatRank);
-    fillIfEmpty('tradeRank', data.tradeRank);
-    fillIfEmpty('explorationRank', data.explorationRank);
-    fillIfEmpty('squadron', data.squadron);
-    fillIfEmpty('power', data.power);
+    overwriteIfPresent('name', data.commander);
+    overwriteIfPresent('combatRank', data.combatRank);
+    overwriteIfPresent('tradeRank', data.tradeRank);
+    overwriteIfPresent('explorationRank', data.explorationRank);
+    overwriteIfPresent('squadron', data.squadron);
+    overwriteIfPresent('power', data.power);
   }
   if(profileChanged) saveProfile();
 
@@ -520,6 +529,22 @@ document.getElementById('resetBtn').addEventListener('click', resetFleet);
 document.getElementById('editProfileBtn').addEventListener('click', startEditProfile);
 document.getElementById('saveProfileBtn').addEventListener('click', saveEditProfile);
 document.getElementById('cancelProfileBtn').addEventListener('click', cancelEditProfile);
+document.getElementById('screenshotBtn').addEventListener('click', async () => {
+  const panel = document.querySelector('.panel');
+  panel.classList.add('screenshot-mode');
+  try{
+    const canvas = await html2canvas(panel, {backgroundColor: '#050709', scale: 2});
+    const safeName = (profile.name || 'fleet').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+    const link = document.createElement('a');
+    link.download = `${safeName}_registry.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }catch(err){
+    alert('Screenshot failed: ' + err.message);
+  }finally{
+    panel.classList.remove('screenshot-mode');
+  }
+});
 document.getElementById('importBtn').addEventListener('click', () => {
   document.getElementById('importFile').click();
 });
