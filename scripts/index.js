@@ -39,12 +39,12 @@ const ocsGalleryCleanup = initOcsGallerySlider();
 
 // ---------------------------------------------------------------------------
 // Server status
-// Polls status.nele.pet and reflects the LMP/Matrix server states as dots
+// Polls status.nele.pet and reflects the KSP/Matrix server states as dots
 // in the homepage header.
 // ---------------------------------------------------------------------------
 
 const serverStatusCleanup = initServerStatus({
-  lmpDot:    document.getElementById('dot-lmp'),
+  kspDot:    document.getElementById('dot-ksp'),
   matrixDot: document.getElementById('dot-matrix'),
 });
 
