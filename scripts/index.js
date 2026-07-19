@@ -16,6 +16,7 @@ import { initHeroSlider }       from './hero-slider.js';
 import { initPawprints }        from './pawprints.js';
 import { initOcsGallerySlider } from './ocs-gallery-slider.js';
 import { galleryArtworks }      from './gallery-data.js';
+import { initServerStatus }     from './server-status.js';
 
 // ---------------------------------------------------------------------------
 // Hero slider
@@ -35,6 +36,17 @@ const heroCleanup = initHeroSlider({
 // ---------------------------------------------------------------------------
 
 const ocsGalleryCleanup = initOcsGallerySlider();
+
+// ---------------------------------------------------------------------------
+// Server status
+// Polls status.nele.pet and reflects the LMP/Matrix server states as dots
+// in the homepage header.
+// ---------------------------------------------------------------------------
+
+const serverStatusCleanup = initServerStatus({
+  lmpDot:    document.getElementById('dot-lmp'),
+  matrixDot: document.getElementById('dot-matrix'),
+});
 
 // ---------------------------------------------------------------------------
 // Cookie consent
@@ -93,4 +105,5 @@ window.addEventListener('beforeunload', () => {
   audioCleanup?.();
   pawprintsCleanup?.();
   ocsGalleryCleanup?.();
+  serverStatusCleanup?.();
 });
