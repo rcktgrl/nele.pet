@@ -37,7 +37,7 @@ async function refreshServerStatus(kspDot, matrixDot) {
     const response = await fetch(STATUS_URL, { cache: 'no-store' });
     const data = await response.json();
 
-    setDotState(kspDot, data.ksp === 'online');
+    setDotState(kspDot, data.lmp === 'online');
     setDotState(matrixDot, data.matrix === 'online');
   } catch {
     setDotState(kspDot, false);
