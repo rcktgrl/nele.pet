@@ -60,6 +60,26 @@
     </div>
   </div>
 
+  <!-- KSP Mod Download Modal -->
+  <div
+    id="ksp-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="ksp-modal-title"
+    aria-hidden="true"
+  >
+    <div class="ksp-modal-card">
+      <h2 id="ksp-modal-title">🚀 Download KSP Server Mods</h2>
+      <p>Download the mods required to join our KSP server?</p>
+      <p>This will download <strong>MechJeb2</strong> and <strong>Kerbal Engineer Redux</strong>.</p>
+      <p class="ksp-modal__note">Note: Making History and Breaking Ground DLC are required too, but must be purchased/enabled separately via Steam — this download can&apos;t include them.</p>
+      <div class="ksp-modal__actions">
+        <button type="button" id="ksp-modal-download">Download</button>
+        <button type="button" id="ksp-modal-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Side Buttons -->
   <div id="right-side-buttons">
     <a id="blog-link" class="side-button side-button--right" href="./pages/blog.html">
@@ -110,9 +130,16 @@
     <h1>Puppy pillow fortress</h1>
 
     <div id="server-status" class="server-status">
-      <span class="server-status__item">
+      <button
+        type="button"
+        id="ksp-status-btn"
+        class="server-status__item ksp-status-btn"
+        aria-haspopup="dialog"
+        aria-controls="ksp-modal"
+        title="Click to download mods for our KSP server"
+      >
         <span class="status-dot" id="dot-ksp"></span> KSP
-      </span>
+      </button>
       <span class="server-status__item">
         <span class="status-dot" id="dot-matrix"></span> Matrix
       </span>
