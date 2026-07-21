@@ -44,8 +44,12 @@ const ocsGalleryCleanup = initOcsGallerySlider();
 // ---------------------------------------------------------------------------
 
 const serverStatusCleanup = initServerStatus({
-  kspDot:    document.getElementById('dot-ksp'),
-  matrixDot: document.getElementById('dot-matrix'),
+  kspDot:            document.getElementById('dot-ksp'),
+  matrixDot:         document.getElementById('dot-matrix'),
+  kspButton:         document.getElementById('ksp-status-btn'),
+  kspModal:          document.getElementById('ksp-modal'),
+  kspDownloadButton: document.getElementById('ksp-modal-download'),
+  kspCancelButton:   document.getElementById('ksp-modal-cancel'),
 });
 
 // ---------------------------------------------------------------------------
