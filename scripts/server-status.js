@@ -5,16 +5,16 @@
  * them as coloured dots in the homepage header.
  *
  * Also wires up the KSP status button so clicking it opens a confirmation
- * modal that triggers mod downloads (MechJeb2 + Kerbal Engineer Redux).
+ * modal that downloads the GameData.zip modpack — the exact mod set
+ * (MechJeb2 + Kerbal Engineer Redux) enforced by the server's
+ * LMPModControl.xml.
  */
 
 const POLL_INTERVAL_MS = 30000;
 
 const STATUS_URL = 'https://status.nele.pet/status.json';
 
-const MECHJEB_JENKINS_BASE = 'https://ksp.sarbian.com/jenkins/job/MechJeb2-Release';
-const MECHJEB_FALLBACK_URL = `${MECHJEB_JENKINS_BASE}/45/artifact/MechJeb2-2.15.1.0.zip`;
-const KER_RELEASES_API = 'https://api.github.com/repos/jrbudda/KerbalEngineer/releases/latest';
+const MODPACK_URL = 'https://dl.nele.pet/GameData.zip';
 
 function setDotState(dotElement, isOnline) {
   if (!dotElement) return;
@@ -30,34 +30,6 @@ async function refreshServerStatus(kspDot, matrixDot) {
   } catch {
     setDotState(kspDot, false);
     setDotState(matrixDot, false);
-  }
-}
-
-async function getMechJebUrl() {
-  try {
-    const res = await fetch(`${MECHJEB_JENKINS_BASE}/lastSuccessfulBuild/api/json`, {
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error('non-ok');
-    const data = await res.json();
-    const artifact = data.artifacts?.find(a => a.fileName.endsWith('.zip'));
-    if (artifact) {
-      return `${MECHJEB_JENKINS_BASE}/lastSuccessfulBuild/artifact/${artifact.relativePath}`;
-    }
-  } catch {
-    // fall through to pinned fallback
-  }
-  return MECHJEB_FALLBACK_URL;
-}
-
-async function getKerUrl() {
-  try {
-    const res = await fetch(KER_RELEASES_API, { cache: 'no-store' });
-    if (!res.ok) throw new Error('non-ok');
-    const data = await res.json();
-    return data.assets?.find(a => a.name.endsWith('.zip'))?.browser_download_url ?? null;
-  } catch {
-    return null;
   }
 }
 
@@ -95,13 +67,9 @@ function initKspModal({ kspButton, kspModal, kspDownloadButton, kspCancelButton 
       closeModal(kspModal, kspButton);
     }
   };
-  const handleDownload = async () => {
+  const handleDownload = () => {
     closeModal(kspModal, kspButton);
-    if (kspDownloadButton) kspDownloadButton.disabled = true;
-    const [mechJebUrl, kerUrl] = await Promise.all([getMechJebUrl(), getKerUrl()]);
-    triggerDownload(mechJebUrl);
-    if (kerUrl) setTimeout(() => triggerDownload(kerUrl), 300);
-    if (kspDownloadButton) kspDownloadButton.disabled = false;
+    triggerDownload(MODPACK_URL);
   };
 
   kspButton.addEventListener('click', handleOpen);
