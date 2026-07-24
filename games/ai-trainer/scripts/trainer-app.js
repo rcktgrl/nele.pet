@@ -185,6 +185,7 @@ const simCfg = {
   progressReward: 0.2,
   gravelPenalty: 1.0,
   wallPenalty: 2.0,
+  wallHitPenalty: 50,
   terminalPenalty: 10,
   lapBonus: 20,
 };
@@ -760,6 +761,7 @@ function initUI() {
   });
   wireSlider('progSlider',    'progVal',    'progressReward',  v => v.toFixed(2), true);
   wireSlider('gravelSlider',  'gravelVal',  'gravelPenalty',   v => v.toFixed(1), true);
+  wireSlider('wallHitSlider', 'wallHitVal', 'wallHitPenalty',  v => Math.round(v), true);
   wireSlider('wallSlider',    'wallVal',    'wallPenalty',     v => v.toFixed(1), true);
   wireSlider('termSlider',    'termVal',    'terminalPenalty', v => Math.round(v), true);
   wireSlider('lapBonusSlider','lapBonusVal','lapBonus',        v => Math.round(v), true);

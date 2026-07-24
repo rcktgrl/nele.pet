@@ -213,10 +213,18 @@ class Car {
         const correction = Math.max(-maxCorrection, Math.min(maxCorrection, hdgErr * 0.8));
         this.hdg += correction;
         this.stuckTimer += dt;
-      } else {
-        this.stuckTimer = Math.max(0, this.stuckTimer - 0.032);
+        return;
       }
-      return;
+      // NOT touching a wall — fall through to the road-width containment below.
+      // This used to `return` unconditionally, which made that check dead code:
+      // nearestWallPoint() returns non-null whenever the side has ANY segments,
+      // so the branch below never ran on a track with walls. track-gen.js
+      // deliberately DROPS wall segments that self-intersect or intrude into the
+      // track interior — which happens on tight corners — and in those gaps a car
+      // could leave the track entirely with no pushback.
+      // Kept identical to the trainer's SimCar.boundary() in
+      // ai-trainer/scripts/sim-worker.js: the two must match or a trained policy
+      // stops transferring into the game.
     }
 
     const dist = Math.sqrt(md), maxD = state.trkData.rw * .5 + 1.0;
