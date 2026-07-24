@@ -97,6 +97,7 @@ let cfg = {
   progressReward: 0.2,   // per metre of forward progress along the centerline
   gravelPenalty: 1.0,    // per second on gravel
   wallPenalty: 2.0,      // per second of wall contact
+  wallHitPenalty: 50,    // ONE-OFF, charged on each new wall/off-track contact
   terminalPenalty: 10,   // on off-track / stuck termination
   lapBonus: 20,          // on lap completion
 };
@@ -401,6 +402,7 @@ class SimCar {
     this.reverseTimer = 0;
     this.onGravel     = false;
     this.stuckTimer   = 0;
+    this.wallHit      = false;  // in wall/off-track contact THIS tick
     this.lap          = 0;
     this.lapTimes     = [];
     // nearest-point hints (−1 = unknown → global search on next lookup)
@@ -415,7 +417,7 @@ class SimCar {
     this.pos.x = pos.x; this.pos.y = pos.y; this.pos.z = pos.z;
     this.hdg = hdg; this.spd = 0;
     this.isReversing = false; this.revSpd = 0; this.reverseTimer = 0;
-    this.onGravel = false; this.stuckTimer = 0;
+    this.onGravel = false; this.stuckTimer = 0; this.wallHit = false;
     this.lap = 0; this.lapTimes = [];
     this.arcHint = -1; this.trkHint = -1; this.gravelHint = -1;
     this.mem.fill(0);
@@ -479,6 +481,11 @@ class SimCar {
   }
 
   boundary(dt) {
+    // Per-tick contact flag. The reward charges a DISCRETE penalty on the
+    // rising edge of this (see cfg.wallHitPenalty), because pricing contact by
+    // duration alone makes a glancing bump almost free — the exact failure the
+    // policy needs the strongest signal about.
+    this.wallHit = false;
     if (!trkPts.length) return;
 
     if (cityCorridors && cityCorridors.length) {
@@ -499,6 +506,7 @@ class SimCar {
         this.spd *= 0.82;
         if (this.isReversing) this.revSpd *= 0.7;
         this.stuckTimer += dt;
+        this.wallHit = true;
       } else {
         this.stuckTimer = Math.max(0, this.stuckTimer - 0.04);
       }
@@ -535,10 +543,17 @@ class SimCar {
         const hdgErr  = wrapPi(targetHdg - this.hdg);
         this.hdg += Math.max(-Math.PI / 16, Math.min(Math.PI / 16, hdgErr * 0.8));
         this.stuckTimer += dt;
-      } else {
-        this.stuckTimer = Math.max(0, this.stuckTimer - 0.032);
+        this.wallHit = true;
+        return;
       }
-      return;
+      // NOT touching a wall — fall through to the road-width containment below.
+      // This used to `return` unconditionally, which made that check dead code:
+      // nearestWallPoint() returns non-null whenever the side has ANY segments
+      // (its own `return null` is annotated "unreachable while side.n > 0"), so
+      // the branch below never ran on a track with walls. track-gen.js
+      // deliberately DROPS wall segments that self-intersect or intrude into the
+      // track interior — which happens on tight corners — and in those gaps a car
+      // left the track with no pushback and no penalty at all.
     }
 
     const dist = Math.sqrt(md), maxD = (trkData ? trkData.rw * 0.5 : 8) + 1.0;
@@ -553,6 +568,7 @@ class SimCar {
       const hdgErr = wrapPi(targetHdg - this.hdg);
       this.hdg += Math.max(-Math.PI / 18, Math.min(Math.PI / 18, hdgErr * 0.75));
       this.stuckTimer += dt;
+      this.wallHit = true;
     } else {
       this.stuckTimer = Math.max(0, this.stuckTimer - 0.032);
     }
@@ -1075,6 +1091,7 @@ function makeEnv(i) {
     offTrackTime: 0,
     noProgTime: 0,
     prevStuck: 0,
+    prevWallHit: false,  // previous tick's contact flag — for edge detection
     // action-repeat bookkeeping
     repCount: 0,
     curAct: new Float64Array(ACT_DIM),
@@ -1117,7 +1134,7 @@ function resetEnv(env, i, pose = null) {
   env.prevS = carArc(env.car).s;
   env.lapAcc = 0; env.lapTime = 0;
   env.epTime = 0; env.epReturn = 0;
-  env.offTrackTime = 0; env.noProgTime = 0; env.prevStuck = 0;
+  env.offTrackTime = 0; env.noProgTime = 0; env.prevStuck = 0; env.prevWallHit = false;
   env.repCount = 0;
   env.pendObs = null; env.pendObsM = null; env.rewAcc = 0;
   env.gDone = false; env.gFit = 0;
@@ -1192,6 +1209,20 @@ function finalizeGroup(g) {
 // Node test harness access — nearest-wall queries against the spatial index.
 export function nearestWallForTest(px, pz, sideName) {
   return nearestWallPoint(px, pz, wallIdx[sideName]);
+}
+
+// Node test harness access — place a car at an arbitrary pose and run ONE
+// boundary() resolution against the currently loaded track. Used by
+// test/wall-containment-check.mjs to probe containment at positions a driving
+// policy would rarely reach on its own (e.g. outside a gap in the wall mesh).
+export function boundaryProbeForTest(px, pz, hdg = 0, spd = 30, dt = 1 / 60) {
+  const car = new SimCar(carSpec, { x: px, y: 0, z: pz }, hdg);
+  car.spd = spd;
+  car.boundary(dt);
+  return {
+    x: car.pos.x, z: car.pos.z,
+    wallHit: car.wallHit, stuckTimer: car.stuckTimer, spd: car.spd,
+  };
 }
 
 // Load a raw track payload into the geometry globals (no derived tables yet).
@@ -1431,6 +1462,15 @@ function stepOnce(dt) {
     }
 
     if (car.onGravel) r -= cfg.gravelPenalty * dt;
+    // Wall/off-track contact is charged two ways:
+    //   · once per CONTACT EVENT (rising edge) — cfg.wallHitPenalty
+    //   · per second of sustained contact      — cfg.wallPenalty
+    // The event term exists because duration-only pricing charged a glancing
+    // bump just wallPenalty*dt (≈1.7 at wallPenalty 100, 60 Hz), far too weak a
+    // signal for a mistake the policy must learn to avoid outright. Set
+    // wallHitPenalty to 0 to restore the old duration-only behaviour.
+    if (car.wallHit && !env.prevWallHit) r -= cfg.wallHitPenalty;
+    env.prevWallHit = car.wallHit;
     const stuckInc = car.stuckTimer - env.prevStuck;
     if (stuckInc > 0) r -= cfg.wallPenalty * stuckInc;
     env.prevStuck = car.stuckTimer;

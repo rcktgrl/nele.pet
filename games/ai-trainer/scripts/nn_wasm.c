@@ -2,15 +2,27 @@
  * nn_wasm.c — Neural-net forward/backward + PPO gradient accumulation for WASM.
  *
  * Compile:
- *   clang --target=wasm32 -nostdlib -fno-builtin -O3 -ffast-math \
+ *   clang --target=wasm32 -nostdlib -fno-builtin -O3 -ffast-math -msimd128 \
  *         -Wl,--no-entry -Wl,--export-all -Wl,--allow-undefined \
  *         nn_wasm.c -o nn_wasm.wasm
  *
  * -fno-builtin keeps the optimizer from lowering array copies/fills into calls
  * to memcpy/memset that the freestanding target can't import. We provide those
- * three libcalls below so the module imports only { env: { exp, tanh } }.
+ * three libcalls below so the module needs no imports at all — see the note
+ * on exp()/tanh() below.
  *
- * JS host must provide imports: { env: { exp, tanh } }
+ * The module is fully self-contained: no imports required. exp() and tanh()
+ * used to be imported from the JS host (`env.exp`/`env.tanh`, i.e. Math.exp/
+ * Math.tanh), but every hidden-unit activation and every log-prob/ratio term
+ * calls one of them — tens of thousands of times per PPO minibatch — and each
+ * call crossed the JS↔WASM boundary. That trampoline isn't free (it defeats
+ * inlining and, on engines that don't special-case a fixed set of Math.*
+ * imports, costs real per-call overhead), so a hot loop that leans on it can
+ * end up slower than the equivalent JIT'd JS despite running compiled code.
+ * exp_impl()/tanh_impl() below reimplement both natively (fdlibm-derived
+ * range reduction + minimax polynomial for exp; exp-based identity for tanh),
+ * verified to match JS Math.exp/Math.tanh to within double-precision rounding
+ * — see test/wasm-math-check.mjs.
  *
  * All large arrays (weights, grads, batch data) live in WASM linear memory
  * managed by the JS caller.  The C code keeps only small fixed-size caches
@@ -20,9 +32,79 @@
 /* freestanding: define NULL manually */
 #define NULL ((void*)0)
 
-/* ── Math imports from JS host ── */
-extern double exp(double x)  __attribute__((import_module("env"), import_name("exp")));
-extern double tanh(double x) __attribute__((import_module("env"), import_name("tanh")));
+/* ── exp()/tanh() — native, no JS import (see file header) ──────────────────
+ *
+ * exp_impl: fdlibm-style range reduction (x = k*ln2 + r, Cody-Waite split of
+ * ln2 for precision) + the standard degree-5 minimax polynomial for exp(r)
+ * on |r| <= ln2/2, then rebuild 2^k by constructing its bit pattern directly.
+ * That bit trick only produces a valid double when k stays inside the normal
+ * exponent range, so the overflow/underflow guards below reject any x whose
+ * k would land outside a comfortable margin of that range *before* reaching
+ * the bit construction, rather than relying on callers to pre-clamp x.
+ *
+ * tanh_impl: tanh(x) = (e^2x - 1)/(e^2x + 1) built on exp_impl. The
+ * cancellation near x=0 only loses absolute precision at the ~1e-16 level
+ * (tanh(x)≈x there already), which is far below the noise floor of a
+ * stochastically-sampled PPO gradient.
+ */
+static double exp_impl(double x) {
+    if (x != x) return x;                    /* NaN passthrough */
+    if (x > 709.0) return 1e308 * 1e308;      /* -> +inf (safely below the true ~709.78 overflow edge) */
+    /* Underflow to 0 well before k=round(x/ln2) could leave the safe normal
+     * exponent range the pow2() bit-construction below relies on (needs
+     * k >= -1022; -700 keeps k >= -1010, comfortable margin). True exp(x) here
+     * is already <1e-304 — irrelevant to any gradient in this trainer — so
+     * flushing to 0 instead of computing subnormals costs nothing that matters.
+     * (PPO's ratio = exp(rho) has no LOWER clamp on rho, so very negative x is
+     * reachable in practice during unstable early training — this must not
+     * silently corrupt into garbage via a bad exponent bit pattern.) */
+    if (x < -700.0) return 0.0;
+
+    const double INV_LN2 = 1.4426950408889634074;
+    const double LN2_HI  = 6.93147180369123816490e-01;
+    const double LN2_LO  = 1.90821492927058770002e-10;
+    const double P1 =  1.66666666666666019037e-01;
+    const double P2 = -2.77777777770155933842e-03;
+    const double P3 =  6.61375632143793436117e-05;
+    const double P4 = -1.65339022054652515390e-06;
+    const double P5 =  4.13813679705723846039e-08;
+
+    double kf = x * INV_LN2;
+    kf = (kf >= 0.0) ? (double)(long)(kf + 0.5) : (double)(long)(kf - 0.5);
+    long k = (long)kf;
+
+    double r = x - kf * LN2_HI;
+    r = r - kf * LN2_LO;
+
+    double t = r * r;
+    double c = r - t * (P1 + t * (P2 + t * (P3 + t * (P4 + t * P5))));
+    double expr = 1.0 - ((r * c) / (c - 2.0) - r);
+
+    /* 2^k via direct IEEE-754 bit construction (k stays well within the
+     * normal exponent range here — see the overflow/underflow guards above). */
+    unsigned long long bits = (unsigned long long)(k + 1023) << 52;
+    double scale;
+    __builtin_memcpy(&scale, &bits, sizeof(scale));
+    return expr * scale;
+}
+
+static double tanh_impl(double x) {
+    if (x > 20.0) return 1.0;
+    if (x < -20.0) return -1.0;
+    double e2x = exp_impl(2.0 * x);
+    return (e2x - 1.0) / (e2x + 1.0);
+}
+
+#define exp  exp_impl
+#define tanh tanh_impl
+
+/* Exported test hooks only — let test/wasm-math-check.mjs verify exp_impl/
+ * tanh_impl against JS Math.exp/Math.tanh directly. Not used by the hot path
+ * (which calls the static functions above via the macros). */
+__attribute__((visibility("default")))
+double wasm_test_exp(double x) { return exp_impl(x); }
+__attribute__((visibility("default")))
+double wasm_test_tanh(double x) { return tanh_impl(x); }
 
 /* ── Freestanding libcalls the optimizer may emit (resolved internally, not
  *    imported). Keep -fno-builtin on so these don't compile to calls to
