@@ -18,9 +18,7 @@ function check(name, ok, detail = '') {
 
 const url = new URL('../scripts/nn_wasm.wasm', import.meta.url);
 const bytes = await readFile(url);
-const { instance } = await WebAssembly.instantiate(bytes, {
-  env: { exp: Math.exp, tanh: Math.tanh, memset: () => 0 },
-});
+const { instance } = await WebAssembly.instantiate(bytes); // no imports — see nn_wasm.c
 const ex = instance.exports;
 const mem = ex.memory;
 

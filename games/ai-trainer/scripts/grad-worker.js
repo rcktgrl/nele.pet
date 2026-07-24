@@ -15,32 +15,26 @@
 import { Net, GRUNet, accumulatePPOGrads, accumulatePPORecurrentGrads } from './nn-core.js';
 
 // ── WASM loading ─────────────────────────────────────────────────────────────
+//
+// The module is fully self-contained (no imports — exp/tanh are compiled in,
+// see nn_wasm.c) so instantiation needs no import object at all. That also
+// means the hot loop never crosses the JS↔WASM boundary for math calls, which
+// used to happen tens of thousands of times per gradient minibatch.
 
 let wasmInst  = null;
 let wasmReady = false;
-
-const wasmImports = {
-  env: {
-    exp:  Math.exp,
-    tanh: Math.tanh,
-    memset: (ptr, val, len) => {
-      new Uint8Array(wasmInst.exports.memory.buffer).fill(val & 0xff, ptr, ptr + len);
-      return ptr;
-    },
-  },
-};
 
 (async () => {
   try {
     const url = new URL('./nn_wasm.wasm', import.meta.url);
     let result;
     try {
-      result = await WebAssembly.instantiateStreaming(fetch(url), wasmImports);
+      result = await WebAssembly.instantiateStreaming(fetch(url));
     } catch (_) {
       // server may send a wrong MIME type — fall back to ArrayBuffer compile
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`fetch ${resp.status} ${resp.statusText}`);
-      result = await WebAssembly.instantiate(await resp.arrayBuffer(), wasmImports);
+      result = await WebAssembly.instantiate(await resp.arrayBuffer());
     }
     wasmInst  = result.instance;
     wasmReady = true;
