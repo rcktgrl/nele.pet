@@ -261,12 +261,16 @@ function onMsg(e) {
   const d = e.data;
   if (d.type === 'ready') {
     workerReady = true;
+    if (dbg.on) worker.postMessage({ type: 'perf', on: true, reset: true });
     rebuildCarMeshes(simCfg.numEnvs);
     refreshHUD({ iteration: 0, totalSteps: 0, bufferFill: 0, avgReturn: 0, bestLap: null, phase: 'collecting' });
     updateStartBtn();
     return;
   }
+  if (d.type === 'perfStats') { dbg.phases = d; dbgRender(); return; }
   if (d.type === 'frame') {
+    lastFrameIteration = d.iteration || 0;
+    if (dbg.on) { dbgOnFrame(d); dbgRender(); }
     lastCars = d.cars || [];
     const bi = bestCarIndex(lastCars);
     syncCarMeshes(lastCars, bi);
@@ -411,6 +415,7 @@ function refreshHUD(d) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DBG_HISTORY = 240;          // ~4 minutes at one sample a second
+let lastFrameIteration = 0;       // tracked even when the panel is shut
 
 const dbg = {
   on: false,
@@ -437,7 +442,14 @@ function setDbg(on) {
   document.getElementById('dbgBtn').style.color = on ? '#fa4' : '';
   if (worker) worker.postMessage({ type: 'perf', on, reset: true });
   if (dbg.timer) { clearInterval(dbg.timer); dbg.timer = 0; }
-  if (on) dbg.timer = setInterval(dbgSample, 1000);
+  if (on) {
+    // Seed the update clock from wherever the run already is, so the FIRST
+    // update after opening the panel produces a seconds/update reading.
+    // Without this the field sits blank until two updates have gone by.
+    dbg.lastIter = lastFrameIteration;
+    dbg.lastIterAt = performance.now();
+    dbg.timer = setInterval(dbgSample, 1000);
+  }
 }
 
 function dbgSample() {
@@ -1011,6 +1023,16 @@ function initUI() {
   wireSlider('wallSlider',    'wallVal',    'wallPenalty',     v => v.toFixed(1), true);
   wireSlider('termSlider',    'termVal',    'terminalPenalty', v => Math.round(v), true);
   wireSlider('lapBonusSlider','lapBonusVal','lapBonus',        v => Math.round(v), true);
+
+  document.getElementById('dbgBtn').addEventListener('click', () => setDbg(!dbg.on));
+  window.addEventListener('keydown', e => {
+    // ignore while typing in the config menu
+    if (e.key === 'd' || e.key === 'D') {
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      setDbg(!dbg.on);
+    }
+  });
 
   document.getElementById('loadBestBtn').addEventListener('click', () => {
     if (worker) worker.postMessage({ type: 'loadBest' });
