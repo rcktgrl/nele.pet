@@ -574,7 +574,11 @@ function dbgRender() {
   if (dbg.stepsPerSec && simCfg.numEnvs) {
     const achieved = dbg.stepsPerSec / simCfg.numEnvs / 60;
     const frac = achieved / Math.max(1, simCfg.speedMult);
-    txt('dbgSpeed', `${achieved.toFixed(0)}× of ${simCfg.speedMult}× asked`);
+    // Below 1× the integer form reads "0×", which looks like a broken readout
+    // rather than "running slower than real time" — keep a decimal down there.
+    const shown = achieved < 10 ? achieved.toFixed(achieved < 1 ? 2 : 1)
+                                : achieved.toFixed(0);
+    txt('dbgSpeed', `${shown}× of ${simCfg.speedMult}× asked`);
     cls('dbgSpeedRow', frac < 0.5 ? 'dbg-warn' : null);
     document.getElementById('dbgSpeedNote').textContent = frac < 0.9
       ? 'compute-bound below the requested multiplier — raising it changes nothing'
