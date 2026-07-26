@@ -147,6 +147,60 @@ here, so TF.js runs on a software rasteriser (SwiftShader) and lands at 4.57 s/g
 5× *slower* than the WASM CPU path. The path works end-to-end (43 tensors, 2 MB, full
 6/6 epochs per update) — only its speed is meaningless in this container.
 
+## Why is a 256×2 net slow? It's tiny.
+
+It is tiny — 154k parameters across actor and critic. The problem is not the net,
+it's how many times it runs and how slowly each run goes.
+
+**Cost tracks parameter count almost exactly**, so nothing pathological is happening:
+
+| net (actor) | actor+critic MACs | s/generation | µs per decision | µs per sample-gradient (per core) |
+|---|---:|---:|---:|---:|
+| 40-64-6 | 5,568 | 1.00 | 16.0 | 31.9 |
+| 40-256-6 | 22,272 | 2.47 | 61.5 | 82.9 |
+| 40-128-128-6 | 43,904 | 3.89 | 93.3 | 134.6 |
+| 40-256-256-6 | 153,344 | 11.12 | 274.5 | 394.6 |
+
+**The work per generation is not small.** One generation of the 256×2 config:
+
+| | passes | FLOPs |
+|---|---:|---:|
+| PPO update — 6 epochs × ~7,100 samples, forward+backward, both nets | 42,581 sample-gradients | ~39 GFLOP |
+| rollout inference — every decision runs actor + critic | 10,736 decisions | ~3.3 GFLOP |
+| KL early-stop estimate — 512-sample actor forwards per epoch | ~3,600 forwards | ~0.6 GFLOP |
+| **total** | | **~43 GFLOP** |
+
+**And the engine delivers 1–2 GFLOP/s.** Measured: 2.33 GFLOP/s per core in the WASM
+gradient kernel, ~1.1 GFLOP/s in the JS rollout forward. 43 GFLOP at that rate on two
+usable worker cores is ~11 s — which is exactly what the benchmark reports. The
+number is fully explained; there is no hidden stall.
+
+The interesting question is why 1–2 GFLOP/s, when the same CPU does 20–50 GFLOP/s
+under a batched BLAS:
+
+1. **Nothing is batched into a matrix multiply.** Every sample is its own
+   vector×matrix pass, so the entire 1.2 MB weight set is re-read *per sample* —
+   arithmetic intensity ≈ 0.5 FLOP/byte, i.e. memory-bound. A GEMM over a 256-sample
+   minibatch reuses each weight 256× and turns the same arithmetic into a
+   cache-blocked, compute-bound kernel. This is the whole gap.
+2. **Everything is `Float64Array`.** WASM SIMD gets 2 f64 lanes where f32 gets 4, and
+   every load moves twice the bytes. ML runs f32 for exactly this reason.
+3. **The rollout has no WASM at all.** `Net.forwardScratch` is a scalar triple loop on
+   the sim thread — measured at 0.39–0.44 MAC/ns (~0.8 GFLOP/s) regardless of width.
+   The WASM SIMD kernel exists only in `grad-worker.js`, so ~3 GFLOP/generation of
+   inference runs single-threaded in plain JS.
+4. **`Math.tanh` is 9–22 % of the forward pass** (higher for narrow nets, where the
+   MAC loop is short). Real, but secondary — the MAC loop is the cost.
+5. **Weight cloning scales with the net.** At 256×2 each grad task carries a 1.2 MB
+   structured clone of the weights, once per minibatch per worker: 2.18 s of the 35 s
+   run, versus 301 ms at 64×1 (see finding 2).
+
+So "small net, big time" comes from ~43 GFLOP/generation meeting an unbatched,
+f64, partly-JS execution path on two cores. Batching the minibatch into GEMMs and
+moving to f32 is a 10–20× opportunity — and the rollout has a free batching axis
+nobody uses: all `numEnvs` agents decide on the same tick, so the 8 (or 32) separate
+40→256→256→6 vector passes could be one small matrix multiply.
+
 ## What to fix first
 
 1. **Stop cloning the weight vectors per dispatch.** Hoist `flatF64()` out of the
@@ -155,10 +209,15 @@ here, so TF.js runs on a software rasteriser (SwiftShader) and lands at 4.57 s/g
    does — one round trip per update instead of ~170. Biggest single win available.
 2. **Raise the default minibatch** (256 → 512/1024) at high `speedMult`, where
    batches arrive at ~7k samples anyway. Free 20 %.
-3. **Cache the rollout observation work.** 18 rays × 15k decisions/generation is
+3. **Batch the forward/backward passes into matrix multiplies** (and consider f32).
+   The gradient kernel processes one sample at a time against a weight set that does
+   not fit in L1/L2 at any useful width; a GEMM over the minibatch is a 10–20× win at
+   larger widths. In the rollout, all `numEnvs` agents decide on the same tick — that
+   is a free batch dimension currently thrown away.
+4. **Cache the rollout observation work.** 18 rays × 15k decisions/generation is
    16 % of wall; the wall grid already bounds each ray, so the remaining win is doing
    fewer of them (or reusing them across an `actionRepeat` window).
-4. **Surface the effective speed multiplier in the HUD.** Users set 200× and get
+5. **Surface the effective speed multiplier in the HUD.** Users set 200× and get
    12–47×; showing the achieved rate makes the compute wall obvious instead of
    looking like a broken slider.
 

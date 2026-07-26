@@ -82,6 +82,14 @@ const CONFIGS = [
     note: '256-wide, 2 hidden layers — same data, ~16× the weights',
     cfg: { backend: 'auto', threads: 0, hiddenSize: 256, hiddenLayers: 2 } },
 
+  { label: 'net-256x1',
+    note: 'width sweep: 256-wide, 1 hidden layer',
+    cfg: { backend: 'auto', threads: 0, hiddenSize: 256, hiddenLayers: 1 } },
+
+  { label: 'net-128x2',
+    note: 'width sweep: 128-wide, 2 hidden layers',
+    cfg: { backend: 'auto', threads: 0, hiddenSize: 128, hiddenLayers: 2 } },
+
   { label: 'envs32-h128',
     note: '32 envs × horizon 128 — 4× the physics for the same batch size',
     cfg: { backend: 'auto', threads: 0, numEnvs: 32, horizon: 128 } },
