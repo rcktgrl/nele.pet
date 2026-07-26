@@ -600,6 +600,47 @@ because it silently degrades:
   init, so cached grid and scratch offsets pointed into a buffer that no longer
   existed. The epoch counter invalidated the grids but not the scratch.
 
+## Debug overlay (for real runs)
+
+Everything in this document was measured with a headless harness. That harness
+cannot tell you anything about the machine you actually train on, so the same
+numbers are now readable live: press **D** in the trainer, or click **DEBUG**
+in the HUD.
+
+The panel samples once a second and shows four blocks:
+
+| block | fields |
+|---|---|
+| Throughput | updates/min, seconds/update, physics steps/s, **achieved** speed vs asked |
+| Learning | average return (sparkline), policy/value loss, KL × epochs run, exploration σ |
+| Where the time goes | stacked phase bar + per-phase ms, from the worker's profiler |
+| Backends | gradients, inference, ray casting, updates rejected as non-finite |
+
+Three of these exist to catch a specific failure mode:
+
+- **Achieved speed** is measured from physics steps actually retired, not from
+  the multiplier you asked for. Asking 200× and getting 40× is invisible
+  otherwise — the sim just runs, slowly. This is the field to watch when tuning
+  `numEnvs`, `episodeLen` and the thread count on your own CPU.
+- **The backend rows** say `wasm-batch` / `wasm` / `gpu` when the compiled paths
+  loaded and `js` when they did not. A silent fallback to the interpreted path
+  costs roughly an order of magnitude and otherwise looks like "this machine is
+  slow". The row turns red on a fallback.
+- **Updates rejected** counts non-finite gradient updates rolled back by the
+  guard. Anything but 0 means the run is losing updates.
+
+The phase bar splits gradient wait into two rows, because they mean opposite
+things: *waiting on gradient workers* is the sim thread idle-blocked, while the
+overlapped part is time the sim thread spent stepping and is already counted in
+the rollout rows. Reporting the raw wait unsplit is what made an early version
+of the profiler add up to 126 % of wall.
+
+Turning the panel on enables the worker's phase profiler (~5 % overhead) and
+turning it off disables it again, so leaving it shut costs nothing.
+`test/debug-overlay-check.mjs` drives the real page through map select → start →
+first policy update, opens the panel and asserts the fields carry live values —
+a panel full of `—` is exactly the regression it is there to catch.
+
 ## Raw output
 
 `node games/ai-trainer/test/perf-bench.mjs --gens=3 --repeat=3 --json=out.json` writes

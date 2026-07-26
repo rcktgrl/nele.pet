@@ -261,12 +261,16 @@ function onMsg(e) {
   const d = e.data;
   if (d.type === 'ready') {
     workerReady = true;
+    if (dbg.on) worker.postMessage({ type: 'perf', on: true, reset: true });
     rebuildCarMeshes(simCfg.numEnvs);
     refreshHUD({ iteration: 0, totalSteps: 0, bufferFill: 0, avgReturn: 0, bestLap: null, phase: 'collecting' });
     updateStartBtn();
     return;
   }
+  if (d.type === 'perfStats') { dbg.phases = d; dbgRender(); return; }
   if (d.type === 'frame') {
+    lastFrameIteration = d.iteration || 0;
+    if (dbg.on) { dbgOnFrame(d); dbgRender(); }
     lastCars = d.cars || [];
     const bi = bestCarIndex(lastCars);
     syncCarMeshes(lastCars, bi);
@@ -398,6 +402,229 @@ function refreshHUD(d) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Neural network visualiser
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Debug overlay
+//
+//  Answers the three questions a long real-world run actually raises: is it
+//  learning, is it fast, and is it running the code I think it is. The last one
+//  is not paranoia — the inference and ray paths both fall back to JS silently
+//  if their kernel fails to load, and the numbers look identical when they do.
+//
+//  Opening the panel turns the worker's phase profiler on (~5 % cost) and polls
+//  it once a second; closing it turns the profiler back off.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DBG_HISTORY = 240;          // ~4 minutes at one sample a second
+let lastFrameIteration = 0;       // tracked even when the panel is shut
+
+const dbg = {
+  on: false,
+  timer: 0,
+  retHist: [],                    // avg return per sample
+  spuHist: [],                    // seconds per update
+  lastIter: 0,
+  lastIterAt: 0,
+  lastSteps: 0,
+  lastStepsAt: 0,
+  stepsPerSec: 0,
+  phases: null,                   // last perfStats payload
+  frame: null,                    // last frame message
+};
+
+function dbgPush(arr, v) {
+  arr.push(v);
+  if (arr.length > DBG_HISTORY) arr.shift();
+}
+
+function setDbg(on) {
+  dbg.on = on;
+  document.getElementById('dbgWrap').classList.toggle('on', on);
+  document.getElementById('dbgBtn').style.color = on ? '#fa4' : '';
+  if (worker) worker.postMessage({ type: 'perf', on, reset: true });
+  if (dbg.timer) { clearInterval(dbg.timer); dbg.timer = 0; }
+  if (on) {
+    // Seed the update clock from wherever the run already is, so the FIRST
+    // update after opening the panel produces a seconds/update reading.
+    // Without this the field sits blank until two updates have gone by.
+    dbg.lastIter = lastFrameIteration;
+    dbg.lastIterAt = performance.now();
+    dbg.timer = setInterval(dbgSample, 1000);
+  }
+}
+
+function dbgSample() {
+  if (!dbg.on || !worker || !workerReady) return;
+  worker.postMessage({ type: 'perf', reset: true });   // reply arrives as perfStats
+}
+
+// Sparkline: a filled area with the latest value highlighted. Auto-scales to
+// the window, so the shape is what matters, not the absolute height.
+function dbgSpark(canvas, data, colour, fmt) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth || 300, h = 46;
+  if (canvas.width !== (w * dpr | 0)) { canvas.width = w * dpr | 0; canvas.height = h * dpr | 0; }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  if (data.length < 2) {
+    ctx.fillStyle = '#445'; ctx.font = '9px monospace';
+    ctx.fillText('collecting…', 6, h / 2 + 3);
+    return;
+  }
+  let lo = Infinity, hi = -Infinity;
+  for (const v of data) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  if (hi - lo < 1e-9) { hi = lo + 1; lo -= 1; }
+  const pad = (hi - lo) * 0.12;
+  lo -= pad; hi += pad;
+  const x = i => (i / (data.length - 1)) * (w - 2) + 1;
+  const y = v => h - 4 - ((v - lo) / (hi - lo)) * (h - 10);
+
+  ctx.beginPath();
+  ctx.moveTo(x(0), h);
+  for (let i = 0; i < data.length; i++) ctx.lineTo(x(i), y(data[i]));
+  ctx.lineTo(x(data.length - 1), h);
+  ctx.closePath();
+  ctx.fillStyle = colour + '22';
+  ctx.fill();
+
+  ctx.beginPath();
+  for (let i = 0; i < data.length; i++) {
+    const px = x(i), py = y(data[i]);
+    i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+  }
+  ctx.strokeStyle = colour; ctx.lineWidth = 1.2; ctx.stroke();
+
+  ctx.fillStyle = colour;
+  ctx.beginPath(); ctx.arc(x(data.length - 1), y(data[data.length - 1]), 2, 0, Math.PI * 2); ctx.fill();
+  ctx.font = '9px monospace';
+  ctx.fillStyle = '#8aa';
+  ctx.fillText(fmt(hi - pad), 4, 9);
+  ctx.fillText(fmt(lo + pad), 4, h - 4);
+}
+
+// Stacked bar of where the wall clock went, from the worker's profiler.
+const DBG_PHASES = [
+  ['roll.obs',      'sensing (rays, probes)', '#4af'],
+  ['roll.policy',   'policy inference',       '#6c6'],
+  ['roll.phys',     'car physics',            '#fa4'],
+  ['roll.reward',   'reward / termination',   '#a86'],
+  ['upd.pack',      'dispatch to workers',    '#c6c'],
+  ['upd.reduce',    'gradient reduce',        '#96c'],
+  ['upd.adam',      'optimiser step',         '#69c'],
+  ['upd.kl',        'KL early-stop probe',    '#799'],
+];
+
+function dbgDrawPhases() {
+  const canvas = document.getElementById('dbgPhaseCanvas');
+  const list = document.getElementById('dbgPhaseList');
+  const p = dbg.phases;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth || 300, h = 18;
+  if (canvas.width !== (w * dpr | 0)) { canvas.width = w * dpr | 0; canvas.height = h * dpr | 0; }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  if (!p || !p.wall) { list.innerHTML = '<div class="dbg-note">waiting for a profiler window…</div>'; return; }
+
+  // Time the sim thread spent blocked on the gradient pool is not "work" —
+  // it is the pool being the critical path, which is the single most useful
+  // thing this panel can tell you.
+  const overlap = p.ms['roll.step.overlap'] || 0;
+  const blocked = Math.max(0, (p.ms['upd.gradwait'] || 0) - overlap);
+  const rows = DBG_PHASES.map(([k, label, col]) => [label, p.ms[k] || 0, col])
+    .filter(r => r[1] > 0.05);
+  rows.push(['waiting on gradient workers', blocked, '#f66']);
+  const shown = rows.reduce((a, r) => a + r[1], 0);
+  const other = Math.max(0, p.wall - shown);
+  rows.push(['other / idle', other, '#334']);
+
+  let x = 0;
+  for (const [, ms, col] of rows) {
+    const dw = (ms / p.wall) * w;
+    ctx.fillStyle = col;
+    ctx.fillRect(x, 0, Math.max(0, dw - 0.5), h);
+    x += dw;
+  }
+  list.innerHTML = rows
+    .filter(r => r[1] / p.wall > 0.01)
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, ms, col]) =>
+      `<div class="dbg-row"><span style="color:${col}">■</span>` +
+      `<span style="flex:1;margin-left:4px;color:#8aa">${label}</span>` +
+      `<span>${(100 * ms / p.wall).toFixed(1)}%</span></div>`)
+    .join('');
+}
+
+function dbgRender() {
+  if (!dbg.on) return;
+  const f = dbg.frame, p = dbg.phases;
+  const txt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const cls = (id, c) => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.remove('dbg-warn', 'dbg-bad'); if (c) el.classList.add(c); }
+  };
+
+  const spu = dbg.spuHist.length ? dbg.spuHist[dbg.spuHist.length - 1] : null;
+  txt('dbgSpu', spu == null ? '—' : spu.toFixed(2) + ' s');
+  txt('dbgUpm', spu == null || spu <= 0 ? '—' : (60 / spu).toFixed(1));
+  txt('dbgSps', dbg.stepsPerSec ? (dbg.stepsPerSec / 1000).toFixed(1) + 'k' : '—');
+
+  // Achieved speed multiplier vs the one that was asked for. Setting 200x and
+  // getting 40x is normal — the sim is compute-bound long before the slider.
+  if (dbg.stepsPerSec && simCfg.numEnvs) {
+    const achieved = dbg.stepsPerSec / simCfg.numEnvs / 60;
+    const frac = achieved / Math.max(1, simCfg.speedMult);
+    txt('dbgSpeed', `${achieved.toFixed(0)}× of ${simCfg.speedMult}× asked`);
+    cls('dbgSpeedRow', frac < 0.5 ? 'dbg-warn' : null);
+    document.getElementById('dbgSpeedNote').textContent = frac < 0.9
+      ? 'compute-bound below the requested multiplier — raising it changes nothing'
+      : '';
+  }
+
+  if (f) {
+    txt('dbgRet', Number.isFinite(f.avgReturn) ? f.avgReturn.toFixed(1) : '—');
+    txt('dbgLoss', f.loss ? `${f.loss.pi.toFixed(3)} / ${f.loss.v.toFixed(3)}` : '—');
+    const kl = f.mods ? f.mods.kl : null;
+    txt('dbgKl', f.mods ? `${Number.isFinite(kl) ? kl.toFixed(4) : '—'} · ${f.mods.epochs}/${f.mods.epochsMax}` : '—');
+    txt('dbgSigma', f.sigma ? f.sigma.map(v => v.toFixed(3)).join(' / ') : '—');
+
+    txt('dbgGrad', `${f.backend || '—'} ×${f.gradThreads || 0}`);
+    txt('dbgInfer', f.inferBackend || '—');
+    txt('dbgRay', f.rayBackend || '—');
+    // A fallback is not an error, but it is never what you wanted.
+    cls('dbgInfer', f.inferBackend === 'js' ? 'dbg-warn' : null);
+    cls('dbgRay', f.rayBackend === 'js' ? 'dbg-warn' : null);
+    txt('dbgRej', String(f.updateRejects || 0));
+    cls('dbgRejRow', f.updateRejects ? 'dbg-bad' : null);
+  }
+
+  dbgSpark(document.getElementById('dbgRetCanvas'), dbg.retHist, '#6c6', v => v.toFixed(0));
+  dbgSpark(document.getElementById('dbgSpuCanvas'), dbg.spuHist, '#4af', v => v.toFixed(1) + 's');
+  if (p) dbgDrawPhases();
+}
+
+// Fold a frame into the debug series. Updates are irregular, so seconds per
+// update is timed between iteration bumps rather than sampled.
+function dbgOnFrame(d) {
+  dbg.frame = d;
+  const now = performance.now();
+  if (d.iteration > dbg.lastIter) {
+    if (dbg.lastIterAt) {
+      const secs = (now - dbg.lastIterAt) / 1000 / (d.iteration - dbg.lastIter);
+      dbgPush(dbg.spuHist, secs);
+    }
+    dbg.lastIter = d.iteration;
+    dbg.lastIterAt = now;
+    dbgPush(dbg.retHist, d.avgReturn || 0);
+  }
+  if (dbg.lastStepsAt && now - dbg.lastStepsAt > 500) {
+    dbg.stepsPerSec = (d.totalSteps - dbg.lastSteps) / ((now - dbg.lastStepsAt) / 1000);
+    dbg.lastSteps = d.totalSteps; dbg.lastStepsAt = now;
+  } else if (!dbg.lastStepsAt) {
+    dbg.lastSteps = d.totalSteps; dbg.lastStepsAt = now;
+  }
+}
+
 const nnCanvas = document.getElementById('nnCanvas');
 const nnCtx    = nnCanvas.getContext('2d');
 
@@ -796,6 +1023,16 @@ function initUI() {
   wireSlider('wallSlider',    'wallVal',    'wallPenalty',     v => v.toFixed(1), true);
   wireSlider('termSlider',    'termVal',    'terminalPenalty', v => Math.round(v), true);
   wireSlider('lapBonusSlider','lapBonusVal','lapBonus',        v => Math.round(v), true);
+
+  document.getElementById('dbgBtn').addEventListener('click', () => setDbg(!dbg.on));
+  window.addEventListener('keydown', e => {
+    // ignore while typing in the config menu
+    if (e.key === 'd' || e.key === 'D') {
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      setDbg(!dbg.on);
+    }
+  });
 
   document.getElementById('loadBestBtn').addEventListener('click', () => {
     if (worker) worker.postMessage({ type: 'loadBest' });
