@@ -100,6 +100,9 @@ let cfg = {
   wallHitPenalty: 50,    // ONE-OFF, charged on each new wall/off-track contact
   terminalPenalty: 10,   // on off-track / stuck termination
   lapBonus: 20,          // on lap completion
+  // look-ahead window (restart required — they change the observation layout)
+  probeCount: 6,         // centerline look-ahead probes
+  probeRange: 200,       // metres to the furthest probe
   // diagnostics
   perf: false,           // phase profiler (see below) — benchmark use only
 };
@@ -674,7 +677,33 @@ export function castRayFan(car, angles, maxDist, out, offset) {
 // Probe distances extended: Jeff has a 122 m straight ending in a 90° turn.
 // With the old 120 m max, the corner was invisible until the car was already on it.
 // 200 m gives ~80 m of advance warning — enough for a full braking event.
-const PROBE_DISTS = [10, 20, 35, 55, 100, 200];
+// ── Look-ahead window ("map window") ────────────────────────────────────────
+// How far down the track the policy can see, and how finely. PROBE_SHAPE is
+// the stock set expressed as a fraction of its range, so probeRange scales the
+// whole window and probeCount resamples the same near-dense/far-sparse curve.
+// At the defaults (6 probes, 200 m) it reproduces the original
+// [10, 20, 35, 55, 100, 200] exactly, so stock models keep their input layout.
+//
+// The window is a real modelling lever, not just a perf knob: too short and the
+// policy cannot see a corner in time to brake for it (Jeff's 122 m straight
+// into a 90° turn is why the range is 200 m); too long and the far probes are
+// mostly noise the net has to learn to ignore.
+const PROBE_SHAPE = [0.05, 0.10, 0.175, 0.275, 0.50, 1.00];
+
+function buildProbeDists(count, range) {
+  const n = Math.max(1, count | 0), R = Math.max(1, +range || 0);
+  if (n === 1) return [R];
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const x = (k / (n - 1)) * (PROBE_SHAPE.length - 1);   // resample the curve
+    const i = Math.min(PROBE_SHAPE.length - 2, Math.floor(x)), f = x - i;
+    // round: the interpolation would otherwise emit 55.00000000000001
+    out.push(Math.round(R * (PROBE_SHAPE[i] * (1 - f) + PROBE_SHAPE[i + 1] * f) * 1e4) / 1e4);
+  }
+  return out;
+}
+
+let PROBE_DISTS = buildProbeDists(6, 200);
 const SLOPE_NORM  = 0.30;   // |Δy/Δs| considered "max steep"
 
 // Memory cells: the policy gets MEM_DIM extra action outputs that write a
@@ -698,8 +727,8 @@ const MEM_RATE = 0.1;  // max register change per decision (≈5 % of range per 
 //  [22] reversing flag      [23] slope at the car
 //  [24..35] 6 probes × (relative angle, slope between probes)
 //  [36..39] 4 memory cells (written by the policy's memory actions)
-const MEM_OBS = 24 + PROBE_DISTS.length * 2;   // base index of memory cells
-let OBS_DIM = MEM_OBS + MEM_DIM;               // recomputed by configureDims()
+let MEM_OBS = 24 + PROBE_DISTS.length * 2;     // base index of memory cells
+let OBS_DIM = MEM_OBS + MEM_DIM;               // both set by configureDims()
 
 // Arc position of a car, using and updating its locality hint.
 function carArc(car) {
@@ -800,6 +829,8 @@ let ACT_DIM = 2 + MEM_DIM; // [steer, throttle/brake, (memory-cell deltas)]
 function configureDims() {
   isRecurrent = !!cfg.recurrent;
   MEM_DIM = isRecurrent ? 0 : 4;
+  PROBE_DISTS = buildProbeDists(cfg.probeCount, cfg.probeRange);
+  MEM_OBS = 24 + PROBE_DISTS.length * 2;
   OBS_DIM = MEM_OBS + MEM_DIM;
   ACT_DIM = 2 + MEM_DIM;
 }
@@ -2809,6 +2840,10 @@ self.onmessage = function (e) {
         algo: isRecurrent ? 'ppo-gru' : 'ppo',
         obsDim: OBS_DIM,
         actDim: ACT_DIM,
+        // The look-ahead window is configurable, so the observation layout
+        // travels with the model — without it a consumer cannot rebuild the
+        // inputs this policy was trained on.
+        probeDists: Array.from(PROBE_DISTS),
         actor:  { sizes: actor.sizes,  flat: useBest ? Array.from(best.aFlat) : actor.flat()  },
         critic: { sizes: critic.sizes, flat: useBest ? Array.from(best.cFlat) : critic.flat() },
         logStd: Array.from(useBest ? best.logStd : logStd),

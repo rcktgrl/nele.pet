@@ -418,6 +418,50 @@ conclusions do not transfer:
 - **SharedArrayBuffer is still unavailable** regardless of CPU — that is a
   GitHub Pages headers constraint, not a hardware one.
 
+## The map window (look-ahead setting)
+
+`PROBE_DISTS` was a hard-coded `[10, 20, 35, 55, 100, 200]`. It is now derived
+from two restart-required settings, **MAP WINDOW — PROBES** (3/6/9/12) and
+**RANGE** (80/200/400/800 m). `probeRange` scales the whole window and
+`probeCount` resamples the same near-dense/far-sparse curve, so the defaults
+(6, 200) reproduce the historical set exactly and stock models keep their
+layout.
+
+The observation width follows: `24 + 2·probes + 4 memory cells`. That reaches
+further than it looks — the mirror-augmentation index map, the actor/critic
+input layer, the config screen's parameter count, and the racing game's
+inference all had the layout baked in as a constant. **The export now carries
+`probeDists`**, and `ppo-ai.js` rebuilds its observations from the model rather
+than from its own copy of the array; exports without the field fall back to the
+stock window, so old models keep working.
+
+`map-window-check.mjs` covers the stock window being unchanged, a 12-probe
+window resizing the observation and the actor input, the mirror map still being
+an involution at the new width, and the export round trip.
+
+### Three information gaps worth knowing about
+
+Looking at what the policy actually receives, beyond the window size:
+
+1. **Probes are fixed distances in metres, not scaled by speed.** At the Viper
+   GT's 61 m/s top speed the 10 m and 20 m probes are 0.16 s and 0.33 s ahead —
+   below useful reaction range — while at low speed the 200 m probe is ten
+   seconds out. Effectively the policy has ~4 useful probes at speed and ~4 at
+   low speed, just not the same four. The dynamic look-ahead heading error
+   (obs 19) already scales with speed; the probe set does not.
+2. **Road width is normalised away.** Obs 20 is `distance-to-centerline /
+   half-width`, so a 12 m road and a 20 m road look identical. On a single map
+   that is fine — it is a constant. Across maps, which is exactly the
+   multi-track case, the policy cannot tell how much room it has.
+3. **Curvature is computed and thrown away.** `track-gen.js` already builds
+   `state.trkCurv` (per-point curvature at two scales, used by the scripted
+   AI), and it is never sent to the trainer. The policy has to infer corner
+   sharpness from differences between successive probe angles.
+
+None of these are fixed here — each changes the observation layout, and (2) and
+(3) would want their own settings so a run can be compared against one without
+them.
+
 ## Raw output
 
 `node games/ai-trainer/test/perf-bench.mjs --gens=3 --repeat=3 --json=out.json` writes

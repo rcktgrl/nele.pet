@@ -565,6 +565,16 @@
         <div class="opt-group" id="configUnitBtns"></div>
         <span style="color:#445;font-size:.58rem;">more neurons = more capacity, heavier updates</span>
       </div>
+      <div class="config-row" title="How far down the track the policy can see. Each probe reports the direction to a point ahead on the centerline and the gradient to it. More probes = finer detail; longer range = earlier warning of a corner. Changing either changes the observation layout, so a model is only usable with the window it was trained on (the window is saved into the export).">
+        <span class="config-label">MAP WINDOW — PROBES</span>
+        <div class="opt-group" id="configProbeCountBtns"></div>
+        <span style="color:#445;font-size:.58rem;">how many look-ahead points the policy sees</span>
+      </div>
+      <div class="config-row" title="Distance to the furthest look-ahead probe. The near probes stay dense and the far ones spread out, so this scales the whole window. 200 m gives roughly 3 s of warning at top speed.">
+        <span class="config-label">MAP WINDOW — RANGE</span>
+        <div class="opt-group" id="configProbeRangeBtns"></div>
+        <span style="color:#445;font-size:.58rem;">distance to the furthest probe</span>
+      </div>
       <div class="config-row">
         <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#889;font-size:.65rem;">
           <span>RECURRENT (GRU)<br><span style="color:#445;font-size:.9em">GRU memory cell trained by BPTT — replaces the memory-as-action register. Runs on CPU/WASM (no GPU).</span></span>

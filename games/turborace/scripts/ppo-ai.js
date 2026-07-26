@@ -34,22 +34,32 @@ const EDGE_RAY_ANGLES = [
   Math.PI / 18, Math.PI / 4, Math.PI / 2,
 ];
 const EDGE_RAY_DIST = 35;
-const PROBE_DISTS = [10, 20, 35, 55, 100, 200];
+// Look-ahead probe distances. The trainer's "map window" is configurable, so
+// the layout travels with the model in `probeDists`; this is the stock window,
+// used for exports made before that field existed.
+const LEGACY_PROBE_DISTS = [10, 20, 35, 55, 100, 200];
 const SLOPE_NORM  = 0.30;
+
+// A model's probe set, falling back to the stock window.
+function probeDistsOf(model) {
+  const p = model && model.probeDists;
+  return (Array.isArray(p) && p.length && p.every(Number.isFinite))
+    ? p.slice() : LEGACY_PROBE_DISTS.slice();
+}
+function baseObsOf(model) { return 24 + probeDistsOf(model).length * 2; }
 const MEM_RATE    = 0.1;
 const ACTION_REPEAT = 2; // physics ticks per decision, same as training
 
-// Shared observation prefix (indices 0..35) common to both algorithms.
-const BASE_OBS = 24 + PROBE_DISTS.length * 2; // 36
+// Observation width is derived per model (baseObsOf), since the map window is
+// configurable: 24 base inputs + 2 per probe, then the memory cells. At the
+// stock window that is 36 base → 40 feed-forward / 36 recurrent.
 
-// Feed-forward PPO: 4 external memory cells appended → obs 40, act 6.
+// Feed-forward PPO: 4 external memory cells appended → act 6.
 const FF_MEM_DIM = 4;
-const FF_OBS_DIM = BASE_OBS + FF_MEM_DIM; // 40
 const FF_ACT_DIM = 2 + FF_MEM_DIM;        // 6
 
-// Recurrent PPO-GRU: GRU hidden state replaces the memory cells → obs 36, act 2.
-const GRU_OBS_DIM = BASE_OBS; // 36
-const GRU_ACT_DIM = 2;        // 2
+// Recurrent PPO-GRU: the GRU hidden state replaces the memory cells → act 2.
+const GRU_ACT_DIM = 2;
 
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 function wrapPi(a) { return a - 2 * Math.PI * Math.round(a / (2 * Math.PI)); }
@@ -86,9 +96,10 @@ export function validateTrainedModel(model) {
     if (sizes.length !== 3) {
       throw new Error('incompatible recurrent model: actor must be a single GRU layer [in, hidden, out] — retrain and re-export in the AI Trainer');
     }
-    if (model.obsDim !== GRU_OBS_DIM || sizes[0] !== GRU_OBS_DIM || outDim !== GRU_ACT_DIM) {
+    const gruObs = baseObsOf(model);
+    if (model.obsDim !== gruObs || sizes[0] !== gruObs || outDim !== GRU_ACT_DIM) {
       throw new Error(`incompatible model: obs ${model.obsDim}/act ${outDim}, ` +
-                      `the game expects obs ${GRU_OBS_DIM}/act ${GRU_ACT_DIM} for a GRU policy — retrain and re-export in the AI Trainer`);
+                      `its map window implies obs ${gruObs}/act ${GRU_ACT_DIM} for a GRU policy — retrain and re-export in the AI Trainer`);
     }
     if (model.actor.flat.length !== gruParamCount(sizes)) {
       throw new Error('actor weight count does not match its GRU layer sizes');
@@ -98,9 +109,10 @@ export function validateTrainedModel(model) {
 
   if (model.algo === 'ppo') {
     // Feed-forward actor: sizes is [in, ...hidden, out].
-    if (model.obsDim !== FF_OBS_DIM || sizes[0] !== FF_OBS_DIM || outDim !== FF_ACT_DIM) {
+    const ffObs = baseObsOf(model) + FF_MEM_DIM;
+    if (model.obsDim !== ffObs || sizes[0] !== ffObs || outDim !== FF_ACT_DIM) {
       throw new Error(`incompatible model: obs ${model.obsDim}/act ${outDim}, ` +
-                      `the game expects obs ${FF_OBS_DIM}/act ${FF_ACT_DIM} — retrain and re-export in the AI Trainer`);
+                      `its map window implies obs ${ffObs}/act ${FF_ACT_DIM} — retrain and re-export in the AI Trainer`);
     }
     let n = 0;
     for (let l = 0; l < sizes.length - 1; l++) n += (sizes[l] + 1) * sizes[l + 1];
@@ -117,6 +129,7 @@ export function saveTrainedModel(model) {
     algo: model.algo,
     obsDim: model.obsDim,
     actDim: model.actDim,
+    probeDists: model.probeDists,   // observation layout the policy expects
     actor: model.actor,
     iteration: model.iteration,
     totalSteps: model.totalSteps,
@@ -152,9 +165,14 @@ export class PPOAI {
     this.context = context;
 
     this.recurrent = model.algo === 'ppo-gru';
-    this.obsDim = this.recurrent ? GRU_OBS_DIM : FF_OBS_DIM;
-    this.actDim = this.recurrent ? GRU_ACT_DIM : FF_ACT_DIM;
+    // The observation layout comes from the model, not from a constant: the
+    // trainer's map window is configurable and a policy only makes sense fed
+    // the window it learned on.
+    this.probeDists = probeDistsOf(model);
+    this.baseObs = 24 + this.probeDists.length * 2;
     this.memDim = this.recurrent ? 0 : FF_MEM_DIM;
+    this.obsDim = this.baseObs + this.memDim;
+    this.actDim = this.recurrent ? GRU_ACT_DIM : FF_ACT_DIM;
 
     if (this.recurrent) this._unpackGRU(model.actor);
     else                this._unpackActor(model.actor);
@@ -378,8 +396,8 @@ export class PPOAI {
     out[23] = Math.max(-1, Math.min(1, (hereAhead.y - prevY) / 4 / SLOPE_NORM));
 
     let prevD = 0;
-    for (let k = 0; k < PROBE_DISTS.length; k++) {
-      const d = PROBE_DISTS[k];
+    for (let k = 0; k < this.probeDists.length; k++) {
+      const d = this.probeDists[k];
       const p = this._pointAtArc(ap.s + d);
       const ang = wrapPi(Math.atan2(p.x - c.pos.x, p.z - c.pos.z) - c.hdg);
       const slope = (p.y - prevY) / (d - prevD);
@@ -388,7 +406,7 @@ export class PPOAI {
       prevY = p.y; prevD = d;
     }
     // Feed-forward only: external memory cells (the GRU has no memory inputs).
-    for (let d = 0; d < this.memDim; d++) out[BASE_OBS + d] = this.mem[d];
+    for (let d = 0; d < this.memDim; d++) out[this.baseObs + d] = this.mem[d];
   }
 
   // ── Main update (called every physics tick) ──────────────────────────────────
