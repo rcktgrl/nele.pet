@@ -1840,6 +1840,51 @@ function _flushBatchRecurrent() {
 //  (yielding between minibatches) if nested workers are unavailable.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Weight vectors shipped to the gradient pool, reused across minibatches.
+// postMessage serializes synchronously, so the buffer is safe to refill as
+// soon as the dispatch loop returns — and the pool sees one copy per task
+// either way. Sized on demand; a re-init with a different architecture just
+// grows them.
+let _wFlatActor = null, _wFlatCritic = null;
+
+function poolWeights() {
+  const nA = actor.paramCount(), nC = critic.paramCount();
+  if (!_wFlatActor  || _wFlatActor.length  !== nA) _wFlatActor  = new Float64Array(nA);
+  if (!_wFlatCritic || _wFlatCritic.length !== nC) _wFlatCritic = new Float64Array(nC);
+  return [actor.flatF64Into(_wFlatActor), critic.flatF64Into(_wFlatCritic)];
+}
+
+// Sum the pool's partial gradients into the nets. The first result is loaded,
+// the rest are added — same order as the old accumulate-then-load, without the
+// two full-size temporaries per minibatch.
+function reduceGrads(results, actDim, gLs) {
+  let mbPi = 0, mbV = 0, mbEnt = 0;
+  for (let r = 0; r < results.length; r++) {
+    const res = results[r];
+    if (r === 0) { actor.loadGradFlat(res.aG); critic.loadGradFlat(res.cG); }
+    else         { actor.addGradFlat(res.aG);  critic.addGradFlat(res.cG); }
+    for (let d = 0; d < actDim; d++) gLs[d] += res.gLs[d];
+    mbPi += res.pi; mbV += res.v; mbEnt += res.ent;
+    if (res.mode && res.mode.indexOf('wasm') === 0) _wasmOk = true;
+  }
+  return { pi: mbPi, v: mbV, ent: mbEnt };
+}
+
+// Adam step for the exploration log-σ vector. Identical in the feed-forward
+// and recurrent updates, so it lives here instead of twice inline.
+function stepLogStd(gLs, bs) {
+  lsT++;
+  const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+  const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
+  for (let d = 0; d < ACT_DIM; d++) {
+    const g = gLs[d] / bs;
+    lsM[d] = b1 * lsM[d] + (1 - b1) * g;
+    lsV[d] = b2 * lsV[d] + (1 - b2) * g * g;
+    logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
+    logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
+  }
+}
+
 function packSlice(OBS, ACT, LOGP, ADV, RET, idx, s0, s1) {
   const n = s1 - s0;
   const obs  = new Float64Array(n * OBS_DIM);
@@ -1985,9 +2030,9 @@ async function _runPPORecurrent(batch) {
 
       let gLs, mbPi, mbV, mbEnt;
       const pool = gradPool && gradPool.length ? gradPool : null;
-      const aFlat = actor.flatF64(), cFlat = critic.flatF64();
 
       if (pool) {
+        const [aFlat, cFlat] = poolWeights();   // only the pool needs them
         const K = Math.min(pool.length, mb.length);
         const per = Math.ceil(mb.length / K);
         const lsArr = Array.from(logStd);
@@ -2019,16 +2064,8 @@ async function _runPPORecurrent(batch) {
           if (perf.on) pfAdd('upd.gradwait', _tgw);
         }
         const _trd = perf.on ? performance.now() : 0;
-        const aG = new Float64Array(aFlat.length), cG = new Float64Array(cFlat.length);
-        gLs = new Float64Array(actDim); mbPi = 0; mbV = 0; mbEnt = 0;
-        for (const r of results) {
-          for (let k = 0; k < aG.length; k++) aG[k] += r.aG[k];
-          for (let k = 0; k < cG.length; k++) cG[k] += r.cG[k];
-          for (let d = 0; d < actDim; d++) gLs[d] += r.gLs[d];
-          mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
-          if (r.mode && r.mode.indexOf('wasm') === 0) _wasmOk = true;
-        }
-        actor.loadGradFlat(aG); critic.loadGradFlat(cG);
+        gLs = new Float64Array(actDim);
+        ({ pi: mbPi, v: mbV, ent: mbEnt } = reduceGrads(results, actDim, gLs));
         if (perf.on) pfAdd('upd.reduce', _trd);
       } else {
         const _tgl = perf.on ? performance.now() : 0;
@@ -2048,16 +2085,7 @@ async function _runPPORecurrent(batch) {
       const _tad = perf.on ? performance.now() : 0;
       actor.adamStep(cfg.lr, 1 / bs);
       critic.adamStep(cfg.lr, 1 / bs);
-      lsT++;
-      const b1 = 0.9, b2 = 0.999, eps = 1e-8;
-      const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
-      for (let d = 0; d < actDim; d++) {
-        const g = gLs[d] / bs;
-        lsM[d] = b1 * lsM[d] + (1 - b1) * g;
-        lsV[d] = b2 * lsV[d] + (1 - b2) * g * g;
-        logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
-        logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
-      }
+      stepLogStd(gLs, bs);
       if (perf.on) { pfAdd('upd.adam', _tad); pfCount('upd.minibatches', 1); }
       sumPi += mbPi / bs; sumV += mbV / bs; sumEnt += mbEnt / bs; nMB++;
     }
@@ -2221,7 +2249,7 @@ async function _runPPO(batch) {
         const _tpk = perf.on ? performance.now() : 0;
         const K = Math.min(pool.length, Math.max(1, Math.floor(bs / 32)));
         const per = Math.ceil(bs / K);
-        const aFlat = actor.flatF64(), cFlat = critic.flatF64();
+        const [aFlat, cFlat] = poolWeights();
         const lsArr = Array.from(logStd);
         const tasks = [];
         for (let c = 0; c < K; c++) {
@@ -2253,19 +2281,8 @@ async function _runPPO(batch) {
           if (perf.on) pfAdd('upd.gradwait', _tgw);
         }
         const _trd = perf.on ? performance.now() : 0;
-        const aG = new Float64Array(aFlat.length);
-        const cG = new Float64Array(cFlat.length);
         gLs = new Float64Array(ACT_DIM);
-        mbPi = 0; mbV = 0; mbEnt = 0;
-        for (const r of results) {
-          for (let k = 0; k < aG.length; k++) aG[k] += r.aG[k];
-          for (let k = 0; k < cG.length; k++) cG[k] += r.cG[k];
-          for (let d = 0; d < ACT_DIM; d++) gLs[d] += r.gLs[d];
-          mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
-          if (r.mode === 'wasm') _wasmOk = true;
-        }
-        actor.loadGradFlat(aG);
-        critic.loadGradFlat(cG);
+        ({ pi: mbPi, v: mbV, ent: mbEnt } = reduceGrads(results, ACT_DIM, gLs));
         if (perf.on) pfAdd('upd.reduce', _trd);
       } else {
         // ── Local fallback: single-threaded gradient computation ──
@@ -2286,16 +2303,7 @@ async function _runPPO(batch) {
       const _tad = perf.on ? performance.now() : 0;
       actor.adamStep(cfg.lr, 1 / bs);
       critic.adamStep(cfg.lr, 1 / bs);
-      lsT++;
-      const b1 = 0.9, b2 = 0.999, eps = 1e-8;
-      const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
-      for (let d = 0; d < ACT_DIM; d++) {
-        const g = gLs[d] / bs;
-        lsM[d] = b1 * lsM[d] + (1 - b1) * g;
-        lsV[d] = b2 * lsV[d] + (1 - b2) * g * g;
-        logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
-        logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
-      }
+      stepLogStd(gLs, bs);
 
       if (perf.on) { pfAdd('upd.adam', _tad); pfCount('upd.minibatches', 1); }
 

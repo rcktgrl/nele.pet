@@ -221,6 +221,64 @@ nobody uses: all `numEnvs` agents decide on the same tick, so the 8 (or 32) sepa
    12–47×; showing the achieved rate makes the compute wall obvious instead of
    looking like a broken slider.
 
+## Optimization pass (applied)
+
+Acting on findings 1–2, with one rule: **the gradients must not change**. The
+A/B below verifies that directly — `max |Δgrad| = 0.0`, bit-identical.
+
+**What changed.** The update loop rebuilt two full weight vectors
+(`actor.flatF64()` + `critic.flatF64()`) and two full gradient accumulators for
+*every minibatch*, then copied the accumulators into the nets. At 256×2 that is
+~2.5 MB allocated, filled and copied per minibatch, ~500 minibatches per three
+generations. Now the weight buffers are allocated once and refilled
+(`flatF64Into`), and the pool's partial gradients are reduced straight into the
+nets (`addGradFlat`) — no temporaries. Plus: σ/σ² hoisted out of the PPO sample
+loop (they only move between Adam steps), the two per-sample gradient vectors
+hoisted, and the duplicated log-σ Adam step and pool-reduce folded into shared
+helpers used by both the feed-forward and recurrent updates.
+
+Same-process A/B of the dispatch work (median of 9, interleaved):
+
+| net | old ms/minibatch | new ms/minibatch | speedup |
+|---|---:|---:|---:|
+| 64×1 | 0.051 | 0.014 | 3.7× |
+| 256×1 | 0.236 | 0.056 | 4.2× |
+| 256×2 | 1.854 | 0.460 | 4.0× |
+
+End-to-end, paired A/B (baseline and optimized sources alternated, 3 rounds —
+see the note on measurement below):
+
+| config | old s/gen | new s/gen | change |
+|---|---:|---:|---:|
+| `wasm-auto` | 0.957 / 0.983 / 0.950 | 0.913 / 0.911 / 0.945 | **−4 %** |
+| `bignet-256x2` | 11.19 / 11.59 / 11.22 | 10.54 / 10.23 / 10.61 | **−7 %** |
+
+The optimized build won all six paired rounds.
+
+**What did not pay, and was reverted.** Reusing preallocated per-layer
+activation and delta buffers inside `Net.forward`/`backward` — the obvious
+"stop allocating in the hot loop" fix — measured *neutral to 7 % slower*
+(64×1 1.02×, 256×1 1.02×, 256×2 0.99–0.93×). Short-lived typed arrays live in
+V8's nursery where allocation is a pointer bump and zeroing is free, while
+long-lived scratch pays write barriers and needs an explicit `fill(0)`. The
+code kept the simpler version, with a comment so nobody "fixes" it again.
+
+**Not attempted.** The WASM kernel was left alone: it is where 72 % of the wall
+goes, but the committed `nn_wasm.wasm` does not rebuild byte-identically with
+this container's clang 18, so any C change would ship a wholesale-different
+binary for an expected ~1–2 % (hoisting the per-sample `exp(log_std)` calls).
+The 10×-class win there is the batched-GEMM rewrite described above, which is a
+numerics-sensitive project rather than a cleanup.
+
+### A note on measuring this container
+
+Absolute timings drift a lot between runs — the same `wasm-auto` config measured
+0.66, 0.91, 0.96 and 1.25 s/gen across sessions with identical code. A plain
+before/after comparison minutes apart is therefore worthless; the first attempt
+at one showed the optimized build 45 % *slower* purely from drift. Both A/Bs
+above are paired: either alternating old/new modules inside one process, or
+alternating source trees across interleaved benchmark rounds.
+
 ## Raw output
 
 `node games/ai-trainer/test/perf-bench.mjs --gens=3 --repeat=3 --json=out.json` writes
