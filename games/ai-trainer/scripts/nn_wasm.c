@@ -701,6 +701,53 @@ static void gru_forward(const int *sizes, const double *f, const double *obs,
     }
 }
 
+/* Per-timestep pre-activation deltas, kept so the weight gradients can be
+ * accumulated ONCE after the time loop instead of once per timestep. */
+static double r_dsz[MAX_SEQ * MAX_RH];
+static double r_dsr[MAX_SEQ * MAX_RH];
+static double r_dsh[MAX_SEQ * MAX_RH];
+
+/* G[j][i] += Σ_t D[t][j]·A[t][i], walking t downwards so the sum keeps the
+ * order the per-timestep version produced. The output tile stays in registers
+ * across the whole sequence, so each gradient element is read and written once
+ * per chunk rather than once per timestep — the same blocking that the
+ * feed-forward kernel uses, with time as the reduction axis. */
+static void accum_outer(double *G, int rows, int cols,
+                        const double *D, int dstride,
+                        const double *A, int astride, int T) {
+    for (int j = 0; j < rows; j++) {
+        double *gj = G + (nn_size_t)j * cols;
+        int i0 = 0;
+        for (; i0 + GEMM_T <= cols; i0 += GEMM_T) {
+            double acc[GEMM_T];
+            for (int u = 0; u < GEMM_T; u++) acc[u] = gj[i0 + u];
+            for (int t = T - 1; t >= 0; t--) {
+                double d = D[(nn_size_t)t * dstride + j];
+                if (d == 0.0) continue;
+                const double *a = A + (nn_size_t)t * astride + i0;
+                for (int u = 0; u < GEMM_T; u++) acc[u] += d * a[u];
+            }
+            for (int u = 0; u < GEMM_T; u++) gj[i0 + u] = acc[u];
+        }
+        for (; i0 < cols; i0++) {
+            double acc = gj[i0];
+            for (int t = T - 1; t >= 0; t--) {
+                double d = D[(nn_size_t)t * dstride + j];
+                if (d != 0.0) acc += d * A[(nn_size_t)t * astride + i0];
+            }
+            gj[i0] = acc;
+        }
+    }
+}
+
+static void accum_bias(double *gb, int n, const double *D, int dstride, int T) {
+    for (int j = 0; j < n; j++) {
+        double acc = gb[j];
+        for (int t = T - 1; t >= 0; t--) acc += D[(nn_size_t)t * dstride + j];
+        gb[j] = acc;
+    }
+}
+
 static void gru_backward(const int *sizes, const double *f, double *g,
                          const double *obs, const double *dY, const double *done, int T) {
     int I = sizes[0], H = sizes[1], O = sizes[2];
@@ -712,18 +759,21 @@ static void gru_backward(const int *sizes, const double *f, double *g,
     double *gWy = gbh + H;            double *gby = gWy + O * H;
     double dhNext[MAX_RH];
     for (int j = 0; j < H; j++) dhNext[j] = 0.0;
+
+    /* ── recurrence: sequential in time, weights read-only ─────────────── */
     for (int t = T - 1; t >= 0; t--) {
         double *z = r_z + t * H, *rr = r_r + t * H, *hh = r_hh + t * H;
-        double *rh = r_rh + t * H, *h = r_h + t * H, *hp = r_hp + t * H;
-        const double *x = obs + t * I;
-        double dh[MAX_RH], dhPrev[MAX_RH], dsh[MAX_RH], drh[MAX_RH], dr[MAX_RH];
+        double *rh = r_rh + t * H, *hp = r_hp + t * H;
+        double dh[MAX_RH], dhPrev[MAX_RH], drh[MAX_RH], dr[MAX_RH];
+        double *dsz = r_dsz + t * H, *dsr = r_dsr + t * H, *dsh = r_dsh + t * H;
         for (int j = 0; j < H; j++) { dh[j] = dhNext[j]; dhPrev[j] = 0.0; drh[j] = 0.0; }
+
         const double *dyt = dY + t * O;
         for (int o = 0; o < O; o++) {
             double dyo = dyt[o];
             if (dyo == 0.0) continue;
-            gby[o] += dyo; int off = o * H;
-            for (int j = 0; j < H; j++) { gWy[off + j] += dyo * h[j]; dh[j] += dyo * Wy[off + j]; }
+            int off = o * H;
+            for (int j = 0; j < H; j++) dh[j] += dyo * Wy[off + j];
         }
         for (int j = 0; j < H; j++) {
             double dhh = dh[j] * z[j];
@@ -733,24 +783,38 @@ static void gru_backward(const int *sizes, const double *f, double *g,
             dh[j] = dz;  /* reuse slot to hold dz for the gate pass */
         }
         for (int j = 0; j < H; j++) {
-            double d = dsh[j]; gbh[j] += d; int xo = j * I, ho = j * H;
-            for (int i = 0; i < I; i++) gWh[xo + i] += d * x[i];
-            for (int k = 0; k < H; k++) { gUh[ho + k] += d * rh[k]; drh[k] += d * Uh[ho + k]; }
+            double d = dsh[j];
+            int ho = j * H;
+            for (int k = 0; k < H; k++) drh[k] += d * Uh[ho + k];
         }
+        (void)rh;
         for (int k = 0; k < H; k++) { dr[k] = drh[k] * hp[k]; dhPrev[k] += drh[k] * rr[k]; }
         for (int j = 0; j < H; j++) {
-            double dsz = dh[j] * z[j] * (1.0 - z[j]);
-            double dsr = dr[j] * rr[j] * (1.0 - rr[j]);
-            gbz[j] += dsz; gbr[j] += dsr; int xo = j * I, ho = j * H;
-            for (int i = 0; i < I; i++) { gWz[xo + i] += dsz * x[i]; gWr[xo + i] += dsr * x[i]; }
+            double a = dh[j] * z[j] * (1.0 - z[j]);
+            double b = dr[j] * rr[j] * (1.0 - rr[j]);
+            dsz[j] = a; dsr[j] = b;
+            int ho = j * H;
             for (int k = 0; k < H; k++) {
-                gUz[ho + k] += dsz * hp[k]; dhPrev[k] += dsz * Uz[ho + k];
-                gUr[ho + k] += dsr * hp[k]; dhPrev[k] += dsr * Ur[ho + k];
+                dhPrev[k] += a * Uz[ho + k];
+                dhPrev[k] += b * Ur[ho + k];
             }
         }
         if (t > 0 && !(done && done[t - 1] != 0.0)) { for (int j = 0; j < H; j++) dhNext[j] = dhPrev[j]; }
         else                                        { for (int j = 0; j < H; j++) dhNext[j] = 0.0; }
     }
+
+    /* ── weight gradients: one pass over the whole chunk ───────────────── */
+    accum_outer(gWy, O, H, dY,    O, r_h,  H, T);
+    accum_bias (gby, O,    dY,    O,              T);
+    accum_outer(gWh, H, I, r_dsh, H, obs,  I, T);
+    accum_outer(gUh, H, H, r_dsh, H, r_rh, H, T);
+    accum_bias (gbh, H,    r_dsh, H,              T);
+    accum_outer(gWz, H, I, r_dsz, H, obs,  I, T);
+    accum_outer(gUz, H, H, r_dsz, H, r_hp, H, T);
+    accum_bias (gbz, H,    r_dsz, H,              T);
+    accum_outer(gWr, H, I, r_dsr, H, obs,  I, T);
+    accum_outer(gUr, H, H, r_dsr, H, r_hp, H, T);
+    accum_bias (gbr, H,    r_dsr, H,              T);
 }
 
 /* out_losses / *_grad / g_log_std ACCUMULATE — zero them once before the

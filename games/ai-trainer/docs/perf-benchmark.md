@@ -539,6 +539,33 @@ dominate a recurrent generation. On a machine with more cores the gradient pool
 finishes sooner and the rollout share grows, so this should be worth more there
 than on the 4-core box it was measured on.
 
+## Blocked BPTT weight gradients
+
+With the rollout batched, the recurrent update's BPTT gradients became the
+dominant cost of a recurrent generation. `gru_backward` accumulated all six
+weight-gradient matrices *inside* the time loop, so 3·(H×I) + 3·(H×H) + O×H of
+gradient memory was read-modify-written on **every timestep** — 155 KB per step
+at H=64, ~5 MB per 32-step chunk.
+
+The recurrence itself has to stay sequential (each step's `dhPrev` feeds the
+previous one), but the weight gradients do not: the per-timestep pre-activation
+deltas are now stored and the gradients accumulated once per chunk, with time
+as the reduction axis and the output tile held in registers — the same blocking
+the feed-forward kernel uses. The weight *reads* that drive the recurrence stay
+in the time loop; only the read-modify-write traffic leaves it.
+
+Paired on `gru-recurrent`: gradient wall **3.94 s → 3.53 s** (13.6 → 12.1 ms
+per minibatch), end-to-end **5.23 s → 4.75 s (~9 %)**. Less than the 1.8× the
+feed-forward kernel got, because the time loop still reads the three H×H
+recurrent matrices every step to propagate `dhPrev`, and the per-dispatch
+overhead is unchanged. `gru-wasm-parity` holds at 1.9e-13.
+
+## Observation reference
+
+What each input actually is — including which rays duplicate each other and
+what the policy cannot see — is written up separately in
+[`observations.md`](./observations.md).
+
 ## Raw output
 
 `node games/ai-trainer/test/perf-bench.mjs --gens=3 --repeat=3 --json=out.json` writes
