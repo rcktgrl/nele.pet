@@ -507,6 +507,38 @@ dimensions get the entropy bonus but only an indirect reward signal, so their
 and Adam's second moment being poisoned by one huge gradient, which freezes the
 affected parameters at an effective learning rate of ~0.
 
+## Batched GRU step (the default mode)
+
+`forward_batch` covered the feed-forward policy only, so the default mode still
+ran a scalar JS `GRUNet.step()` per agent per decision — the single biggest item
+in a recurrent run. `gru_step_batch` steps every due agent in one call: each
+gate is a pair of matrix-vector products against shared weights, so batching
+turns them into matrix-matrix work, with a weight row loaded once for two
+agents on top of the compiled SIMD the JS path never had.
+
+| I×H×O | agents | JS µs/tick | batched WASM µs/tick | speedup |
+|---|---:|---:|---:|---:|
+| 36×64×2 | 8 | 388.2 | 73.4 | **5.3×** |
+| 36×64×2 | 32 | 1566.7 | 301.5 | **5.2×** |
+| 36×128×2 | 8 | 1246.0 | 200.6 | **6.2×** |
+| 36×128×2 | 32 | 4876.6 | 793.5 | **6.2×** |
+| 36×256×2 | 8 | 4131.0 | 600.7 | **6.9×** |
+
+It also removes the two hidden-state arrays the JS path allocated per agent per
+decision — the new states are written back into the gather buffer and scattered
+from there.
+
+`gru-batch-check.mjs` pins it to `GRUNet.step()` across four shapes and agent
+counts either side of the kernel's 32-agent block (max 1.1e-11 relative), and
+`sim-smoke` asserts the recurrent run actually takes this path.
+
+End-to-end, paired on `gru-recurrent`: the **rollout loop drops 2.89 s → 2.09 s
+(1.38×)** and the wall 5.87 s → 5.31 s. The wall moves less than the rollout
+because the recurrent update's BPTT gradients — off-thread, and untouched here —
+dominate a recurrent generation. On a machine with more cores the gradient pool
+finishes sooner and the rollout share grows, so this should be worth more there
+than on the 4-core box it was measured on.
+
 ## Raw output
 
 `node games/ai-trainer/test/perf-bench.mjs --gens=3 --repeat=3 --json=out.json` writes

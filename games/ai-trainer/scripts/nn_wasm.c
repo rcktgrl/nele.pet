@@ -864,4 +864,130 @@ void forward_batch(int nlayers, const int *sizes, const double *flat,
     }
 }
 
+/* ── gru_step_batch ───────────────────────────────────────────────────────
+ * One GRU step for n agents at once — the recurrent rollout's inner loop.
+ *
+ * The recurrent policy is the trainer's default, and it was the one path still
+ * running a scalar JS step per agent per decision (24 % of a recurrent run).
+ * Each gate is a pair of matrix-vector products against shared weights, so
+ * stepping the agents together turns them into matrix-matrix work: a weight row
+ * is loaded once for two agents instead of once each, on top of the compiled
+ * SIMD the JS path never had.
+ *
+ * Layout matches GRUNet.flat():
+ *   Wz Wr Wh (H×I) · Uz Ur Uh (H×H) · bz br bh (H) · Wy (O×H) · by (O)
+ * obs: n×I, hprev: n×H, hout: n×H, yout: n×O — all row-major, sample-major.
+ * Accumulation order per unit is the JS order (inputs then hidden), so this
+ * agrees with GRUNet.step() to floating-point noise.
+ */
+#define GRU_BLK 32
+
+static double s_gru_z [GRU_BLK * BLK_UNITS];
+static double s_gru_r [GRU_BLK * BLK_UNITS];
+static double s_gru_rh[GRU_BLK * BLK_UNITS];
+
+__attribute__((visibility("default")))
+void gru_step_batch(const int *sizes, const double *flat,
+                    const double *obs, const double *hprev, int n,
+                    double *hout, double *yout) {
+    int I = sizes[0], H = sizes[1], O = sizes[2];
+    if (H > BLK_UNITS || I > BLK_UNITS || O > BLK_UNITS) return;  /* JS fallback */
+
+    const double *Wz = flat;
+    const double *Wr = Wz + (nn_size_t)H * I;
+    const double *Wh = Wr + (nn_size_t)H * I;
+    const double *Uz = Wh + (nn_size_t)H * I;
+    const double *Ur = Uz + (nn_size_t)H * H;
+    const double *Uh = Ur + (nn_size_t)H * H;
+    const double *bz = Uh + (nn_size_t)H * H;
+    const double *br = bz + H;
+    const double *bh = br + H;
+    const double *Wy = bh + H;
+    const double *by = Wy + (nn_size_t)O * H;
+
+    for (int k0 = 0; k0 < n; k0 += GRU_BLK) {
+        int bs = n - k0 < GRU_BLK ? n - k0 : GRU_BLK;
+        const double *X  = obs   + (nn_size_t)k0 * I;
+        const double *P  = hprev + (nn_size_t)k0 * H;
+        double       *HO = hout  + (nn_size_t)k0 * H;
+        double       *YO = yout  + (nn_size_t)k0 * O;
+
+        /* ── update (z) and reset (r) gates ─────────────────────────────── */
+        for (int j = 0; j < H; j++) {
+            const double *wz = Wz + (nn_size_t)j * I, *wr = Wr + (nn_size_t)j * I;
+            const double *uz = Uz + (nn_size_t)j * H, *ur = Ur + (nn_size_t)j * H;
+            double bzj = bz[j], brj = br[j];
+            int s = 0;
+            for (; s + 1 < bs; s += 2) {          /* two agents per weight load */
+                const double *x0 = X + (nn_size_t)s * I,     *x1 = X + (nn_size_t)(s + 1) * I;
+                const double *p0 = P + (nn_size_t)s * H,     *p1 = P + (nn_size_t)(s + 1) * H;
+                double z0 = bzj, z1 = bzj, r0 = brj, r1 = brj;
+                for (int i = 0; i < I; i++) {
+                    double a0 = x0[i], a1 = x1[i], vz = wz[i], vr = wr[i];
+                    z0 += vz * a0; z1 += vz * a1; r0 += vr * a0; r1 += vr * a1;
+                }
+                for (int k = 0; k < H; k++) {
+                    double c0 = p0[k], c1 = p1[k], vz = uz[k], vr = ur[k];
+                    z0 += vz * c0; z1 += vz * c1; r0 += vr * c0; r1 += vr * c1;
+                }
+                s_gru_z[(nn_size_t)s * H + j]       = sigmoidd(z0);
+                s_gru_z[(nn_size_t)(s + 1) * H + j] = sigmoidd(z1);
+                s_gru_r[(nn_size_t)s * H + j]       = sigmoidd(r0);
+                s_gru_r[(nn_size_t)(s + 1) * H + j] = sigmoidd(r1);
+            }
+            for (; s < bs; s++) {
+                const double *xs = X + (nn_size_t)s * I, *ps = P + (nn_size_t)s * H;
+                double zz = bzj, rr = brj;
+                for (int i = 0; i < I; i++) { zz += wz[i] * xs[i]; rr += wr[i] * xs[i]; }
+                for (int k = 0; k < H; k++) { zz += uz[k] * ps[k]; rr += ur[k] * ps[k]; }
+                s_gru_z[(nn_size_t)s * H + j] = sigmoidd(zz);
+                s_gru_r[(nn_size_t)s * H + j] = sigmoidd(rr);
+            }
+        }
+
+        for (int s = 0; s < bs; s++) {
+            const double *ps = P + (nn_size_t)s * H;
+            for (int k = 0; k < H; k++)
+                s_gru_rh[(nn_size_t)s * H + k] = s_gru_r[(nn_size_t)s * H + k] * ps[k];
+        }
+
+        /* ── candidate state and the new hidden state ───────────────────── */
+        for (int j = 0; j < H; j++) {
+            const double *wh = Wh + (nn_size_t)j * I, *uh = Uh + (nn_size_t)j * H;
+            double bhj = bh[j];
+            int s = 0;
+            for (; s + 1 < bs; s += 2) {
+                const double *x0 = X + (nn_size_t)s * I, *x1 = X + (nn_size_t)(s + 1) * I;
+                const double *g0 = s_gru_rh + (nn_size_t)s * H, *g1 = s_gru_rh + (nn_size_t)(s + 1) * H;
+                double h0 = bhj, h1 = bhj;
+                for (int i = 0; i < I; i++) { double v = wh[i]; h0 += v * x0[i]; h1 += v * x1[i]; }
+                for (int k = 0; k < H; k++) { double v = uh[k]; h0 += v * g0[k]; h1 += v * g1[k]; }
+                double t0 = tanh(h0), t1 = tanh(h1);
+                double zz0 = s_gru_z[(nn_size_t)s * H + j], zz1 = s_gru_z[(nn_size_t)(s + 1) * H + j];
+                HO[(nn_size_t)s * H + j]       = (1.0 - zz0) * P[(nn_size_t)s * H + j] + zz0 * t0;
+                HO[(nn_size_t)(s + 1) * H + j] = (1.0 - zz1) * P[(nn_size_t)(s + 1) * H + j] + zz1 * t1;
+            }
+            for (; s < bs; s++) {
+                const double *xs = X + (nn_size_t)s * I, *gs = s_gru_rh + (nn_size_t)s * H;
+                double hs = bhj;
+                for (int i = 0; i < I; i++) hs += wh[i] * xs[i];
+                for (int k = 0; k < H; k++) hs += uh[k] * gs[k];
+                double t = tanh(hs), zz = s_gru_z[(nn_size_t)s * H + j];
+                HO[(nn_size_t)s * H + j] = (1.0 - zz) * P[(nn_size_t)s * H + j] + zz * t;
+            }
+        }
+
+        /* ── linear output head ─────────────────────────────────────────── */
+        for (int s = 0; s < bs; s++) {
+            const double *hs = HO + (nn_size_t)s * H;
+            for (int o = 0; o < O; o++) {
+                const double *wy = Wy + (nn_size_t)o * H;
+                double sy = by[o];
+                for (int j = 0; j < H; j++) sy += wy[j] * hs[j];
+                YO[(nn_size_t)s * O + o] = sy;
+            }
+        }
+    }
+}
+
 int get_heap_base(void) { return (int)(unsigned int)&__heap_base; }

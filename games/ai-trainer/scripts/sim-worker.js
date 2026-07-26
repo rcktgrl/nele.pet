@@ -873,14 +873,12 @@ function fwdInvalidate() { fwdDirty = true; }
 
 async function initFwd() {
   fwdInst = null; fwdLayout = null; fwdErr = '';
-  // The GRU policy carries hidden state across steps; the batch kernel is
-  // feed-forward only.
-  if (isRecurrent) { fwdErr = 'recurrent policy — JS step path'; return; }
   try {
     const url = new URL('./nn_wasm.wasm', import.meta.url);
     const src = await fetch(url);
     const { instance } = await WebAssembly.instantiate(await src.arrayBuffer(), {});
-    if (typeof instance.exports.forward_batch !== 'function') throw new Error('forward_batch missing');
+    const need = isRecurrent ? 'gru_step_batch' : 'forward_batch';
+    if (typeof instance.exports[need] !== 'function') throw new Error(need + ' missing');
     fwdInst = instance;
     fwdBuildLayout();
   } catch (err) {
@@ -895,11 +893,16 @@ function fwdBuildLayout() {
   const align8 = n => (n + 7) & ~7;
   const aSizes = actor.sizes, cSizes = critic.sizes;
   const nA = actor.paramCount(), nC = critic.paramCount();
-  const cap = Math.max(1, cfg.numEnvs | 0) * 2;   // mirror doubles the rows
+  // Mirror augmentation doubles the rows; it is feed-forward only.
+  const cap = Math.max(1, cfg.numEnvs | 0) * (isRecurrent ? 1 : 2);
+  const H  = isRecurrent ? actor.H  : 0;
+  const HC = isRecurrent ? critic.H : 0;
   const sz = [
     align8(aSizes.length * 4), align8(cSizes.length * 4),
     align8(nA * 8), align8(nC * 8),
     align8(cap * OBS_DIM * 8), align8(cap * ACT_DIM * 8), align8(cap * 8),
+    align8(cap * H * 8), align8(cap * H * 8),      // actor hidden state: in, out
+    align8(cap * HC * 8), align8(cap * HC * 8),    // critic hidden state: in, out
   ];
   const total = sz.reduce((a, b) => a + b, 0);
   const mem = fwdInst.exports.memory;
@@ -914,6 +917,9 @@ function fwdBuildLayout() {
   L.aSizesOff = take(0); L.cSizesOff = take(1);
   L.aFlatOff  = take(2); L.cFlatOff  = take(3);
   L.obsOff    = take(4); L.aOutOff   = take(5); L.cOutOff = take(6);
+  L.aHinOff   = take(7); L.aHoutOff  = take(8);
+  L.cHinOff   = take(9); L.cHoutOff  = take(10);
+  L.H = H; L.HC = HC; L.recurrent = isRecurrent;
   const buf = mem.buffer;
   new Int32Array(buf, L.aSizesOff, aSizes.length).set(aSizes);
   new Int32Array(buf, L.cSizesOff, cSizes.length).set(cSizes);
@@ -944,6 +950,24 @@ function fwdRun(obsBatch, n, wantCritic) {
 
 function fwdActorOut(n) { return new Float64Array(fwdInst.exports.memory.buffer, fwdLayout.aOutOff, n * ACT_DIM); }
 function fwdCriticOut(n) { return new Float64Array(fwdInst.exports.memory.buffer, fwdLayout.cOutOff, n); }
+
+// One GRU step for n agents. hInA/hInC carry the incoming hidden states packed
+// n×H; the new states are written back into them, so the caller scatters from
+// a single place and no per-agent state array is allocated per decision.
+function fwdRunGRU(obsBatch, hInA, hInC, n) {
+  if (!fwdReady() || !fwdLayout.recurrent || n <= 0 || n > fwdLayout.cap) return false;
+  if (fwdDirty) fwdUpload();
+  const ex = fwdInst.exports, L = fwdLayout;
+  const buf = ex.memory.buffer;
+  new Float64Array(buf, L.obsOff, n * OBS_DIM).set(obsBatch.subarray(0, n * OBS_DIM));
+  new Float64Array(buf, L.aHinOff, n * L.H).set(hInA.subarray(0, n * L.H));
+  new Float64Array(buf, L.cHinOff, n * L.HC).set(hInC.subarray(0, n * L.HC));
+  ex.gru_step_batch(L.aSizesOff, L.aFlatOff, L.obsOff, L.aHinOff, n, L.aHoutOff, L.aOutOff);
+  ex.gru_step_batch(L.cSizesOff, L.cFlatOff, L.obsOff, L.cHinOff, n, L.cHoutOff, L.cOutOff);
+  hInA.set(new Float64Array(buf, L.aHoutOff, n * L.H));
+  hInC.set(new Float64Array(buf, L.cHoutOff, n * L.HC));
+  return true;
+}
 
 let isRecurrent = false;    // true when the GRU policy/critic is active
 let actor  = null;          // Net or GRUNet → action means
@@ -1624,6 +1648,54 @@ function finishDecision(env) {
 // are still built per agent (they read that agent's track geometry); only the
 // network evaluation is batched, which is the expensive half.
 let _obsBatch = null, _decIdx = null;
+let _hBatchA = null, _hBatchC = null;
+
+// Recurrent variant: gather every due agent's hidden state, step them all in
+// one call, scatter the new states back. The per-decision Float64Array pair the
+// JS path allocated for the next hidden state is gone with it.
+function decideBatchedRecurrent(due, nDue) {
+  const H = fwdLayout.H, HC = fwdLayout.HC;
+  if (!_obsBatch || _obsBatch.length < nDue * OBS_DIM) _obsBatch = new Float64Array(nDue * OBS_DIM);
+  if (!_hBatchA  || _hBatchA.length  < nDue * H)  _hBatchA = new Float64Array(nDue * H);
+  if (!_hBatchC  || _hBatchC.length  < nDue * HC) _hBatchC = new Float64Array(nDue * HC);
+
+  let _tp = perf.on ? performance.now() : 0;
+  for (let k = 0; k < nDue; k++) commitTransition(due[k], false);
+  if (perf.on) { pfAdd('roll.commit', _tp); _tp = performance.now(); }
+
+  for (let k = 0; k < nDue; k++) {
+    const env = due[k];
+    useTrack(env.trackIdx);
+    const obs = new Float64Array(OBS_DIM);
+    buildObs(env.car, obs);
+    env.pendObs = obs;
+    _obsBatch.set(obs, k * OBS_DIM);
+    // BPTT seeds each chunk with the state that went INTO the step, so the
+    // snapshot has to be taken before the batch overwrites it.
+    _hBatchA.set(env.hActor, k * H);
+    _hBatchC.set(env.hCritic, k * HC);
+    env.pendHActor  = Float64Array.from(env.hActor);
+    env.pendHCritic = Float64Array.from(env.hCritic);
+  }
+  if (perf.on) { pfAdd('roll.obs', _tp); _tp = performance.now(); }
+
+  if (!fwdRunGRU(_obsBatch, _hBatchA, _hBatchC, nDue)) {
+    for (let k = 0; k < nDue; k++) decideOne(due[k]);
+    return;
+  }
+  const MU = fwdActorOut(nDue), V = fwdCriticOut(nDue);
+  for (let k = 0; k < nDue; k++) {
+    const env = due[k];
+    const mu = MU.subarray(k * ACT_DIM, (k + 1) * ACT_DIM);
+    for (let d = 0; d < ACT_DIM; d++) env.curAct[d] = mu[d] + Math.exp(logStd[d]) * gauss();
+    env.pendLogp = logProb(env.curAct, mu);
+    env.pendVal  = vDenorm(V[k]);
+    env.hActor.set(_hBatchA.subarray(k * H, (k + 1) * H));
+    env.hCritic.set(_hBatchC.subarray(k * HC, (k + 1) * HC));
+  }
+  if (perf.on) pfAdd('roll.policy', _tp);
+  for (let k = 0; k < nDue; k++) finishDecision(due[k]);
+}
 
 function decideBatched(due, nDue) {
   const cap = nDue * (cfg.mirror ? 2 : 1);
@@ -1691,7 +1763,9 @@ function stepOnce(dt) {
   // ── Decisions first, batched when the kernel can take them ──
   // Agents never observe each other, so hoisting every decision ahead of every
   // physics step changes nothing an agent can see.
-  const canBatch = fwdReady() && !isRecurrent && !(cfg.failRate > 0);
+  // Defect-masked agents each act with their own weights, so they cannot share
+  // a batch; that mode is feed-forward only.
+  const canBatch = fwdReady() && (isRecurrent || !(cfg.failRate > 0));
   if (!_decIdx || _decIdx.length < envs.length) _decIdx = new Array(envs.length);
   let nDue = 0;
   for (let i = 0; i < envs.length; i++) {
@@ -1701,7 +1775,8 @@ function stepOnce(dt) {
   }
   if (nDue) {
     if (canBatch) {
-      decideBatched(_decIdx, nDue);
+      if (isRecurrent) decideBatchedRecurrent(_decIdx, nDue);
+      else             decideBatched(_decIdx, nDue);
     } else {
       for (let k = 0; k < nDue; k++) { useTrack(_decIdx[k].trackIdx); decideOne(_decIdx[k]); }
     }

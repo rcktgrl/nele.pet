@@ -287,6 +287,8 @@ console.log('\n7. Recurrent PPO (GRU)');
   send({ type: 'stop' });
   if (frame) {
     check(`recurrent updates completed (${frame.iteration})`, frame.iteration > 0);
+    check(`batched WASM GRU step active (${frame.inferBackend})`,
+      frame.inferBackend === 'wasm-batch', frame.inferInfo || '');
     check('recurrent losses finite', Number.isFinite(frame.loss.pi) && Number.isFinite(frame.loss.v));
     check('frame flagged recurrent', frame.recurrent === true);
   } else {
