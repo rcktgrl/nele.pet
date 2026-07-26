@@ -53,10 +53,10 @@ they keep working unchanged.
 
 ## What the policy cannot see
 
-- **Gravel ahead.** The rays hit barriers only. Input 21 says "I am on gravel
-  *now*"; nothing shows a runoff area before the car is in it. On a map with
-  runoff (jeff has it) the policy can only learn to avoid gravel from the
-  centerline geometry and the penalty it collects afterwards.
+- **How far the gravel extends.** The short fan now shows where the asphalt
+  ends — i.e. where gravel *starts* — out to 35 m, so the policy can see a
+  runoff area coming. What it still cannot see is how deep that runoff is or
+  where it ends, only the boundary it is about to cross.
 - **How wide the road is.** Input 20 is distance-to-centerline *divided by*
   half-width, so a 12 m road and a 20 m road produce identical numbers. Fine on
   one map, a real blind spot across maps.
