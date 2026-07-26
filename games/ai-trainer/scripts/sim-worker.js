@@ -100,6 +100,8 @@ let cfg = {
   wallHitPenalty: 50,    // ONE-OFF, charged on each new wall/off-track contact
   terminalPenalty: 10,   // on off-track / stuck termination
   lapBonus: 20,          // on lap completion
+  // diagnostics
+  perf: false,           // phase profiler (see below) — benchmark use only
 };
 
 const FIXED_DT = 1 / 60;
@@ -111,6 +113,47 @@ let lastTickMs = 0;
 let lastPostMs = 0;
 let tickHandle = null;
 let carSpec    = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Phase profiler (cfg.perf, or the 'perf' message)
+//
+//  Off by default — every probe sits behind `perf.on`, so a disabled profiler
+//  costs one boolean test. When on, wall-clock milliseconds accumulate per
+//  phase so a benchmark can say where a run actually spends its time. The
+//  rollout probes are inside the per-step hot loop, so their totals carry a
+//  few percent of profiler overhead: price it with a perf-off control run.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const perf = {
+  on: false,
+  t0: 0,                     // performance.now() at the last reset
+  ms: Object.create(null),   // phase → accumulated milliseconds
+  n:  Object.create(null),   // phase → probe count (or explicit tally)
+};
+
+function pfReset() {
+  perf.ms = Object.create(null);
+  perf.n  = Object.create(null);
+  perf.t0 = performance.now();
+}
+
+function pfAdd(key, t0) {
+  perf.ms[key] = (perf.ms[key] || 0) + (performance.now() - t0);
+  perf.n[key]  = (perf.n[key]  || 0) + 1;
+}
+
+function pfCount(key, v) { perf.n[key] = (perf.n[key] || 0) + v; }
+
+function pfMs(key, dMs) {
+  perf.ms[key] = (perf.ms[key] || 0) + dMs;
+  perf.n[key]  = (perf.n[key]  || 0) + 1;
+}
+
+// >0 while an update is parked on an off-thread await (gradient pool or the
+// TF.js worker). The sim loop keeps stepping during those awaits, so rollout
+// time booked while this is set is time the two phases OVERLAP — without it a
+// phase breakdown sums past 100 % of the wall clock.
+let _pfWait = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Geometry helpers
@@ -1380,9 +1423,12 @@ function stepOnce(dt) {
 
     // ── New agent decision at the start of each repeat window ──
     if (env.repCount <= 0) {
+      let _tp = perf.on ? performance.now() : 0;
       commitTransition(env, false); // finalize previous window (non-terminal)
+      if (perf.on) { pfAdd('roll.commit', _tp); _tp = performance.now(); }
       const obs = new Float64Array(OBS_DIM);
       buildObs(car, obs);
+      if (perf.on) { pfAdd('roll.obs', _tp); _tp = performance.now(); }
       let mean;
       if (isRecurrent) {
         // Recurrent: snapshot the INPUT hidden state, then advance the actor &
@@ -1421,6 +1467,7 @@ function stepOnce(dt) {
           env.pendValM  = groupOn() ? 0 : vDenorm(critic.forwardScratch(obsM)[0]);
         }
       }
+      if (perf.on) pfAdd('roll.policy', _tp);
       if (cfg.neuronRepair && (totalSteps & 31) === 0) reservoirOffer(obs);
       env.repCount = cfg.actionRepeat;
       // Memory write: rate-limited delta from the memory actions. Applied
@@ -1438,10 +1485,13 @@ function stepOnce(dt) {
     const a1  = Math.max(-1, Math.min(1, env.curAct[1]));
     const thr = a1 > 0 ? a1 : 0;
     const brk = a1 < 0 ? -a1 : 0;
+    const _tph = perf.on ? performance.now() : 0;
     car.update({ thr, brk, str }, dt);
+    if (perf.on) { pfAdd('roll.phys', _tph); }
     totalSteps++;
 
     // ── Reward ──
+    const _trw = perf.on ? performance.now() : 0;
     const ap = carArc(car);
     let ds = ap.s - env.prevS;
     if (ds >  trackLen / 2) ds -= trackLen;
@@ -1504,6 +1554,7 @@ function stepOnce(dt) {
     } else if (env.epTime >= cfg.episodeLen) {
       terminateEnv(env, i, 0, true);
     }
+    if (perf.on) pfAdd('roll.reward', _trw);
   }
 
   // ── Trigger async PPO update when the rollout buffer is full ──
@@ -1518,7 +1569,9 @@ function stepOnce(dt) {
     }
   } else if (agentSteps >= cfg.horizon * cfg.numEnvs && !_ppoRunning) {
     _ppoRunning = true;
+    const _tg = perf.on ? performance.now() : 0;
     const batch = isRecurrent ? _flushBatchRecurrent() : _flushBatch();
+    if (perf.on) pfAdd('upd.gae', _tg);
     agentSteps = 0;
     if (batch.N >= 8) _runPPO(batch); else _ppoRunning = false;
   }
@@ -1860,6 +1913,8 @@ function loadBestSnapshot() {
 
 async function _runPPORecurrent(batch) {
   const gen = simGen;
+  const _tWall = perf.on ? performance.now() : 0;
+  const _tNorm = _tWall;
   const { seqs, N } = batch;
   const actDim = ACT_DIM;
 
@@ -1876,6 +1931,8 @@ async function _runPPORecurrent(batch) {
   { let k = 0; for (const s of seqs) for (let t = 0; t < s.T; t++) allRet[k++] = s.ret[t]; }
   updateValueStats(allRet, N);
   for (const s of seqs) for (let t = 0; t < s.T; t++) s.ret[t] = (s.ret[t] - valMean) / valStd;
+
+  if (perf.on) pfAdd('upd.norm', _tNorm);
 
   const hp = { clip: cfg.clip, entropyCoef: cfg.entropyCoef, vfCoef: cfg.vfCoef };
 
@@ -1899,17 +1956,21 @@ async function _runPPORecurrent(batch) {
     }
     return cnt ? kl / cnt : 0;
   };
+  const _tk0 = perf.on ? performance.now() : 0;
   const kl0 = cfg.klStop ? klEstimate() : 0;
+  if (perf.on && cfg.klStop) pfAdd('upd.kl', _tk0);
 
   const order = Array.from({ length: seqs.length }, (_, k) => k);
   const mbTarget = Math.max(1, cfg.minibatch | 0);
   let sumPi = 0, sumV = 0, sumEnt = 0, nMB = 0, epochsRan = 0;
 
   for (let ep = 0; ep < cfg.epochs; ep++) {
+    const _tsh = perf.on ? performance.now() : 0;
     for (let k = order.length - 1; k > 0; k--) {
       const j = Math.floor(Math.random() * (k + 1));
       const tmp = order[k]; order[k] = order[j]; order[j] = tmp;
     }
+    if (perf.on) pfAdd('upd.shuffle', _tsh);
 
     // greedily pack chunks into minibatches of ~mbTarget steps
     let mi = 0;
@@ -1943,6 +2004,9 @@ async function _runPPORecurrent(batch) {
           }));
         }
         let results;
+        if (perf.on) pfCount('upd.tasks', tasks.length);
+        const _tgw = perf.on ? performance.now() : 0;
+        _pfWait++;
         try {
           results = await Promise.all(tasks);
         } catch (err) {
@@ -1950,7 +2014,11 @@ async function _runPPORecurrent(batch) {
           gradPool = [];
           mi -= mb.length;  // redo this minibatch locally
           continue;
+        } finally {
+          _pfWait--;
+          if (perf.on) pfAdd('upd.gradwait', _tgw);
         }
+        const _trd = perf.on ? performance.now() : 0;
         const aG = new Float64Array(aFlat.length), cG = new Float64Array(cFlat.length);
         gLs = new Float64Array(actDim); mbPi = 0; mbV = 0; mbEnt = 0;
         for (const r of results) {
@@ -1961,7 +2029,9 @@ async function _runPPORecurrent(batch) {
           if (r.mode && r.mode.indexOf('wasm') === 0) _wasmOk = true;
         }
         actor.loadGradFlat(aG); critic.loadGradFlat(cG);
+        if (perf.on) pfAdd('upd.reduce', _trd);
       } else {
+        const _tgl = perf.on ? performance.now() : 0;
         actor.zeroGrad(); critic.zeroGrad();
         gLs = new Float64Array(actDim); mbPi = 0; mbV = 0; mbEnt = 0;
         for (const s of mb) {
@@ -1969,9 +2039,13 @@ async function _runPPORecurrent(batch) {
           for (let d = 0; d < actDim; d++) gLs[d] += r.gLs[d];
           mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
         }
+        if (perf.on) { pfAdd('upd.gradlocal', _tgl); pfCount('upd.tasks', 1); }
+        _pfWait++;
         await new Promise(res => setTimeout(res, 0));  // let simLoop tick
+        _pfWait--;
       }
 
+      const _tad = perf.on ? performance.now() : 0;
       actor.adamStep(cfg.lr, 1 / bs);
       critic.adamStep(cfg.lr, 1 / bs);
       lsT++;
@@ -1984,23 +2058,29 @@ async function _runPPORecurrent(batch) {
         logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
         logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
       }
+      if (perf.on) { pfAdd('upd.adam', _tad); pfCount('upd.minibatches', 1); }
       sumPi += mbPi / bs; sumV += mbV / bs; sumEnt += mbEnt / bs; nMB++;
     }
 
     epochsRan = ep + 1;
+    if (perf.on) pfCount('upd.epochs', 1);
     if (cfg.klStop) {
+      const _tkl = perf.on ? performance.now() : 0;
       const kl = klEstimate() - kl0;
+      if (perf.on) pfAdd('upd.kl', _tkl);
       lastKl = kl;
       if (kl > cfg.klLimit) break;
     }
   }
 
   if (gen !== simGen) return;
+  const _tpost = perf.on ? performance.now() : 0;
   lastEpochs = epochsRan;
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
   iteration++;
   if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
   else updateBestSnapshot();
+  if (perf.on) { pfAdd('upd.post', _tpost); pfAdd('upd.wall', _tWall); }
   _ppoRunning = false;
   if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
 }
@@ -2008,6 +2088,8 @@ async function _runPPORecurrent(batch) {
 async function _runPPO(batch) {
   if (batch.recurrent) { await _runPPORecurrent(batch); return; }
   const gen = simGen;
+  const _tWall = perf.on ? performance.now() : 0;
+  const _tNorm = _tWall;
   const { OBS, ACT, LOGP, ADV, RET } = batch;
   const N = OBS.length;
 
@@ -2025,6 +2107,7 @@ async function _runPPO(batch) {
     if (gpuState === 'ready') sendTfWeights();  // tf critic must match the rescale
     for (let k = 0; k < N; k++) RET[k] = (RET[k] - valMean) / valStd;
   }
+  if (perf.on) pfAdd('upd.norm', _tNorm);
 
   const idx = Array.from({ length: N }, (_, k) => k);
   const hp = {
@@ -2049,12 +2132,15 @@ async function _runPPO(batch) {
     }
     return kl / klSample;
   };
+  const _tk0 = perf.on ? performance.now() : 0;
   const kl0 = cfg.klStop ? klEstimate() : 0;
+  if (perf.on && cfg.klStop) pfAdd('upd.kl', _tk0);
   let epochsRan = 0;
 
   // ── GPU path: the COMPLETE update (all epochs, shuffling, Adam) runs on the
   //    TF.js worker; the new weights come back in one message ────────────────
   if (gpuState === 'ready' && tfWorker) {
+    const _tgpu = perf.on ? performance.now() : 0;
     try {
       // Truncate to a whole number of minibatches. Constant tensor shapes
       // are what lets the WebGL backend REUSE its textures — per-update
@@ -2071,6 +2157,7 @@ async function _runPPO(batch) {
         act.set(ACT[k], k * ACT_DIM);
         logp[k] = LOGP[k]; adv[k] = ADV[k]; ret[k] = RET[k];
       }
+      _pfWait++;
       const r = await new Promise((resolve, reject) => {
         _tfPending = {
           resolve, reject,
@@ -2084,7 +2171,7 @@ async function _runPPO(batch) {
           hp: { ...hp, lr: cfg.lr },
           epochs: cfg.epochs, minibatch: mbs,
         }, [obs.buffer, act.buffer, logp.buffer, adv.buffer, ret.buffer]);
-      });
+      }).finally(() => { _pfWait--; });
       // sanity: never load NaN/Inf weights into the live policy
       let finite = Number.isFinite(r.loss.pi) && Number.isFinite(r.loss.v);
       for (let k = 0; finite && k < r.actorFlat.length; k += 97) {
@@ -2109,14 +2196,17 @@ async function _runPPO(batch) {
       _tfFail(String(err && err.message || err));
       // fall through to the CPU path for this batch
     }
+    if (perf.on) pfAdd('upd.gpu', _tgpu);
   }
 
   for (let ep = 0; ep < cfg.epochs && !gpuDone; ep++) {
     // Fisher-Yates shuffle
+    const _tsh = perf.on ? performance.now() : 0;
     for (let k = N - 1; k > 0; k--) {
       const j = Math.floor(Math.random() * (k + 1));
       const tmp = idx[k]; idx[k] = idx[j]; idx[j] = tmp;
     }
+    if (perf.on) pfAdd('upd.shuffle', _tsh);
 
     // ── CPU path (pool or local): per-minibatch ──────────────────────────────
     for (let start = 0; start < N; start += cfg.minibatch) {
@@ -2128,6 +2218,7 @@ async function _runPPO(batch) {
       const pool = gradPool && gradPool.length ? gradPool : null;
       if (pool) {
         // ── Parallel: split the minibatch across the pool ──
+        const _tpk = perf.on ? performance.now() : 0;
         const K = Math.min(pool.length, Math.max(1, Math.floor(bs / 32)));
         const per = Math.ceil(bs / K);
         const aFlat = actor.flatF64(), cFlat = critic.flatF64();
@@ -2146,6 +2237,9 @@ async function _runPPO(batch) {
           }, [slice.obs.buffer, slice.act.buffer, slice.logp.buffer, slice.adv.buffer, slice.ret.buffer]));
         }
         let results;
+        if (perf.on) { pfAdd('upd.pack', _tpk); pfCount('upd.tasks', tasks.length); }
+        const _tgw = perf.on ? performance.now() : 0;
+        _pfWait++;
         try {
           results = await Promise.all(tasks);
         } catch (err) {
@@ -2154,7 +2248,11 @@ async function _runPPO(batch) {
           gradPool = [];
           start -= cfg.minibatch; // redo this minibatch locally
           continue;
+        } finally {
+          _pfWait--;
+          if (perf.on) pfAdd('upd.gradwait', _tgw);
         }
+        const _trd = perf.on ? performance.now() : 0;
         const aG = new Float64Array(aFlat.length);
         const cG = new Float64Array(cFlat.length);
         gLs = new Float64Array(ACT_DIM);
@@ -2168,16 +2266,24 @@ async function _runPPO(batch) {
         }
         actor.loadGradFlat(aG);
         critic.loadGradFlat(cG);
+        if (perf.on) pfAdd('upd.reduce', _trd);
       } else {
         // ── Local fallback: single-threaded gradient computation ──
         actor.zeroGrad(); critic.zeroGrad();
+        const _tpk2 = perf.on ? performance.now() : 0;
         const slice = packSlice(OBS, ACT, LOGP, ADV, RET, idx, start, end);
+        if (perf.on) { pfAdd('upd.pack', _tpk2); }
+        const _tgl = perf.on ? performance.now() : 0;
         const r = accumulatePPOGrads(actor, critic, logStd, hp, slice);
+        if (perf.on) { pfAdd('upd.gradlocal', _tgl); pfCount('upd.tasks', 1); }
         gLs = r.gLs; mbPi = r.pi; mbV = r.v; mbEnt = r.ent;
         // yield so simLoop can tick between minibatches
+        _pfWait++;
         await new Promise(res => setTimeout(res, 0));
+        _pfWait--;
       }
 
+      const _tad = perf.on ? performance.now() : 0;
       actor.adamStep(cfg.lr, 1 / bs);
       critic.adamStep(cfg.lr, 1 / bs);
       lsT++;
@@ -2191,12 +2297,17 @@ async function _runPPO(batch) {
         logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
       }
 
+      if (perf.on) { pfAdd('upd.adam', _tad); pfCount('upd.minibatches', 1); }
+
       sumPi += mbPi / bs; sumV += mbV / bs; sumEnt += mbEnt / bs; nMB++;
     }
 
     epochsRan = ep + 1;
+    if (perf.on) pfCount('upd.epochs', 1);
     if (cfg.klStop) {
+      const _tkl = perf.on ? performance.now() : 0;
       const kl = klEstimate() - kl0;
+      if (perf.on) pfAdd('upd.kl', _tkl);
       lastKl = kl;
       if (kl > cfg.klLimit) break;  // policy moved far enough — extra epochs
                                     // would only overfit this batch
@@ -2205,6 +2316,7 @@ async function _runPPO(batch) {
   if (gen !== simGen) return;  // re-init during the GPU update → discard results
   if (!gpuDone) lastEpochs = epochsRan;
 
+  const _tpost = perf.on ? performance.now() : 0;
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
   iteration++;
   if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
@@ -2214,6 +2326,7 @@ async function _runPPO(batch) {
     repairPass();
   }
   if (!isRecurrent && cfg.failRate > 0) refreshFailNets();  // defect copies track new weights
+  if (perf.on) { pfAdd('upd.post', _tpost); pfAdd('upd.wall', _tWall); }
   _ppoRunning = false;
   if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
 }
@@ -2305,13 +2418,22 @@ function simLoop() {
   if (steps > MAX_STEPS_PER_TICK) { steps = MAX_STEPS_PER_TICK; _accum = 0; }
   else _accum -= steps * FIXED_DT;
 
+  const _ts = perf.on ? performance.now() : 0;
   for (let s = 0; s < steps; s++) {
     stepOnce(FIXED_DT);
     if (!running) break;
   }
+  if (perf.on) {
+    const d = performance.now() - _ts;
+    pfMs('roll.step', d);
+    if (_pfWait) pfMs('roll.step.overlap', d);  // ran while an update awaited
+    pfCount('sim.steps', steps);
+  }
 
   if (now - lastPostMs >= 1000 / POST_HZ) {
+    const _tn = perf.on ? performance.now() : 0;
     postMessage(buildSnapshot());
+    if (perf.on) pfAdd('snapshot', _tn);
     lastPostMs = now;
   }
 
@@ -2344,6 +2466,8 @@ self.onmessage = function (e) {
     carSpec       = carData;
 
     if (config) Object.assign(cfg, config);
+    perf.on = !!cfg.perf;
+    pfReset();
 
     running = false;
     stopLoop();
@@ -2409,6 +2533,31 @@ self.onmessage = function (e) {
 
   if (type === 'getSnapshot') {
     if (actor) postMessage(buildSnapshot());
+    return;
+  }
+
+  // Profiler control: { on } toggles collection, { reset } zeroes the
+  // accumulators AFTER the report is taken, so a benchmark can read one
+  // window and start the next in a single round-trip.
+  if (type === 'perf') {
+    if (typeof e.data.on === 'boolean') perf.on = e.data.on;
+    const report = {
+      type: 'perfStats',
+      tag: e.data.tag,
+      on: perf.on,
+      wall: performance.now() - perf.t0,
+      ms: { ...perf.ms },
+      n:  { ...perf.n },
+      iteration, totalSteps,
+      episodes: recentReturns.length,
+      gradThreads: gradPool ? gradPool.length : 0,
+      wasm: _wasmOk, wasmErr: _wasmErr, gpuState, gpuInfo,
+      epochsMax: cfg.epochs, minibatch: cfg.minibatch,
+      horizon: cfg.horizon, numEnvs: cfg.numEnvs,
+      obsDim: OBS_DIM, actorSizes: actor ? actor.sizes : null,
+    };
+    if (e.data.reset) pfReset();
+    postMessage(report);
     return;
   }
 
