@@ -36,6 +36,8 @@ import { Net, GRUNet, gauss, LOG_2PI, accumulatePPOGrads, accumulatePPORecurrent
 let trkPts       = [];   // [{x,y,z}] spaced centerline points
 let trkWallLeft  = [];   // [{x0,z0,x1,z1}] left barrier segments
 let trkWallRight = [];   // [{x0,z0,x1,z1}] right barrier segments
+let trkEdgeLeft  = [];   // [{x0,z0,x1,z1}] left pavement boundary (±rw/2)
+let trkEdgeRight = [];   // [{x0,z0,x1,z1}] right pavement boundary
 let trkData      = null; // {wp:[[x,0,z],...], rw, laps}
 let gravelProfile = null;// {pts, leftRunoff, rightRunoff, rw}
 let cityCorridors = null;// [{x,z,hw,hd}] axis-aligned driveable rects (city tracks)
@@ -175,7 +177,7 @@ let _pfWait = 0;
 
 const WALL_CELL = 16;      // metres per grid cell
 
-let wallIdx = { left: null, right: null, all: null };
+let wallIdx = { left: null, right: null, all: null, edge: null };
 
 function packWallSide(walls) {
   const n = walls ? walls.length : 0;
@@ -215,12 +217,29 @@ function packWallSide(walls) {
   };
 }
 
+// computeTrackEdgeSegments emits one segment per point PAIR and stops before
+// wrapping, so the pavement outline has a gap at the start/finish line that a
+// ray could shoot straight through. Close it here rather than diverging from
+// the shared track builder.
+function closeEdgeLoop(segs) {
+  if (!segs || segs.length < 2) return segs || [];
+  const a = segs[segs.length - 1], b = segs[0];
+  if (Math.abs(a.x1 - b.x0) < 1e-6 && Math.abs(a.z1 - b.z0) < 1e-6) return segs;
+  return segs.concat([{ x0: a.x1, z0: a.z1, x1: b.x0, z1: b.z0 }]);
+}
+
 function buildWallIndex() {
+  const hasEdge = (trkEdgeLeft && trkEdgeLeft.length) || (trkEdgeRight && trkEdgeRight.length);
   wallIdx = {
     left: packWallSide(trkWallLeft),
     right: packWallSide(trkWallRight),
     // combined index for the ray fans — rays don't care about sides
     all: packWallSide([...(trkWallLeft || []), ...(trkWallRight || [])]),
+    // pavement outline: what the short fan aims at. Null when the payload
+    // predates it, in which case that fan falls back to the barriers.
+    edge: hasEdge
+      ? packWallSide([...closeEdgeLoop(trkEdgeLeft), ...closeEdgeLoop(trkEdgeRight)])
+      : null,
   };
 }
 
@@ -664,11 +683,12 @@ const EDGE_RAY_ANGLES = [
 ];
 const EDGE_RAY_DIST = 35;
 
-export function castRayFan(car, angles, maxDist, out, offset) {
+export function castRayFan(car, angles, maxDist, out, offset, grid) {
+  const g = grid || wallIdx.all;
   const ox = car.pos.x, oz = car.pos.z;
   for (let k = 0; k < angles.length; k++) {
     const angle = car.hdg + angles[k];
-    out[offset + k] = rayThroughGrid(wallIdx.all, ox, oz,
+    out[offset + k] = rayThroughGrid(g, ox, oz,
                                      Math.sin(angle), Math.cos(angle), maxDist) / maxDist;
   }
 }
@@ -743,7 +763,11 @@ function carArc(car) {
 function buildObs(car, out) {
   castRayFan(car, RAY_ANGLES, RAY_DIST, out, 0);
   for (let k = 0; k < RAY_ANGLES.length; k++) out[k] = Math.sqrt(out[k]);
-  castRayFan(car, EDGE_RAY_ANGLES, EDGE_RAY_DIST, out, 11);
+  // Short fan aims at the pavement boundary — "where does the asphalt end" —
+  // which is what makes it more than a near-field copy of the long fan. Five of
+  // its seven angles duplicate a long-ray angle, so pointed at the same
+  // barriers it carried almost no information the long fan did not.
+  castRayFan(car, EDGE_RAY_ANGLES, EDGE_RAY_DIST, out, 11, wallIdx.edge);
 
   const ap = carArc(car);
   const speedFrac = car.spd / car.data.maxSpd;
@@ -1438,6 +1462,8 @@ function loadRawTrack(t) {
   trkPts        = t.pts;
   trkWallLeft   = t.wallLeft;
   trkWallRight  = t.wallRight;
+  trkEdgeLeft   = t.edgeLeft  || [];
+  trkEdgeRight  = t.edgeRight || [];
   trkData       = t.data;
   gravelProfile = t.gravelProfile || null;
   cityCorridors = t.cityCorridors || null;
@@ -1451,7 +1477,7 @@ function buildTrackCtx(t) {
   buildArcTable();   // → navPts, arcLen, trackLen (from the globals just set)
   buildWallIndex();  // → wallIdx
   return {
-    trkPts, trkWallLeft, trkWallRight, trkData,
+    trkPts, trkWallLeft, trkWallRight, trkEdgeLeft, trkEdgeRight, trkData,
     gravelProfile, cityCorridors, cityAiPts,
     navPts, arcLen, trackLen, wallIdx,
   };
@@ -1464,6 +1490,7 @@ function useTrack(idx) {
   const c = trackCtxs[idx];
   if (!c) return;
   trkPts = c.trkPts; trkWallLeft = c.trkWallLeft; trkWallRight = c.trkWallRight;
+  trkEdgeLeft = c.trkEdgeLeft; trkEdgeRight = c.trkEdgeRight;
   trkData = c.trkData; gravelProfile = c.gravelProfile;
   cityCorridors = c.cityCorridors; cityAiPts = c.cityAiPts;
   navPts = c.navPts; arcLen = c.arcLen; trackLen = c.trackLen; wallIdx = c.wallIdx;
@@ -2923,6 +2950,26 @@ self.onmessage = function (e) {
     return;
   }
 
+  // Read one agent's live observation vector, with the layout that describes
+  // it. Useful for checking what the policy actually receives — the inputs are
+  // configurable now, so "which index is what" is no longer a constant.
+  if (type === 'inspectObs') {
+    if (!envs.length || !actor) return;
+    const env = envs[Math.min(envs.length - 1, Math.max(0, e.data.env | 0))];
+    useTrack(env.trackIdx);
+    const obs = new Float64Array(OBS_DIM);
+    buildObs(env.car, obs);
+    postMessage({
+      type: 'obsSample',
+      obs: Array.from(obs),
+      obsDim: OBS_DIM,
+      probeDists: Array.from(PROBE_DISTS),
+      edgeRays: !!(wallIdx && wallIdx.edge),
+      rayDist: RAY_DIST, edgeRayDist: EDGE_RAY_DIST,
+    });
+    return;
+  }
+
   // Profiler control: { on } toggles collection, { reset } zeroes the
   // accumulators AFTER the report is taken, so a benchmark can read one
   // window and start the next in a single round-trip.
@@ -2976,6 +3023,9 @@ self.onmessage = function (e) {
         // travels with the model — without it a consumer cannot rebuild the
         // inputs this policy was trained on.
         probeDists: Array.from(PROBE_DISTS),
+        // Inputs 11..17 measure the pavement boundary, not the barriers. Older
+        // exports lack the flag and are read as barrier rays.
+        edgeRays: !!(wallIdx && wallIdx.edge),
         actor:  { sizes: actor.sizes,  flat: useBest ? Array.from(best.aFlat) : actor.flat()  },
         critic: { sizes: critic.sizes, flat: useBest ? Array.from(best.cFlat) : critic.flat() },
         logStd: Array.from(useBest ? best.logStd : logStd),

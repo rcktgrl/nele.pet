@@ -10,8 +10,8 @@ Every value is clamped to the range shown. Source line references are
 
 | idx | input | source | range |
 |---|---|---|---|
-| 0–10 | 11 barrier rays, **200 m**, √-normalised | wall grid | 0…1, **1 = nothing within range** |
-| 11–17 | 7 barrier rays, **35 m**, linear | same wall grid | 0…1, 1 = nothing within range |
+| 0–10 | 11 **barrier** rays, **200 m**, √-normalised | wall grid | 0…1, **1 = nothing within range** |
+| 11–17 | 7 **pavement-edge** rays, **35 m**, linear | track-edge grid | 0…1, 1 = nothing within range |
 | 18 | speed ÷ car's max speed | car | 0…1 |
 | 19 | heading error to a look-ahead point `12 + 45·speedFrac` m along the centerline, ÷π | centerline | −1…1 |
 | 20 | distance from centerline ÷ half road width | centerline | 0…1 (clamped) |
@@ -26,27 +26,30 @@ setting). Actions in GRU mode are 2: steer and throttle/brake.
 
 ## The rays, precisely
 
-Both fans are cast against **the same geometry** — `wallIdx.all`, the combined
-left+right barrier index. The code calls the first set "track-edge rays", but
-there is no separate edge geometry in the cast: both sets measure distance to a
-*barrier*.
+The two fans measure **different boundaries**:
 
-| | angles (° from heading) | range | normalisation |
-|---|---|---|---|
-| long fan (0–10) | −90, −60, −30, −10, −5, **0**, +5, +10, +30, +60, +90 | 200 m | `√(d / 200)` |
-| short fan (11–17) | −90, −45, −10, **0**, +10, +45, +90 | 35 m | `d / 35` |
+| | angles (° from heading) | target | range | normalisation |
+|---|---|---|---|---|
+| long fan (0–10) | −90, −60, −30, −10, −5, **0**, +5, +10, +30, +60, +90 | barriers | 200 m | `√(d / 200)` |
+| short fan (11–17) | −90, −45, −10, **0**, +10, +45, +90 | **pavement edge (±rw/2)** | 35 m | `d / 35` |
 
-**Five of the seven short rays duplicate a long-ray angle exactly** (−90, −10,
-0, +10, +90). Only ±45 point somewhere the long fan does not. So the short fan
-is mostly a near-field zoom rather than new information: at 5 m the long ray
-reads `√(5/200) = 0.158` while the short ray reads `5/35 = 0.143`, and the
-short one keeps resolving as the distance shrinks where the long one is
-compressed against zero. The √ on the long fan exists for the same reason —
-it expands the near field at the cost of far-field resolution.
+The short fan aims at where the asphalt ends and gravel begins — geometry
+`track-gen.js` already computes for the scripted AI (`state.trkEdgeLeft/Right`)
+and the trainer previously never shipped.
 
-If you want the rays cheaper, that redundancy is where the slack is: dropping
-the five duplicated short angles costs little information, and dropping the
-short fan entirely costs near-field resolution only.
+This matters because **five of the seven short angles duplicate a long-ray
+angle exactly** (−90, −10, 0, +10, +90). Cast at the same barriers, as they
+were originally, that fan carried almost nothing the long fan did not — it was
+a near-field zoom. Pointed at the pavement edge, every one of them measures
+something the long fan cannot see.
+
+The √ on the long fan expands the near field at the cost of far-field
+resolution; the short fan does not need it, since 35 m of range keeps its
+resolution usable throughout.
+
+Exports carry `edgeRays: true`. Models exported before this flag existed
+trained against the barriers and are fed barrier rays by the racing game, so
+they keep working unchanged.
 
 ## What the policy cannot see
 

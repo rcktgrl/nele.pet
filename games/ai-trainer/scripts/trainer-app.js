@@ -209,6 +209,11 @@ function serializeTrackFromState() {
     pts:          state.trkPts.map(p => ({ x: p.x, y: p.y, z: p.z })),
     wallLeft:     (state.trkWallLeft  || []).map(w => ({ x0: w.x0, z0: w.z0, x1: w.x1, z1: w.z1 })),
     wallRight:    (state.trkWallRight || []).map(w => ({ x0: w.x0, z0: w.z0, x1: w.x1, z1: w.z1 })),
+    // Pavement boundary at ±rw/2 — where the asphalt ends and gravel begins.
+    // track-gen already computes it for the scripted AI; the short ray fan
+    // aims at this instead of the barriers.
+    edgeLeft:     (state.trkEdgeLeft  || []).map(w => ({ x0: w.x0, z0: w.z0, x1: w.x1, z1: w.z1 })),
+    edgeRight:    (state.trkEdgeRight || []).map(w => ({ x0: w.x0, z0: w.z0, x1: w.x1, z1: w.z1 })),
     data: state.trkData ? { wp: state.trkData.wp, rw: state.trkData.rw, laps: state.trkData.laps } : null,
     gravelProfile: state.gravelProfile ? {
       pts:         state.gravelProfile.pts.map(p => ({ x: p.x, y: p.y, z: p.z })),

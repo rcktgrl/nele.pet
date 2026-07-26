@@ -130,6 +130,7 @@ export function saveTrainedModel(model) {
     obsDim: model.obsDim,
     actDim: model.actDim,
     probeDists: model.probeDists,   // observation layout the policy expects
+    edgeRays: model.edgeRays,       // short fan aims at the pavement boundary
     actor: model.actor,
     iteration: model.iteration,
     totalSteps: model.totalSteps,
@@ -168,6 +169,9 @@ export class PPOAI {
     // The observation layout comes from the model, not from a constant: the
     // trainer's map window is configurable and a policy only makes sense fed
     // the window it learned on.
+    // Inputs 11..17 are pavement-boundary rays when the model says so; older
+    // exports predate the flag and trained against the barriers.
+    this.edgeRays = model.edgeRays === true;
     this.probeDists = probeDistsOf(model);
     this.baseObs = 24 + this.probeDists.length * 2;
     this.memDim = this.recurrent ? 0 : FF_MEM_DIM;
@@ -340,12 +344,18 @@ export class PPOAI {
 
   // ── Sensors ──────────────────────────────────────────────────────────────────
 
-  _castRayFan(angles, maxDist, out, offset) {
+  // `useEdges` aims the fan at the pavement boundary (where gravel starts)
+  // instead of the barriers — what the trainer's short fan measures when the
+  // model was exported with edgeRays.
+  _castRayFan(angles, maxDist, out, offset, useEdges) {
     const c = this.car;
     const ox = c.pos.x, oz = c.pos.z;
     const rr = maxDist * maxDist * 1.5;
     const near = [];
-    for (const segs of [state.trkWallLeft || [], state.trkWallRight || []]) {
+    const sides = useEdges
+      ? [state.trkEdgeLeft || [], state.trkEdgeRight || []]
+      : [state.trkWallLeft || [], state.trkWallRight || []];
+    for (const segs of sides) {
       for (const w of segs) {
         const cx = (w.x0 + w.x1) * 0.5 - ox, cz = (w.z0 + w.z1) * 0.5 - oz;
         const e0x = w.x0 - ox, e0z = w.z0 - oz;
@@ -376,7 +386,7 @@ export class PPOAI {
 
     this._castRayFan(RAY_ANGLES, RAY_DIST, out, 0);
     for (let k = 0; k < RAY_ANGLES.length; k++) out[k] = Math.sqrt(out[k]);
-    this._castRayFan(EDGE_RAY_ANGLES, EDGE_RAY_DIST, out, 11);
+    this._castRayFan(EDGE_RAY_ANGLES, EDGE_RAY_DIST, out, 11, this.edgeRays);
 
     const ap = this._arcPosition(c.pos.x, c.pos.z);
     const speedFrac = c.spd / c.data.maxSpd;
