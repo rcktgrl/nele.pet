@@ -556,7 +556,13 @@ class SimCar {
       // left the track with no pushback and no penalty at all.
     }
 
-    const dist = Math.sqrt(md), maxD = (trkData ? trkData.rw * 0.5 : 8) + 1.0;
+    // Last-resort containment for cars that got past the wall mesh (gaps where
+    // track-gen.js culled segments, or a high-speed clip-through). Bound it at
+    // the OUTER edge of the gravel runoff — the barrier line — so runoff stays
+    // drivable. Using the road edge here makes gravel act like a wall.
+    const dist = Math.sqrt(md);
+    const roadEdge = (trkData ? trkData.rw * 0.5 : 8) + 1.0;
+    const maxD = Math.max(roadEdge, this.runoffOuterEdge() + 1.0);
     if (dist > maxD) {
       const px = np.x - this.pos.x, pz = np.z - this.pos.z;
       const pl = Math.sqrt(px * px + pz * pz) || 1;
@@ -572,6 +578,32 @@ class SimCar {
     } else {
       this.stuckTimer = Math.max(0, this.stuckTimer - 0.032);
     }
+  }
+
+  // Outer edge of the gravel runoff on the car's current side, measured from
+  // the centreline — i.e. where track-gen.js places the barrier. 0 when the
+  // track has no runoff profile.
+  //
+  // The road-width fallback containment in boundary() MUST use this, not the
+  // road half-width: gravel starts at rw/2 + 1.75, which is already outside
+  // rw/2 + 1.0, so containing at the road edge walls the car off from the
+  // runoff entirely and gravel behaves like a barrier.
+  runoffOuterEdge() {
+    const profile = gravelProfile;
+    if (!profile) return 0;
+    const { pts, leftRunoff, rightRunoff, rw } = profile;
+    const n = pts.length;
+    const near = nearestIdx(this.pos.x, this.pos.z, pts, this.gravelHint, 40);
+    const ni = near.idx;
+    const p   = pts[ni];
+    const nxt = pts[(ni + 1) % n], prv = pts[(ni + n - 1) % n];
+    const tx  = nxt.x - prv.x, tz = nxt.z - prv.z;
+    const tl  = Math.hypot(tx, tz) || 1;
+    const nx  = -tz / tl, nz = tx / tl;
+    const lat = (this.pos.x - p.x) * nx + (this.pos.z - p.z) * nz;
+    const ri  = Math.min(ni, rightRunoff.length - 1);
+    const gravelW = lat >= 0 ? (rightRunoff[ri] || 0) : (leftRunoff[ri] || 0);
+    return rw / 2 + 1.75 + gravelW;
   }
 
   checkGravel() {

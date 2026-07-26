@@ -227,7 +227,12 @@ class Car {
       // stops transferring into the game.
     }
 
-    const dist = Math.sqrt(md), maxD = state.trkData.rw * .5 + 1.0;
+    // Last-resort containment for cars that got past the wall mesh (gaps where
+    // track-gen.js culled segments, or a high-speed clip-through). Bound it at
+    // the OUTER edge of the gravel runoff — the barrier line — so runoff stays
+    // drivable. Using the road edge here makes gravel act like a wall.
+    const dist = Math.sqrt(md);
+    const maxD = Math.max(state.trkData.rw * .5 + 1.0, this.runoffOuterEdge() + 1.0);
     if (dist > maxD) {
       const px = np.x - this.pos.x, pz = np.z - this.pos.z, pl = Math.sqrt(px * px + pz * pz) || 1;
       this.pos.x += px / pl * (dist - maxD + 0.5);
@@ -244,6 +249,32 @@ class Car {
     } else {
       this.stuckTimer = Math.max(0, this.stuckTimer - 0.032);
     }
+  }
+
+  // Outer edge of the gravel runoff on the car's current side, measured from
+  // the centreline — i.e. where track-gen.js places the barrier. 0 when the
+  // track has no runoff profile. Used by boundary()'s fallback containment so
+  // the runoff stays drivable instead of behaving like a barrier.
+  // Mirrors SimCar.runoffOuterEdge() in ai-trainer/scripts/sim-worker.js.
+  runoffOuterEdge() {
+    const profile = state.gravelProfile;
+    if (!profile) return 0;
+    const { pts, leftRunoff, rightRunoff, rw } = profile;
+    const n = pts.length;
+    let md = Infinity, ni = 0;
+    for (let i = 0; i < n; i++) {
+      const d = (this.pos.x - pts[i].x) ** 2 + (this.pos.z - pts[i].z) ** 2;
+      if (d < md) { md = d; ni = i; }
+    }
+    const p = pts[ni];
+    const nxt = pts[(ni + 1) % n], prv = pts[(ni + n - 1) % n];
+    const tx = nxt.x - prv.x, tz = nxt.z - prv.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    const nx = -tz / tl, nz = tx / tl;
+    const lat = (this.pos.x - p.x) * nx + (this.pos.z - p.z) * nz;
+    const runoffIdx = Math.min(ni, rightRunoff.length - 1);
+    const gravelW = lat >= 0 ? (rightRunoff[runoffIdx] || 0) : (leftRunoff[runoffIdx] || 0);
+    return rw / 2 + 1.75 + gravelW;
   }
 
   checkGravel() {
