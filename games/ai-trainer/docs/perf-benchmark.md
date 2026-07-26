@@ -279,6 +279,78 @@ at one showed the optimized build 45 % *slower* purely from drift. Both A/Bs
 above are paired: either alternating old/new modules inside one process, or
 alternating source trees across interleaved benchmark rounds.
 
+## Batched (GEMM-style) gradient kernel
+
+Finding 4 said the engine ran at 1–2 GFLOP/s. That figure was pipeline-level —
+gradient wall-clock divided by samples, including dispatch and the sim thread
+competing for cores. Measured in isolation the WASM kernel was doing **4.3–5.0
+GFLOP/s**, still far below what the arithmetic needs, and for the same reason:
+it processed **one sample at a time**, so the weight matrix and the gradient
+matrix were re-streamed from memory 42,000× per generation.
+
+**What the kernel does now.** `compute_ppo_grads` processes 32 samples per
+block, with the loop nest restructured so the hot matrices stay resident:
+
+- **Forward** — four samples share each weight-row load (four accumulators, one
+  `W` row), so `W` is read once per four samples instead of once per sample.
+- **Backward pass A (`gW += Dᵀ·A`)** — the real win. A 16-wide output tile is
+  held in registers across the *whole block*, so the gradient row — the hottest
+  memory in the kernel — is loaded and stored **once per block** instead of
+  once per sample.
+- **Backward pass B (`dPrev += D·W`)** — split into its own loop so neither
+  runs out of registers, two samples per weight-row load.
+
+Same-process A/B against the previous kernel, 256-sample minibatch:
+
+| net | old ms | new ms | speedup | GFLOP/s |
+|---|---:|---:|---:|---|
+| 64×1 | 1.98 | 1.32 | 1.50× | 4.3 → 6.5 |
+| 256×1 | 7.65 | 5.32 | 1.44× | 4.5 → 6.4 |
+| 128×2 | 13.77 | 8.71 | 1.58× | 4.9 → 7.7 |
+| 256×2 | 47.32 | 26.32 | **1.80×** | 5.0 → **8.9** |
+
+**Numerics.** Holding an accumulator in a register across the block lets
+`-ffast-math` reassociate the sum, so this is no longer bit-identical: it
+deviates from the previous kernel by ≤4e-12 relative, and from the scalar JS
+reference by ≤2.6e-11 — against the parity test's 1e-9 tolerance, and orders of
+magnitude below the sampling noise in a PPO advantage estimate. All eight
+ai-trainer checks pass.
+
+**Two tunings that measured worse and were reverted** (both are in the source
+as comments, so nobody re-tries them): tiling the *fused* backward four samples
+wide spills on wasm32 (1.09× vs 1.60×), and widening pass B from two samples to
+four costs the same way (1.32× vs 1.78×). A 4-wide output tile in pass A is
+also worse than 16 (1.57× vs 1.78×).
+
+### …and why end-to-end only moves ~8 %
+
+A 1.8× kernel does **not** give a 1.8× training run. Paired A/B on the default
+config measured 0.766/0.732/0.780 → 0.712/0.678/0.706 s per generation, about
+**8 %**. The phase profile after the change explains it exactly:
+
+| | share of wall |
+|---|---:|
+| gradient workers, off-thread | 72 % |
+| … of which the sim thread kept stepping (overlapped) | 51 % |
+| … of which the sim thread was **idle-blocked** | **21 %** |
+| rollout loop (sim thread) | 55 % |
+| — policy+critic forward | 21 % |
+| — observations (raycasts) | 17 % |
+| — minibatch packing | 11 % |
+
+The gradient work runs in other threads and mostly hides behind the rollout.
+Only the 21 % the sim thread spends *blocked* on it is recoverable, so making
+the kernel infinitely fast would buy ~21 % on this config. The critical path is
+now the sim thread. Bigger nets keep more of the win (paired A/B on 256×2
+measured 15–19 % for an intermediate build of this kernel) because gradients
+are a larger share there.
+
+**So the next lever is the rollout, not the kernel** — and it is the same
+argument one level up: `Net.forwardScratch` runs one decision at a time, in
+scalar JS, single-threaded, while every `numEnvs` agent decides on the same
+tick. That is a free batch dimension worth 21 % of the wall, and the raycast
+observations another 17 %.
+
 ## Raw output
 
 `node games/ai-trainer/test/perf-bench.mjs --gens=3 --repeat=3 --json=out.json` writes

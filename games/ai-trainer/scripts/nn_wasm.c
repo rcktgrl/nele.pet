@@ -6,6 +6,10 @@
  *         -Wl,--no-entry -Wl,--export-all -Wl,--allow-undefined \
  *         nn_wasm.c -o nn_wasm.wasm
  *
+ * The committed nn_wasm.wasm is a clang 18.1.3 build. -msimd128 matters: the
+ * same source without it measures ~1.4x slower, so clang IS auto-vectorising
+ * these loops and the kernel below is written to give it contiguous runs.
+ *
  * -fno-builtin keeps the optimizer from lowering array copies/fills into calls
  * to memcpy/memset that the freestanding target can't import. We provide those
  * three libcalls below so the module needs no imports at all — see the note
@@ -142,6 +146,201 @@ static double s_critic_acts[(MAX_LAYERS + 1) * MAX_UNITS];
 /* Two alternating delta buffers for backward pass (avoids aliasing). */
 static double s_dA[MAX_UNITS];
 static double s_dB[MAX_UNITS];
+
+/* ── Blocked (batched) gradient kernel ────────────────────────────────────
+ * The per-sample path below is correct but memory-bound: it walks the entire
+ * weight matrix, and the entire gradient matrix, once for EVERY sample. At
+ * 256×2 that is 1.2 MB restreamed 42,000× per generation, which is why the
+ * kernel measured ~1-2 GFLOP/s — nowhere near what the arithmetic needs.
+ *
+ * The blocked path below processes BLK samples at a time with the loop nest
+ * reordered so a weight row and its gradient row stay in L1 across the whole
+ * block. Crucially it is NOT a reassociation: every accumulator still receives
+ * exactly the same additions in exactly the same order as the per-sample path
+ * (gW[j][i] and gb[j] over samples ascending, dPrev[s][i] over output units
+ * ascending), so the gradients are bit-identical — only the memory traffic
+ * changes. Nets wider than BLK_UNITS fall back to the per-sample path.
+ */
+#define BLK        32   /* samples per block                                */
+#define GEMM_T      16   /* output tile held in registers by the gW kernel    */
+#define BLK_UNITS 256   /* max layer width handled by the blocked path      */
+
+static double s_blk_actor[(MAX_LAYERS + 1) * BLK * BLK_UNITS];
+static double s_blk_critic[(MAX_LAYERS + 1) * BLK * BLK_UNITS];
+static double s_blk_dcol[BLK];          /* one output unit's delta column   */
+static double s_blk_d0[BLK * BLK_UNITS];
+static double s_blk_d1[BLK * BLK_UNITS];
+
+#define BLK_LAYER(base, l) ((base) + (nn_size_t)(l) * (BLK * BLK_UNITS))
+
+static int blk_fits(int nlayers, const int *sizes) {
+    if (nlayers > MAX_LAYERS) return 0;
+    for (int l = 0; l <= nlayers; l++) if (sizes[l] > BLK_UNITS) return 0;
+    return 1;
+}
+
+/* Forward a block. acts layer l holds bs×sizes[l], sample-major.
+ * Four samples share each weight-row load. */
+static void net_forward_blk(int nlayers, const int *sizes, const double *flat,
+                            int bs, double *acts) {
+    int offset = 0;
+    for (int l = 0; l < nlayers; l++) {
+        int nIn = sizes[l], nOut = sizes[l + 1];
+        const double *W = flat + offset;   offset += nIn * nOut;
+        const double *b = flat + offset;   offset += nOut;
+        const double *A = BLK_LAYER(acts, l);
+        double *O = BLK_LAYER(acts, l + 1);
+        int is_last = (l == nlayers - 1);
+
+        for (int j = 0; j < nOut; j++) {
+            const double *w = W + (nn_size_t)j * nIn;
+            double bj = b[j];
+            int s = 0;
+            for (; s + 3 < bs; s += 4) {
+                const double *a0 = A + (nn_size_t)(s    ) * nIn;
+                const double *a1 = A + (nn_size_t)(s + 1) * nIn;
+                const double *a2 = A + (nn_size_t)(s + 2) * nIn;
+                const double *a3 = A + (nn_size_t)(s + 3) * nIn;
+                double t0 = bj, t1 = bj, t2 = bj, t3 = bj;
+                for (int i = 0; i < nIn; i++) {
+                    double wi = w[i];
+                    t0 += wi * a0[i]; t1 += wi * a1[i];
+                    t2 += wi * a2[i]; t3 += wi * a3[i];
+                }
+                if (!is_last) { t0 = tanh(t0); t1 = tanh(t1); t2 = tanh(t2); t3 = tanh(t3); }
+                O[(nn_size_t)(s    ) * nOut + j] = t0;
+                O[(nn_size_t)(s + 1) * nOut + j] = t1;
+                O[(nn_size_t)(s + 2) * nOut + j] = t2;
+                O[(nn_size_t)(s + 3) * nOut + j] = t3;
+            }
+            for (; s < bs; s++) {
+                const double *as = A + (nn_size_t)s * nIn;
+                double t = bj;
+                for (int i = 0; i < nIn; i++) t += w[i] * as[i];
+                O[(nn_size_t)s * nOut + j] = is_last ? t : tanh(t);
+            }
+        }
+    }
+}
+
+/* Backward a block. `dout` holds bs×sizes[nlayers] sample-major and is
+ * consumed; gradients accumulate into grad_flat. */
+static void net_backward_blk(int nlayers, const int *sizes, const double *flat,
+                             double *grad_flat, const double *acts,
+                             const double *dout, int bs) {
+    int w_off[MAX_LAYERS], b_off[MAX_LAYERS];
+    int offset = 0;
+    for (int l = 0; l < nlayers; l++) {
+        w_off[l] = offset;  offset += sizes[l] * sizes[l + 1];
+        b_off[l] = offset;  offset += sizes[l + 1];
+    }
+
+    const double *delta = dout;
+    double *dprev_buf = s_blk_d0, *dprev_other = s_blk_d1;
+
+    for (int l = nlayers - 1; l >= 0; l--) {
+        int nIn = sizes[l], nOut = sizes[l + 1];
+        const double *A = BLK_LAYER(acts, l);
+        const double *W = flat      + w_off[l];
+        double       *gW = grad_flat + w_off[l];
+        double       *gb = grad_flat + b_off[l];
+
+        double *dPrev = NULL;
+        if (l > 0) {
+            dPrev = dprev_buf;
+            for (nn_size_t k = 0; k < (nn_size_t)bs * nIn; k++) dPrev[k] = 0.0;
+        }
+
+        /* ── Pass A: gW[j][i] += Σ_s d[s][j]·A[s][i] ──────────────────────
+         * The gradient matrix is the hottest memory in the kernel: the
+         * per-sample path read and wrote all of it once per sample. Here the
+         * output tile stays in registers across the WHOLE block, so gW is
+         * loaded and stored exactly once per block — a bs-fold cut in the
+         * dominant traffic. i is tiled by GEMM_T so clang keeps the tile in
+         * f64x2 registers and still vectorises the inner run.
+         */
+        for (int j = 0; j < nOut; j++) {
+            double *gWj = gW + (nn_size_t)j * nIn;
+            /* gather this unit's delta column: contiguous, and lets us skip
+             * the (common) all-clipped case in one test */
+            double sb = 0.0;
+            int any = 0;
+            for (int s = 0; s < bs; s++) {
+                double d = delta[(nn_size_t)s * nOut + j];
+                s_blk_dcol[s] = d;
+                sb += d;
+                any |= (d != 0.0);
+            }
+            gb[j] += sb;
+            if (!any) continue;
+
+            int i0 = 0;
+            for (; i0 + GEMM_T <= nIn; i0 += GEMM_T) {
+                double acc[GEMM_T];
+                for (int t = 0; t < GEMM_T; t++) acc[t] = gWj[i0 + t];
+                for (int s = 0; s < bs; s++) {
+                    double d = s_blk_dcol[s];
+                    if (d == 0.0) continue;
+                    const double *as = A + (nn_size_t)s * nIn + i0;
+                    for (int t = 0; t < GEMM_T; t++) acc[t] += d * as[t];
+                }
+                for (int t = 0; t < GEMM_T; t++) gWj[i0 + t] = acc[t];
+            }
+            for (; i0 < nIn; i0++) {                     /* ragged tail */
+                double a0 = gWj[i0];
+                for (int s = 0; s < bs; s++) {
+                    double d = s_blk_dcol[s];
+                    if (d == 0.0) continue;
+                    a0 += d * A[(nn_size_t)s * nIn + i0];
+                }
+                gWj[i0] = a0;
+            }
+        }
+
+        /* ── Pass B: dPrev[s][i] += Σ_j d[s][j]·W[j][i] ────────────────────
+         * Split from pass A so neither loop runs out of registers (fusing
+         * them needs four activation and four dPrev streams live at once and
+         * measured slower). j outermost keeps the weight row hot across the
+         * two samples that share each load.
+         */
+        if (dPrev) {
+            for (int j = 0; j < nOut; j++) {
+                const double *Wj = W + (nn_size_t)j * nIn;
+                /* two samples per weight-row load. Four was measured slower:
+                 * the extra dPrev streams spill on wasm32 (1.32× vs 1.78×). */
+                int s = 0;
+                for (; s + 1 < bs; s += 2) {
+                    double d0 = delta[(nn_size_t)(s    ) * nOut + j];
+                    double d1 = delta[(nn_size_t)(s + 1) * nOut + j];
+                    if (d0 == 0.0 && d1 == 0.0) continue;
+                    double *p0 = dPrev + (nn_size_t)(s    ) * nIn;
+                    double *p1 = dPrev + (nn_size_t)(s + 1) * nIn;
+                    for (int i = 0; i < nIn; i++) {
+                        double w = Wj[i];
+                        p0[i] += d0 * w;
+                        p1[i] += d1 * w;
+                    }
+                }
+                for (; s < bs; s++) {
+                    double d = delta[(nn_size_t)s * nOut + j];
+                    if (d == 0.0) continue;
+                    double *ps = dPrev + (nn_size_t)s * nIn;
+                    for (int i = 0; i < nIn; i++) ps[i] += d * Wj[i];
+                }
+            }
+        }
+
+        if (dPrev) {
+            /* tanh derivative: d/dz tanh(z) = 1 - tanh(z)² = 1 - a² */
+            for (nn_size_t k = 0; k < (nn_size_t)bs * nIn; k++) {
+                double a = A[k];
+                dPrev[k] *= (1.0 - a * a);
+            }
+            delta = dPrev;
+            double *tmp = dprev_buf; dprev_buf = dprev_other; dprev_other = tmp;
+        }
+    }
+}
 
 /* ── net_forward ──────────────────────────────────────────────────────────
  * Runs one forward pass through `nlayers`-layer network.
@@ -295,6 +494,91 @@ void compute_ppo_grads(
     double sum_pi = 0.0, sum_v = 0.0, sum_ent = 0.0;
     double d_mu[MAX_UNITS]; /* actor output gradient (act_dim ≤ MAX_UNITS) */
     double d_v[1];          /* critic scalar gradient */
+
+    /* Blocked path — same arithmetic, a fraction of the memory traffic. */
+    if (blk_fits(n_al, actor_sizes) && blk_fits(n_cl, critic_sizes)) {
+        static double blk_dmu[BLK * BLK_UNITS];
+        static double blk_dv [BLK * BLK_UNITS];
+        /* σ and σ² are fixed for the whole minibatch — logStd only moves
+         * between Adam steps — so these exp() calls leave the sample loop. */
+        double sd_[MAX_UNITS], sd2_[MAX_UNITS];
+        for (int d = 0; d < act_dim; d++) {
+            sd_[d]  = exp(log_std[d]);
+            sd2_[d] = exp(2.0 * log_std[d]);
+        }
+
+        for (int k0 = 0; k0 < n; k0 += BLK) {
+            int bs = n - k0 < BLK ? n - k0 : BLK;
+
+            /* Inputs for this block go into layer 0 of both activation
+             * caches (both nets read the same observation). */
+            double *ain = s_blk_actor, *cin = s_blk_critic;
+            for (int s = 0; s < bs; s++) {
+                const double *src = obs + (nn_size_t)(k0 + s) * obs_dim;
+                double *da = ain + (nn_size_t)s * obs_dim;
+                double *dc = cin + (nn_size_t)s * obs_dim;
+                for (int i = 0; i < obs_dim; i++) { da[i] = src[i]; dc[i] = src[i]; }
+            }
+
+            net_forward_blk(n_al, actor_sizes,  actor_flat,  bs, s_blk_actor);
+            net_forward_blk(n_cl, critic_sizes, critic_flat, bs, s_blk_critic);
+
+            const double *MU = BLK_LAYER(s_blk_actor,  n_al);
+            const double *VV = BLK_LAYER(s_blk_critic, n_cl);
+            for (nn_size_t z = 0; z < (nn_size_t)bs * act_dim; z++) blk_dmu[z] = 0.0;
+
+            for (int s = 0; s < bs; s++) {
+                int k = k0 + s;
+                const double *a  = act + (nn_size_t)k * act_dim;
+                const double *mu = MU  + (nn_size_t)s * act_dim;
+                double A = adv[k], R = ret[k];
+
+                double lp = 0.0;
+                for (int d = 0; d < act_dim; d++) {
+                    double z  = (a[d] - mu[d]) / sd_[d];
+                    lp += -0.5 * z * z - log_std[d] - 0.5 * LOG_2PI;
+                }
+                double rho = lp - logp[k];
+                if (rho > 20.0) rho = 20.0;
+                double ratio = exp(rho);
+                double lo = 1.0 - clip, hi = 1.0 + clip;
+                double clipped = ratio < lo ? lo : (ratio > hi ? hi : ratio);
+                double surr1 = ratio * A, surr2 = clipped * A;
+                sum_pi += surr1 < surr2 ? -surr1 : -surr2;
+
+                double coef = (surr1 <= surr2) ? (-A * ratio) : 0.0;
+                if (coef != 0.0) {
+                    /* clipped samples keep an all-zero row, which the block
+                     * backward skips sample-by-sample exactly as before */
+                    double *dm = blk_dmu + (nn_size_t)s * act_dim;
+                    for (int d = 0; d < act_dim; d++) {
+                        double sd2  = sd2_[d];
+                        double diff = a[d] - mu[d];
+                        dm[d]         = coef * diff / sd2;
+                        g_log_std[d] += coef * (diff * diff / sd2 - 1.0);
+                    }
+                }
+                for (int d = 0; d < act_dim; d++) {
+                    g_log_std[d] += -entropy_coef;
+                    sum_ent      += log_std[d] + 0.5 * (LOG_2PI + 1.0);
+                }
+
+                double v = VV[s];
+                sum_v  += 0.5 * (v - R) * (v - R);
+                blk_dv[s] = vf_coef * (v - R);
+            }
+
+            net_backward_blk(n_al, actor_sizes,  actor_flat,  actor_grad,
+                             s_blk_actor,  blk_dmu, bs);
+            net_backward_blk(n_cl, critic_sizes, critic_flat, critic_grad,
+                             s_blk_critic, blk_dv,  bs);
+        }
+
+        out_losses[0] = sum_pi;
+        out_losses[1] = sum_v;
+        out_losses[2] = sum_ent;
+        return;
+    }
 
     for (int k = 0; k < n; k++) {
         const double *o = obs  + k * obs_dim;
