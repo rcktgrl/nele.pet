@@ -167,7 +167,7 @@ function obsDim() { return 24 + (simCfg.probeCount | 0) * 2 + 4; }
 const simCfg = {
   hiddenLayers: 1,       // restart required
   hiddenSize: 64,        // restart required
-  recurrent: false,      // restart required — GRU recurrent policy/critic (BPTT)
+  recurrent: true,       // restart required — GRU recurrent policy/critic (BPTT)
   bpttLen: 32,           // truncated-BPTT window (decisions per training chunk)
   backend: 'auto',       // restart required — 'auto' | 'gpu' | 'wasm' | 'js'
   threads: Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 2)),

@@ -462,6 +462,51 @@ None of these are fixed here — each changes the observation layout, and (2) an
 (3) would want their own settings so a run can be compared against one without
 them.
 
+## GRU is the default now
+
+The recurrent (GRU) policy is the mode that actually holds up over a long run;
+the feed-forward policy trains but has been observed to collapse after a few
+hundred updates. `recurrent: true` is now the default in the config screen, in
+the worker's fallback config, and the feed-forward tests ask for
+`recurrent: false` explicitly.
+
+Two consequences worth being explicit about:
+
+- **The batched WASM inference does not cover this mode.** `forward_batch` is
+  feed-forward only — a GRU carries hidden state across steps — so recurrent
+  runs still take the per-agent JS `step()` path. From the sweep, that path is
+  the single biggest item in a recurrent run: policy forward 2.52 s of a
+  10.35 s run (24 %). Batching the GRU step across agents is the same
+  optimisation one level over, and it is the one that would actually help the
+  default mode.
+- **The GPU backend is off in recurrent mode** (`initGpu` returns early — the
+  TF.js per-sample kernel cannot do BPTT), so recurrent training is CPU/WASM
+  only.
+
+### Non-finite guard on the CPU update
+
+While looking at how a run could "just die", one gap stood out: the GPU path
+refuses to load non-finite weights, and the CPU path had no such check. A single
+bad update — a ratio spike driving an enormous gradient, a NaN anywhere in the
+batch — would be written straight into the policy, and every later update would
+train from NaN weights. The run would look like it simply stopped learning,
+with nothing in the HUD to say why.
+
+The CPU path now checkpoints the weights before the epoch loop (after the
+PopArt rescale, so a rollback stays consistent with `valMean`/`valStd`) and
+restores them if the update produced anything non-finite, clearing the Adam
+moments with it. Rejected updates are counted in `updateRejects` on the frame
+message.
+
+This is insurance, not a diagnosis: it was not reproduced, and if the
+feed-forward collapse is a gradual degradation rather than a numerical
+blow-up the guard will never fire. Two other candidates, both feed-forward
+only, if it needs chasing: the memory-as-action register (its action
+dimensions get the entropy bonus but only an indirect reward signal, so their
+σ drifts up while the register saturates and feeds noise back as observations),
+and Adam's second moment being poisoned by one huge gradient, which freezes the
+affected parameters at an effective learning rate of ~0.
+
 ## Raw output
 
 `node games/ai-trainer/test/perf-bench.mjs --gens=3 --repeat=3 --json=out.json` writes

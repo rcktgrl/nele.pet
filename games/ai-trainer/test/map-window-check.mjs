@@ -67,9 +67,11 @@ const carData = { accel: 12, maxSpd: 50, brake: 25, hdl: 1.0, aiSpd: 1.0 };
 
 async function boot(config) {
   inbox.length = 0;
+  // The window applies to both policies; these checks pin the feed-forward
+  // layout (base + probes + memory cells) unless a case says otherwise.
   send({ type: 'init', track: makeTrack(), carData, config: {
     numEnvs: 4, speedMult: 200, episodeLen: 10, backend: 'js', threads: 1,
-    minibatch: 128, horizon: 32, epochs: 2, klStop: false, ...config,
+    minibatch: 128, horizon: 32, epochs: 2, klStop: false, recurrent: false, ...config,
   } });
   return waitFor(m => m.type === 'ready');
 }
@@ -132,6 +134,20 @@ console.log('\n2. Wide window (12 probes, 400 m)');
     !!m && m.probeDists[11] === 400);
   check('exported obsDim matches the actor input', !!m && m.obsDim === m.actor.sizes[0]);
   check('weights are finite', !!m && m.actor.flat.every(Number.isFinite));
+}
+
+// ── 3. The window resizes the recurrent layout too ───────────────────────────
+console.log('\n3. Recurrent policy (no memory cells)');
+{
+  const ready = await boot({ recurrent: true, probeCount: 9, probeRange: 300 });
+  const want = 24 + 9 * 2;   // GRU carries memory in its hidden state
+  check(`observation is base + probes only, ${want} (${ready && ready.obsDim})`,
+    !!ready && ready.obsDim === want);
+  const m = await exportModel();
+  check('recurrent export carries the window', !!m && m.probeDists.length === 9);
+  check(`furthest probe is the configured range (${m && m.probeDists && m.probeDists[8]} m)`,
+    !!m && m.probeDists[8] === 300);
+  send({ type: 'stop' });
 }
 
 console.log(failures ? `\n${failures} CHECK(S) FAILED` : '\nall checks passed');

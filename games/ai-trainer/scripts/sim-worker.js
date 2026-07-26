@@ -82,7 +82,10 @@ let cfg = {
   minibatch: 256,
   hiddenSize: 64,        // restart required
   hiddenLayers: 1,       // restart required
-  recurrent: false,      // restart required — GRU recurrent policy/critic (BPTT)
+  recurrent: true,       // restart required — GRU recurrent policy/critic (BPTT).
+                         // The default: the feed-forward policy trains but has
+                         // been observed to collapse after a few hundred
+                         // updates, while the GRU keeps improving.
   bpttLen: 32,           // truncated-BPTT window (decisions per training chunk)
   backend: 'auto',       // 'auto' | 'gpu' | 'wasm' | 'js' — restart required
   threads: 0,            // gradient worker count, 0 = auto (cores − 2, max 6)
@@ -2122,6 +2125,55 @@ function stepLogStd(gLs, bs) {
   }
 }
 
+// ── Update checkpoint / non-finite guard ────────────────────────────────────
+//  The GPU path already refuses to load non-finite weights. The CPU path had no
+//  such check, so one bad update — a ratio spike driving an enormous gradient,
+//  a NaN anywhere in the batch — poisoned the policy permanently and silently:
+//  every later update would train from NaN weights and the run would look like
+//  it simply stopped learning.
+//
+//  The weights are checkpointed before the epoch loop (AFTER the PopArt rescale,
+//  so a rollback stays consistent with valMean/valStd) and restored if the
+//  update produced anything non-finite. Adam moments are cleared with it —
+//  keeping the moments that produced the blow-up would just reproduce it.
+let _ckActor = null, _ckCritic = null, _ckLogStd = null;
+let updateRejects = 0;   // updates discarded this run, surfaced in the frame
+
+function checkpointWeights() {
+  const nA = actor.paramCount(), nC = critic.paramCount();
+  if (!_ckActor  || _ckActor.length  !== nA) _ckActor  = new Float64Array(nA);
+  if (!_ckCritic || _ckCritic.length !== nC) _ckCritic = new Float64Array(nC);
+  if (!_ckLogStd || _ckLogStd.length !== logStd.length) _ckLogStd = new Float64Array(logStd.length);
+  actor.flatF64Into(_ckActor);
+  critic.flatF64Into(_ckCritic);
+  _ckLogStd.set(logStd);
+}
+
+// Sampled scan — a blow-up never touches just one weight, and walking millions
+// of parameters every update to prove it would cost more than it catches.
+function updateIsFinite(loss) {
+  if (loss && !(Number.isFinite(loss.pi) && Number.isFinite(loss.v))) return false;
+  for (let d = 0; d < logStd.length; d++) if (!Number.isFinite(logStd[d])) return false;
+  // poolWeights() owns the reusable flat buffers and resizes them when the
+  // architecture changes — reaching for the buffers directly would overflow
+  // them after a re-init with a different net.
+  const [a, c] = poolWeights();
+  for (let k = 0; k < a.length; k += 97) if (!Number.isFinite(a[k])) return false;
+  for (let k = 0; k < c.length; k += 97) if (!Number.isFinite(c[k])) return false;
+  return true;
+}
+
+function rollbackWeights() {
+  actor.loadFlat(_ckActor);
+  critic.loadFlat(_ckCritic);
+  logStd.set(_ckLogStd);
+  actor.resetAdam();
+  critic.resetAdam();
+  lsM.fill(0); lsV.fill(0); lsT = 0;
+  updateRejects++;
+  fwdInvalidate();
+}
+
 function packSlice(OBS, ACT, LOGP, ADV, RET, idx, s0, s1) {
   const n = s1 - s0;
   const obs  = new Float64Array(n * OBS_DIM);
@@ -2217,6 +2269,7 @@ async function _runPPORecurrent(batch) {
   for (const s of seqs) for (let t = 0; t < s.T; t++) s.ret[t] = (s.ret[t] - valMean) / valStd;
 
   if (perf.on) pfAdd('upd.norm', _tNorm);
+  checkpointWeights();
 
   const hp = { clip: cfg.clip, entropyCoef: cfg.entropyCoef, vfCoef: cfg.vfCoef };
 
@@ -2344,6 +2397,7 @@ async function _runPPORecurrent(batch) {
   const _tpost = perf.on ? performance.now() : 0;
   lastEpochs = epochsRan;
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
+  if (!updateIsFinite(nMB ? lastLoss : null)) rollbackWeights();
   iteration++;
   if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
   else updateBestSnapshot();
@@ -2377,6 +2431,7 @@ async function _runPPO(batch) {
     for (let k = 0; k < N; k++) RET[k] = (RET[k] - valMean) / valStd;
   }
   if (perf.on) pfAdd('upd.norm', _tNorm);
+  checkpointWeights();
 
   const idx = Array.from({ length: N }, (_, k) => k);
   const hp = {
@@ -2567,6 +2622,7 @@ async function _runPPO(batch) {
 
   const _tpost = perf.on ? performance.now() : 0;
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
+  if (!gpuDone && !updateIsFinite(nMB ? lastLoss : null)) rollbackWeights();
   iteration++;
   if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
   else updateBestSnapshot();
@@ -2624,6 +2680,7 @@ function buildSnapshot() {
     },
     gradThreads: gradPool ? gradPool.length : 0,
     inferBackend: fwdReady() ? 'wasm-batch' : 'js',
+    updateRejects,
     inferInfo: fwdReady() ? '' : (fwdErr || 'loading'),
     backend: gpuState === 'ready'  ? 'gpu'
            : gpuState === 'init'   ? 'gpu-init'

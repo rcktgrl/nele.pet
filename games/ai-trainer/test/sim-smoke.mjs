@@ -138,7 +138,7 @@ console.log('\n1. Mirror augmentation index map');
 console.log('\n2. Vanilla PPO (mods off)');
 {
   const frame = await runConfig('vanilla', {
-    numEnvs: 4, speedMult: 200, episodeLen: 15,
+    numEnvs: 4, speedMult: 200, episodeLen: 15, recurrent: false,
     backend: 'js', threads: 1, minibatch: 128, horizon: 64, epochs: 2,
     klStop: false, mirror: false, neuronRepair: false, failRate: 0, groupSize: 1,
   }, 15000);
@@ -159,7 +159,7 @@ console.log('\n2. Vanilla PPO (mods off)');
 console.log('\n3. KL early stop');
 {
   const frame = await runConfig('kl-stop', {
-    numEnvs: 4, speedMult: 200, episodeLen: 15,
+    numEnvs: 4, speedMult: 200, episodeLen: 15, recurrent: false,
     backend: 'js', threads: 1, minibatch: 128, horizon: 64, epochs: 4,
     klStop: true, klLimit: 1e-9,  // any movement at all must trigger the stop
   }, 15000);
@@ -175,7 +175,7 @@ console.log('\n3. KL early stop');
 console.log('\n4. Agent groups ×4');
 {
   const frame = await runConfig('groups', {
-    numEnvs: 8, speedMult: 200, episodeLen: 10,
+    numEnvs: 8, speedMult: 200, episodeLen: 10, recurrent: false,
     backend: 'js', threads: 1, minibatch: 128, horizon: 32, epochs: 2,
     groupSize: 4, klStop: false,
   }, 25000);
@@ -193,7 +193,7 @@ console.log('\n4. Agent groups ×4');
 console.log('\n5. Combined: mirror + 10% defect weights + neuron repair');
 {
   const frame = await runConfig('combo', {
-    numEnvs: 4, speedMult: 200, episodeLen: 12,
+    numEnvs: 4, speedMult: 200, episodeLen: 12, recurrent: false,
     backend: 'js', threads: 1, minibatch: 128, horizon: 64, epochs: 2,
     mirror: true, failRate: 0.10, neuronRepair: true, klStop: true,
   }, 25000);
@@ -238,7 +238,7 @@ console.log('\n6. Neuron repair on a crafted network');
   send({
     type: 'init', track: makeTrack(), carData, model,
     config: {
-      numEnvs: 4, speedMult: 200, episodeLen: 15,
+      numEnvs: 4, speedMult: 200, episodeLen: 15, recurrent: false,
       backend: 'js', threads: 1, hiddenSize: H, hiddenLayers: 1,
       neuronRepair: true, klStop: false, mirror: false, failRate: 0, groupSize: 1,
     },
