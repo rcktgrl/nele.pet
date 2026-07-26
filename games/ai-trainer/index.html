@@ -403,7 +403,7 @@
   <button class="btn" id="restartBtn" title="Restart training with same settings">RESTART</button>
   <button class="btn btn-danger" id="resetBtn" title="Wipe all learned weights and start from scratch">RESET AI</button>
   <span class="hud-sep">│</span>
-  <button class="btn" id="exportBtn" title="Save the model as JSON — exports the best-average network snapshot once one exists, otherwise the live weights">EXPORT</button>
+  <button class="btn" id="exportBtn" title="Save the model as JSON — exports the CURRENT (latest) network">EXPORT</button>
   <button class="btn" id="importBtn">IMPORT</button>
   <input type="file" id="importFile" accept=".json" style="display:none">
   <span class="hud-sep">│</span>
@@ -475,7 +475,7 @@
     <div id="modsStatus" style="color:#667;font-size:.6rem;margin-top:6px;"></div>
   </div>
 
-  <div class="ctrl-section" title="The trainer keeps a snapshot of the network whose recent episodes had the best AVERAGE return across all agents — judged by how well everyone does with it, not by one lucky run. EXPORT saves this snapshot.">
+  <div class="ctrl-section" title="The trainer keeps a snapshot of the network whose recent episodes had the best AVERAGE return across all agents. It is a training aid — LOAD BEST rewinds to it after the policy drifts somewhere worse. EXPORT always saves the latest network, not this snapshot.">
     <div class="ctrl-title live-title">🏅 BEST NETWORK (AVG OF ALL AGENTS)</div>
     <div id="bestStatus" style="color:#667;font-size:.6rem;margin-bottom:8px;">no snapshot yet</div>
     <div class="ctrl-actions">
@@ -564,6 +564,23 @@
         <span class="config-label">NEURONS PER LAYER</span>
         <div class="opt-group" id="configUnitBtns"></div>
         <span style="color:#445;font-size:.58rem;">more neurons = more capacity, heavier updates</span>
+      </div>
+      <div class="config-row" title="How far down the track the policy can see. Each probe reports the direction to a point ahead on the centerline and the gradient to it. More probes = finer detail; longer range = earlier warning of a corner. Changing either changes the observation layout, so a model is only usable with the window it was trained on (the window is saved into the export).">
+        <span class="config-label">MAP WINDOW — PROBES</span>
+        <div class="opt-group" id="configProbeCountBtns"></div>
+        <span style="color:#445;font-size:.58rem;">how many look-ahead points the policy sees</span>
+      </div>
+      <div class="config-row" title="Distance to the furthest look-ahead probe. The near probes stay dense and the far ones spread out, so this scales the whole window. 200 m gives roughly 3 s of warning at top speed.">
+        <span class="config-label">MAP WINDOW — RANGE</span>
+        <div class="opt-group" id="configProbeRangeBtns"></div>
+        <span style="color:#445;font-size:.58rem;">distance to the furthest probe</span>
+      </div>
+      <div class="config-row">
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#889;font-size:.65rem;"
+               title="Each probe also reports how much drivable ground there is left and right at that point — pavement plus kerb margin plus that side's gravel runoff, in absolute metres. Off, a probe carries only its bearing and gradient.">
+          <span>PROBE WIDTHS<br><span style="color:#445;font-size:.9em">probes also report the drivable width either side — the policy otherwise cannot tell a wide track from a narrow one</span></span>
+          <input type="checkbox" id="configProbeWidthToggle" style="accent-color:#fa4;">
+        </label>
       </div>
       <div class="config-row">
         <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#889;font-size:.65rem;">

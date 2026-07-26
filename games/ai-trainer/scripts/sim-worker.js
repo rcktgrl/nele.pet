@@ -36,6 +36,8 @@ import { Net, GRUNet, gauss, LOG_2PI, accumulatePPOGrads, accumulatePPORecurrent
 let trkPts       = [];   // [{x,y,z}] spaced centerline points
 let trkWallLeft  = [];   // [{x0,z0,x1,z1}] left barrier segments
 let trkWallRight = [];   // [{x0,z0,x1,z1}] right barrier segments
+let trkEdgeLeft  = [];   // [{x0,z0,x1,z1}] left pavement boundary (±rw/2)
+let trkEdgeRight = [];   // [{x0,z0,x1,z1}] right pavement boundary
 let trkData      = null; // {wp:[[x,0,z],...], rw, laps}
 let gravelProfile = null;// {pts, leftRunoff, rightRunoff, rw}
 let cityCorridors = null;// [{x,z,hw,hd}] axis-aligned driveable rects (city tracks)
@@ -82,7 +84,10 @@ let cfg = {
   minibatch: 256,
   hiddenSize: 64,        // restart required
   hiddenLayers: 1,       // restart required
-  recurrent: false,      // restart required — GRU recurrent policy/critic (BPTT)
+  recurrent: true,       // restart required — GRU recurrent policy/critic (BPTT).
+                         // The default: the feed-forward policy trains but has
+                         // been observed to collapse after a few hundred
+                         // updates, while the GRU keeps improving.
   bpttLen: 32,           // truncated-BPTT window (decisions per training chunk)
   backend: 'auto',       // 'auto' | 'gpu' | 'wasm' | 'js' — restart required
   threads: 0,            // gradient worker count, 0 = auto (cores − 2, max 6)
@@ -100,6 +105,12 @@ let cfg = {
   wallHitPenalty: 50,    // ONE-OFF, charged on each new wall/off-track contact
   terminalPenalty: 10,   // on off-track / stuck termination
   lapBonus: 20,          // on lap completion
+  // look-ahead window (restart required — they change the observation layout)
+  probeCount: 6,         // centerline look-ahead probes
+  probeRange: 200,       // metres to the furthest probe
+  probeWidths: true,     // probes also report the drivable width either side
+  // diagnostics
+  perf: false,           // phase profiler (see below) — benchmark use only
 };
 
 const FIXED_DT = 1 / 60;
@@ -111,6 +122,47 @@ let lastTickMs = 0;
 let lastPostMs = 0;
 let tickHandle = null;
 let carSpec    = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Phase profiler (cfg.perf, or the 'perf' message)
+//
+//  Off by default — every probe sits behind `perf.on`, so a disabled profiler
+//  costs one boolean test. When on, wall-clock milliseconds accumulate per
+//  phase so a benchmark can say where a run actually spends its time. The
+//  rollout probes are inside the per-step hot loop, so their totals carry a
+//  few percent of profiler overhead: price it with a perf-off control run.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const perf = {
+  on: false,
+  t0: 0,                     // performance.now() at the last reset
+  ms: Object.create(null),   // phase → accumulated milliseconds
+  n:  Object.create(null),   // phase → probe count (or explicit tally)
+};
+
+function pfReset() {
+  perf.ms = Object.create(null);
+  perf.n  = Object.create(null);
+  perf.t0 = performance.now();
+}
+
+function pfAdd(key, t0) {
+  perf.ms[key] = (perf.ms[key] || 0) + (performance.now() - t0);
+  perf.n[key]  = (perf.n[key]  || 0) + 1;
+}
+
+function pfCount(key, v) { perf.n[key] = (perf.n[key] || 0) + v; }
+
+function pfMs(key, dMs) {
+  perf.ms[key] = (perf.ms[key] || 0) + dMs;
+  perf.n[key]  = (perf.n[key]  || 0) + 1;
+}
+
+// >0 while an update is parked on an off-thread await (gradient pool or the
+// TF.js worker). The sim loop keeps stepping during those awaits, so rollout
+// time booked while this is set is time the two phases OVERLAP — without it a
+// phase breakdown sums past 100 % of the wall clock.
+let _pfWait = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Geometry helpers
@@ -126,7 +178,7 @@ let carSpec    = null;
 
 const WALL_CELL = 16;      // metres per grid cell
 
-let wallIdx = { left: null, right: null, all: null };
+let wallIdx = { left: null, right: null, all: null, edge: null };
 
 function packWallSide(walls) {
   const n = walls ? walls.length : 0;
@@ -166,12 +218,29 @@ function packWallSide(walls) {
   };
 }
 
+// computeTrackEdgeSegments emits one segment per point PAIR and stops before
+// wrapping, so the pavement outline has a gap at the start/finish line that a
+// ray could shoot straight through. Close it here rather than diverging from
+// the shared track builder.
+function closeEdgeLoop(segs) {
+  if (!segs || segs.length < 2) return segs || [];
+  const a = segs[segs.length - 1], b = segs[0];
+  if (Math.abs(a.x1 - b.x0) < 1e-6 && Math.abs(a.z1 - b.z0) < 1e-6) return segs;
+  return segs.concat([{ x0: a.x1, z0: a.z1, x1: b.x0, z1: b.z0 }]);
+}
+
 function buildWallIndex() {
+  const hasEdge = (trkEdgeLeft && trkEdgeLeft.length) || (trkEdgeRight && trkEdgeRight.length);
   wallIdx = {
     left: packWallSide(trkWallLeft),
     right: packWallSide(trkWallRight),
     // combined index for the ray fans — rays don't care about sides
     all: packWallSide([...(trkWallLeft || []), ...(trkWallRight || [])]),
+    // pavement outline: what the short fan aims at. Null when the payload
+    // predates it, in which case that fan falls back to the barriers.
+    edge: hasEdge
+      ? packWallSide([...closeEdgeLoop(trkEdgeLeft), ...closeEdgeLoop(trkEdgeRight)])
+      : null,
   };
 }
 
@@ -647,11 +716,13 @@ const EDGE_RAY_ANGLES = [
 ];
 const EDGE_RAY_DIST = 35;
 
-export function castRayFan(car, angles, maxDist, out, offset) {
+export function castRayFan(car, angles, maxDist, out, offset, grid) {
+  const g = grid || wallIdx.all;
+  if (fwdReady() && castRayFanWasm(car, angles, maxDist, out, offset, g)) return;
   const ox = car.pos.x, oz = car.pos.z;
   for (let k = 0; k < angles.length; k++) {
     const angle = car.hdg + angles[k];
-    out[offset + k] = rayThroughGrid(wallIdx.all, ox, oz,
+    out[offset + k] = rayThroughGrid(g, ox, oz,
                                      Math.sin(angle), Math.cos(angle), maxDist) / maxDist;
   }
 }
@@ -663,8 +734,35 @@ export function castRayFan(car, angles, maxDist, out, offset) {
 // Probe distances extended: Jeff has a 122 m straight ending in a 90° turn.
 // With the old 120 m max, the corner was invisible until the car was already on it.
 // 200 m gives ~80 m of advance warning — enough for a full braking event.
-const PROBE_DISTS = [10, 20, 35, 55, 100, 200];
+// ── Look-ahead window ("map window") ────────────────────────────────────────
+// How far down the track the policy can see, and how finely. PROBE_SHAPE is
+// the stock set expressed as a fraction of its range, so probeRange scales the
+// whole window and probeCount resamples the same near-dense/far-sparse curve.
+// At the defaults (6 probes, 200 m) it reproduces the original
+// [10, 20, 35, 55, 100, 200] exactly, so stock models keep their input layout.
+//
+// The window is a real modelling lever, not just a perf knob: too short and the
+// policy cannot see a corner in time to brake for it (Jeff's 122 m straight
+// into a 90° turn is why the range is 200 m); too long and the far probes are
+// mostly noise the net has to learn to ignore.
+const PROBE_SHAPE = [0.05, 0.10, 0.175, 0.275, 0.50, 1.00];
+
+function buildProbeDists(count, range) {
+  const n = Math.max(1, count | 0), R = Math.max(1, +range || 0);
+  if (n === 1) return [R];
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const x = (k / (n - 1)) * (PROBE_SHAPE.length - 1);   // resample the curve
+    const i = Math.min(PROBE_SHAPE.length - 2, Math.floor(x)), f = x - i;
+    // round: the interpolation would otherwise emit 55.00000000000001
+    out.push(Math.round(R * (PROBE_SHAPE[i] * (1 - f) + PROBE_SHAPE[i + 1] * f) * 1e4) / 1e4);
+  }
+  return out;
+}
+
+let PROBE_DISTS = buildProbeDists(6, 200);
 const SLOPE_NORM  = 0.30;   // |Δy/Δs| considered "max steep"
+const _extScratch = new Float64Array(2);
 
 // Memory cells: the policy gets MEM_DIM extra action outputs that write a
 // rate-limited delta into a persistent per-car register, which is fed back
@@ -687,8 +785,67 @@ const MEM_RATE = 0.1;  // max register change per decision (≈5 % of range per 
 //  [22] reversing flag      [23] slope at the car
 //  [24..35] 6 probes × (relative angle, slope between probes)
 //  [36..39] 4 memory cells (written by the policy's memory actions)
-const MEM_OBS = 24 + PROBE_DISTS.length * 2;   // base index of memory cells
-let OBS_DIM = MEM_OBS + MEM_DIM;               // recomputed by configureDims()
+let PROBE_STRIDE = 2;                          // values per probe (4 with widths)
+let MEM_OBS = 24 + PROBE_DISTS.length * PROBE_STRIDE;  // base index of memory cells
+let OBS_DIM = MEM_OBS + MEM_DIM;               // both set by configureDims()
+
+// ── Drivable width along the centerline ─────────────────────────────────────
+// Pavement width is one constant per track, so the width a probe reports only
+// varies through the gravel runoff, which differs left from right. Sampling the
+// runoff profile per probe per decision would mean a nearest-point search each
+// time; instead each centerline point's extent is resolved once per track and
+// the probes interpolate that.
+//
+// "Extent" is the same boundary the on-gravel test uses: pavement half-width
+// plus the kerb margin, plus that side's runoff — i.e. how far out the car can
+// go before it runs out of ground.
+const GRAVEL_MARGIN = 1.75;   // matches SimCar's on-gravel inner bound
+const WIDTH_NORM    = 25;     // metres mapped to 1.0
+
+let extentL = null, extentR = null;   // per navPts index, metres
+
+function buildExtentTable() {
+  const n = navPts.length;
+  extentL = new Float64Array(n);
+  extentR = new Float64Array(n);
+  const half = (trkData ? trkData.rw : 12) * 0.5;
+  const g = gravelProfile;
+  if (!g || !g.pts || !g.pts.length) {
+    extentL.fill(half + GRAVEL_MARGIN);
+    extentR.fill(half + GRAVEL_MARGIN);
+    return;
+  }
+  // navPts and the gravel profile are both dense chains along the same
+  // centerline, so walking them together with a moving hint is enough.
+  let hint = -1;
+  for (let i = 0; i < n; i++) {
+    const p = navPts[i];
+    const near = nearestIdx(p.x, p.z, g.pts, hint, 12);
+    hint = near.idx;
+    const ri = Math.min(near.idx, g.rightRunoff.length - 1);
+    const li = Math.min(near.idx, g.leftRunoff.length - 1);
+    extentR[i] = half + GRAVEL_MARGIN + (g.rightRunoff[ri] || 0);
+    extentL[i] = half + GRAVEL_MARGIN + (g.leftRunoff[li]  || 0);
+  }
+}
+
+// Drivable extent either side at arc distance s, interpolated between points.
+function extentAtArc(s, out) {
+  const n = navPts.length;
+  if (!extentL || !n) { out[0] = out[1] = 0; return out; }
+  s = ((s % trackLen) + trackLen) % trackLen;
+  let lo = 0, hi = n - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (arcLen[mid] <= s) lo = mid; else hi = mid - 1;
+  }
+  const j = (lo + 1) % n;
+  const segLen = (j === 0 ? trackLen : arcLen[j]) - arcLen[lo];
+  const f = segLen > 1e-9 ? (s - arcLen[lo]) / segLen : 0;
+  out[0] = extentL[lo] * (1 - f) + extentL[j] * f;
+  out[1] = extentR[lo] * (1 - f) + extentR[j] * f;
+  return out;
+}
 
 // Arc position of a car, using and updating its locality hint.
 function carArc(car) {
@@ -700,7 +857,11 @@ function carArc(car) {
 function buildObs(car, out) {
   castRayFan(car, RAY_ANGLES, RAY_DIST, out, 0);
   for (let k = 0; k < RAY_ANGLES.length; k++) out[k] = Math.sqrt(out[k]);
-  castRayFan(car, EDGE_RAY_ANGLES, EDGE_RAY_DIST, out, 11);
+  // Short fan aims at the pavement boundary — "where does the asphalt end" —
+  // which is what makes it more than a near-field copy of the long fan. Five of
+  // its seven angles duplicate a long-ray angle, so pointed at the same
+  // barriers it carried almost no information the long fan did not.
+  castRayFan(car, EDGE_RAY_ANGLES, EDGE_RAY_DIST, out, 11, wallIdx.edge);
 
   const ap = carArc(car);
   const speedFrac = car.spd / car.data.maxSpd;
@@ -724,13 +885,22 @@ function buildObs(car, out) {
   out[23] = Math.max(-1, Math.min(1, (hereAhead.y - prevY) / 4 / SLOPE_NORM));
 
   let prevD = 0;
+  const st = PROBE_STRIDE;
   for (let k = 0; k < PROBE_DISTS.length; k++) {
     const d = PROBE_DISTS[k];
     const p = pointAtArc(ap.s + d);
     const ang = wrapPi(Math.atan2(p.x - car.pos.x, p.z - car.pos.z) - car.hdg);
     const slope = (p.y - prevY) / (d - prevD);
-    out[24 + k * 2]     = Math.max(-1, Math.min(1, ang / Math.PI));
-    out[24 + k * 2 + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
+    out[24 + k * st]     = Math.max(-1, Math.min(1, ang / Math.PI));
+    out[24 + k * st + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
+    if (st === 4) {
+      // How much ground there is either side where the probe points — the
+      // absolute width, not a ratio, so a wide track reads differently from a
+      // narrow one (input 20 divides its own width out).
+      extentAtArc(ap.s + d, _extScratch);
+      out[24 + k * st + 2] = Math.min(1, _extScratch[0] / WIDTH_NORM);
+      out[24 + k * st + 3] = Math.min(1, _extScratch[1] / WIDTH_NORM);
+    }
     prevY = p.y; prevD = d;
   }
   for (let d = 0; d < MEM_DIM; d++) out[MEM_OBS + d] = car.mem[d];
@@ -764,8 +934,13 @@ export function mirrorObsInto(src, dst) {
   dst[22] = src[22];
   dst[23] = src[23];
   for (let p = 0; p < PROBE_DISTS.length; p++) {
-    dst[24 + 2 * p] = -src[24 + 2 * p];
-    dst[25 + 2 * p] = src[25 + 2 * p];
+    const b = 24 + PROBE_STRIDE * p;
+    dst[b]     = -src[b];        // bearing flips
+    dst[b + 1] = src[b + 1];     // grade is unchanged by a left/right flip
+    if (PROBE_STRIDE === 4) {    // ...but the two sides trade places
+      dst[b + 2] = src[b + 3];
+      dst[b + 3] = src[b + 2];
+    }
   }
   for (let d = 0; d < MEM_DIM; d++) dst[MEM_OBS + d] = src[MEM_OBS + d];
   return dst;
@@ -789,8 +964,249 @@ let ACT_DIM = 2 + MEM_DIM; // [steer, throttle/brake, (memory-cell deltas)]
 function configureDims() {
   isRecurrent = !!cfg.recurrent;
   MEM_DIM = isRecurrent ? 0 : 4;
+  PROBE_DISTS = buildProbeDists(cfg.probeCount, cfg.probeRange);
+  PROBE_STRIDE = cfg.probeWidths ? 4 : 2;
+  MEM_OBS = 24 + PROBE_DISTS.length * PROBE_STRIDE;
   OBS_DIM = MEM_OBS + MEM_DIM;
   ACT_DIM = 2 + MEM_DIM;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Batched WASM inference for the rollout
+//
+//  The rollout used to run one scalar-JS forward per agent per decision. That
+//  was 21 % of the wall clock on the default config and 40 % at 256x2 — and it
+//  sits on the sim thread, which is the critical path (the gradient pool runs
+//  off-thread and mostly hides behind it).
+//
+//  Every agent that needs a decision on a given tick is now forwarded in ONE
+//  call into the compiled kernel: 4.4x faster at 64x1, 6.3x at 256x2, measured
+//  against the JS path it replaces. Two effects stack — compiled SIMD code
+//  instead of a scalar JS loop, and each weight loaded once per tick instead
+//  of once per agent.
+//
+//  Weights are uploaded when they change, not per tick. They change once per
+//  completed update, so agents act with the last COMPLETED policy for the
+//  duration of an update instead of a half-applied one. That is the standard
+//  PPO arrangement (a fixed behaviour policy per iteration) and it keeps the
+//  stored log-probs consistent with the weights that produced them.
+//
+//  Everything here is best-effort: if the module will not load, or the layout
+//  is one the kernel does not handle, `fwdReady()` stays false and the
+//  per-agent JS path runs unchanged.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let fwdInst   = null;   // WebAssembly.Instance
+let fwdErr    = '';     // last load failure, surfaced in the HUD tooltip
+let fwdLayout = null;   // arena offsets, rebuilt when a shape changes
+let fwdDirty  = true;   // weights need re-uploading
+
+function fwdReady() { return !!fwdInst && !!fwdLayout; }
+function fwdInvalidate() { fwdDirty = true; }
+
+async function initFwd() {
+  fwdInst = null; fwdLayout = null; fwdErr = '';
+  try {
+    const url = new URL('./nn_wasm.wasm', import.meta.url);
+    const src = await fetch(url);
+    const { instance } = await WebAssembly.instantiate(await src.arrayBuffer(), {});
+    const need = isRecurrent ? 'gru_step_batch' : 'forward_batch';
+    if (typeof instance.exports[need] !== 'function') throw new Error(need + ' missing');
+    fwdInst = instance;
+    fwdBuildLayout();
+  } catch (err) {
+    fwdInst = null; fwdLayout = null;
+    fwdErr = String((err && err.message) || err);
+  }
+}
+
+// Arena: [actorSizes][criticSizes][actorFlat][criticFlat][obs][outActor][outCritic]
+function fwdBuildLayout() {
+  if (!fwdInst || !actor || !critic) { fwdLayout = null; return; }
+  const align8 = n => (n + 7) & ~7;
+  const aSizes = actor.sizes, cSizes = critic.sizes;
+  const nA = actor.paramCount(), nC = critic.paramCount();
+  // Mirror augmentation doubles the rows; it is feed-forward only.
+  const cap = Math.max(1, cfg.numEnvs | 0) * (isRecurrent ? 1 : 2);
+  const H  = isRecurrent ? actor.H  : 0;
+  const HC = isRecurrent ? critic.H : 0;
+  const sz = [
+    align8(aSizes.length * 4), align8(cSizes.length * 4),
+    align8(nA * 8), align8(nC * 8),
+    align8(cap * OBS_DIM * 8), align8(cap * ACT_DIM * 8), align8(cap * 8),
+    align8(cap * H * 8), align8(cap * H * 8),      // actor hidden state: in, out
+    align8(cap * HC * 8), align8(cap * HC * 8),    // critic hidden state: in, out
+  ];
+  const total = sz.reduce((a, b) => a + b, 0);
+  const mem = fwdInst.exports.memory;
+  const base = fwdInst.exports.get_heap_base();
+  if (base + total > mem.buffer.byteLength) {
+    try { mem.grow(Math.ceil((base + total - mem.buffer.byteLength) / 65536)); }
+    catch { fwdLayout = null; fwdErr = 'memory.grow failed'; return; }
+  }
+  let off = base;
+  const L = { cap, nA, nC, aLayers: aSizes.length - 1, cLayers: cSizes.length - 1 };
+  const take = i => { const o = off; off += sz[i]; return o; };
+  L.aSizesOff = take(0); L.cSizesOff = take(1);
+  L.aFlatOff  = take(2); L.cFlatOff  = take(3);
+  L.obsOff    = take(4); L.aOutOff   = take(5); L.cOutOff = take(6);
+  L.aHinOff   = take(7); L.aHoutOff  = take(8);
+  L.cHinOff   = take(9); L.cHoutOff  = take(10);
+  L.H = H; L.HC = HC; L.recurrent = isRecurrent;
+  const buf = mem.buffer;
+  new Int32Array(buf, L.aSizesOff, aSizes.length).set(aSizes);
+  new Int32Array(buf, L.cSizesOff, cSizes.length).set(cSizes);
+  L.end = off;
+  fwdLayout = L;
+  fwdDirty = true;
+  rayArenaReset();
+}
+
+function fwdUpload() {
+  if (!fwdReady()) return;
+  const buf = fwdInst.exports.memory.buffer;
+  actor.flatF64Into(new Float64Array(buf, fwdLayout.aFlatOff, fwdLayout.nA));
+  critic.flatF64Into(new Float64Array(buf, fwdLayout.cFlatOff, fwdLayout.nC));
+  fwdDirty = false;
+}
+
+// Forward `n` observation rows (packed into obsBatch) through both nets.
+// Returns false if the kernel is unavailable — caller falls back to JS.
+function fwdRun(obsBatch, n, wantCritic) {
+  if (!fwdReady() || n <= 0 || n > fwdLayout.cap) return false;
+  if (fwdDirty) fwdUpload();
+  const ex = fwdInst.exports, L = fwdLayout;
+  const buf = ex.memory.buffer;
+  new Float64Array(buf, L.obsOff, n * OBS_DIM).set(obsBatch.subarray(0, n * OBS_DIM));
+  ex.forward_batch(L.aLayers, L.aSizesOff, L.aFlatOff, L.obsOff, n, L.aOutOff);
+  if (wantCritic) ex.forward_batch(L.cLayers, L.cSizesOff, L.cFlatOff, L.obsOff, n, L.cOutOff);
+  return true;
+}
+
+// ── Ray casting in the kernel ───────────────────────────────────────────────
+//  The grid walker is the rollout's sensing cost. Each wall/edge grid is
+//  uploaded to linear memory once and marched by the compiled kernel instead
+//  of the JS port of the same algorithm.
+//
+//  Grids are bump-allocated after the inference layout and never freed: the
+//  set of tracks is fixed once training starts. `rayEpoch` invalidates every
+//  cached upload when the layout is rebuilt, since that moves the arena.
+let rayTop = 0, rayEpoch = 0, rayDirs = null, rayOut = null;
+
+function rayArenaReset() {
+  // initFwd() builds a NEW instance with its own linear memory, so every
+  // cached offset — grids and scratch alike — belongs to a buffer that no
+  // longer exists. Bumping the epoch invalidates the grids; the scratch has
+  // to be dropped outright.
+  rayDirs = null; rayOut = null;
+  rayEpoch++;
+  rayTop = fwdLayout ? fwdLayout.end : 0;
+}
+
+// Upload one grid (segments + CSR cells + dedupe stamps). Returns false when
+// it will not fit, leaving the caller on the JS path.
+function uploadGrid(g) {
+  if (!fwdReady() || !g || !g.n) return false;
+  if (g._rayEpoch === rayEpoch) return true;
+  const align8 = n => (n + 7) & ~7;
+  const nCells = g.gw * g.gh;
+  let total = 0;
+  for (let c = 0; c < nCells; c++) total += g.cells[c] ? g.cells[c].length : 0;
+
+  const szSegs = align8(g.n * 4 * 8);
+  const szStart = align8((nCells + 1) * 4);
+  const szIdx = align8(Math.max(1, total) * 4);
+  const szStamp = align8(g.n * 4);
+  const need = szSegs + szStart + szIdx + szStamp;
+
+  const mem = fwdInst.exports.memory;
+  if (rayTop + need > mem.buffer.byteLength) {
+    try { mem.grow(Math.ceil((rayTop + need - mem.buffer.byteLength) / 65536)); }
+    catch { return false; }
+  }
+  let off = rayTop;
+  const segsOff = off; off += szSegs;
+  const startOff = off; off += szStart;
+  const idxOff = off; off += szIdx;
+  const stampOff = off; off += szStamp;
+  rayTop = off;
+
+  const buf = mem.buffer;
+  new Float64Array(buf, segsOff, g.n * 4).set(g.segs);
+  const start = new Int32Array(buf, startOff, nCells + 1);
+  const idx = new Int32Array(buf, idxOff, Math.max(1, total));
+  let w = 0;
+  for (let c = 0; c < nCells; c++) {
+    start[c] = w;
+    const cell = g.cells[c];
+    if (cell) for (let k = 0; k < cell.length; k++) idx[w++] = cell[k];
+  }
+  start[nCells] = w;
+  new Int32Array(buf, stampOff, g.n).fill(0);
+
+  g._rayEpoch = rayEpoch;
+  g._off = { segsOff, startOff, idxOff, stampOff, nCells };
+  return true;
+}
+
+// Cast one fan through the kernel. Directions are computed here so the WASM
+// path marches the identical rays the JS path would.
+function castRayFanWasm(car, angles, maxDist, out, offset, g) {
+  if (!uploadGrid(g)) return false;
+  const m = angles.length;
+  if (!rayDirs || rayDirs.len < m * 2) {   // .len, not .length — it is a record
+    const align8 = n => (n + 7) & ~7;
+    const mem = fwdInst.exports.memory;
+    const need = align8(m * 2 * 8) + align8(m * 8);
+    if (rayTop + need > mem.buffer.byteLength) {
+      try { mem.grow(Math.ceil((rayTop + need - mem.buffer.byteLength) / 65536)); }
+      catch { return false; }
+    }
+    rayDirs = { off: rayTop, len: m * 2 }; rayTop += align8(m * 2 * 8);
+    rayOut  = { off: rayTop, len: m };     rayTop += align8(m * 8);
+  }
+  const buf = fwdInst.exports.memory.buffer;
+  const dirs = new Float64Array(buf, rayDirs.off, m * 2);
+  for (let k = 0; k < m; k++) {
+    const a = car.hdg + angles[k];
+    dirs[k * 2] = Math.sin(a); dirs[k * 2 + 1] = Math.cos(a);
+  }
+  const o = g._off;
+  fwdInst.exports.cast_ray_fan(
+    o.segsOff, o.startOff, o.idxOff, o.stampOff, g.n, g.gw, g.gh,
+    g.minX, g.minZ, WALL_CELL, car.pos.x, car.pos.z,
+    rayDirs.off, m, maxDist, rayOut.off);
+  const res = new Float64Array(buf, rayOut.off, m);
+  for (let k = 0; k < m; k++) out[offset + k] = res[k];
+  return true;
+}
+
+// Which path the ray fans actually took — a fan silently falling back to JS
+// looks identical in the observation, so it has to be reported.
+function rayBackendName() {
+  if (!fwdReady() || !wallIdx || !wallIdx.all) return 'js';
+  return wallIdx.all._rayEpoch === rayEpoch ? 'wasm' : 'js';
+}
+
+function fwdActorOut(n) { return new Float64Array(fwdInst.exports.memory.buffer, fwdLayout.aOutOff, n * ACT_DIM); }
+function fwdCriticOut(n) { return new Float64Array(fwdInst.exports.memory.buffer, fwdLayout.cOutOff, n); }
+
+// One GRU step for n agents. hInA/hInC carry the incoming hidden states packed
+// n×H; the new states are written back into them, so the caller scatters from
+// a single place and no per-agent state array is allocated per decision.
+function fwdRunGRU(obsBatch, hInA, hInC, n) {
+  if (!fwdReady() || !fwdLayout.recurrent || n <= 0 || n > fwdLayout.cap) return false;
+  if (fwdDirty) fwdUpload();
+  const ex = fwdInst.exports, L = fwdLayout;
+  const buf = ex.memory.buffer;
+  new Float64Array(buf, L.obsOff, n * OBS_DIM).set(obsBatch.subarray(0, n * OBS_DIM));
+  new Float64Array(buf, L.aHinOff, n * L.H).set(hInA.subarray(0, n * L.H));
+  new Float64Array(buf, L.cHinOff, n * L.HC).set(hInC.subarray(0, n * L.HC));
+  ex.gru_step_batch(L.aSizesOff, L.aFlatOff, L.obsOff, L.aHinOff, n, L.aHoutOff, L.aOutOff);
+  ex.gru_step_batch(L.cSizesOff, L.cFlatOff, L.obsOff, L.cHinOff, n, L.cHoutOff, L.cOutOff);
+  hInA.set(new Float64Array(buf, L.aHoutOff, n * L.H));
+  hInC.set(new Float64Array(buf, L.cHoutOff, n * L.HC));
+  return true;
 }
 
 let isRecurrent = false;    // true when the GRU policy/critic is active
@@ -1262,6 +1678,8 @@ function loadRawTrack(t) {
   trkPts        = t.pts;
   trkWallLeft   = t.wallLeft;
   trkWallRight  = t.wallRight;
+  trkEdgeLeft   = t.edgeLeft  || [];
+  trkEdgeRight  = t.edgeRight || [];
   trkData       = t.data;
   gravelProfile = t.gravelProfile || null;
   cityCorridors = t.cityCorridors || null;
@@ -1274,10 +1692,11 @@ function buildTrackCtx(t) {
   loadRawTrack(t);
   buildArcTable();   // → navPts, arcLen, trackLen (from the globals just set)
   buildWallIndex();  // → wallIdx
+  buildExtentTable();// → extentL, extentR (needs navPts + arcLen)
   return {
-    trkPts, trkWallLeft, trkWallRight, trkData,
+    trkPts, trkWallLeft, trkWallRight, trkEdgeLeft, trkEdgeRight, trkData,
     gravelProfile, cityCorridors, cityAiPts,
-    navPts, arcLen, trackLen, wallIdx,
+    navPts, arcLen, trackLen, wallIdx, extentL, extentR,
   };
 }
 
@@ -1288,9 +1707,11 @@ function useTrack(idx) {
   const c = trackCtxs[idx];
   if (!c) return;
   trkPts = c.trkPts; trkWallLeft = c.trkWallLeft; trkWallRight = c.trkWallRight;
+  trkEdgeLeft = c.trkEdgeLeft; trkEdgeRight = c.trkEdgeRight;
   trkData = c.trkData; gravelProfile = c.gravelProfile;
   cityCorridors = c.cityCorridors; cityAiPts = c.cityAiPts;
   navPts = c.navPts; arcLen = c.arcLen; trackLen = c.trackLen; wallIdx = c.wallIdx;
+  extentL = c.extentL; extentR = c.extentR;
   activeTrack = idx;
 }
 
@@ -1397,24 +1818,19 @@ function terminateEnv(env, i, penalty, truncated) {
 }
 
 // One physics tick for every env (dt = FIXED_DT).
-function stepOnce(dt) {
-  // Back-pressure: if an update is in flight and the next batch is already
-  // twice the horizon, pause collection so batches can't grow without bound
-  // at high speed multipliers.
-  if (_ppoRunning && agentSteps >= cfg.horizon * cfg.numEnvs * 2) return;
-
-  simTime += dt;
-  for (let i = 0; i < envs.length; i++) {
-    const env = envs[i];
-    if (env.gDone) continue;  // parked until its group's last member finishes
-    useTrack(env.trackIdx);   // point geometry at this env's track (multi-track)
-    const car = env.car;
-
-    // ── New agent decision at the start of each repeat window ──
-    if (env.repCount <= 0) {
-      commitTransition(env, false); // finalize previous window (non-terminal)
-      const obs = new Float64Array(OBS_DIM);
-      buildObs(car, obs);
+// One agent's decision, computed on this thread. Used for the recurrent
+// policy, for defect-masked agents (each acts with its own weights, so they
+// cannot share a batch), and whenever the WASM kernel is unavailable.
+function decideOne(env) {
+  const car = env.car;
+  let _tp = perf.on ? performance.now() : 0;
+  commitTransition(env, false); // finalize previous window (non-terminal)
+  if (perf.on) { pfAdd('roll.commit', _tp); _tp = performance.now(); }
+  const obs = new Float64Array(OBS_DIM);
+  buildObs(car, obs);
+  if (perf.on) { pfAdd('roll.obs', _tp); _tp = performance.now(); }
+  {
+    {
       let mean;
       if (isRecurrent) {
         // Recurrent: snapshot the INPUT hidden state, then advance the actor &
@@ -1453,16 +1869,170 @@ function stepOnce(dt) {
           env.pendValM  = groupOn() ? 0 : vDenorm(critic.forwardScratch(obsM)[0]);
         }
       }
-      if (cfg.neuronRepair && (totalSteps & 31) === 0) reservoirOffer(obs);
-      env.repCount = cfg.actionRepeat;
-      // Memory write: rate-limited delta from the memory actions. Applied
-      // after the observation snapshot, so the new value appears in the
-      // NEXT decision's observation. (no-op in recurrent mode: MEM_DIM = 0)
-      for (let d = 0; d < MEM_DIM; d++) {
-        const a = Math.max(-1, Math.min(1, env.curAct[2 + d]));
-        car.mem[d] = Math.max(-1, Math.min(1, car.mem[d] + MEM_RATE * a));
-      }
+      if (perf.on) pfAdd('roll.policy', _tp);
     }
+  }
+  finishDecision(env);
+}
+
+// Shared decision tail: reservoir sample, repeat window, memory register.
+function finishDecision(env) {
+  const car = env.car;
+  if (cfg.neuronRepair && (totalSteps & 31) === 0) reservoirOffer(env.pendObs);
+  env.repCount = cfg.actionRepeat;
+  // Memory write: rate-limited delta from the memory actions. Applied
+  // after the observation snapshot, so the new value appears in the
+  // NEXT decision's observation. (no-op in recurrent mode: MEM_DIM = 0)
+  for (let d = 0; d < MEM_DIM; d++) {
+    const a = Math.max(-1, Math.min(1, env.curAct[2 + d]));
+    car.mem[d] = Math.max(-1, Math.min(1, car.mem[d] + MEM_RATE * a));
+  }
+}
+
+// Every agent due a decision this tick, forwarded in one call. Observations
+// are still built per agent (they read that agent's track geometry); only the
+// network evaluation is batched, which is the expensive half.
+let _obsBatch = null, _decIdx = null;
+let _hBatchA = null, _hBatchC = null;
+
+// Recurrent variant: gather every due agent's hidden state, step them all in
+// one call, scatter the new states back. The per-decision Float64Array pair the
+// JS path allocated for the next hidden state is gone with it.
+function decideBatchedRecurrent(due, nDue) {
+  const H = fwdLayout.H, HC = fwdLayout.HC;
+  if (!_obsBatch || _obsBatch.length < nDue * OBS_DIM) _obsBatch = new Float64Array(nDue * OBS_DIM);
+  if (!_hBatchA  || _hBatchA.length  < nDue * H)  _hBatchA = new Float64Array(nDue * H);
+  if (!_hBatchC  || _hBatchC.length  < nDue * HC) _hBatchC = new Float64Array(nDue * HC);
+
+  let _tp = perf.on ? performance.now() : 0;
+  for (let k = 0; k < nDue; k++) commitTransition(due[k], false);
+  if (perf.on) { pfAdd('roll.commit', _tp); _tp = performance.now(); }
+
+  for (let k = 0; k < nDue; k++) {
+    const env = due[k];
+    useTrack(env.trackIdx);
+    const obs = new Float64Array(OBS_DIM);
+    buildObs(env.car, obs);
+    env.pendObs = obs;
+    _obsBatch.set(obs, k * OBS_DIM);
+    // BPTT seeds each chunk with the state that went INTO the step, so the
+    // snapshot has to be taken before the batch overwrites it.
+    _hBatchA.set(env.hActor, k * H);
+    _hBatchC.set(env.hCritic, k * HC);
+    env.pendHActor  = Float64Array.from(env.hActor);
+    env.pendHCritic = Float64Array.from(env.hCritic);
+  }
+  if (perf.on) { pfAdd('roll.obs', _tp); _tp = performance.now(); }
+
+  if (!fwdRunGRU(_obsBatch, _hBatchA, _hBatchC, nDue)) {
+    for (let k = 0; k < nDue; k++) decideOne(due[k]);
+    return;
+  }
+  const MU = fwdActorOut(nDue), V = fwdCriticOut(nDue);
+  for (let k = 0; k < nDue; k++) {
+    const env = due[k];
+    const mu = MU.subarray(k * ACT_DIM, (k + 1) * ACT_DIM);
+    for (let d = 0; d < ACT_DIM; d++) env.curAct[d] = mu[d] + Math.exp(logStd[d]) * gauss();
+    env.pendLogp = logProb(env.curAct, mu);
+    env.pendVal  = vDenorm(V[k]);
+    env.hActor.set(_hBatchA.subarray(k * H, (k + 1) * H));
+    env.hCritic.set(_hBatchC.subarray(k * HC, (k + 1) * HC));
+  }
+  if (perf.on) pfAdd('roll.policy', _tp);
+  for (let k = 0; k < nDue; k++) finishDecision(due[k]);
+}
+
+function decideBatched(due, nDue) {
+  const cap = nDue * (cfg.mirror ? 2 : 1);
+  if (!_obsBatch || _obsBatch.length < cap * OBS_DIM) _obsBatch = new Float64Array(cap * OBS_DIM);
+
+  let _tp = perf.on ? performance.now() : 0;
+  for (let k = 0; k < nDue; k++) commitTransition(due[k], false);
+  if (perf.on) { pfAdd('roll.commit', _tp); _tp = performance.now(); }
+
+  for (let k = 0; k < nDue; k++) {
+    const env = due[k];
+    useTrack(env.trackIdx);
+    const obs = new Float64Array(OBS_DIM);
+    buildObs(env.car, obs);
+    env.pendObs = obs;
+    _obsBatch.set(obs, k * OBS_DIM);
+  }
+  let rows = nDue;
+  if (cfg.mirror) {
+    for (let k = 0; k < nDue; k++) {
+      const env = due[k];
+      const obsM = mirrorObsInto(env.pendObs, new Float64Array(OBS_DIM));
+      env.pendObsM = obsM;
+      _obsBatch.set(obsM, rows++ * OBS_DIM);
+    }
+  }
+  if (perf.on) { pfAdd('roll.obs', _tp); _tp = performance.now(); }
+
+  const wantV = !groupOn();
+  if (!fwdRun(_obsBatch, rows, wantV)) {          // kernel refused → JS path
+    for (let k = 0; k < nDue; k++) decideOne(due[k]);
+    return;
+  }
+  const MU = fwdActorOut(rows);
+  const V  = wantV ? fwdCriticOut(rows) : null;
+
+  for (let k = 0; k < nDue; k++) {
+    const env = due[k];
+    const mu = MU.subarray(k * ACT_DIM, (k + 1) * ACT_DIM);
+    for (let d = 0; d < ACT_DIM; d++) env.curAct[d] = mu[d] + Math.exp(logStd[d]) * gauss();
+    env.pendLogp = logProb(env.curAct, mu);
+    env.pendVal  = wantV ? vDenorm(V[k]) : 0;
+  }
+  if (cfg.mirror) {
+    for (let k = 0; k < nDue; k++) {
+      const env = due[k], r = nDue + k;
+      const actM = mirrorActInto(env.curAct, new Float64Array(ACT_DIM));
+      env.pendActM  = actM;
+      env.pendLogpM = logProb(actM, MU.subarray(r * ACT_DIM, (r + 1) * ACT_DIM));
+      env.pendValM  = wantV ? vDenorm(V[r]) : 0;
+    }
+  }
+  if (perf.on) pfAdd('roll.policy', _tp);
+  for (let k = 0; k < nDue; k++) finishDecision(due[k]);
+}
+
+function stepOnce(dt) {
+  // Back-pressure: if an update is in flight and the next batch is already
+  // twice the horizon, pause collection so batches can't grow without bound
+  // at high speed multipliers.
+  if (_ppoRunning && agentSteps >= cfg.horizon * cfg.numEnvs * 2) return;
+
+  simTime += dt;
+
+  // ── Decisions first, batched when the kernel can take them ──
+  // Agents never observe each other, so hoisting every decision ahead of every
+  // physics step changes nothing an agent can see.
+  // Defect-masked agents each act with their own weights, so they cannot share
+  // a batch; that mode is feed-forward only.
+  const canBatch = fwdReady() && (isRecurrent || !(cfg.failRate > 0));
+  if (!_decIdx || _decIdx.length < envs.length) _decIdx = new Array(envs.length);
+  let nDue = 0;
+  for (let i = 0; i < envs.length; i++) {
+    const env = envs[i];
+    if (env.gDone || env.repCount > 0) continue;
+    _decIdx[nDue++] = env;
+  }
+  if (nDue) {
+    if (canBatch) {
+      if (isRecurrent) decideBatchedRecurrent(_decIdx, nDue);
+      else             decideBatched(_decIdx, nDue);
+    } else {
+      for (let k = 0; k < nDue; k++) { useTrack(_decIdx[k].trackIdx); decideOne(_decIdx[k]); }
+    }
+  }
+
+  // ── Then physics, reward and termination for every live agent ──
+  for (let i = 0; i < envs.length; i++) {
+    const env = envs[i];
+    if (env.gDone) continue;  // parked until its group's last member finishes
+    useTrack(env.trackIdx);   // point geometry at this env's track (multi-track)
+    const car = env.car;
     env.repCount--;
 
     // ── Apply action ──
@@ -1470,10 +2040,13 @@ function stepOnce(dt) {
     const a1  = Math.max(-1, Math.min(1, env.curAct[1]));
     const thr = a1 > 0 ? a1 : 0;
     const brk = a1 < 0 ? -a1 : 0;
+    const _tph = perf.on ? performance.now() : 0;
     car.update({ thr, brk, str }, dt);
+    if (perf.on) { pfAdd('roll.phys', _tph); }
     totalSteps++;
 
     // ── Reward ──
+    const _trw = perf.on ? performance.now() : 0;
     const ap = carArc(car);
     let ds = ap.s - env.prevS;
     if (ds >  trackLen / 2) ds -= trackLen;
@@ -1536,6 +2109,7 @@ function stepOnce(dt) {
     } else if (env.epTime >= cfg.episodeLen) {
       terminateEnv(env, i, 0, true);
     }
+    if (perf.on) pfAdd('roll.reward', _trw);
   }
 
   // ── Trigger async PPO update when the rollout buffer is full ──
@@ -1550,7 +2124,9 @@ function stepOnce(dt) {
     }
   } else if (agentSteps >= cfg.horizon * cfg.numEnvs && !_ppoRunning) {
     _ppoRunning = true;
+    const _tg = perf.on ? performance.now() : 0;
     const batch = isRecurrent ? _flushBatchRecurrent() : _flushBatch();
+    if (perf.on) pfAdd('upd.gae', _tg);
     agentSteps = 0;
     if (batch.N >= 8) _runPPO(batch); else _ppoRunning = false;
   }
@@ -1584,7 +2160,12 @@ function desiredThreads() {
   const t = cfg.threads | 0;
   if (t > 0) return Math.max(1, Math.min(64, t));
   const hc = (self.navigator && self.navigator.hardwareConcurrency) || 4;
-  return Math.max(1, Math.min(6, hc - 2)); // leave cores for sim + render
+  // Leave two threads for the sim loop and the renderer. The old cap of 6 was
+  // chosen for small machines and left most of a desktop CPU idle (a 32-thread
+  // part got 6). Note the per-minibatch split is separately bounded by
+  // minibatch/32 slices, so workers past that only pay off once the minibatch
+  // is raised — an idle worker costs memory, not time.
+  return Math.max(1, Math.min(12, hc - 2));
 }
 
 let _poolRebuild = false; // thread count changed mid-update → rebuild when idle
@@ -1819,6 +2400,100 @@ function _flushBatchRecurrent() {
 //  (yielding between minibatches) if nested workers are unavailable.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Weight vectors shipped to the gradient pool, reused across minibatches.
+// postMessage serializes synchronously, so the buffer is safe to refill as
+// soon as the dispatch loop returns — and the pool sees one copy per task
+// either way. Sized on demand; a re-init with a different architecture just
+// grows them.
+let _wFlatActor = null, _wFlatCritic = null;
+
+function poolWeights() {
+  const nA = actor.paramCount(), nC = critic.paramCount();
+  if (!_wFlatActor  || _wFlatActor.length  !== nA) _wFlatActor  = new Float64Array(nA);
+  if (!_wFlatCritic || _wFlatCritic.length !== nC) _wFlatCritic = new Float64Array(nC);
+  return [actor.flatF64Into(_wFlatActor), critic.flatF64Into(_wFlatCritic)];
+}
+
+// Sum the pool's partial gradients into the nets. The first result is loaded,
+// the rest are added — same order as the old accumulate-then-load, without the
+// two full-size temporaries per minibatch.
+function reduceGrads(results, actDim, gLs) {
+  let mbPi = 0, mbV = 0, mbEnt = 0;
+  for (let r = 0; r < results.length; r++) {
+    const res = results[r];
+    if (r === 0) { actor.loadGradFlat(res.aG); critic.loadGradFlat(res.cG); }
+    else         { actor.addGradFlat(res.aG);  critic.addGradFlat(res.cG); }
+    for (let d = 0; d < actDim; d++) gLs[d] += res.gLs[d];
+    mbPi += res.pi; mbV += res.v; mbEnt += res.ent;
+    if (res.mode && res.mode.indexOf('wasm') === 0) _wasmOk = true;
+  }
+  return { pi: mbPi, v: mbV, ent: mbEnt };
+}
+
+// Adam step for the exploration log-σ vector. Identical in the feed-forward
+// and recurrent updates, so it lives here instead of twice inline.
+function stepLogStd(gLs, bs) {
+  lsT++;
+  const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+  const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
+  for (let d = 0; d < ACT_DIM; d++) {
+    const g = gLs[d] / bs;
+    lsM[d] = b1 * lsM[d] + (1 - b1) * g;
+    lsV[d] = b2 * lsV[d] + (1 - b2) * g * g;
+    logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
+    logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
+  }
+}
+
+// ── Update checkpoint / non-finite guard ────────────────────────────────────
+//  The GPU path already refuses to load non-finite weights. The CPU path had no
+//  such check, so one bad update — a ratio spike driving an enormous gradient,
+//  a NaN anywhere in the batch — poisoned the policy permanently and silently:
+//  every later update would train from NaN weights and the run would look like
+//  it simply stopped learning.
+//
+//  The weights are checkpointed before the epoch loop (AFTER the PopArt rescale,
+//  so a rollback stays consistent with valMean/valStd) and restored if the
+//  update produced anything non-finite. Adam moments are cleared with it —
+//  keeping the moments that produced the blow-up would just reproduce it.
+let _ckActor = null, _ckCritic = null, _ckLogStd = null;
+let updateRejects = 0;   // updates discarded this run, surfaced in the frame
+
+function checkpointWeights() {
+  const nA = actor.paramCount(), nC = critic.paramCount();
+  if (!_ckActor  || _ckActor.length  !== nA) _ckActor  = new Float64Array(nA);
+  if (!_ckCritic || _ckCritic.length !== nC) _ckCritic = new Float64Array(nC);
+  if (!_ckLogStd || _ckLogStd.length !== logStd.length) _ckLogStd = new Float64Array(logStd.length);
+  actor.flatF64Into(_ckActor);
+  critic.flatF64Into(_ckCritic);
+  _ckLogStd.set(logStd);
+}
+
+// Sampled scan — a blow-up never touches just one weight, and walking millions
+// of parameters every update to prove it would cost more than it catches.
+function updateIsFinite(loss) {
+  if (loss && !(Number.isFinite(loss.pi) && Number.isFinite(loss.v))) return false;
+  for (let d = 0; d < logStd.length; d++) if (!Number.isFinite(logStd[d])) return false;
+  // poolWeights() owns the reusable flat buffers and resizes them when the
+  // architecture changes — reaching for the buffers directly would overflow
+  // them after a re-init with a different net.
+  const [a, c] = poolWeights();
+  for (let k = 0; k < a.length; k += 97) if (!Number.isFinite(a[k])) return false;
+  for (let k = 0; k < c.length; k += 97) if (!Number.isFinite(c[k])) return false;
+  return true;
+}
+
+function rollbackWeights() {
+  actor.loadFlat(_ckActor);
+  critic.loadFlat(_ckCritic);
+  logStd.set(_ckLogStd);
+  actor.resetAdam();
+  critic.resetAdam();
+  lsM.fill(0); lsV.fill(0); lsT = 0;
+  updateRejects++;
+  fwdInvalidate();
+}
+
 function packSlice(OBS, ACT, LOGP, ADV, RET, idx, s0, s1) {
   const n = s1 - s0;
   const obs  = new Float64Array(n * OBS_DIM);
@@ -1880,6 +2555,7 @@ function loadBestSnapshot() {
   recentReturns = [];
   curAvg = null;
   sendTfWeights();  // keep the GPU backend's resident weights in sync
+  fwdInvalidate();
   refreshFailNets();  // defect copies must act with the restored weights
 }
 
@@ -1892,6 +2568,8 @@ function loadBestSnapshot() {
 
 async function _runPPORecurrent(batch) {
   const gen = simGen;
+  const _tWall = perf.on ? performance.now() : 0;
+  const _tNorm = _tWall;
   const { seqs, N } = batch;
   const actDim = ACT_DIM;
 
@@ -1907,7 +2585,11 @@ async function _runPPORecurrent(batch) {
   const allRet = new Float64Array(N);
   { let k = 0; for (const s of seqs) for (let t = 0; t < s.T; t++) allRet[k++] = s.ret[t]; }
   updateValueStats(allRet, N);
+  fwdInvalidate();     // PopArt rescaled the critic — refresh the resident copy
   for (const s of seqs) for (let t = 0; t < s.T; t++) s.ret[t] = (s.ret[t] - valMean) / valStd;
+
+  if (perf.on) pfAdd('upd.norm', _tNorm);
+  checkpointWeights();
 
   const hp = { clip: cfg.clip, entropyCoef: cfg.entropyCoef, vfCoef: cfg.vfCoef };
 
@@ -1931,17 +2613,21 @@ async function _runPPORecurrent(batch) {
     }
     return cnt ? kl / cnt : 0;
   };
+  const _tk0 = perf.on ? performance.now() : 0;
   const kl0 = cfg.klStop ? klEstimate() : 0;
+  if (perf.on && cfg.klStop) pfAdd('upd.kl', _tk0);
 
   const order = Array.from({ length: seqs.length }, (_, k) => k);
   const mbTarget = Math.max(1, cfg.minibatch | 0);
   let sumPi = 0, sumV = 0, sumEnt = 0, nMB = 0, epochsRan = 0;
 
   for (let ep = 0; ep < cfg.epochs; ep++) {
+    const _tsh = perf.on ? performance.now() : 0;
     for (let k = order.length - 1; k > 0; k--) {
       const j = Math.floor(Math.random() * (k + 1));
       const tmp = order[k]; order[k] = order[j]; order[j] = tmp;
     }
+    if (perf.on) pfAdd('upd.shuffle', _tsh);
 
     // greedily pack chunks into minibatches of ~mbTarget steps
     let mi = 0;
@@ -1956,9 +2642,9 @@ async function _runPPORecurrent(batch) {
 
       let gLs, mbPi, mbV, mbEnt;
       const pool = gradPool && gradPool.length ? gradPool : null;
-      const aFlat = actor.flatF64(), cFlat = critic.flatF64();
 
       if (pool) {
+        const [aFlat, cFlat] = poolWeights();   // only the pool needs them
         const K = Math.min(pool.length, mb.length);
         const per = Math.ceil(mb.length / K);
         const lsArr = Array.from(logStd);
@@ -1975,6 +2661,9 @@ async function _runPPORecurrent(batch) {
           }));
         }
         let results;
+        if (perf.on) pfCount('upd.tasks', tasks.length);
+        const _tgw = perf.on ? performance.now() : 0;
+        _pfWait++;
         try {
           results = await Promise.all(tasks);
         } catch (err) {
@@ -1982,18 +2671,16 @@ async function _runPPORecurrent(batch) {
           gradPool = [];
           mi -= mb.length;  // redo this minibatch locally
           continue;
+        } finally {
+          _pfWait--;
+          if (perf.on) pfAdd('upd.gradwait', _tgw);
         }
-        const aG = new Float64Array(aFlat.length), cG = new Float64Array(cFlat.length);
-        gLs = new Float64Array(actDim); mbPi = 0; mbV = 0; mbEnt = 0;
-        for (const r of results) {
-          for (let k = 0; k < aG.length; k++) aG[k] += r.aG[k];
-          for (let k = 0; k < cG.length; k++) cG[k] += r.cG[k];
-          for (let d = 0; d < actDim; d++) gLs[d] += r.gLs[d];
-          mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
-          if (r.mode && r.mode.indexOf('wasm') === 0) _wasmOk = true;
-        }
-        actor.loadGradFlat(aG); critic.loadGradFlat(cG);
+        const _trd = perf.on ? performance.now() : 0;
+        gLs = new Float64Array(actDim);
+        ({ pi: mbPi, v: mbV, ent: mbEnt } = reduceGrads(results, actDim, gLs));
+        if (perf.on) pfAdd('upd.reduce', _trd);
       } else {
+        const _tgl = perf.on ? performance.now() : 0;
         actor.zeroGrad(); critic.zeroGrad();
         gLs = new Float64Array(actDim); mbPi = 0; mbV = 0; mbEnt = 0;
         for (const s of mb) {
@@ -2001,38 +2688,41 @@ async function _runPPORecurrent(batch) {
           for (let d = 0; d < actDim; d++) gLs[d] += r.gLs[d];
           mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
         }
+        if (perf.on) { pfAdd('upd.gradlocal', _tgl); pfCount('upd.tasks', 1); }
+        _pfWait++;
         await new Promise(res => setTimeout(res, 0));  // let simLoop tick
+        _pfWait--;
       }
 
+      const _tad = perf.on ? performance.now() : 0;
       actor.adamStep(cfg.lr, 1 / bs);
       critic.adamStep(cfg.lr, 1 / bs);
-      lsT++;
-      const b1 = 0.9, b2 = 0.999, eps = 1e-8;
-      const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
-      for (let d = 0; d < actDim; d++) {
-        const g = gLs[d] / bs;
-        lsM[d] = b1 * lsM[d] + (1 - b1) * g;
-        lsV[d] = b2 * lsV[d] + (1 - b2) * g * g;
-        logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
-        logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
-      }
+      stepLogStd(gLs, bs);
+      if (perf.on) { pfAdd('upd.adam', _tad); pfCount('upd.minibatches', 1); }
       sumPi += mbPi / bs; sumV += mbV / bs; sumEnt += mbEnt / bs; nMB++;
     }
 
     epochsRan = ep + 1;
+    if (perf.on) pfCount('upd.epochs', 1);
     if (cfg.klStop) {
+      const _tkl = perf.on ? performance.now() : 0;
       const kl = klEstimate() - kl0;
+      if (perf.on) pfAdd('upd.kl', _tkl);
       lastKl = kl;
       if (kl > cfg.klLimit) break;
     }
   }
 
   if (gen !== simGen) return;
+  const _tpost = perf.on ? performance.now() : 0;
   lastEpochs = epochsRan;
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
+  if (!updateIsFinite(nMB ? lastLoss : null)) rollbackWeights();
   iteration++;
   if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
   else updateBestSnapshot();
+  fwdInvalidate();     // the completed policy is the new behaviour policy
+  if (perf.on) { pfAdd('upd.post', _tpost); pfAdd('upd.wall', _tWall); }
   _ppoRunning = false;
   if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
 }
@@ -2040,6 +2730,8 @@ async function _runPPORecurrent(batch) {
 async function _runPPO(batch) {
   if (batch.recurrent) { await _runPPORecurrent(batch); return; }
   const gen = simGen;
+  const _tWall = perf.on ? performance.now() : 0;
+  const _tNorm = _tWall;
   const { OBS, ACT, LOGP, ADV, RET } = batch;
   const N = OBS.length;
 
@@ -2054,9 +2746,12 @@ async function _runPPO(batch) {
   // NORMALISED return targets. Skipped in group mode (no critic).
   if (!batch.grouped) {
     updateValueStats(RET, N);
+    fwdInvalidate();   // PopArt rescaled the critic — refresh the resident copy
     if (gpuState === 'ready') sendTfWeights();  // tf critic must match the rescale
     for (let k = 0; k < N; k++) RET[k] = (RET[k] - valMean) / valStd;
   }
+  if (perf.on) pfAdd('upd.norm', _tNorm);
+  checkpointWeights();
 
   const idx = Array.from({ length: N }, (_, k) => k);
   const hp = {
@@ -2081,12 +2776,15 @@ async function _runPPO(batch) {
     }
     return kl / klSample;
   };
+  const _tk0 = perf.on ? performance.now() : 0;
   const kl0 = cfg.klStop ? klEstimate() : 0;
+  if (perf.on && cfg.klStop) pfAdd('upd.kl', _tk0);
   let epochsRan = 0;
 
   // ── GPU path: the COMPLETE update (all epochs, shuffling, Adam) runs on the
   //    TF.js worker; the new weights come back in one message ────────────────
   if (gpuState === 'ready' && tfWorker) {
+    const _tgpu = perf.on ? performance.now() : 0;
     try {
       // Truncate to a whole number of minibatches. Constant tensor shapes
       // are what lets the WebGL backend REUSE its textures — per-update
@@ -2103,6 +2801,7 @@ async function _runPPO(batch) {
         act.set(ACT[k], k * ACT_DIM);
         logp[k] = LOGP[k]; adv[k] = ADV[k]; ret[k] = RET[k];
       }
+      _pfWait++;
       const r = await new Promise((resolve, reject) => {
         _tfPending = {
           resolve, reject,
@@ -2116,7 +2815,7 @@ async function _runPPO(batch) {
           hp: { ...hp, lr: cfg.lr },
           epochs: cfg.epochs, minibatch: mbs,
         }, [obs.buffer, act.buffer, logp.buffer, adv.buffer, ret.buffer]);
-      });
+      }).finally(() => { _pfWait--; });
       // sanity: never load NaN/Inf weights into the live policy
       let finite = Number.isFinite(r.loss.pi) && Number.isFinite(r.loss.v);
       for (let k = 0; finite && k < r.actorFlat.length; k += 97) {
@@ -2141,14 +2840,17 @@ async function _runPPO(batch) {
       _tfFail(String(err && err.message || err));
       // fall through to the CPU path for this batch
     }
+    if (perf.on) pfAdd('upd.gpu', _tgpu);
   }
 
   for (let ep = 0; ep < cfg.epochs && !gpuDone; ep++) {
     // Fisher-Yates shuffle
+    const _tsh = perf.on ? performance.now() : 0;
     for (let k = N - 1; k > 0; k--) {
       const j = Math.floor(Math.random() * (k + 1));
       const tmp = idx[k]; idx[k] = idx[j]; idx[j] = tmp;
     }
+    if (perf.on) pfAdd('upd.shuffle', _tsh);
 
     // ── CPU path (pool or local): per-minibatch ──────────────────────────────
     for (let start = 0; start < N; start += cfg.minibatch) {
@@ -2160,9 +2862,10 @@ async function _runPPO(batch) {
       const pool = gradPool && gradPool.length ? gradPool : null;
       if (pool) {
         // ── Parallel: split the minibatch across the pool ──
+        const _tpk = perf.on ? performance.now() : 0;
         const K = Math.min(pool.length, Math.max(1, Math.floor(bs / 32)));
         const per = Math.ceil(bs / K);
-        const aFlat = actor.flatF64(), cFlat = critic.flatF64();
+        const [aFlat, cFlat] = poolWeights();
         const lsArr = Array.from(logStd);
         const tasks = [];
         for (let c = 0; c < K; c++) {
@@ -2178,6 +2881,9 @@ async function _runPPO(batch) {
           }, [slice.obs.buffer, slice.act.buffer, slice.logp.buffer, slice.adv.buffer, slice.ret.buffer]));
         }
         let results;
+        if (perf.on) { pfAdd('upd.pack', _tpk); pfCount('upd.tasks', tasks.length); }
+        const _tgw = perf.on ? performance.now() : 0;
+        _pfWait++;
         try {
           results = await Promise.all(tasks);
         } catch (err) {
@@ -2186,49 +2892,46 @@ async function _runPPO(batch) {
           gradPool = [];
           start -= cfg.minibatch; // redo this minibatch locally
           continue;
+        } finally {
+          _pfWait--;
+          if (perf.on) pfAdd('upd.gradwait', _tgw);
         }
-        const aG = new Float64Array(aFlat.length);
-        const cG = new Float64Array(cFlat.length);
+        const _trd = perf.on ? performance.now() : 0;
         gLs = new Float64Array(ACT_DIM);
-        mbPi = 0; mbV = 0; mbEnt = 0;
-        for (const r of results) {
-          for (let k = 0; k < aG.length; k++) aG[k] += r.aG[k];
-          for (let k = 0; k < cG.length; k++) cG[k] += r.cG[k];
-          for (let d = 0; d < ACT_DIM; d++) gLs[d] += r.gLs[d];
-          mbPi += r.pi; mbV += r.v; mbEnt += r.ent;
-          if (r.mode === 'wasm') _wasmOk = true;
-        }
-        actor.loadGradFlat(aG);
-        critic.loadGradFlat(cG);
+        ({ pi: mbPi, v: mbV, ent: mbEnt } = reduceGrads(results, ACT_DIM, gLs));
+        if (perf.on) pfAdd('upd.reduce', _trd);
       } else {
         // ── Local fallback: single-threaded gradient computation ──
         actor.zeroGrad(); critic.zeroGrad();
+        const _tpk2 = perf.on ? performance.now() : 0;
         const slice = packSlice(OBS, ACT, LOGP, ADV, RET, idx, start, end);
+        if (perf.on) { pfAdd('upd.pack', _tpk2); }
+        const _tgl = perf.on ? performance.now() : 0;
         const r = accumulatePPOGrads(actor, critic, logStd, hp, slice);
+        if (perf.on) { pfAdd('upd.gradlocal', _tgl); pfCount('upd.tasks', 1); }
         gLs = r.gLs; mbPi = r.pi; mbV = r.v; mbEnt = r.ent;
         // yield so simLoop can tick between minibatches
+        _pfWait++;
         await new Promise(res => setTimeout(res, 0));
+        _pfWait--;
       }
 
+      const _tad = perf.on ? performance.now() : 0;
       actor.adamStep(cfg.lr, 1 / bs);
       critic.adamStep(cfg.lr, 1 / bs);
-      lsT++;
-      const b1 = 0.9, b2 = 0.999, eps = 1e-8;
-      const bc1 = 1 - Math.pow(b1, lsT), bc2 = 1 - Math.pow(b2, lsT);
-      for (let d = 0; d < ACT_DIM; d++) {
-        const g = gLs[d] / bs;
-        lsM[d] = b1 * lsM[d] + (1 - b1) * g;
-        lsV[d] = b2 * lsV[d] + (1 - b2) * g * g;
-        logStd[d] -= cfg.lr * (lsM[d] / bc1) / (Math.sqrt(lsV[d] / bc2) + eps);
-        logStd[d] = Math.max(-2.5, Math.min(0.3, logStd[d]));
-      }
+      stepLogStd(gLs, bs);
+
+      if (perf.on) { pfAdd('upd.adam', _tad); pfCount('upd.minibatches', 1); }
 
       sumPi += mbPi / bs; sumV += mbV / bs; sumEnt += mbEnt / bs; nMB++;
     }
 
     epochsRan = ep + 1;
+    if (perf.on) pfCount('upd.epochs', 1);
     if (cfg.klStop) {
+      const _tkl = perf.on ? performance.now() : 0;
       const kl = klEstimate() - kl0;
+      if (perf.on) pfAdd('upd.kl', _tkl);
       lastKl = kl;
       if (kl > cfg.klLimit) break;  // policy moved far enough — extra epochs
                                     // would only overfit this batch
@@ -2237,15 +2940,20 @@ async function _runPPO(batch) {
   if (gen !== simGen) return;  // re-init during the GPU update → discard results
   if (!gpuDone) lastEpochs = epochsRan;
 
+  const _tpost = perf.on ? performance.now() : 0;
   if (nMB) lastLoss = { pi: sumPi / nMB, v: sumV / nMB, ent: sumEnt / nMB };
+  if (!gpuDone && !updateIsFinite(nMB ? lastLoss : null)) rollbackWeights();
   iteration++;
   if (_loadBestPending) { _loadBestPending = false; loadBestSnapshot(); }
   else updateBestSnapshot();
   if (!isRecurrent && (_repairPending || (cfg.neuronRepair && iteration % REPAIR_EVERY === 0))) {
     _repairPending = false;
     repairPass();
+    fwdInvalidate();
   }
   if (!isRecurrent && cfg.failRate > 0) refreshFailNets();  // defect copies track new weights
+  fwdInvalidate();     // the completed policy is the new behaviour policy
+  if (perf.on) { pfAdd('upd.post', _tpost); pfAdd('upd.wall', _tWall); }
   _ppoRunning = false;
   if (_poolRebuild) { _poolRebuild = false; initGradPool(true); }
 }
@@ -2291,6 +2999,10 @@ function buildSnapshot() {
       masked: cfg.failRate > 0 ? envs.filter(e => e.actNet).length : 0,
     },
     gradThreads: gradPool ? gradPool.length : 0,
+    inferBackend: fwdReady() ? 'wasm-batch' : 'js',
+    rayBackend: rayBackendName(),
+    updateRejects,
+    inferInfo: fwdReady() ? '' : (fwdErr || 'loading'),
     backend: gpuState === 'ready'  ? 'gpu'
            : gpuState === 'init'   ? 'gpu-init'
            : gpuState === 'failed' ? 'gpu-failed'
@@ -2337,13 +3049,22 @@ function simLoop() {
   if (steps > MAX_STEPS_PER_TICK) { steps = MAX_STEPS_PER_TICK; _accum = 0; }
   else _accum -= steps * FIXED_DT;
 
+  const _ts = perf.on ? performance.now() : 0;
   for (let s = 0; s < steps; s++) {
     stepOnce(FIXED_DT);
     if (!running) break;
   }
+  if (perf.on) {
+    const d = performance.now() - _ts;
+    pfMs('roll.step', d);
+    if (_pfWait) pfMs('roll.step.overlap', d);  // ran while an update awaited
+    pfCount('sim.steps', steps);
+  }
 
   if (now - lastPostMs >= 1000 / POST_HZ) {
+    const _tn = perf.on ? performance.now() : 0;
     postMessage(buildSnapshot());
+    if (perf.on) pfAdd('snapshot', _tn);
     lastPostMs = now;
   }
 
@@ -2376,12 +3097,16 @@ self.onmessage = function (e) {
     carSpec       = carData;
 
     if (config) Object.assign(cfg, config);
+    perf.on = !!cfg.perf;
+    pfReset();
 
     running = false;
     stopLoop();
     initGradPool();
     initSim(model || null);
     initGpu();
+    // Batched inference kernel; the JS path runs until it resolves.
+    initFwd().then(fwdBuildLayout);
     postMessage({
       type: 'ready', obsDim: OBS_DIM, actorSizes: actor.sizes,
       numEnvs: cfg.numEnvs, gradThreads: gradPool ? gradPool.length : 0,
@@ -2444,6 +3169,53 @@ self.onmessage = function (e) {
     return;
   }
 
+  // Read one agent's live observation vector, with the layout that describes
+  // it. Useful for checking what the policy actually receives — the inputs are
+  // configurable now, so "which index is what" is no longer a constant.
+  if (type === 'inspectObs') {
+    if (!envs.length || !actor) return;
+    const env = envs[Math.min(envs.length - 1, Math.max(0, e.data.env | 0))];
+    useTrack(env.trackIdx);
+    const obs = new Float64Array(OBS_DIM);
+    buildObs(env.car, obs);
+    postMessage({
+      type: 'obsSample',
+      obs: Array.from(obs),
+      obsDim: OBS_DIM,
+      probeDists: Array.from(PROBE_DISTS),
+      edgeRays: !!(wallIdx && wallIdx.edge),
+      probeWidths: PROBE_STRIDE === 4, probeStride: PROBE_STRIDE, widthNorm: WIDTH_NORM,
+      rayDist: RAY_DIST, edgeRayDist: EDGE_RAY_DIST,
+      rayBackend: rayBackendName(),
+    });
+    return;
+  }
+
+  // Profiler control: { on } toggles collection, { reset } zeroes the
+  // accumulators AFTER the report is taken, so a benchmark can read one
+  // window and start the next in a single round-trip.
+  if (type === 'perf') {
+    if (typeof e.data.on === 'boolean') perf.on = e.data.on;
+    const report = {
+      type: 'perfStats',
+      tag: e.data.tag,
+      on: perf.on,
+      wall: performance.now() - perf.t0,
+      ms: { ...perf.ms },
+      n:  { ...perf.n },
+      iteration, totalSteps,
+      episodes: recentReturns.length,
+      gradThreads: gradPool ? gradPool.length : 0,
+      wasm: _wasmOk, wasmErr: _wasmErr, gpuState, gpuInfo,
+      epochsMax: cfg.epochs, minibatch: cfg.minibatch,
+      horizon: cfg.horizon, numEnvs: cfg.numEnvs,
+      obsDim: OBS_DIM, actorSizes: actor ? actor.sizes : null,
+    };
+    if (e.data.reset) pfReset();
+    postMessage(report);
+    return;
+  }
+
   if (type === 'loadBest') {
     if (!best) return;
     if (_ppoRunning) _loadBestPending = true;  // applied when the update finishes
@@ -2453,10 +3225,12 @@ self.onmessage = function (e) {
 
   if (type === 'exportModel') {
     if (!actor) return;
-    // Default: export the best-average snapshot when one exists — the live
-    // weights may have drifted past their peak. { which: 'current' } forces
-    // the live weights.
-    const useBest = !!best && e.data.which !== 'current';
+    // Default: the LATEST weights. The best-average snapshot is scored on a
+    // single scalar (mean return over recent episodes), which is not a
+    // meaningful thing to maximise once training spans several maps — the
+    // "best" update is then whichever one happened to draw the easier tracks.
+    // { which: 'best' } still returns the snapshot for anyone who wants it.
+    const useBest = e.data.which === 'best' && !!best;
     postMessage({
       type: 'modelExport',
       model: {
@@ -2466,6 +3240,17 @@ self.onmessage = function (e) {
         algo: isRecurrent ? 'ppo-gru' : 'ppo',
         obsDim: OBS_DIM,
         actDim: ACT_DIM,
+        // The look-ahead window is configurable, so the observation layout
+        // travels with the model — without it a consumer cannot rebuild the
+        // inputs this policy was trained on.
+        probeDists: Array.from(PROBE_DISTS),
+        // Inputs 11..17 measure the pavement boundary, not the barriers. Older
+        // exports lack the flag and are read as barrier rays.
+        edgeRays: !!(wallIdx && wallIdx.edge),
+        // Probes carry the drivable width either side, so each probe occupies
+        // four slots instead of two. Absent in older exports, which used two.
+        probeWidths: PROBE_STRIDE === 4,
+        widthNorm: WIDTH_NORM,
         actor:  { sizes: actor.sizes,  flat: useBest ? Array.from(best.aFlat) : actor.flat()  },
         critic: { sizes: critic.sizes, flat: useBest ? Array.from(best.cFlat) : critic.flat() },
         logStd: Array.from(useBest ? best.logStd : logStd),

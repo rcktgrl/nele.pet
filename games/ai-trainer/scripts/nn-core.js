@@ -43,6 +43,11 @@ export class Net {
     return n;
   }
 
+  // The per-layer activation buffers are deliberately allocated fresh on every
+  // call. Reusing preallocated ones was measured SLOWER (7 % at 256×2): the
+  // short-lived arrays stay in V8's nursery, where allocation is a pointer
+  // bump and the zero-fill comes free, while long-lived scratch pays write
+  // barriers and an explicit clear. See docs/perf-benchmark.md.
   forward(x, cache = null) {
     let a = x;
     if (cache) cache.acts = [x];
@@ -170,8 +175,10 @@ export class Net {
     return out;
   }
 
-  flatF64() {
-    const out = new Float64Array(this.paramCount());
+  // Fill a caller-owned buffer instead of allocating one. The update loop
+  // ships the weights to the gradient pool once per minibatch; at 256×2 that
+  // is 620 KB per net per minibatch, which is not worth handing to the GC.
+  flatF64Into(out) {
     let k = 0;
     for (let l = 0; l < this.W.length; l++) {
       out.set(this.W[l], k); k += this.W[l].length;
@@ -179,6 +186,8 @@ export class Net {
     }
     return out;
   }
+
+  flatF64() { return this.flatF64Into(new Float64Array(this.paramCount())); }
 
   loadFlat(arr) {
     let k = 0;
@@ -205,6 +214,20 @@ export class Net {
       this.gb[l].set(arr.subarray(k, k + this.gb[l].length)); k += this.gb[l].length;
     }
   }
+
+  // Add a flat gradient on top of the current one. Lets the update loop reduce
+  // the pool's partial gradients straight into the net — no full-size
+  // accumulator to allocate, fill and copy for every minibatch.
+  addGradFlat(arr) {
+    let k = 0;
+    for (let l = 0; l < this.gW.length; l++) {
+      const gW = this.gW[l], gb = this.gb[l];
+      for (let i = 0; i < gW.length; i++) gW[i] += arr[k + i];
+      k += gW.length;
+      for (let i = 0; i < gb.length; i++) gb[i] += arr[k + i];
+      k += gb.length;
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -221,18 +244,31 @@ export function accumulatePPOGrads(actor, critic, logStd, hp, data) {
   const gLs = new Float64Array(actDim);
   let sumPi = 0, sumV = 0, sumEnt = 0;
 
+  // Hoisted out of the sample loop: the cache objects are refilled by each
+  // forward, and the two small gradient vectors are fully overwritten per
+  // sample. (The per-layer activation buffers inside forward() stay
+  // per-call — see the note there.)
+  const aCache = {}, cCache = {};
+  const dMu = new Float64Array(actDim);
+  const dV  = new Float64Array(1);
+  // σ and σ² are constant across the minibatch — logStd only moves between
+  // Adam steps — so the exp() calls are hoisted out of the sample loop.
+  const sd = new Float64Array(actDim), sd2 = new Float64Array(actDim);
+  for (let d = 0; d < actDim; d++) {
+    sd[d] = Math.exp(logStd[d]);
+    sd2[d] = Math.exp(2 * logStd[d]);
+  }
+
   for (let k = 0; k < n; k++) {
     const o = obs.subarray(k * obsDim, (k + 1) * obsDim);
     const a = act.subarray(k * actDim, (k + 1) * actDim);
     const A = adv[k], R = ret[k];
 
     // ── Actor ──
-    const aCache = {};
     const mu = actor.forward(o, aCache);
     let lp = 0;
     for (let d = 0; d < actDim; d++) {
-      const sd = Math.exp(logStd[d]);
-      const z = (a[d] - mu[d]) / sd;
+      const z = (a[d] - mu[d]) / sd[d];
       lp += -0.5 * z * z - logStd[d] - 0.5 * LOG_2PI;
     }
     const ratio = Math.exp(Math.min(20, lp - logp[k]));
@@ -242,11 +278,9 @@ export function accumulatePPOGrads(actor, critic, logStd, hp, data) {
     // gradient flows only through the unclipped branch when it's the min
     const coef = surr1 <= surr2 ? -A * ratio : 0;
     if (coef !== 0) {
-      const dMu = new Float64Array(actDim);
       for (let d = 0; d < actDim; d++) {
-        const sd2 = Math.exp(2 * logStd[d]);
-        dMu[d] = coef * (a[d] - mu[d]) / sd2;
-        gLs[d] += coef * (((a[d] - mu[d]) ** 2) / sd2 - 1);
+        dMu[d] = coef * (a[d] - mu[d]) / sd2[d];
+        gLs[d] += coef * (((a[d] - mu[d]) ** 2) / sd2[d] - 1);
       }
       actor.backward(aCache, dMu);
     }
@@ -257,11 +291,10 @@ export function accumulatePPOGrads(actor, critic, logStd, hp, data) {
     }
 
     // ── Critic ──
-    const cCache = {};
     const v = critic.forward(o, cCache)[0];
-    const dv = hp.vfCoef * (v - R);
     sumV += 0.5 * (v - R) ** 2;
-    critic.backward(cCache, Float64Array.of(dv));
+    dV[0] = hp.vfCoef * (v - R);
+    critic.backward(cCache, dV);
   }
 
   return { gLs, pi: sumPi, v: sumV, ent: sumEnt };
@@ -381,12 +414,12 @@ export class GRUNet {
     }
   }
 
-  flatF64() {
-    const out = new Float64Array(this.paramCount());
+  flatF64Into(out) {
     let k = 0;
     for (const p of this._P) { out.set(p, k); k += p.length; }
     return out;
   }
+  flatF64() { return this.flatF64Into(new Float64Array(this.paramCount())); }
   flat() { return Array.from(this.flatF64()); }
 
   loadFlat(arr) {
@@ -404,6 +437,14 @@ export class GRUNet {
   loadGradFlat(arr) {
     let k = 0;
     for (const g of this._G) { g.set(arr.subarray(k, k + g.length)); k += g.length; }
+  }
+
+  addGradFlat(arr) {
+    let k = 0;
+    for (const g of this._G) {
+      for (let i = 0; i < g.length; i++) g[i] += arr[k + i];
+      k += g.length;
+    }
   }
 
   // Forward a whole sequence from initial state h0, caching the per-step

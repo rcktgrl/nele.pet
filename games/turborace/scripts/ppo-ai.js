@@ -34,22 +34,38 @@ const EDGE_RAY_ANGLES = [
   Math.PI / 18, Math.PI / 4, Math.PI / 2,
 ];
 const EDGE_RAY_DIST = 35;
-const PROBE_DISTS = [10, 20, 35, 55, 100, 200];
+// Look-ahead probe distances. The trainer's "map window" is configurable, so
+// the layout travels with the model in `probeDists`; this is the stock window,
+// used for exports made before that field existed.
+const LEGACY_PROBE_DISTS = [10, 20, 35, 55, 100, 200];
 const SLOPE_NORM  = 0.30;
+
+// A model's probe set, falling back to the stock window.
+function probeDistsOf(model) {
+  const p = model && model.probeDists;
+  return (Array.isArray(p) && p.length && p.every(Number.isFinite))
+    ? p.slice() : LEGACY_PROBE_DISTS.slice();
+}
+// Probes occupy four slots when the model carries drivable widths, two
+// otherwise (every export predating the flag).
+function probeStrideOf(model) { return (model && model.probeWidths === true) ? 4 : 2; }
+function baseObsOf(model) { return 24 + probeDistsOf(model).length * probeStrideOf(model); }
+
+const GRAVEL_MARGIN = 1.75;   // matches the trainer's on-gravel inner bound
+const DEFAULT_WIDTH_NORM = 25;
 const MEM_RATE    = 0.1;
 const ACTION_REPEAT = 2; // physics ticks per decision, same as training
 
-// Shared observation prefix (indices 0..35) common to both algorithms.
-const BASE_OBS = 24 + PROBE_DISTS.length * 2; // 36
+// Observation width is derived per model (baseObsOf), since the map window is
+// configurable: 24 base inputs + 2 per probe, then the memory cells. At the
+// stock window that is 36 base → 40 feed-forward / 36 recurrent.
 
-// Feed-forward PPO: 4 external memory cells appended → obs 40, act 6.
+// Feed-forward PPO: 4 external memory cells appended → act 6.
 const FF_MEM_DIM = 4;
-const FF_OBS_DIM = BASE_OBS + FF_MEM_DIM; // 40
 const FF_ACT_DIM = 2 + FF_MEM_DIM;        // 6
 
-// Recurrent PPO-GRU: GRU hidden state replaces the memory cells → obs 36, act 2.
-const GRU_OBS_DIM = BASE_OBS; // 36
-const GRU_ACT_DIM = 2;        // 2
+// Recurrent PPO-GRU: the GRU hidden state replaces the memory cells → act 2.
+const GRU_ACT_DIM = 2;
 
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 function wrapPi(a) { return a - 2 * Math.PI * Math.round(a / (2 * Math.PI)); }
@@ -86,9 +102,10 @@ export function validateTrainedModel(model) {
     if (sizes.length !== 3) {
       throw new Error('incompatible recurrent model: actor must be a single GRU layer [in, hidden, out] — retrain and re-export in the AI Trainer');
     }
-    if (model.obsDim !== GRU_OBS_DIM || sizes[0] !== GRU_OBS_DIM || outDim !== GRU_ACT_DIM) {
+    const gruObs = baseObsOf(model);
+    if (model.obsDim !== gruObs || sizes[0] !== gruObs || outDim !== GRU_ACT_DIM) {
       throw new Error(`incompatible model: obs ${model.obsDim}/act ${outDim}, ` +
-                      `the game expects obs ${GRU_OBS_DIM}/act ${GRU_ACT_DIM} for a GRU policy — retrain and re-export in the AI Trainer`);
+                      `its map window implies obs ${gruObs}/act ${GRU_ACT_DIM} for a GRU policy — retrain and re-export in the AI Trainer`);
     }
     if (model.actor.flat.length !== gruParamCount(sizes)) {
       throw new Error('actor weight count does not match its GRU layer sizes');
@@ -98,9 +115,10 @@ export function validateTrainedModel(model) {
 
   if (model.algo === 'ppo') {
     // Feed-forward actor: sizes is [in, ...hidden, out].
-    if (model.obsDim !== FF_OBS_DIM || sizes[0] !== FF_OBS_DIM || outDim !== FF_ACT_DIM) {
+    const ffObs = baseObsOf(model) + FF_MEM_DIM;
+    if (model.obsDim !== ffObs || sizes[0] !== ffObs || outDim !== FF_ACT_DIM) {
       throw new Error(`incompatible model: obs ${model.obsDim}/act ${outDim}, ` +
-                      `the game expects obs ${FF_OBS_DIM}/act ${FF_ACT_DIM} — retrain and re-export in the AI Trainer`);
+                      `its map window implies obs ${ffObs}/act ${FF_ACT_DIM} — retrain and re-export in the AI Trainer`);
     }
     let n = 0;
     for (let l = 0; l < sizes.length - 1; l++) n += (sizes[l] + 1) * sizes[l + 1];
@@ -117,6 +135,10 @@ export function saveTrainedModel(model) {
     algo: model.algo,
     obsDim: model.obsDim,
     actDim: model.actDim,
+    probeDists: model.probeDists,   // observation layout the policy expects
+    edgeRays: model.edgeRays,       // short fan aims at the pavement boundary
+    probeWidths: model.probeWidths, // probes carry drivable width either side
+    widthNorm: model.widthNorm,
     actor: model.actor,
     iteration: model.iteration,
     totalSteps: model.totalSteps,
@@ -152,9 +174,19 @@ export class PPOAI {
     this.context = context;
 
     this.recurrent = model.algo === 'ppo-gru';
-    this.obsDim = this.recurrent ? GRU_OBS_DIM : FF_OBS_DIM;
-    this.actDim = this.recurrent ? GRU_ACT_DIM : FF_ACT_DIM;
+    // The observation layout comes from the model, not from a constant: the
+    // trainer's map window is configurable and a policy only makes sense fed
+    // the window it learned on.
+    // Inputs 11..17 are pavement-boundary rays when the model says so; older
+    // exports predate the flag and trained against the barriers.
+    this.edgeRays = model.edgeRays === true;
+    this.probeDists = probeDistsOf(model);
+    this.probeStride = probeStrideOf(model);
+    this.widthNorm = Number.isFinite(model.widthNorm) ? model.widthNorm : DEFAULT_WIDTH_NORM;
+    this.baseObs = 24 + this.probeDists.length * this.probeStride;
     this.memDim = this.recurrent ? 0 : FF_MEM_DIM;
+    this.obsDim = this.baseObs + this.memDim;
+    this.actDim = this.recurrent ? GRU_ACT_DIM : FF_ACT_DIM;
 
     if (this.recurrent) this._unpackGRU(model.actor);
     else                this._unpackActor(model.actor);
@@ -322,12 +354,18 @@ export class PPOAI {
 
   // ── Sensors ──────────────────────────────────────────────────────────────────
 
-  _castRayFan(angles, maxDist, out, offset) {
+  // `useEdges` aims the fan at the pavement boundary (where gravel starts)
+  // instead of the barriers — what the trainer's short fan measures when the
+  // model was exported with edgeRays.
+  _castRayFan(angles, maxDist, out, offset, useEdges) {
     const c = this.car;
     const ox = c.pos.x, oz = c.pos.z;
     const rr = maxDist * maxDist * 1.5;
     const near = [];
-    for (const segs of [state.trkWallLeft || [], state.trkWallRight || []]) {
+    const sides = useEdges
+      ? [state.trkEdgeLeft || [], state.trkEdgeRight || []]
+      : [state.trkWallLeft || [], state.trkWallRight || []];
+    for (const segs of sides) {
       for (const w of segs) {
         const cx = (w.x0 + w.x1) * 0.5 - ox, cz = (w.z0 + w.z1) * 0.5 - oz;
         const e0x = w.x0 - ox, e0z = w.z0 - oz;
@@ -358,7 +396,7 @@ export class PPOAI {
 
     this._castRayFan(RAY_ANGLES, RAY_DIST, out, 0);
     for (let k = 0; k < RAY_ANGLES.length; k++) out[k] = Math.sqrt(out[k]);
-    this._castRayFan(EDGE_RAY_ANGLES, EDGE_RAY_DIST, out, 11);
+    this._castRayFan(EDGE_RAY_ANGLES, EDGE_RAY_DIST, out, 11, this.edgeRays);
 
     const ap = this._arcPosition(c.pos.x, c.pos.z);
     const speedFrac = c.spd / c.data.maxSpd;
@@ -378,17 +416,46 @@ export class PPOAI {
     out[23] = Math.max(-1, Math.min(1, (hereAhead.y - prevY) / 4 / SLOPE_NORM));
 
     let prevD = 0;
-    for (let k = 0; k < PROBE_DISTS.length; k++) {
-      const d = PROBE_DISTS[k];
+    const st = this.probeStride;
+    for (let k = 0; k < this.probeDists.length; k++) {
+      const d = this.probeDists[k];
       const p = this._pointAtArc(ap.s + d);
       const ang = wrapPi(Math.atan2(p.x - c.pos.x, p.z - c.pos.z) - c.hdg);
       const slope = (p.y - prevY) / (d - prevD);
-      out[24 + k * 2]     = Math.max(-1, Math.min(1, ang / Math.PI));
-      out[24 + k * 2 + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
+      out[24 + k * st]     = Math.max(-1, Math.min(1, ang / Math.PI));
+      out[24 + k * st + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
+      if (st === 4) {
+        const ext = this._extentAt(p);
+        out[24 + k * st + 2] = Math.min(1, ext[0] / this.widthNorm);
+        out[24 + k * st + 3] = Math.min(1, ext[1] / this.widthNorm);
+      }
       prevY = p.y; prevD = d;
     }
     // Feed-forward only: external memory cells (the GRU has no memory inputs).
-    for (let d = 0; d < this.memDim; d++) out[BASE_OBS + d] = this.mem[d];
+    for (let d = 0; d < this.memDim; d++) out[this.baseObs + d] = this.mem[d];
+  }
+
+  // Drivable half-width either side at a centerline point: pavement plus kerb
+  // margin plus that side's runoff, matching the trainer's extent table.
+  _extentAt(p) {
+    const { trackData } = this.context();
+    const half = ((trackData && trackData.rw) || 12) * 0.5;
+    const base = half + GRAVEL_MARGIN;
+    const g = state.gravelProfile;
+    this._ext = this._ext || new Float64Array(2);
+    if (!g || !g.pts || !g.pts.length) { this._ext[0] = this._ext[1] = base; return this._ext; }
+    let bi = 0, bd = Infinity;
+    const pts = g.pts;
+    for (let i = 0; i < pts.length; i++) {
+      const dx = p.x - pts[i].x, dz = p.z - pts[i].z;
+      const dd = dx * dx + dz * dz;
+      if (dd < bd) { bd = dd; bi = i; }
+    }
+    const li = Math.min(bi, g.leftRunoff.length - 1);
+    const ri = Math.min(bi, g.rightRunoff.length - 1);
+    this._ext[0] = base + (g.leftRunoff[li]  || 0);
+    this._ext[1] = base + (g.rightRunoff[ri] || 0);
+    return this._ext;
   }
 
   // ── Main update (called every physics tick) ──────────────────────────────────

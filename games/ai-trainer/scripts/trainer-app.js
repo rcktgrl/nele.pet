@@ -157,18 +157,26 @@ function bestCarIndex(cars) {
 // ─────────────────────────────────────────────────────────────────────────────
 let worker = null, workerReady = false, simRunning = false;
 
-const OBS_DIM = 40; // must match sim-worker.js (36 + 4 memory cells)
+// Observation width follows the look-ahead window, so it is derived rather
+// than fixed: 24 base inputs + 2 per probe + 4 memory cells. Must match
+// configureDims() in sim-worker.js.
 const ACT_DIM = 6;  // steer, throttle/brake + 4 memory-cell deltas
+function obsDim() {
+  return 24 + (simCfg.probeCount | 0) * (simCfg.probeWidths ? 4 : 2) + 4;
+}
 
 // Full training config — architecture fields require restart, others are live
 const simCfg = {
   hiddenLayers: 1,       // restart required
   hiddenSize: 64,        // restart required
-  recurrent: false,      // restart required — GRU recurrent policy/critic (BPTT)
+  recurrent: true,       // restart required — GRU recurrent policy/critic (BPTT)
   bpttLen: 32,           // truncated-BPTT window (decisions per training chunk)
   backend: 'auto',       // restart required — 'auto' | 'gpu' | 'wasm' | 'js'
   threads: Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 2)),
   numEnvs: 8,            // restart required
+  probeCount: 6,         // restart required — centerline look-ahead probes
+  probeRange: 200,       // restart required — metres to the furthest probe
+  probeWidths: true,     // restart required — probes carry the drivable width
   speedMult: 1,
   episodeLen: 60,
   randomSpawn: true,
@@ -204,6 +212,11 @@ function serializeTrackFromState() {
     pts:          state.trkPts.map(p => ({ x: p.x, y: p.y, z: p.z })),
     wallLeft:     (state.trkWallLeft  || []).map(w => ({ x0: w.x0, z0: w.z0, x1: w.x1, z1: w.z1 })),
     wallRight:    (state.trkWallRight || []).map(w => ({ x0: w.x0, z0: w.z0, x1: w.x1, z1: w.z1 })),
+    // Pavement boundary at ±rw/2 — where the asphalt ends and gravel begins.
+    // track-gen already computes it for the scripted AI; the short ray fan
+    // aims at this instead of the barriers.
+    edgeLeft:     (state.trkEdgeLeft  || []).map(w => ({ x0: w.x0, z0: w.z0, x1: w.x1, z1: w.z1 })),
+    edgeRight:    (state.trkEdgeRight || []).map(w => ({ x0: w.x0, z0: w.z0, x1: w.x1, z1: w.z1 })),
     data: state.trkData ? { wp: state.trkData.wp, rw: state.trkData.rw, laps: state.trkData.laps } : null,
     gravelProfile: state.gravelProfile ? {
       pts:         state.gravelProfile.pts.map(p => ({ x: p.x, y: p.y, z: p.z })),
@@ -448,7 +461,7 @@ function drawNN(flat, layers) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function netParams(hiddenLayers, hiddenSize, outDim) {
-  const sizes = [OBS_DIM, ...Array(hiddenLayers).fill(hiddenSize), outDim];
+  const sizes = [obsDim(), ...Array(hiddenLayers).fill(hiddenSize), outDim];
   let n = 0;
   for (let i = 0; i < sizes.length - 1; i++) n += (sizes[i] + 1) * sizes[i + 1];
   return n;
@@ -465,7 +478,7 @@ function updateConfigParamCount() {
   const l = simCfg.hiddenLayers, h = simCfg.hiddenSize;
   let act, crit, note;
   if (simCfg.recurrent) {
-    const I = OBS_DIM - 4, O = ACT_DIM - 4;  // memory cells dropped
+    const I = obsDim() - 4, O = ACT_DIM - 4;  // memory cells dropped
     act  = gruParams(h, I, O);
     crit = gruParams(h, I, 1);
     note = ' · GRU recurrent';
@@ -559,6 +572,15 @@ function initConfigMenu() {
     [{ val: 32 }, { val: 64 }, { val: 128 }, { val: 256 }],
     'hiddenSize', () => updateConfigParamCount());
 
+  makeOptBtnGroup('configProbeCountBtns',
+    [{ val: 3 }, { val: 6 }, { val: 9 }, { val: 12 }],
+    'probeCount', () => updateConfigParamCount());
+
+  makeOptBtnGroup('configProbeRangeBtns',
+    [{ label: '80 m', val: 80 }, { label: '200 m', val: 200 },
+     { label: '400 m', val: 400 }, { label: '800 m', val: 800 }],
+    'probeRange');
+
   makeOptBtnGroup('configHorizonBtns',
     [{ label: '256', val: 256 }, { label: '512', val: 512 }, { label: '1024', val: 1024 }],
     'horizon');
@@ -583,6 +605,15 @@ function initConfigMenu() {
     recTog.checked = simCfg.recurrent;
     recTog.addEventListener('change', () => {
       simCfg.recurrent = recTog.checked;
+      updateConfigParamCount();
+    });
+  }
+
+  const pwTog = document.getElementById('configProbeWidthToggle');
+  if (pwTog) {
+    pwTog.checked = simCfg.probeWidths;
+    pwTog.addEventListener('change', () => {
+      simCfg.probeWidths = pwTog.checked;
       updateConfigParamCount();
     });
   }

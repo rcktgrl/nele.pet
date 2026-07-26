@@ -27,6 +27,19 @@ globalThis.postMessage = msg => {
   if (wakeup) { const w = wakeup; wakeup = null; w(); }
 };
 
+// Let the worker's batched-inference kernel load from disk, so this test
+// exercises the WASM decision path the browser uses rather than the fallback.
+const realFetch = globalThis.fetch;
+globalThis.fetch = async url => {
+  const str = String(url);
+  if (str.startsWith('file:')) {
+    const { readFile } = await import('node:fs/promises');
+    const bytes = await readFile(new URL(str));
+    return new Response(bytes, { headers: { 'Content-Type': 'application/wasm' } });
+  }
+  return realFetch(url);
+};
+
 const sim = await import('../scripts/sim-worker.js');
 const handler = globalThis.self.onmessage;
 const send = msg => handler({ data: msg });
@@ -125,13 +138,15 @@ console.log('\n1. Mirror augmentation index map');
 console.log('\n2. Vanilla PPO (mods off)');
 {
   const frame = await runConfig('vanilla', {
-    numEnvs: 4, speedMult: 200, episodeLen: 15,
+    numEnvs: 4, speedMult: 200, episodeLen: 15, recurrent: false,
     backend: 'js', threads: 1, minibatch: 128, horizon: 64, epochs: 2,
     klStop: false, mirror: false, neuronRepair: false, failRate: 0, groupSize: 1,
   }, 15000);
   if (frame) {
     check(`updates completed (${frame.iteration})`, frame.iteration > 0);
     check('losses finite', Number.isFinite(frame.loss.pi) && Number.isFinite(frame.loss.v));
+    check(`batched WASM inference active (${frame.inferBackend})`,
+      frame.inferBackend === 'wasm-batch', frame.inferInfo || '');
     check(`all epochs ran without KL stop (${frame.mods.epochs}/2)`, frame.mods.epochs === 2);
     check('no mods reported active',
       frame.mods.groupSize === 1 && !frame.mods.mirror && !frame.mods.repair && frame.mods.masked === 0);
@@ -144,7 +159,7 @@ console.log('\n2. Vanilla PPO (mods off)');
 console.log('\n3. KL early stop');
 {
   const frame = await runConfig('kl-stop', {
-    numEnvs: 4, speedMult: 200, episodeLen: 15,
+    numEnvs: 4, speedMult: 200, episodeLen: 15, recurrent: false,
     backend: 'js', threads: 1, minibatch: 128, horizon: 64, epochs: 4,
     klStop: true, klLimit: 1e-9,  // any movement at all must trigger the stop
   }, 15000);
@@ -160,7 +175,7 @@ console.log('\n3. KL early stop');
 console.log('\n4. Agent groups ×4');
 {
   const frame = await runConfig('groups', {
-    numEnvs: 8, speedMult: 200, episodeLen: 10,
+    numEnvs: 8, speedMult: 200, episodeLen: 10, recurrent: false,
     backend: 'js', threads: 1, minibatch: 128, horizon: 32, epochs: 2,
     groupSize: 4, klStop: false,
   }, 25000);
@@ -178,7 +193,7 @@ console.log('\n4. Agent groups ×4');
 console.log('\n5. Combined: mirror + 10% defect weights + neuron repair');
 {
   const frame = await runConfig('combo', {
-    numEnvs: 4, speedMult: 200, episodeLen: 12,
+    numEnvs: 4, speedMult: 200, episodeLen: 12, recurrent: false,
     backend: 'js', threads: 1, minibatch: 128, horizon: 64, epochs: 2,
     mirror: true, failRate: 0.10, neuronRepair: true, klStop: true,
   }, 25000);
@@ -223,7 +238,8 @@ console.log('\n6. Neuron repair on a crafted network');
   send({
     type: 'init', track: makeTrack(), carData, model,
     config: {
-      numEnvs: 4, speedMult: 200, episodeLen: 15,
+      // the crafted model above is OBS-wide, so pin the layout that produces it
+      numEnvs: 4, speedMult: 200, episodeLen: 15, recurrent: false, probeWidths: false,
       backend: 'js', threads: 1, hiddenSize: H, hiddenLayers: 1,
       neuronRepair: true, klStop: false, mirror: false, failRate: 0, groupSize: 1,
     },
@@ -253,16 +269,22 @@ console.log('\n6. Neuron repair on a crafted network');
 console.log('\n7. Recurrent PPO (GRU)');
 {
   inbox.length = 0;
+  // 'init' MERGES into the worker's config rather than replacing it, so a key
+  // an earlier section set stays set. Be explicit about the layout here rather
+  // than inheriting whatever ran before.
   send({ type: 'init', track: makeTrack(), carData, config: {
-    numEnvs: 4, speedMult: 200, episodeLen: 12,
+    numEnvs: 4, speedMult: 200, episodeLen: 12, probeWidths: true,
     backend: 'js', threads: 1, minibatch: 96, horizon: 64, epochs: 2,
     recurrent: true, bpttLen: 16, klStop: false,
   } });
   const ready = await waitFor(m => m.type === 'ready', 5000);
   check('recurrent worker ready', !!ready);
-  // memory-as-action cells are dropped → obs 36, act 2
-  check(`obs/act layout dropped memory cells (obs ${ready && ready.obsDim})`,
-    !!ready && ready.obsDim === 36 && ready.actorSizes[ready.actorSizes.length - 1] === 2);
+  // memory-as-action cells are dropped: obs is base + probes with NO memory
+  // tail, act is 2. Width follows the probe stride (4 slots per probe by
+  // default), so it is derived rather than hard-coded.
+  const GRU_OBS = 24 + 6 * 4;
+  check(`obs/act layout dropped memory cells (obs ${ready && ready.obsDim}, expected ${GRU_OBS})`,
+    !!ready && ready.obsDim === GRU_OBS && ready.actorSizes[ready.actorSizes.length - 1] === 2);
   send({ type: 'start' });
   await new Promise(res => setTimeout(res, 18000));
   send({ type: 'getSnapshot' });
@@ -272,6 +294,8 @@ console.log('\n7. Recurrent PPO (GRU)');
   send({ type: 'stop' });
   if (frame) {
     check(`recurrent updates completed (${frame.iteration})`, frame.iteration > 0);
+    check(`batched WASM GRU step active (${frame.inferBackend})`,
+      frame.inferBackend === 'wasm-batch', frame.inferInfo || '');
     check('recurrent losses finite', Number.isFinite(frame.loss.pi) && Number.isFinite(frame.loss.v));
     check('frame flagged recurrent', frame.recurrent === true);
   } else {
@@ -279,7 +303,7 @@ console.log('\n7. Recurrent PPO (GRU)');
   }
   const m = await exportModel();
   check('export is a recurrent (GRU) model',
-    !!m && m.algo === 'ppo-gru' && m.obsDim === 36 && m.actDim === 2 &&
+    !!m && m.algo === 'ppo-gru' && m.obsDim === GRU_OBS && m.actDim === 2 &&
     m.actor.flat.every(Number.isFinite) && m.critic.flat.every(Number.isFinite));
 }
 
