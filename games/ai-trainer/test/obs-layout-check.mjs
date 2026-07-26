@@ -123,8 +123,15 @@ async function sample(recurrent) {
   if (!await waitFor(m => m.type === 'ready')) return null;
   send({ type: 'getSnapshot' });
   const frame = await waitFor(m => m.type === 'frame');
-  send({ type: 'inspectObs', env: 0 });
-  const s = await waitFor(m => m.type === 'obsSample');
+  // The kernel loads asynchronously; sampling immediately after 'ready' would
+  // measure the JS fallback and prove nothing about the compiled path.
+  let s = null;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    send({ type: 'inspectObs', env: 0 });
+    s = await waitFor(m => m.type === 'obsSample');
+    if (s && s.rayBackend === 'wasm') break;
+    await new Promise(res => setTimeout(res, 50));
+  }
   send({ type: 'stop' });
   return s && frame ? { ...s, car: frame.cars[0] } : null;
 }
@@ -148,7 +155,9 @@ function report(label, s) {
   console.log(`\n══ ${label} — ${obsDim} inputs ══`);
   console.log(`   car at (${car.x.toFixed(1)}, ${car.z.toFixed(1)}) heading ${car.hdg.toFixed(3)} rad, speed ${car.spd.toFixed(2)}`);
   console.log(`   probes ${probeDists.join(', ')} m · edgeRays ${edgeRays} · probeStride ${probeStride}` +
-              ` · ray ranges ${rayDist}/${edgeRayDist} m\n`);
+              ` · rays via ${s.rayBackend} · ray ranges ${rayDist}/${edgeRayDist} m\n`);
+  check(`${label}: ray fans ran in the kernel, not the JS fallback`, s.rayBackend === 'wasm',
+    `rayBackend ${s.rayBackend}`);
   console.log('   idx  input                                          live    expected');
 
   for (let k = 0; k < LONG_ANGLES.length; k++) {

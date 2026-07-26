@@ -566,6 +566,40 @@ What each input actually is — including which rays duplicate each other and
 what the policy cannot see — is written up separately in
 [`observations.md`](./observations.md).
 
+## Ray casting in the kernel
+
+The last piece of the rollout still running interpreted: `rayThroughGrid` is an
+Amanatides–Woo grid march, ported to C so the 18 rays per decision run compiled.
+
+Each wall/edge grid is uploaded to linear memory once — segments, plus the
+per-cell segment lists flattened to CSR, since linear memory cannot hold JS's
+array-of-arrays — and marched in place. Direction vectors are computed host-side
+and passed in: deriving them in C would need `sin`/`cos`, which this
+deliberately import-free module does not have, and taking them from the host
+also guarantees both paths march the identical rays.
+
+Observation phase on `gru-recurrent`: **62 µs → 32.4 µs per tick (1.9×)**,
+8.8 % → 5.2 % of wall.
+
+That is a smaller share of the wall than it sounds, and the reason is worth
+recording: on this 4-core box the sim thread is already **idle-blocked ~40 % of
+the run** waiting for gradients, so making the rollout cheaper mostly buys more
+idling. The port matters on a machine with enough cores to run a wide gradient
+pool — the update finishes sooner there, and the single-threaded rollout becomes
+the critical path. It could not be demonstrated on the hardware it was written
+on.
+
+Two bugs the checks caught, both of the same family — code that looks correct
+because it silently degrades:
+
+- The ray fans were running the **JS fallback** while every geometric assertion
+  passed, because `initFwd()` resolves asynchronously and the check sampled
+  immediately after `ready`. `inspectObs` now reports `rayBackend`, and the
+  check asserts it rather than trusting that the values look right.
+- `initFwd()` builds a **new instance with its own linear memory** on every
+  init, so cached grid and scratch offsets pointed into a buffer that no longer
+  existed. The epoch counter invalidated the grids but not the scratch.
+
 ## Raw output
 
 `node games/ai-trainer/test/perf-bench.mjs --gens=3 --repeat=3 --json=out.json` writes

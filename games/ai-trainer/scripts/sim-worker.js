@@ -686,6 +686,7 @@ const EDGE_RAY_DIST = 35;
 
 export function castRayFan(car, angles, maxDist, out, offset, grid) {
   const g = grid || wallIdx.all;
+  if (fwdReady() && castRayFanWasm(car, angles, maxDist, out, offset, g)) return;
   const ox = car.pos.x, oz = car.pos.z;
   for (let k = 0; k < angles.length; k++) {
     const angle = car.hdg + angles[k];
@@ -1023,8 +1024,10 @@ function fwdBuildLayout() {
   const buf = mem.buffer;
   new Int32Array(buf, L.aSizesOff, aSizes.length).set(aSizes);
   new Int32Array(buf, L.cSizesOff, cSizes.length).set(cSizes);
+  L.end = off;
   fwdLayout = L;
   fwdDirty = true;
+  rayArenaReset();
 }
 
 function fwdUpload() {
@@ -1046,6 +1049,111 @@ function fwdRun(obsBatch, n, wantCritic) {
   ex.forward_batch(L.aLayers, L.aSizesOff, L.aFlatOff, L.obsOff, n, L.aOutOff);
   if (wantCritic) ex.forward_batch(L.cLayers, L.cSizesOff, L.cFlatOff, L.obsOff, n, L.cOutOff);
   return true;
+}
+
+// ── Ray casting in the kernel ───────────────────────────────────────────────
+//  The grid walker is the rollout's sensing cost. Each wall/edge grid is
+//  uploaded to linear memory once and marched by the compiled kernel instead
+//  of the JS port of the same algorithm.
+//
+//  Grids are bump-allocated after the inference layout and never freed: the
+//  set of tracks is fixed once training starts. `rayEpoch` invalidates every
+//  cached upload when the layout is rebuilt, since that moves the arena.
+let rayTop = 0, rayEpoch = 0, rayDirs = null, rayOut = null;
+
+function rayArenaReset() {
+  // initFwd() builds a NEW instance with its own linear memory, so every
+  // cached offset — grids and scratch alike — belongs to a buffer that no
+  // longer exists. Bumping the epoch invalidates the grids; the scratch has
+  // to be dropped outright.
+  rayDirs = null; rayOut = null;
+  rayEpoch++;
+  rayTop = fwdLayout ? fwdLayout.end : 0;
+}
+
+// Upload one grid (segments + CSR cells + dedupe stamps). Returns false when
+// it will not fit, leaving the caller on the JS path.
+function uploadGrid(g) {
+  if (!fwdReady() || !g || !g.n) return false;
+  if (g._rayEpoch === rayEpoch) return true;
+  const align8 = n => (n + 7) & ~7;
+  const nCells = g.gw * g.gh;
+  let total = 0;
+  for (let c = 0; c < nCells; c++) total += g.cells[c] ? g.cells[c].length : 0;
+
+  const szSegs = align8(g.n * 4 * 8);
+  const szStart = align8((nCells + 1) * 4);
+  const szIdx = align8(Math.max(1, total) * 4);
+  const szStamp = align8(g.n * 4);
+  const need = szSegs + szStart + szIdx + szStamp;
+
+  const mem = fwdInst.exports.memory;
+  if (rayTop + need > mem.buffer.byteLength) {
+    try { mem.grow(Math.ceil((rayTop + need - mem.buffer.byteLength) / 65536)); }
+    catch { return false; }
+  }
+  let off = rayTop;
+  const segsOff = off; off += szSegs;
+  const startOff = off; off += szStart;
+  const idxOff = off; off += szIdx;
+  const stampOff = off; off += szStamp;
+  rayTop = off;
+
+  const buf = mem.buffer;
+  new Float64Array(buf, segsOff, g.n * 4).set(g.segs);
+  const start = new Int32Array(buf, startOff, nCells + 1);
+  const idx = new Int32Array(buf, idxOff, Math.max(1, total));
+  let w = 0;
+  for (let c = 0; c < nCells; c++) {
+    start[c] = w;
+    const cell = g.cells[c];
+    if (cell) for (let k = 0; k < cell.length; k++) idx[w++] = cell[k];
+  }
+  start[nCells] = w;
+  new Int32Array(buf, stampOff, g.n).fill(0);
+
+  g._rayEpoch = rayEpoch;
+  g._off = { segsOff, startOff, idxOff, stampOff, nCells };
+  return true;
+}
+
+// Cast one fan through the kernel. Directions are computed here so the WASM
+// path marches the identical rays the JS path would.
+function castRayFanWasm(car, angles, maxDist, out, offset, g) {
+  if (!uploadGrid(g)) return false;
+  const m = angles.length;
+  if (!rayDirs || rayDirs.len < m * 2) {   // .len, not .length — it is a record
+    const align8 = n => (n + 7) & ~7;
+    const mem = fwdInst.exports.memory;
+    const need = align8(m * 2 * 8) + align8(m * 8);
+    if (rayTop + need > mem.buffer.byteLength) {
+      try { mem.grow(Math.ceil((rayTop + need - mem.buffer.byteLength) / 65536)); }
+      catch { return false; }
+    }
+    rayDirs = { off: rayTop, len: m * 2 }; rayTop += align8(m * 2 * 8);
+    rayOut  = { off: rayTop, len: m };     rayTop += align8(m * 8);
+  }
+  const buf = fwdInst.exports.memory.buffer;
+  const dirs = new Float64Array(buf, rayDirs.off, m * 2);
+  for (let k = 0; k < m; k++) {
+    const a = car.hdg + angles[k];
+    dirs[k * 2] = Math.sin(a); dirs[k * 2 + 1] = Math.cos(a);
+  }
+  const o = g._off;
+  fwdInst.exports.cast_ray_fan(
+    o.segsOff, o.startOff, o.idxOff, o.stampOff, g.n, g.gw, g.gh,
+    g.minX, g.minZ, WALL_CELL, car.pos.x, car.pos.z,
+    rayDirs.off, m, maxDist, rayOut.off);
+  const res = new Float64Array(buf, rayOut.off, m);
+  for (let k = 0; k < m; k++) out[offset + k] = res[k];
+  return true;
+}
+
+// Which path the ray fans actually took — a fan silently falling back to JS
+// looks identical in the observation, so it has to be reported.
+function rayBackendName() {
+  if (!fwdReady() || !wallIdx || !wallIdx.all) return 'js';
+  return wallIdx.all._rayEpoch === rayEpoch ? 'wasm' : 'js';
 }
 
 function fwdActorOut(n) { return new Float64Array(fwdInst.exports.memory.buffer, fwdLayout.aOutOff, n * ACT_DIM); }
@@ -2860,6 +2968,7 @@ function buildSnapshot() {
     },
     gradThreads: gradPool ? gradPool.length : 0,
     inferBackend: fwdReady() ? 'wasm-batch' : 'js',
+    rayBackend: rayBackendName(),
     updateRejects,
     inferInfo: fwdReady() ? '' : (fwdErr || 'loading'),
     backend: gpuState === 'ready'  ? 'gpu'
@@ -3045,6 +3154,7 @@ self.onmessage = function (e) {
       edgeRays: !!(wallIdx && wallIdx.edge),
       probeWidths: PROBE_STRIDE === 4, probeStride: PROBE_STRIDE, widthNorm: WIDTH_NORM,
       rayDist: RAY_DIST, edgeRayDist: EDGE_RAY_DIST,
+      rayBackend: rayBackendName(),
     });
     return;
   }

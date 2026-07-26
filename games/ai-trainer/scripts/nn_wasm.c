@@ -1054,4 +1054,110 @@ void gru_step_batch(const int *sizes, const double *flat,
     }
 }
 
+/* ── cast_ray_fan ─────────────────────────────────────────────────────────
+ * Amanatides-Woo grid march for one fan of rays — a faithful port of
+ * rayThroughGrid()/castRayFan() in sim-worker.js, which together are the
+ * rollout's sensing cost.
+ *
+ * The JS grid stores each cell as its own Int32Array; linear memory cannot
+ * hold an array of arrays, so cells arrive flattened as CSR: cell c owns
+ * cell_idx[cell_start[c] .. cell_start[c+1]).
+ *
+ * `stamp` dedupes segments registered in several cells, compared against a
+ * generation counter that ticks per ray. It lives in linear memory and is
+ * caller-allocated, one slot per segment.
+ *
+ * Writes out[k] = distance / max_dist, so "nothing within range" is 1.0. The
+ * caller applies the long fan's √ afterwards, exactly as the JS path does.
+ */
+static int s_ray_gen = 0;
+
+static double ray_segment(double ox, double oz, double dx, double dz,
+                          double ax, double az, double bx, double bz) {
+    double ex = bx - ax, ez = bz - az;
+    double det = dx * ez - dz * ex;
+    if (det < 0) { if (-det < 1e-8) return -1.0; }
+    else         { if ( det < 1e-8) return -1.0; }
+    double fx = ax - ox, fz = az - oz;
+    double t = (fx * ez - fz * ex) / det;
+    double u = (dz * fx - dx * fz) / det;
+    if (t >= 0.0 && u >= 0.0 && u <= 1.0) return t;
+    return -1.0;
+}
+
+__attribute__((visibility("default")))
+void cast_ray_fan(const double *segs, const int *cell_start, const int *cell_idx,
+                  int *stamp, int n_segs, int gw, int gh,
+                  double min_x, double min_z, double cell_size,
+                  double ox, double oz,
+                  const double *dirs, int n_angles, double max_dist,
+                  double *out) {
+    /* Directions arrive precomputed as (dx, dz) pairs. Deriving them here
+     * would need sin/cos, which this freestanding module deliberately does not
+     * import — and taking them from the host also guarantees the WASM path
+     * marches along exactly the same rays the JS path does. */
+    for (int k = 0; k < n_angles; k++) {
+        double dx = dirs[k * 2], dz = dirs[k * 2 + 1];
+        double best = max_dist;
+
+        if (n_segs > 0) {
+            double gx1 = min_x + gw * cell_size, gz1 = min_z + gh * cell_size;
+            double t0 = 0.0, t1 = max_dist;
+            int inside = 1;
+            if (dx != 0.0) {
+                double ta = (min_x - ox) / dx, tb = (gx1 - ox) / dx;
+                double lo = ta < tb ? ta : tb, hi = ta < tb ? tb : ta;
+                if (lo > t0) t0 = lo;
+                if (hi < t1) t1 = hi;
+            } else if (ox < min_x || ox > gx1) inside = 0;
+            if (inside && dz != 0.0) {
+                double ta = (min_z - oz) / dz, tb = (gz1 - oz) / dz;
+                double lo = ta < tb ? ta : tb, hi = ta < tb ? tb : ta;
+                if (lo > t0) t0 = lo;
+                if (hi < t1) t1 = hi;
+            } else if (inside && (oz < min_z || oz > gz1)) inside = 0;
+
+            if (inside && t0 <= t1) {
+                double ex = ox + dx * (t0 + 1e-9), ez = oz + dz * (t0 + 1e-9);
+                int cx = (int)((ex - min_x) / cell_size);
+                int cz = (int)((ez - min_z) / cell_size);
+                if (cx < 0) cx = 0; else if (cx >= gw) cx = gw - 1;
+                if (cz < 0) cz = 0; else if (cz >= gh) cz = gh - 1;
+                int step_x = dx > 0 ? 1 : -1, step_z = dz > 0 ? 1 : -1;
+                double inf = 1.0 / 0.0;
+                double t_max_x = dx != 0.0
+                    ? ((min_x + (cx + (dx > 0 ? 1 : 0)) * cell_size) - ox) / dx : inf;
+                double t_max_z = dz != 0.0
+                    ? ((min_z + (cz + (dz > 0 ? 1 : 0)) * cell_size) - oz) / dz : inf;
+                double t_dx = dx != 0.0 ? cell_size / (dx < 0 ? -dx : dx) : inf;
+                double t_dz = dz != 0.0 ? cell_size / (dz < 0 ? -dz : dz) : inf;
+
+                int gen = ++s_ray_gen;
+                for (;;) {
+                    int c = cz * gw + cx;
+                    for (int q = cell_start[c]; q < cell_start[c + 1]; q++) {
+                        int i = cell_idx[q];
+                        if (stamp[i] == gen) continue;
+                        stamp[i] = gen;
+                        double t = ray_segment(ox, oz, dx, dz,
+                                               segs[i * 4], segs[i * 4 + 1],
+                                               segs[i * 4 + 2], segs[i * 4 + 3]);
+                        if (t > 0.0 && t < best) best = t;
+                    }
+                    double t_next = t_max_x < t_max_z ? t_max_x : t_max_z;
+                    if (t_next > best || t_next > t1) break;
+                    if (t_max_x < t_max_z) {
+                        t_max_x += t_dx; cx += step_x;
+                        if (cx < 0 || cx >= gw) break;
+                    } else {
+                        t_max_z += t_dz; cz += step_z;
+                        if (cz < 0 || cz >= gh) break;
+                    }
+                }
+            }
+        }
+        out[k] = best / max_dist;
+    }
+}
+
 int get_heap_base(void) { return (int)(unsigned int)&__heap_base; }
