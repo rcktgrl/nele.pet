@@ -403,7 +403,7 @@
   <button class="btn" id="restartBtn" title="Restart training with same settings">RESTART</button>
   <button class="btn btn-danger" id="resetBtn" title="Wipe all learned weights and start from scratch">RESET AI</button>
   <span class="hud-sep">│</span>
-  <button class="btn" id="exportBtn" title="Save the model as JSON — exports the best-average network snapshot once one exists, otherwise the live weights">EXPORT</button>
+  <button class="btn" id="exportBtn" title="Save the model as JSON — exports the CURRENT (latest) network">EXPORT</button>
   <button class="btn" id="importBtn">IMPORT</button>
   <input type="file" id="importFile" accept=".json" style="display:none">
   <span class="hud-sep">│</span>
@@ -475,7 +475,7 @@
     <div id="modsStatus" style="color:#667;font-size:.6rem;margin-top:6px;"></div>
   </div>
 
-  <div class="ctrl-section" title="The trainer keeps a snapshot of the network whose recent episodes had the best AVERAGE return across all agents — judged by how well everyone does with it, not by one lucky run. EXPORT saves this snapshot.">
+  <div class="ctrl-section" title="The trainer keeps a snapshot of the network whose recent episodes had the best AVERAGE return across all agents. It is a training aid — LOAD BEST rewinds to it after the policy drifts somewhere worse. EXPORT always saves the latest network, not this snapshot.">
     <div class="ctrl-title live-title">🏅 BEST NETWORK (AVG OF ALL AGENTS)</div>
     <div id="bestStatus" style="color:#667;font-size:.6rem;margin-bottom:8px;">no snapshot yet</div>
     <div class="ctrl-actions">

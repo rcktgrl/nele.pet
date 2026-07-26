@@ -27,6 +27,19 @@ globalThis.postMessage = msg => {
   if (wakeup) { const w = wakeup; wakeup = null; w(); }
 };
 
+// Let the worker's batched-inference kernel load from disk, so this test
+// exercises the WASM decision path the browser uses rather than the fallback.
+const realFetch = globalThis.fetch;
+globalThis.fetch = async url => {
+  const str = String(url);
+  if (str.startsWith('file:')) {
+    const { readFile } = await import('node:fs/promises');
+    const bytes = await readFile(new URL(str));
+    return new Response(bytes, { headers: { 'Content-Type': 'application/wasm' } });
+  }
+  return realFetch(url);
+};
+
 const sim = await import('../scripts/sim-worker.js');
 const handler = globalThis.self.onmessage;
 const send = msg => handler({ data: msg });
@@ -132,6 +145,8 @@ console.log('\n2. Vanilla PPO (mods off)');
   if (frame) {
     check(`updates completed (${frame.iteration})`, frame.iteration > 0);
     check('losses finite', Number.isFinite(frame.loss.pi) && Number.isFinite(frame.loss.v));
+    check(`batched WASM inference active (${frame.inferBackend})`,
+      frame.inferBackend === 'wasm-batch', frame.inferInfo || '');
     check(`all epochs ran without KL stop (${frame.mods.epochs}/2)`, frame.mods.epochs === 2);
     check('no mods reported active',
       frame.mods.groupSize === 1 && !frame.mods.mirror && !frame.mods.repair && frame.mods.masked === 0);

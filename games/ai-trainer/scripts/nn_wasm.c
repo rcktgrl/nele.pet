@@ -829,4 +829,39 @@ int compute_ppo_recurrent_grads(
  * right after all static/BSS data. */
 extern unsigned char __heap_base;
 __attribute__((visibility("default")))
+/* ── forward_batch ────────────────────────────────────────────────────────
+ * Batched inference for the rollout: n observations in, n output rows out.
+ * The rollout used to call a scalar JS forward once per agent per decision;
+ * one call per tick for every agent that needs a decision measured 4.4x
+ * faster at 64x1 and 6.3x at 256x2, because the compiled kernel replaces the
+ * scalar JS loop AND each weight is loaded once for the whole tick instead
+ * of once per agent.
+ *
+ * obs: n x sizes[0], row-major.   out: n x sizes[nlayers], row-major.
+ * Falls back to nothing — the caller checks blk_fits() equivalents by
+ * construction (the trainer's widths are <= BLK_UNITS).
+ */
+__attribute__((visibility("default")))
+void forward_batch(int nlayers, const int *sizes, const double *flat,
+                   const double *obs, int n, double *out) {
+    if (!blk_fits(nlayers, sizes)) return;   /* caller keeps the JS path */
+    int nIn0 = sizes[0], nOut = sizes[nlayers];
+    for (int k0 = 0; k0 < n; k0 += BLK) {
+        int bs = n - k0 < BLK ? n - k0 : BLK;
+        double *in = s_blk_actor;
+        for (int s = 0; s < bs; s++) {
+            const double *src = obs + (nn_size_t)(k0 + s) * nIn0;
+            double *dst = in + (nn_size_t)s * nIn0;
+            for (int i = 0; i < nIn0; i++) dst[i] = src[i];
+        }
+        net_forward_blk(nlayers, sizes, flat, bs, s_blk_actor);
+        const double *O = BLK_LAYER(s_blk_actor, nlayers);
+        for (int s = 0; s < bs; s++) {
+            const double *src = O + (nn_size_t)s * nOut;
+            double *dst = out + (nn_size_t)(k0 + s) * nOut;
+            for (int j = 0; j < nOut; j++) dst[j] = src[j];
+        }
+    }
+}
+
 int get_heap_base(void) { return (int)(unsigned int)&__heap_base; }

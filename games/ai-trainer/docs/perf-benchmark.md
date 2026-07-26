@@ -351,6 +351,73 @@ scalar JS, single-threaded, while every `numEnvs` agent decides on the same
 tick. That is a free batch dimension worth 21 % of the wall, and the raycast
 observations another 17 %.
 
+## Batched WASM inference in the rollout
+
+Once the gradient kernel was fast, the sim thread was the critical path — and
+`Net.forwardScratch` ran **one scalar-JS forward per agent per decision**: 21 %
+of the wall on the default config, 40 % at 256×2, single-threaded, never
+touching the WASM kernel at all.
+
+Every agent due a decision on a tick is now forwarded in **one** call to
+`forward_batch`. Two effects stack: compiled SIMD instead of a scalar JS loop,
+and each weight loaded once per tick instead of once per agent.
+
+| net | agents | JS µs/decision | batched WASM µs/decision | speedup |
+|---|---:|---:|---:|---:|
+| 64×1 | 8 | 6.61 | 1.50 | **4.4×** |
+| 64×1 | 32 | 6.86 | 1.49 | **4.6×** |
+| 256×2 | 8 | 137.7 | 21.7 | **6.3×** |
+| 256×2 | 32 | 140.4 | 23.6 | **6.0×** |
+
+Including the copy in and out of WASM memory. `forward-batch-check.mjs` pins
+the kernel to the JS reference (max 4e-12 relative across 24 shape/batch-size
+combinations, including the batch-size boundary at 33), and `sim-smoke` now
+shims `fetch` so the node suite exercises the WASM decision path rather than
+the fallback.
+
+Three details worth knowing:
+
+- **`stepOnce` is now two phases** — every decision first, then every agent's
+  physics. Agents never observe each other, so nothing an agent can see
+  changes; the RNG draw order does, so runs do not replay identically.
+- **Weights upload when they change, not per tick.** They change once per
+  completed update, so agents act with the last *completed* policy for the
+  duration of an update instead of a half-applied one — the standard PPO
+  arrangement, and it keeps stored log-probs consistent with the weights that
+  produced them. The PopArt critic rescale forces an immediate re-upload,
+  since `valMean`/`valStd` move with those weights.
+- **It is best-effort.** Recurrent policies (GRU hidden state), defect-masked
+  agents (`failRate > 0`, each acts with its own weights), and any layout the
+  kernel does not handle fall back to the per-agent JS path. `inferBackend` in
+  the frame message says which ran.
+
+## Export: latest, not best
+
+`exportModel` used to default to the best-average snapshot. That snapshot is
+scored on one scalar — mean return over recent episodes — which stops being a
+meaningful thing to maximise once training spans several maps, where the
+"best" update is whichever one drew the easier tracks. It now exports the
+**current** network; `{ which: 'best' }` still returns the snapshot, and LOAD
+BEST is unchanged (it is a training aid, not an export policy).
+
+## Note on the numbers in this document
+
+Everything above was measured in a 4-core Linux container. The trainer's actual
+target is a desktop CPU (i9-14900KF, Ryzen 9600X), where several of these
+conclusions do not transfer:
+
+- **"More than 2 grad workers stops helping"** is a 4-core artifact. The pool
+  cap was `min(6, cores − 2)`, which left a 32-thread part with 6 workers and
+  26 idle; it is now `min(12, cores − 2)`. Note the per-minibatch split is
+  separately bounded by `minibatch/32` slices, so workers past that only pay
+  off once the minibatch is raised.
+- **The `gpu-tfjs` row** ran on a software rasteriser here. On a real GPU that
+  path is worth re-measuring rather than dismissing.
+- **Block sizes** (`BLK`, `GEMM_T`) were tuned against this container's cache
+  hierarchy; a desktop part has more of both and may prefer larger.
+- **SharedArrayBuffer is still unavailable** regardless of CPU — that is a
+  GitHub Pages headers constraint, not a hardware one.
+
 ## Raw output
 
 `node games/ai-trainer/test/perf-bench.mjs --gens=3 --repeat=3 --json=out.json` writes
