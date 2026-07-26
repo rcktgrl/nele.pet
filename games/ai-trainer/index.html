@@ -246,6 +246,35 @@
     cursor: default;
   }
 
+  /* ── Debug overlay ───────────────────────────────────────────────────────── */
+  #dbgWrap {
+    position: fixed;
+    top: 56px; left: 14px;
+    z-index: 95;
+    display: none;
+    width: 340px;
+    background: rgba(4,6,18,.93);
+    border: 1px solid #1a2535;
+    border-radius: 8px;
+    padding: 8px 10px 10px;
+    font-size: .62rem;
+    color: #8aa;
+    max-height: calc(100vh - 130px);
+    overflow-y: auto;
+  }
+  #dbgWrap.on { display: block; }
+  #dbgWrap h4 {
+    margin: 8px 0 4px; font-size: .58rem; letter-spacing: .08em;
+    color: #4af; text-transform: uppercase; font-weight: 700;
+  }
+  #dbgWrap h4:first-child { margin-top: 0; }
+  #dbgWrap canvas { display: block; width: 100%; height: 46px; border-radius: 4px; background: rgba(8,12,28,.9); }
+  .dbg-row { display: flex; justify-content: space-between; gap: 8px; line-height: 1.5; }
+  .dbg-row span:last-child { color: #cfe; font-variant-numeric: tabular-nums; }
+  .dbg-warn span:last-child { color: #fa4; }
+  .dbg-bad  span:last-child { color: #f66; }
+  .dbg-note { color: #556; line-height: 1.35; margin-top: 3px; }
+
   /* ── Map selection menu ──────────────────────────────────────────────────── */
   #mapMenu {
     position: fixed;
@@ -397,6 +426,7 @@
   <span class="hud-sep">│</span>
   <span class="hud-chip" id="hudTrack" style="color:#4af;">—</span>
   <button class="btn" id="viewTrackBtn" title="Watch the next track — training keeps running on every track" style="display:none;">VIEW ▶</button>
+  <button class="btn" id="dbgBtn" title="Show throughput, learning curves and where the wall clock goes (D)">DEBUG</button>
   <button class="btn" id="mapsBtn" title="Choose a different map">MAPS</button>
   <span class="hud-sep">│</span>
   <button class="btn btn-start" id="startBtn">▶ START</button>
@@ -527,6 +557,35 @@
 <div id="leaderboard">
   <div class="lb-title">EPISODE RETURNS</div>
   <div id="lbRows"></div>
+</div>
+
+<!-- ── Debug overlay (toggle with the DEBUG button or the D key) ─────────── -->
+<div id="dbgWrap">
+  <h4>Throughput</h4>
+  <div class="dbg-row"><span>updates / min</span><span id="dbgUpm">—</span></div>
+  <div class="dbg-row"><span>seconds / update</span><span id="dbgSpu">—</span></div>
+  <div class="dbg-row"><span>physics steps / s</span><span id="dbgSps">—</span></div>
+  <div class="dbg-row" id="dbgSpeedRow"><span>speed achieved</span><span id="dbgSpeed">—</span></div>
+  <div class="dbg-note" id="dbgSpeedNote"></div>
+  <canvas id="dbgSpuCanvas" title="Seconds per update over time — flat is healthy, a rising trend means updates are getting more expensive"></canvas>
+
+  <h4>Learning</h4>
+  <div class="dbg-row"><span>avg return (last 20 eps)</span><span id="dbgRet">—</span></div>
+  <div class="dbg-row"><span>policy / value loss</span><span id="dbgLoss">—</span></div>
+  <div class="dbg-row"><span>KL moved · epochs run</span><span id="dbgKl">—</span></div>
+  <div class="dbg-row"><span>exploration σ</span><span id="dbgSigma">—</span></div>
+  <canvas id="dbgRetCanvas" title="Average return over time — the curve that should be going up"></canvas>
+
+  <h4>Where the time goes</h4>
+  <canvas id="dbgPhaseCanvas" height="18" title="Share of wall clock per phase, measured by the worker's profiler"></canvas>
+  <div id="dbgPhaseList"></div>
+
+  <h4>Backends</h4>
+  <div class="dbg-row"><span>gradients</span><span id="dbgGrad">—</span></div>
+  <div class="dbg-row"><span>inference</span><span id="dbgInfer">—</span></div>
+  <div class="dbg-row"><span>ray casting</span><span id="dbgRay">—</span></div>
+  <div class="dbg-row" id="dbgRejRow"><span>updates rejected (non-finite)</span><span id="dbgRej">0</span></div>
+  <div class="dbg-note">The profiler adds ~5&nbsp;% while this panel is open.</div>
 </div>
 
 <!-- ── Neural network visualiser ─────────────────────────────────────────── -->
