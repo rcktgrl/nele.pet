@@ -238,7 +238,8 @@ console.log('\n6. Neuron repair on a crafted network');
   send({
     type: 'init', track: makeTrack(), carData, model,
     config: {
-      numEnvs: 4, speedMult: 200, episodeLen: 15, recurrent: false,
+      // the crafted model above is OBS-wide, so pin the layout that produces it
+      numEnvs: 4, speedMult: 200, episodeLen: 15, recurrent: false, probeWidths: false,
       backend: 'js', threads: 1, hiddenSize: H, hiddenLayers: 1,
       neuronRepair: true, klStop: false, mirror: false, failRate: 0, groupSize: 1,
     },
@@ -268,16 +269,22 @@ console.log('\n6. Neuron repair on a crafted network');
 console.log('\n7. Recurrent PPO (GRU)');
 {
   inbox.length = 0;
+  // 'init' MERGES into the worker's config rather than replacing it, so a key
+  // an earlier section set stays set. Be explicit about the layout here rather
+  // than inheriting whatever ran before.
   send({ type: 'init', track: makeTrack(), carData, config: {
-    numEnvs: 4, speedMult: 200, episodeLen: 12,
+    numEnvs: 4, speedMult: 200, episodeLen: 12, probeWidths: true,
     backend: 'js', threads: 1, minibatch: 96, horizon: 64, epochs: 2,
     recurrent: true, bpttLen: 16, klStop: false,
   } });
   const ready = await waitFor(m => m.type === 'ready', 5000);
   check('recurrent worker ready', !!ready);
-  // memory-as-action cells are dropped → obs 36, act 2
-  check(`obs/act layout dropped memory cells (obs ${ready && ready.obsDim})`,
-    !!ready && ready.obsDim === 36 && ready.actorSizes[ready.actorSizes.length - 1] === 2);
+  // memory-as-action cells are dropped: obs is base + probes with NO memory
+  // tail, act is 2. Width follows the probe stride (4 slots per probe by
+  // default), so it is derived rather than hard-coded.
+  const GRU_OBS = 24 + 6 * 4;
+  check(`obs/act layout dropped memory cells (obs ${ready && ready.obsDim}, expected ${GRU_OBS})`,
+    !!ready && ready.obsDim === GRU_OBS && ready.actorSizes[ready.actorSizes.length - 1] === 2);
   send({ type: 'start' });
   await new Promise(res => setTimeout(res, 18000));
   send({ type: 'getSnapshot' });
@@ -296,7 +303,7 @@ console.log('\n7. Recurrent PPO (GRU)');
   }
   const m = await exportModel();
   check('export is a recurrent (GRU) model',
-    !!m && m.algo === 'ppo-gru' && m.obsDim === 36 && m.actDim === 2 &&
+    !!m && m.algo === 'ppo-gru' && m.obsDim === GRU_OBS && m.actDim === 2 &&
     m.actor.flat.every(Number.isFinite) && m.critic.flat.every(Number.isFinite));
 }
 

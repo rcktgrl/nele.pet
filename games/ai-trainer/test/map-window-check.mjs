@@ -67,11 +67,14 @@ const carData = { accel: 12, maxSpd: 50, brake: 25, hdl: 1.0, aiSpd: 1.0 };
 
 async function boot(config) {
   inbox.length = 0;
-  // The window applies to both policies; these checks pin the feed-forward
-  // layout (base + probes + memory cells) unless a case says otherwise.
+  // The window applies to both policies and to both probe strides; these
+  // checks pin the feed-forward layout with two-slot probes (base + probes +
+  // memory cells) unless a case says otherwise, so the arithmetic below stays
+  // about the WINDOW rather than about what each probe carries.
   send({ type: 'init', track: makeTrack(), carData, config: {
     numEnvs: 4, speedMult: 200, episodeLen: 10, backend: 'js', threads: 1,
-    minibatch: 128, horizon: 32, epochs: 2, klStop: false, recurrent: false, ...config,
+    minibatch: 128, horizon: 32, epochs: 2, klStop: false,
+    recurrent: false, probeWidths: false, ...config,
   } });
   return waitFor(m => m.type === 'ready');
 }
@@ -136,8 +139,22 @@ console.log('\n2. Wide window (12 probes, 400 m)');
   check('weights are finite', !!m && m.actor.flat.every(Number.isFinite));
 }
 
-// ── 3. The window resizes the recurrent layout too ───────────────────────────
-console.log('\n3. Recurrent policy (no memory cells)');
+// ── 3. The window and the probe stride compose ───────────────────────────────
+console.log('\n3. Window × probe widths');
+{
+  const ready = await boot({ probeCount: 12, probeRange: 400, probeWidths: true });
+  const want = 24 + 12 * 4 + 4;   // four slots per probe once widths are on
+  check(`12 probes × 4 slots + memory = ${want} (${ready && ready.obsDim})`,
+    !!ready && ready.obsDim === want);
+  const m = await exportModel();
+  check('export flags the widened probe block', !!m && m.probeWidths === true);
+  check('export carries the width normalisation', !!m && Number.isFinite(m.widthNorm));
+  check('export still carries the window', !!m && m.probeDists.length === 12);
+  send({ type: 'stop' });
+}
+
+// ── 4. The window resizes the recurrent layout too ───────────────────────────
+console.log('\n4. Recurrent policy (no memory cells)');
 {
   const ready = await boot({ recurrent: true, probeCount: 9, probeRange: 300 });
   const want = 24 + 9 * 2;   // GRU carries memory in its hidden state

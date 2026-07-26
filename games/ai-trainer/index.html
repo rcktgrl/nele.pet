@@ -576,6 +576,13 @@
         <span style="color:#445;font-size:.58rem;">distance to the furthest probe</span>
       </div>
       <div class="config-row">
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#889;font-size:.65rem;"
+               title="Each probe also reports how much drivable ground there is left and right at that point — pavement plus kerb margin plus that side's gravel runoff, in absolute metres. Off, a probe carries only its bearing and gradient.">
+          <span>PROBE WIDTHS<br><span style="color:#445;font-size:.9em">probes also report the drivable width either side — the policy otherwise cannot tell a wide track from a narrow one</span></span>
+          <input type="checkbox" id="configProbeWidthToggle" style="accent-color:#fa4;">
+        </label>
+      </div>
+      <div class="config-row">
         <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#889;font-size:.65rem;">
           <span>RECURRENT (GRU)<br><span style="color:#445;font-size:.9em">GRU memory cell trained by BPTT — replaces the memory-as-action register. Runs on CPU/WASM (no GPU).</span></span>
           <input type="checkbox" id="configRecurrentToggle" style="accent-color:#fa4;">

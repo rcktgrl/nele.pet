@@ -161,7 +161,9 @@ let worker = null, workerReady = false, simRunning = false;
 // than fixed: 24 base inputs + 2 per probe + 4 memory cells. Must match
 // configureDims() in sim-worker.js.
 const ACT_DIM = 6;  // steer, throttle/brake + 4 memory-cell deltas
-function obsDim() { return 24 + (simCfg.probeCount | 0) * 2 + 4; }
+function obsDim() {
+  return 24 + (simCfg.probeCount | 0) * (simCfg.probeWidths ? 4 : 2) + 4;
+}
 
 // Full training config — architecture fields require restart, others are live
 const simCfg = {
@@ -174,6 +176,7 @@ const simCfg = {
   numEnvs: 8,            // restart required
   probeCount: 6,         // restart required — centerline look-ahead probes
   probeRange: 200,       // restart required — metres to the furthest probe
+  probeWidths: true,     // restart required — probes carry the drivable width
   speedMult: 1,
   episodeLen: 60,
   randomSpawn: true,
@@ -602,6 +605,15 @@ function initConfigMenu() {
     recTog.checked = simCfg.recurrent;
     recTog.addEventListener('change', () => {
       simCfg.recurrent = recTog.checked;
+      updateConfigParamCount();
+    });
+  }
+
+  const pwTog = document.getElementById('configProbeWidthToggle');
+  if (pwTog) {
+    pwTog.checked = simCfg.probeWidths;
+    pwTog.addEventListener('change', () => {
+      simCfg.probeWidths = pwTog.checked;
       updateConfigParamCount();
     });
   }

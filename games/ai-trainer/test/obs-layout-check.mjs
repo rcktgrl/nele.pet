@@ -129,8 +129,11 @@ async function sample(recurrent) {
   return s && frame ? { ...s, car: frame.cars[0] } : null;
 }
 
+const GRAVEL_MARGIN = 1.75;
+
 function report(label, s) {
-  const { obs, obsDim, probeDists, edgeRays, rayDist, edgeRayDist, car } = s;
+  const { obs, obsDim, probeDists, edgeRays, rayDist, edgeRayDist, car,
+          probeStride, widthNorm } = s;
   const dirOf = deg => {
     const a = car.hdg + deg * Math.PI / 180;
     return [Math.sin(a), Math.cos(a)];
@@ -144,7 +147,8 @@ function report(label, s) {
 
   console.log(`\n══ ${label} — ${obsDim} inputs ══`);
   console.log(`   car at (${car.x.toFixed(1)}, ${car.z.toFixed(1)}) heading ${car.hdg.toFixed(3)} rad, speed ${car.spd.toFixed(2)}`);
-  console.log(`   probes ${probeDists.join(', ')} m · edgeRays ${edgeRays} · ray ranges ${rayDist}/${edgeRayDist} m\n`);
+  console.log(`   probes ${probeDists.join(', ')} m · edgeRays ${edgeRays} · probeStride ${probeStride}` +
+              ` · ray ranges ${rayDist}/${edgeRayDist} m\n`);
   console.log('   idx  input                                          live    expected');
 
   for (let k = 0; k < LONG_ANGLES.length; k++) {
@@ -168,24 +172,53 @@ function report(label, s) {
   row(21, 'on gravel', 0, 0);
   row(22, 'reversing', 0, 0);
   row(23, 'grade over next 4 m ÷ 0.30 (track is flat)', 0, 1e-9);
+  // No gravel profile on this ring, so the drivable extent is the pavement
+  // half-width plus the kerb margin, the same on both sides.
+  const expectExtent = Math.min(1, (ROAD_HALF + GRAVEL_MARGIN) / widthNorm);
   for (let k = 0; k < probeDists.length; k++) {
-    const d = probeDists[k];
-    row(24 + 2 * k, `probe ${k} (${d} m): bearing ÷π`, expectedBearing(car, d), 0.002);
-    row(25 + 2 * k, `probe ${k} (${d} m): grade ÷ 0.30 (flat)`, 0, 1e-9);
+    const d = probeDists[k], b = 24 + probeStride * k;
+    row(b,     `probe ${k} (${d} m): bearing ÷π`, expectedBearing(car, d), 0.002);
+    row(b + 1, `probe ${k} (${d} m): grade ÷ 0.30 (flat)`, 0, 1e-9);
+    if (probeStride === 4) {
+      row(b + 2, `probe ${k} (${d} m): drivable LEFT ÷ ${widthNorm} m`, expectExtent, 0.01);
+      row(b + 3, `probe ${k} (${d} m): drivable RIGHT ÷ ${widthNorm} m`, expectExtent, 0.01);
+    }
   }
-  const memBase = 24 + probeDists.length * 2;
+  const memBase = 24 + probeDists.length * probeStride;
   for (let i = memBase; i < obsDim; i++) row(i, `memory cell ${i - memBase} (feed-forward only)`, 0, 1e-9);
 
   for (const [i, name, live, expect, ok] of rows) {
     console.log(`   ${String(i).padStart(3)}  ${name.padEnd(46)} ${live.toFixed(4).padStart(8)}` +
                 (expect === null ? '    (see check below)' : `  ${expect.toFixed(4).padStart(8)} ${ok ? '✓' : '✗'}`));
   }
-  check(`${label}: vector width matches 24 + 2·probes${memBase < obsDim ? ' + memory' : ''}`,
+  check(`${label}: vector width matches 24 + ${probeStride}·probes${memBase < obsDim ? ' + memory' : ''}`,
     obsDim === memBase + (memBase < obsDim ? 4 : 0));
 }
 
 report('GRU (default)', await sample(true));
 report('Feed-forward', await sample(false));
+
+// ── the mirror map has to trade the two sides, not just negate bearings ─────
+console.log('\n══ mirror map over the widened probe block ══');
+{
+  const sim = await import('../scripts/sim-worker.js');
+  const s = await sample(true);
+  const W = s.obsDim, st = s.probeStride;
+  const src = Float64Array.from({ length: W }, (_, i) => i + 1);
+  const dst = sim.mirrorObsInto(src, new Float64Array(W));
+  const back = sim.mirrorObsInto(dst, new Float64Array(W));
+  check('mirror is an involution', back.every((v, i) => v === src[i]));
+  let ok = true;
+  for (let k = 0; k < s.probeDists.length; k++) {
+    const b = 24 + st * k;
+    ok = ok && dst[b] === -src[b]            // bearing flips
+            && dst[b + 1] === src[b + 1]     // grade unchanged
+            && dst[b + 2] === src[b + 3]     // left  ← right
+            && dst[b + 3] === src[b + 2];    // right ← left
+  }
+  check('every probe flips its bearing and SWAPS its two width slots', ok);
+  console.log(`   ${ok ? '✓' : '✗'} probe block mirrors correctly at stride ${st}`);
+}
 
 console.log(failures ? `\n${failures} CHECK(S) FAILED — the doc and the code disagree`
                      : '\nall checks passed — every index matches docs/observations.md');

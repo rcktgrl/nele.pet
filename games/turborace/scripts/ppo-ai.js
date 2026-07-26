@@ -46,7 +46,13 @@ function probeDistsOf(model) {
   return (Array.isArray(p) && p.length && p.every(Number.isFinite))
     ? p.slice() : LEGACY_PROBE_DISTS.slice();
 }
-function baseObsOf(model) { return 24 + probeDistsOf(model).length * 2; }
+// Probes occupy four slots when the model carries drivable widths, two
+// otherwise (every export predating the flag).
+function probeStrideOf(model) { return (model && model.probeWidths === true) ? 4 : 2; }
+function baseObsOf(model) { return 24 + probeDistsOf(model).length * probeStrideOf(model); }
+
+const GRAVEL_MARGIN = 1.75;   // matches the trainer's on-gravel inner bound
+const DEFAULT_WIDTH_NORM = 25;
 const MEM_RATE    = 0.1;
 const ACTION_REPEAT = 2; // physics ticks per decision, same as training
 
@@ -131,6 +137,8 @@ export function saveTrainedModel(model) {
     actDim: model.actDim,
     probeDists: model.probeDists,   // observation layout the policy expects
     edgeRays: model.edgeRays,       // short fan aims at the pavement boundary
+    probeWidths: model.probeWidths, // probes carry drivable width either side
+    widthNorm: model.widthNorm,
     actor: model.actor,
     iteration: model.iteration,
     totalSteps: model.totalSteps,
@@ -173,7 +181,9 @@ export class PPOAI {
     // exports predate the flag and trained against the barriers.
     this.edgeRays = model.edgeRays === true;
     this.probeDists = probeDistsOf(model);
-    this.baseObs = 24 + this.probeDists.length * 2;
+    this.probeStride = probeStrideOf(model);
+    this.widthNorm = Number.isFinite(model.widthNorm) ? model.widthNorm : DEFAULT_WIDTH_NORM;
+    this.baseObs = 24 + this.probeDists.length * this.probeStride;
     this.memDim = this.recurrent ? 0 : FF_MEM_DIM;
     this.obsDim = this.baseObs + this.memDim;
     this.actDim = this.recurrent ? GRU_ACT_DIM : FF_ACT_DIM;
@@ -406,17 +416,46 @@ export class PPOAI {
     out[23] = Math.max(-1, Math.min(1, (hereAhead.y - prevY) / 4 / SLOPE_NORM));
 
     let prevD = 0;
+    const st = this.probeStride;
     for (let k = 0; k < this.probeDists.length; k++) {
       const d = this.probeDists[k];
       const p = this._pointAtArc(ap.s + d);
       const ang = wrapPi(Math.atan2(p.x - c.pos.x, p.z - c.pos.z) - c.hdg);
       const slope = (p.y - prevY) / (d - prevD);
-      out[24 + k * 2]     = Math.max(-1, Math.min(1, ang / Math.PI));
-      out[24 + k * 2 + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
+      out[24 + k * st]     = Math.max(-1, Math.min(1, ang / Math.PI));
+      out[24 + k * st + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
+      if (st === 4) {
+        const ext = this._extentAt(p);
+        out[24 + k * st + 2] = Math.min(1, ext[0] / this.widthNorm);
+        out[24 + k * st + 3] = Math.min(1, ext[1] / this.widthNorm);
+      }
       prevY = p.y; prevD = d;
     }
     // Feed-forward only: external memory cells (the GRU has no memory inputs).
     for (let d = 0; d < this.memDim; d++) out[this.baseObs + d] = this.mem[d];
+  }
+
+  // Drivable half-width either side at a centerline point: pavement plus kerb
+  // margin plus that side's runoff, matching the trainer's extent table.
+  _extentAt(p) {
+    const { trackData } = this.context();
+    const half = ((trackData && trackData.rw) || 12) * 0.5;
+    const base = half + GRAVEL_MARGIN;
+    const g = state.gravelProfile;
+    this._ext = this._ext || new Float64Array(2);
+    if (!g || !g.pts || !g.pts.length) { this._ext[0] = this._ext[1] = base; return this._ext; }
+    let bi = 0, bd = Infinity;
+    const pts = g.pts;
+    for (let i = 0; i < pts.length; i++) {
+      const dx = p.x - pts[i].x, dz = p.z - pts[i].z;
+      const dd = dx * dx + dz * dz;
+      if (dd < bd) { bd = dd; bi = i; }
+    }
+    const li = Math.min(bi, g.leftRunoff.length - 1);
+    const ri = Math.min(bi, g.rightRunoff.length - 1);
+    this._ext[0] = base + (g.leftRunoff[li]  || 0);
+    this._ext[1] = base + (g.rightRunoff[ri] || 0);
+    return this._ext;
   }
 
   // ── Main update (called every physics tick) ──────────────────────────────────

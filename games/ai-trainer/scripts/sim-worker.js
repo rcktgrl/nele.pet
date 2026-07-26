@@ -108,6 +108,7 @@ let cfg = {
   // look-ahead window (restart required — they change the observation layout)
   probeCount: 6,         // centerline look-ahead probes
   probeRange: 200,       // metres to the furthest probe
+  probeWidths: true,     // probes also report the drivable width either side
   // diagnostics
   perf: false,           // phase profiler (see below) — benchmark use only
 };
@@ -728,6 +729,7 @@ function buildProbeDists(count, range) {
 
 let PROBE_DISTS = buildProbeDists(6, 200);
 const SLOPE_NORM  = 0.30;   // |Δy/Δs| considered "max steep"
+const _extScratch = new Float64Array(2);
 
 // Memory cells: the policy gets MEM_DIM extra action outputs that write a
 // rate-limited delta into a persistent per-car register, which is fed back
@@ -750,8 +752,67 @@ const MEM_RATE = 0.1;  // max register change per decision (≈5 % of range per 
 //  [22] reversing flag      [23] slope at the car
 //  [24..35] 6 probes × (relative angle, slope between probes)
 //  [36..39] 4 memory cells (written by the policy's memory actions)
-let MEM_OBS = 24 + PROBE_DISTS.length * 2;     // base index of memory cells
+let PROBE_STRIDE = 2;                          // values per probe (4 with widths)
+let MEM_OBS = 24 + PROBE_DISTS.length * PROBE_STRIDE;  // base index of memory cells
 let OBS_DIM = MEM_OBS + MEM_DIM;               // both set by configureDims()
+
+// ── Drivable width along the centerline ─────────────────────────────────────
+// Pavement width is one constant per track, so the width a probe reports only
+// varies through the gravel runoff, which differs left from right. Sampling the
+// runoff profile per probe per decision would mean a nearest-point search each
+// time; instead each centerline point's extent is resolved once per track and
+// the probes interpolate that.
+//
+// "Extent" is the same boundary the on-gravel test uses: pavement half-width
+// plus the kerb margin, plus that side's runoff — i.e. how far out the car can
+// go before it runs out of ground.
+const GRAVEL_MARGIN = 1.75;   // matches SimCar's on-gravel inner bound
+const WIDTH_NORM    = 25;     // metres mapped to 1.0
+
+let extentL = null, extentR = null;   // per navPts index, metres
+
+function buildExtentTable() {
+  const n = navPts.length;
+  extentL = new Float64Array(n);
+  extentR = new Float64Array(n);
+  const half = (trkData ? trkData.rw : 12) * 0.5;
+  const g = gravelProfile;
+  if (!g || !g.pts || !g.pts.length) {
+    extentL.fill(half + GRAVEL_MARGIN);
+    extentR.fill(half + GRAVEL_MARGIN);
+    return;
+  }
+  // navPts and the gravel profile are both dense chains along the same
+  // centerline, so walking them together with a moving hint is enough.
+  let hint = -1;
+  for (let i = 0; i < n; i++) {
+    const p = navPts[i];
+    const near = nearestIdx(p.x, p.z, g.pts, hint, 12);
+    hint = near.idx;
+    const ri = Math.min(near.idx, g.rightRunoff.length - 1);
+    const li = Math.min(near.idx, g.leftRunoff.length - 1);
+    extentR[i] = half + GRAVEL_MARGIN + (g.rightRunoff[ri] || 0);
+    extentL[i] = half + GRAVEL_MARGIN + (g.leftRunoff[li]  || 0);
+  }
+}
+
+// Drivable extent either side at arc distance s, interpolated between points.
+function extentAtArc(s, out) {
+  const n = navPts.length;
+  if (!extentL || !n) { out[0] = out[1] = 0; return out; }
+  s = ((s % trackLen) + trackLen) % trackLen;
+  let lo = 0, hi = n - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (arcLen[mid] <= s) lo = mid; else hi = mid - 1;
+  }
+  const j = (lo + 1) % n;
+  const segLen = (j === 0 ? trackLen : arcLen[j]) - arcLen[lo];
+  const f = segLen > 1e-9 ? (s - arcLen[lo]) / segLen : 0;
+  out[0] = extentL[lo] * (1 - f) + extentL[j] * f;
+  out[1] = extentR[lo] * (1 - f) + extentR[j] * f;
+  return out;
+}
 
 // Arc position of a car, using and updating its locality hint.
 function carArc(car) {
@@ -791,13 +852,22 @@ function buildObs(car, out) {
   out[23] = Math.max(-1, Math.min(1, (hereAhead.y - prevY) / 4 / SLOPE_NORM));
 
   let prevD = 0;
+  const st = PROBE_STRIDE;
   for (let k = 0; k < PROBE_DISTS.length; k++) {
     const d = PROBE_DISTS[k];
     const p = pointAtArc(ap.s + d);
     const ang = wrapPi(Math.atan2(p.x - car.pos.x, p.z - car.pos.z) - car.hdg);
     const slope = (p.y - prevY) / (d - prevD);
-    out[24 + k * 2]     = Math.max(-1, Math.min(1, ang / Math.PI));
-    out[24 + k * 2 + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
+    out[24 + k * st]     = Math.max(-1, Math.min(1, ang / Math.PI));
+    out[24 + k * st + 1] = Math.max(-1, Math.min(1, slope / SLOPE_NORM));
+    if (st === 4) {
+      // How much ground there is either side where the probe points — the
+      // absolute width, not a ratio, so a wide track reads differently from a
+      // narrow one (input 20 divides its own width out).
+      extentAtArc(ap.s + d, _extScratch);
+      out[24 + k * st + 2] = Math.min(1, _extScratch[0] / WIDTH_NORM);
+      out[24 + k * st + 3] = Math.min(1, _extScratch[1] / WIDTH_NORM);
+    }
     prevY = p.y; prevD = d;
   }
   for (let d = 0; d < MEM_DIM; d++) out[MEM_OBS + d] = car.mem[d];
@@ -831,8 +901,13 @@ export function mirrorObsInto(src, dst) {
   dst[22] = src[22];
   dst[23] = src[23];
   for (let p = 0; p < PROBE_DISTS.length; p++) {
-    dst[24 + 2 * p] = -src[24 + 2 * p];
-    dst[25 + 2 * p] = src[25 + 2 * p];
+    const b = 24 + PROBE_STRIDE * p;
+    dst[b]     = -src[b];        // bearing flips
+    dst[b + 1] = src[b + 1];     // grade is unchanged by a left/right flip
+    if (PROBE_STRIDE === 4) {    // ...but the two sides trade places
+      dst[b + 2] = src[b + 3];
+      dst[b + 3] = src[b + 2];
+    }
   }
   for (let d = 0; d < MEM_DIM; d++) dst[MEM_OBS + d] = src[MEM_OBS + d];
   return dst;
@@ -857,7 +932,8 @@ function configureDims() {
   isRecurrent = !!cfg.recurrent;
   MEM_DIM = isRecurrent ? 0 : 4;
   PROBE_DISTS = buildProbeDists(cfg.probeCount, cfg.probeRange);
-  MEM_OBS = 24 + PROBE_DISTS.length * 2;
+  PROBE_STRIDE = cfg.probeWidths ? 4 : 2;
+  MEM_OBS = 24 + PROBE_DISTS.length * PROBE_STRIDE;
   OBS_DIM = MEM_OBS + MEM_DIM;
   ACT_DIM = 2 + MEM_DIM;
 }
@@ -1476,10 +1552,11 @@ function buildTrackCtx(t) {
   loadRawTrack(t);
   buildArcTable();   // → navPts, arcLen, trackLen (from the globals just set)
   buildWallIndex();  // → wallIdx
+  buildExtentTable();// → extentL, extentR (needs navPts + arcLen)
   return {
     trkPts, trkWallLeft, trkWallRight, trkEdgeLeft, trkEdgeRight, trkData,
     gravelProfile, cityCorridors, cityAiPts,
-    navPts, arcLen, trackLen, wallIdx,
+    navPts, arcLen, trackLen, wallIdx, extentL, extentR,
   };
 }
 
@@ -1494,6 +1571,7 @@ function useTrack(idx) {
   trkData = c.trkData; gravelProfile = c.gravelProfile;
   cityCorridors = c.cityCorridors; cityAiPts = c.cityAiPts;
   navPts = c.navPts; arcLen = c.arcLen; trackLen = c.trackLen; wallIdx = c.wallIdx;
+  extentL = c.extentL; extentR = c.extentR;
   activeTrack = idx;
 }
 
@@ -2965,6 +3043,7 @@ self.onmessage = function (e) {
       obsDim: OBS_DIM,
       probeDists: Array.from(PROBE_DISTS),
       edgeRays: !!(wallIdx && wallIdx.edge),
+      probeWidths: PROBE_STRIDE === 4, probeStride: PROBE_STRIDE, widthNorm: WIDTH_NORM,
       rayDist: RAY_DIST, edgeRayDist: EDGE_RAY_DIST,
     });
     return;
@@ -3026,6 +3105,10 @@ self.onmessage = function (e) {
         // Inputs 11..17 measure the pavement boundary, not the barriers. Older
         // exports lack the flag and are read as barrier rays.
         edgeRays: !!(wallIdx && wallIdx.edge),
+        // Probes carry the drivable width either side, so each probe occupies
+        // four slots instead of two. Absent in older exports, which used two.
+        probeWidths: PROBE_STRIDE === 4,
+        widthNorm: WIDTH_NORM,
         actor:  { sizes: actor.sizes,  flat: useBest ? Array.from(best.aFlat) : actor.flat()  },
         critic: { sizes: critic.sizes, flat: useBest ? Array.from(best.cFlat) : critic.flat() },
         logStd: Array.from(useBest ? best.logStd : logStd),

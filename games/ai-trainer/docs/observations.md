@@ -1,9 +1,14 @@
 # What the policy actually sees
 
 The observation vector in **GRU (recurrent) mode**, which is the trainer's
-default. 36 inputs at the stock map window; the width follows the window as
-`24 + 2 × probes`. The feed-forward policy appends 4 memory-register cells on
-the end (`obs 36..39`) — the GRU has none, its hidden state does that job.
+default. **48 inputs** at the stock settings; the width follows the map window
+and the probe stride as `24 + slots × probes`, where a probe occupies 4 slots
+with PROBE WIDTHS on (the default) and 2 with it off. The feed-forward policy
+appends 4 memory-register cells on the end — the GRU has none, its hidden state
+does that job.
+
+`obs-layout-check.mjs` asserts every index below against a live agent, so this
+table cannot drift from the code.
 
 Every value is clamped to the range shown. Source line references are
 `scripts/sim-worker.js` → `buildObs()`.
@@ -18,11 +23,31 @@ Every value is clamped to the range shown. Source line references are
 | 21 | on gravel | car | 0 / 1 |
 | 22 | reversing | car | 0 / 1 |
 | 23 | grade over the next 4 m ÷ 0.30 | centerline elevation | −1…1 |
-| 24+2k | probe k: bearing to a point `d_k` ahead, ÷π | centerline | −1…1 |
-| 25+2k | probe k: mean grade between probe k−1 and k ÷ 0.30 | centerline elevation | −1…1 |
+| 24+4k | probe k: bearing to a point `d_k` ahead, ÷π | centerline | −1…1 |
+| 25+4k | probe k: mean grade between probe k−1 and k ÷ 0.30 | centerline elevation | −1…1 |
+| 26+4k | probe k: drivable ground to the **left** ÷ 25 m | road width + runoff | 0…1 |
+| 27+4k | probe k: drivable ground to the **right** ÷ 25 m | road width + runoff | 0…1 |
 
 Stock probe distances `d_k`: 10, 20, 35, 55, 100, 200 m (see the map window
 setting). Actions in GRU mode are 2: steer and throttle/brake.
+
+### The width slots
+
+"Drivable" is the same boundary the on-gravel test uses: pavement half-width +
+1.75 m kerb margin + that side's gravel runoff — how far out the car can go
+before it runs out of ground. Reported in **absolute metres** (÷25 m), not as a
+ratio, which is the point: input 20 divides the road width out of its own
+reading, so without these the policy genuinely cannot tell a 12 m road from a
+20 m one. Across maps that was a blind spot.
+
+Pavement width is one constant per track in the current track format, so the
+variation *along* a track comes from the runoff, and the two sides differ.
+That asymmetry is why left and right are separate slots rather than one total —
+and why the mirror augmentation **swaps** them rather than negating.
+
+Turn them off with the PROBE WIDTHS toggle to compare a run without them;
+exports record `probeWidths` and `widthNorm`, and models predating the flag are
+read as two-slot probes.
 
 ## The rays, precisely
 
@@ -57,9 +82,10 @@ they keep working unchanged.
   ends — i.e. where gravel *starts* — out to 35 m, so the policy can see a
   runoff area coming. What it still cannot see is how deep that runoff is or
   where it ends, only the boundary it is about to cross.
-- **How wide the road is.** Input 20 is distance-to-centerline *divided by*
-  half-width, so a 12 m road and a 20 m road produce identical numbers. Fine on
-  one map, a real blind spot across maps.
+- ~~**How wide the road is.**~~ Fixed by the probe width slots above: the
+  drivable extent either side now arrives in absolute metres at every probe.
+  Input 20 still divides its own width out, but it is no longer the only
+  width signal.
 - **Curvature.** `track-gen.js` computes `state.trkCurv` (two scales, used by
   the scripted AI) and never sends it. Corner sharpness has to be inferred from
   differences between successive probe bearings.
