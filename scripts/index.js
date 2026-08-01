@@ -39,13 +39,14 @@ const ocsGalleryCleanup = initOcsGallerySlider();
 
 // ---------------------------------------------------------------------------
 // Server status
-// Polls status.nele.pet and reflects the KSP/Matrix server states as dots
-// in the homepage header.
+// Polls status.nele.pet and reflects the KSP/Matrix/BeamMP server states as
+// dots in the homepage header.
 // ---------------------------------------------------------------------------
 
 const serverStatusCleanup = initServerStatus({
   kspDot:            document.getElementById('dot-ksp'),
   matrixDot:         document.getElementById('dot-matrix'),
+  beammpDot:         document.getElementById('dot-beammp'),
   kspButton:         document.getElementById('ksp-status-btn'),
   kspModal:          document.getElementById('ksp-modal'),
   kspDownloadButton: document.getElementById('ksp-modal-download'),

@@ -1,8 +1,8 @@
 /**
  * server-status.js
  *
- * Polls status.nele.pet for the KSP and Matrix server states and reflects
- * them as coloured dots in the homepage header.
+ * Polls status.nele.pet for the KSP, Matrix, and BeamMP server states and
+ * reflects them as coloured dots in the homepage header.
  *
  * Also wires up the KSP status button so clicking it opens a confirmation
  * modal that downloads the GameData.zip modpack — the exact mod set
@@ -21,15 +21,17 @@ function setDotState(dotElement, isOnline) {
   dotElement.className = `status-dot ${isOnline ? 'online' : 'offline'}`;
 }
 
-async function refreshServerStatus(kspDot, matrixDot) {
+async function refreshServerStatus(kspDot, matrixDot, beammpDot) {
   try {
     const response = await fetch(STATUS_URL, { cache: 'no-store' });
     const data = await response.json();
     setDotState(kspDot, data.lmp === 'online');
     setDotState(matrixDot, data.matrix === 'online');
+    setDotState(beammpDot, data.beammp === 'online');
   } catch {
     setDotState(kspDot, false);
     setDotState(matrixDot, false);
+    setDotState(beammpDot, false);
   }
 }
 
@@ -93,17 +95,18 @@ function initKspModal({ kspButton, kspModal, kspDownloadButton, kspCancelButton 
  * @param {object}              options
  * @param {HTMLElement}         options.kspDot            - Status dot for the KSP server.
  * @param {HTMLElement}         options.matrixDot         - Status dot for the Matrix server.
+ * @param {HTMLElement}         [options.beammpDot]       - Status dot for the BeamMP server.
  * @param {HTMLElement}         [options.kspButton]       - Clickable KSP status button.
  * @param {HTMLElement}         [options.kspModal]        - KSP download modal element.
  * @param {HTMLElement}         [options.kspDownloadButton] - Confirm download button in modal.
  * @param {HTMLElement}         [options.kspCancelButton]   - Cancel button in modal.
  * @returns {() => void} Cleanup function.
  */
-export function initServerStatus({ kspDot, matrixDot, kspButton, kspModal, kspDownloadButton, kspCancelButton }) {
-  refreshServerStatus(kspDot, matrixDot);
+export function initServerStatus({ kspDot, matrixDot, beammpDot, kspButton, kspModal, kspDownloadButton, kspCancelButton }) {
+  refreshServerStatus(kspDot, matrixDot, beammpDot);
 
   const intervalId = setInterval(() => {
-    refreshServerStatus(kspDot, matrixDot);
+    refreshServerStatus(kspDot, matrixDot, beammpDot);
   }, POLL_INTERVAL_MS);
 
   const cleanupModal = initKspModal({ kspButton, kspModal, kspDownloadButton, kspCancelButton });
