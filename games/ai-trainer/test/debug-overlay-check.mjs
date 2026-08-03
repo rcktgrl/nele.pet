@@ -87,7 +87,12 @@ await page.waitForFunction(
 check('trainer reached its first policy update', true);
 
 console.log('\n2. Overlay reports live data');
-await page.keyboard.press('d');
+// Open with the BUTTON, not the key. The first version of this panel shipped
+// with setDbg() defined and nothing calling it: the button rendered, did
+// nothing, and a keyboard-only check passed. Both paths get asserted now.
+await page.click('#dbgBtn');
+check('the DEBUG button opens the panel',
+  await page.evaluate(() => document.getElementById('dbgWrap').classList.contains('on')));
 // one profiler window, plus the next update so seconds/update has a reading
 await page.waitForFunction(
   () => (document.getElementById('dbgSpu') || {}).textContent !== '—',
@@ -122,11 +127,19 @@ check(`inference is the batched kernel, not the fallback (${ui.infer})`, ui.infe
 check(`ray casting is the kernel, not the fallback (${ui.ray})`, ui.ray === 'wasm');
 check(`no updates rejected as non-finite (${ui.rej})`, ui.rej === '0');
 
-console.log('\n4. Toggling off stops the profiler');
-await page.keyboard.press('d');
-await page.waitForTimeout(300);
-const off = await page.evaluate(() => document.getElementById('dbgWrap').classList.contains('on'));
-check('panel closes again', !off);
+console.log('\n4. Both toggles work in both directions');
+await page.keyboard.press('d');                 // key closes what the button opened
+await page.waitForTimeout(200);
+check('the D key closes the panel',
+  !await page.evaluate(() => document.getElementById('dbgWrap').classList.contains('on')));
+await page.keyboard.press('d');                 // key opens
+await page.waitForTimeout(200);
+check('the D key opens the panel',
+  await page.evaluate(() => document.getElementById('dbgWrap').classList.contains('on')));
+await page.click('#dbgBtn');                    // button closes
+await page.waitForTimeout(200);
+check('the DEBUG button closes the panel',
+  !await page.evaluate(() => document.getElementById('dbgWrap').classList.contains('on')));
 
 await browser.close();
 server.close();
