@@ -1,4 +1,4 @@
-<script type="module" crossorigin src="./assets/editor-B184pw7e.js"></script>
+<script type="module" crossorigin src="./assets/editor-CETZo9Zd.js"></script>
 <link rel="modulepreload" crossorigin href="./assets/math.scalar.functions-BWXNux-o.js">
 <link rel="modulepreload" crossorigin href="./assets/observable.pure-CJ4J1f_C.js">
 <link rel="modulepreload" crossorigin href="./assets/performanceConfigurator-UtxC_Odd.js">
@@ -407,7 +407,7 @@
 <link rel="modulepreload" crossorigin href="./assets/oitBackBlend.fragment-aa6j2h3e.js">
 <link rel="modulepreload" crossorigin href="./assets/sprites.vertex-Yg2QuCv2.js">
 <link rel="modulepreload" crossorigin href="./assets/sprites.vertex-C0fVd_WD.js">
-<link rel="modulepreload" crossorigin href="./assets/driveSession-gG7NyYKm.js">
+<link rel="modulepreload" crossorigin href="./assets/driveSession-CDEOh6h9.js">
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Turbo Race 2 — track editor</title>
@@ -448,6 +448,8 @@
 
   #stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; color: var(--muted); }
   #stats b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+  #narrowNote { margin-top: 8px; color: var(--warn); font-size: 12px; }
+  #narrowNote[hidden] { display: none; }
 
   #verdict { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 650; }
   #verdict .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
@@ -506,6 +508,7 @@
       <label class="field">name<input id="fieldName" type="text" /></label>
       <label class="field">segment m<input id="fieldSpacing" type="number" min="1" max="20" step="0.5" /></label>
       <div id="stats"></div>
+      <div id="narrowNote" hidden></div>
     </div>
 
     <div id="inspector">
