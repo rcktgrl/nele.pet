@@ -1,4 +1,4 @@
-<script type="module" crossorigin src="./assets/main-BdUIrBM-.js"></script>
+<script type="module" crossorigin src="./assets/editor-B184pw7e.js"></script>
 <link rel="modulepreload" crossorigin href="./assets/math.scalar.functions-BWXNux-o.js">
 <link rel="modulepreload" crossorigin href="./assets/observable.pure-CJ4J1f_C.js">
 <link rel="modulepreload" crossorigin href="./assets/performanceConfigurator-UtxC_Odd.js">
@@ -410,15 +410,145 @@
 <link rel="modulepreload" crossorigin href="./assets/driveSession-gG7NyYKm.js">
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Turbo Race 2</title>
+<title>Turbo Race 2 — track editor</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0d10; }
-  #renderCanvas { width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
-  #boot {
-    position: fixed; inset: 0; display: grid; place-content: center; gap: 0.5rem;
-    color: #d6dde6; font: 500 15px/1.5 ui-sans-serif, system-ui, sans-serif; text-align: center;
+  :root {
+    --bg: #0b0d10;
+    --panel: #12161c;
+    --line: #222a34;
+    --text: #d6dde6;
+    --muted: #8d99a8;
+    --accent: #57c7ff;
+    --good: #46d18b;
+    --bad: #ff5470;
+    --warn: #ffb545;
   }
-  #boot.hidden { display: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); }
+  body { font: 500 13px/1.5 ui-sans-serif, system-ui, sans-serif; }
+  #layout { display: grid; grid-template-columns: 300px 1fr; height: 100%; }
+
+  #panel { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; display: flex; flex-direction: column; }
+  #panel > * { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  #panel h1 { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: 0.01em; }
+  #panel h2 { margin: 0 0 8px; font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+
+  .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  button {
+    font: inherit; color: var(--text); background: #1b222b; border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 10px; cursor: pointer;
+  }
+  button:hover { background: #232c37; }
+  button.primary { background: #14384a; border-color: #1d5872; color: #bfe8ff; width: 100%; font-weight: 650; }
+  button.primary:hover { background: #17455c; }
+  button.danger:hover { background: #3a1a22; border-color: #6b2a36; }
+
+  label.field { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--muted); }
+  label.field input { font: inherit; color: var(--text); background: #0d1116; border: 1px solid var(--line); border-radius: 5px; padding: 4px 7px; width: 100%; }
+  label.field input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
+  #stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; color: var(--muted); }
+  #stats b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+  #verdict { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 650; }
+  #verdict .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  #verdict.pass .dot { background: var(--good); }
+  #verdict.fail .dot { background: var(--bad); }
+  #diagnosticList { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; max-height: 30vh; overflow-y: auto; }
+  #diagnosticList li { color: var(--muted); border-left: 2px solid var(--bad); padding-left: 8px; }
+  #diagnosticList li.warn { border-left-color: var(--warn); }
+  #diagnosticList code { color: var(--text); font: 600 11px/1.4 ui-monospace, monospace; }
+
+  #help { color: var(--muted); font-size: 12px; border-bottom: 0; }
+  #help kbd { font: 600 11px/1 ui-monospace, monospace; background: #0d1116; border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; }
+
+  #views { display: grid; grid-template-rows: 1fr 150px; min-width: 0; }
+  #planCanvas, #profileCanvas { width: 100%; height: 100%; display: block; touch-action: none; }
+  #profileWrap { border-top: 1px solid var(--line); position: relative; min-height: 0; }
+  #profileWrap .caption { position: absolute; left: 10px; top: 8px; color: var(--muted); font-size: 11px; pointer-events: none; }
+
+  #driveOverlay { position: fixed; inset: 0; background: var(--bg); z-index: 10; }
+  #driveOverlay[hidden] { display: none; }
+  #driveCanvas { width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+  #driveHint {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%); padding: 6px 12px;
+    background: rgba(10, 13, 17, 0.8); border: 1px solid var(--line); border-radius: 999px; color: var(--text);
+  }
+  #toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); padding: 8px 14px;
+    background: #1b222b; border: 1px solid var(--line); border-radius: 8px; opacity: 0; transition: opacity 200ms;
+  }
+  #toast.show { opacity: 1; }
 </style>
-<canvas id="renderCanvas"></canvas>
-<div id="boot"><div>Turbo Race 2</div><div id="bootStatus" style="opacity: 0.6">starting…</div></div>
+
+<div id="layout">
+  <aside id="panel">
+    <div>
+      <h1>Track editor</h1>
+      <div style="color: var(--muted)">Turbo Race 2 · §6 geometry</div>
+    </div>
+
+    <div>
+      <div class="row">
+        <button id="btnNew">New</button>
+        <button id="btnTestCircuit">Test circuit</button>
+        <button id="btnOpen">Open…</button>
+      </div>
+      <div class="row" style="margin-top: 6px">
+        <button id="btnSaveDraft">Save draft</button>
+        <button id="btnExport">Export map.json</button>
+      </div>
+    </div>
+
+    <div><button id="btnDrive" class="primary">Drive test</button></div>
+
+    <div>
+      <h2>Track</h2>
+      <label class="field">name<input id="fieldName" type="text" /></label>
+      <label class="field">segment m<input id="fieldSpacing" type="number" min="1" max="20" step="0.5" /></label>
+      <div id="stats"></div>
+    </div>
+
+    <div id="inspector">
+      <h2>Waypoint</h2>
+      <div id="inspectorEmpty" style="color: var(--muted)">Click a waypoint in the plan view.</div>
+      <div id="inspectorFields" hidden>
+        <label class="field">x (m)<input id="fieldX" type="number" step="1" /></label>
+        <label class="field">z (m)<input id="fieldZ" type="number" step="1" /></label>
+        <label class="field">y (m)<input id="fieldY" type="number" step="0.25" /></label>
+        <label class="field">half-width<input id="fieldHalfWidth" type="number" min="2" max="30" step="0.5" /></label>
+        <label class="field">bank (°)<input id="fieldBank" type="number" min="-45" max="45" step="0.5" /></label>
+        <div class="row">
+          <button id="btnInsertAfter">Insert after</button>
+          <button id="btnDelete" class="danger">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Validation</h2>
+      <div id="verdict"><span class="dot"></span><span id="verdictText">checking…</span></div>
+      <ul id="diagnosticList"></ul>
+    </div>
+
+    <div id="help">
+      <b>Plan view</b> — drag a waypoint to move it, drag empty space to pan, wheel to zoom, double-click the road to insert.<br />
+      <b>Profile view</b> — drag the upper/lower handle to set that edge's height (bank), the middle to raise the whole gate.<br />
+      <kbd>D</kbd> drive · <kbd>Del</kbd> remove · <kbd>F</kbd> frame · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo
+    </div>
+  </aside>
+
+  <div id="views">
+    <canvas id="planCanvas"></canvas>
+    <div id="profileWrap">
+      <canvas id="profileCanvas"></canvas>
+      <div class="caption">elevation · inner / outer edge</div>
+    </div>
+  </div>
+</div>
+
+<div id="driveOverlay" hidden>
+  <canvas id="driveCanvas"></canvas>
+  <div id="driveHint">Esc — back to editing</div>
+</div>
+<div id="toast"></div>
+

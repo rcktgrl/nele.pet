@@ -16,6 +16,13 @@ Rebuild with, from the turbo-race-2 repository:
 Sourcemaps are deliberately off: they add ~22 MB, and this directory is already
 the largest thing in the site repository.
 
+## Pages
+
+- `index.html` — the game.
+- `editor.html` — the track editor. Draw a circuit, watch it validate live,
+  press <kbd>D</kbd> to drive what you just drew. Saves drafts and exports map
+  data as downloads; nothing is stored server-side.
+
 ## Status: alpha
 
 A driving test, not a game. One car, one procedurally generated circuit, real
