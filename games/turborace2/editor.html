@@ -1,4 +1,4 @@
-<script type="module" crossorigin src="./assets/editor-B-uEuJdJ.js"></script>
+<script type="module" crossorigin src="./assets/editor-BpfwoWKR.js"></script>
 <link rel="modulepreload" crossorigin href="./assets/math.scalar.functions-BWXNux-o.js">
 <link rel="modulepreload" crossorigin href="./assets/observable.pure-CJ4J1f_C.js">
 <link rel="modulepreload" crossorigin href="./assets/performanceConfigurator-UtxC_Odd.js">
@@ -407,7 +407,7 @@
 <link rel="modulepreload" crossorigin href="./assets/oitBackBlend.fragment-aa6j2h3e.js">
 <link rel="modulepreload" crossorigin href="./assets/sprites.vertex-Yg2QuCv2.js">
 <link rel="modulepreload" crossorigin href="./assets/sprites.vertex-C0fVd_WD.js">
-<link rel="modulepreload" crossorigin href="./assets/driveSession-FUQDb6Kv.js">
+<link rel="modulepreload" crossorigin href="./assets/driveSession-C3Cu282I.js">
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Turbo Race 2 — track editor</title>
@@ -450,8 +450,8 @@
   #stats b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
   #narrowNote { margin-top: 8px; color: var(--warn); font-size: 12px; }
   #narrowNote[hidden] { display: none; }
-  #selectionNote, #paintedNote, #coverNote { margin-top: 8px; color: var(--muted); font-size: 12px; }
-  #selectionNote[hidden], #paintedNote[hidden], #coverNote[hidden] { display: none; }
+  #selectionNote, #paintedNote, #coverNote, #raceNote { margin-top: 8px; color: var(--muted); font-size: 12px; }
+  #selectionNote[hidden], #paintedNote[hidden], #coverNote[hidden], #raceNote[hidden] { display: none; }
 
   label.check { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
   label.check input[type="number"] { font: inherit; color: var(--text); background: #0d1116; border: 1px solid var(--line); border-radius: 5px; padding: 3px 5px; width: 52px; }
@@ -560,6 +560,19 @@
       <div id="coverNote" hidden></div>
     </div>
 
+    <div>
+      <h2>Race</h2>
+      <div class="row">
+        <button data-race="checkpoints" title="Place the checkpoints a lap has to be driven through">Checks</button>
+        <button data-race="sectors" title="Place the sector splits">Sectors</button>
+        <button data-race="grid" title="Place the starting grid">Grid</button>
+        <button data-race="line" title="Shape the line the AI follows">AI line</button>
+        <button data-race="pit" title="Draw the pit lane">Pits</button>
+        <button id="btnResetRace" title="Back to the layout the editor works out on its own">Reset</button>
+      </div>
+      <div id="raceNote" hidden></div>
+    </div>
+
     <div id="inspector">
       <h2>Waypoint</h2>
       <div id="inspectorEmpty" style="color: var(--muted)">Click a waypoint in the plan view.</div>
@@ -584,7 +597,7 @@
 
     <div id="help">
       <b>Plan view</b> — drag a waypoint to move it, drag empty space to box-select, <b>right-drag</b> to pan, wheel to zoom,
-      double-click the road to insert. <kbd>Shift</kbd>-click adds to the selection; hold <kbd>Shift</kbd> while dragging to ignore snapping.<br />
+      double-click the road to insert. Checkpoints, sectors, the grid and the AI line are placed with the Race tools and start out laid out for you. <kbd>Shift</kbd>-click adds to the selection; hold <kbd>Shift</kbd> while dragging to ignore snapping.<br />
       <b>Profile view</b> — drag the upper/lower handle to set that edge's height (bank), the middle to raise the whole gate;
       with several waypoints selected the middle handle raises all of them.<br />
       <b>Diagnostics</b> — click one to jump to the road it is about.<br />
