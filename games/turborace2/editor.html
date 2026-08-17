@@ -1,4 +1,4 @@
-<script type="module" crossorigin src="./assets/editor-DEiPLjx3.js"></script>
+<script type="module" crossorigin src="./assets/editor-ByEuHhIy.js"></script>
 <link rel="modulepreload" crossorigin href="./assets/math.scalar.functions-BWXNux-o.js">
 <link rel="modulepreload" crossorigin href="./assets/observable.pure-CJ4J1f_C.js">
 <link rel="modulepreload" crossorigin href="./assets/performanceConfigurator-UtxC_Odd.js">
@@ -407,7 +407,7 @@
 <link rel="modulepreload" crossorigin href="./assets/oitBackBlend.fragment-aa6j2h3e.js">
 <link rel="modulepreload" crossorigin href="./assets/sprites.vertex-Yg2QuCv2.js">
 <link rel="modulepreload" crossorigin href="./assets/sprites.vertex-C0fVd_WD.js">
-<link rel="modulepreload" crossorigin href="./assets/driveSession-BdK8TnZy.js">
+<link rel="modulepreload" crossorigin href="./assets/driveSession-DZ89p6JE.js">
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Turbo Race 2 — track editor</title>
@@ -450,6 +450,12 @@
   #stats b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
   #narrowNote { margin-top: 8px; color: var(--warn); font-size: 12px; }
   #narrowNote[hidden] { display: none; }
+  #selectionNote { margin-top: 8px; color: var(--muted); font-size: 12px; }
+  #selectionNote[hidden] { display: none; }
+
+  label.check { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+  label.check input[type="number"] { font: inherit; color: var(--text); background: #0d1116; border: 1px solid var(--line); border-radius: 5px; padding: 3px 5px; width: 52px; }
+  button.active { background: #14384a; border-color: #1d5872; color: #bfe8ff; }
 
   #verdict { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 650; }
   #verdict .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
@@ -458,6 +464,8 @@
   #diagnosticList { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; max-height: 30vh; overflow-y: auto; }
   #diagnosticList li { color: var(--muted); border-left: 2px solid var(--bad); padding-left: 8px; }
   #diagnosticList li.warn { border-left-color: var(--warn); }
+  #diagnosticList li.locatable { cursor: pointer; }
+  #diagnosticList li.locatable:hover { color: var(--text); background: #171d25; }
   #diagnosticList code { color: var(--text); font: 600 11px/1.4 ui-monospace, monospace; }
 
   #help { color: var(--muted); font-size: 12px; border-bottom: 0; }
@@ -511,6 +519,25 @@
       <div id="narrowNote" hidden></div>
     </div>
 
+    <div>
+      <h2>Selection</h2>
+      <div class="row">
+        <button id="btnSelectAll" title="Select every waypoint (Ctrl+A)">All</button>
+        <button id="btnRotateLeft" title="Rotate anticlockwise 5° — shift for 45°">⟲</button>
+        <button id="btnRotateRight" title="Rotate clockwise 5° — shift for 45°">⟳</button>
+        <button id="btnGrow" title="Scale up 5% — shift for 25%">＋</button>
+        <button id="btnShrink" title="Scale down 5% — shift for 25%">－</button>
+        <button id="btnMirrorX" title="Mirror left-right">↔</button>
+        <button id="btnMirrorZ" title="Mirror front-back">↕</button>
+      </div>
+      <div class="row" style="margin-top: 8px; align-items: center">
+        <label class="check"><input id="fieldSnap" type="checkbox" /> snap</label>
+        <label class="check">grid <input id="fieldSnapStep" type="number" min="0.5" max="50" step="0.5" /> m</label>
+        <button id="btnMeasure" title="Measure a distance (R)">Ruler</button>
+      </div>
+      <div id="selectionNote" hidden></div>
+    </div>
+
     <div id="inspector">
       <h2>Waypoint</h2>
       <div id="inspectorEmpty" style="color: var(--muted)">Click a waypoint in the plan view.</div>
@@ -534,9 +561,13 @@
     </div>
 
     <div id="help">
-      <b>Plan view</b> — drag a waypoint to move it, drag empty space to pan, wheel to zoom, double-click the road to insert.<br />
-      <b>Profile view</b> — drag the upper/lower handle to set that edge's height (bank), the middle to raise the whole gate.<br />
-      <kbd>D</kbd> drive · <kbd>Del</kbd> remove · <kbd>F</kbd> frame · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo
+      <b>Plan view</b> — drag a waypoint to move it, drag empty space to box-select, <b>right-drag</b> to pan, wheel to zoom,
+      double-click the road to insert. <kbd>Shift</kbd>-click adds to the selection; hold <kbd>Shift</kbd> while dragging to ignore snapping.<br />
+      <b>Profile view</b> — drag the upper/lower handle to set that edge's height (bank), the middle to raise the whole gate;
+      with several waypoints selected the middle handle raises all of them.<br />
+      <b>Diagnostics</b> — click one to jump to the road it is about.<br />
+      <kbd>D</kbd> drive · <kbd>Del</kbd> remove · <kbd>F</kbd> frame · <kbd>R</kbd> ruler · <kbd>G</kbd> snap ·
+      <kbd>←↑↓→</kbd> nudge · <kbd>Esc</kbd> deselect · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo
     </div>
   </aside>
 
