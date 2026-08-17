@@ -1,4 +1,4 @@
-<script type="module" crossorigin src="./assets/editor-19NJnxDz.js"></script>
+<script type="module" crossorigin src="./assets/editor-BkEFTxHQ.js"></script>
 <link rel="modulepreload" crossorigin href="./assets/math.scalar.functions-BWXNux-o.js">
 <link rel="modulepreload" crossorigin href="./assets/observable.pure-CJ4J1f_C.js">
 <link rel="modulepreload" crossorigin href="./assets/performanceConfigurator-UtxC_Odd.js">
@@ -407,7 +407,7 @@
 <link rel="modulepreload" crossorigin href="./assets/oitBackBlend.fragment-aa6j2h3e.js">
 <link rel="modulepreload" crossorigin href="./assets/sprites.vertex-Yg2QuCv2.js">
 <link rel="modulepreload" crossorigin href="./assets/sprites.vertex-C0fVd_WD.js">
-<link rel="modulepreload" crossorigin href="./assets/driveSession-OjPb3QAM.js">
+<link rel="modulepreload" crossorigin href="./assets/driveSession-DTI3RAL9.js">
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Turbo Race 2 — track editor</title>
@@ -450,8 +450,8 @@
   #stats b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
   #narrowNote { margin-top: 8px; color: var(--warn); font-size: 12px; }
   #narrowNote[hidden] { display: none; }
-  #selectionNote { margin-top: 8px; color: var(--muted); font-size: 12px; }
-  #selectionNote[hidden] { display: none; }
+  #selectionNote, #paintedNote { margin-top: 8px; color: var(--muted); font-size: 12px; }
+  #selectionNote[hidden], #paintedNote[hidden] { display: none; }
 
   label.check { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
   label.check input[type="number"] { font: inherit; color: var(--text); background: #0d1116; border: 1px solid var(--line); border-radius: 5px; padding: 3px 5px; width: 52px; }
@@ -538,6 +538,19 @@
       <div id="selectionNote" hidden></div>
     </div>
 
+    <div>
+      <h2>Surface</h2>
+      <div class="row">
+        <button data-surface="tarmac" title="Paint tarmac — this is the eraser">Tarmac</button>
+        <button data-surface="curb" title="Paint kerb">Kerb</button>
+        <button data-surface="gravel" title="Paint gravel">Gravel</button>
+        <button data-surface="grass" title="Paint grass">Grass</button>
+        <button data-surface="dirt" title="Paint dirt">Dirt</button>
+        <button id="btnClearPaint" title="Remove every painted stretch">Clear</button>
+      </div>
+      <div id="paintedNote" hidden></div>
+    </div>
+
     <div id="inspector">
       <h2>Waypoint</h2>
       <div id="inspectorEmpty" style="color: var(--muted)">Click a waypoint in the plan view.</div>
@@ -566,7 +579,8 @@
       <b>Profile view</b> — drag the upper/lower handle to set that edge's height (bank), the middle to raise the whole gate;
       with several waypoints selected the middle handle raises all of them.<br />
       <b>Diagnostics</b> — click one to jump to the road it is about.<br />
-      <kbd>D</kbd> drive · <kbd>Del</kbd> remove · <kbd>F</kbd> frame · <kbd>R</kbd> ruler · <kbd>G</kbd> snap ·
+      <b>Surface</b> — pick one and drag along the road to paint it; the car's grip follows what you lay down.<br />
+      <kbd>D</kbd> drive · <kbd>Del</kbd> remove · <kbd>F</kbd> frame · <kbd>R</kbd> ruler · <kbd>P</kbd> paint · <kbd>G</kbd> snap ·
       <kbd>←↑↓→</kbd> nudge · <kbd>Esc</kbd> deselect · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo
     </div>
   </aside>
