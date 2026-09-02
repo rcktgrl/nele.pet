@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pic</title>
+  <link rel="icon" type="image/x-icon" href="../assets/icons/favicon.ico">
+  <link rel="stylesheet" href="../styles/index.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2em;
+      box-sizing: border-box;
+    }
+    .pic-frame {
+      background: linear-gradient(135deg, var(--glass-background), rgba(255, 255, 255, 0.08));
+      border: 1.5px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      border-radius: 18px;
+      padding: 10px;
+      max-width: min(92vw, 720px);
+    }
+    .pic-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="background-canvas" aria-hidden="true"></div>
+  <div class="pic-frame">
+    <img src="../assets/images/screenshot-2026-09-02.png" alt="Screenshot from 2026-09-02" />
+  </div>
+</body>
+</html>
