@@ -129,6 +129,27 @@ p { margin: 0; font-size: 18px; line-height: 1.4; max-width: 62ch; color: var(--
 .carpick .n { font-family: var(--display); font-size: 24px; line-height: 1; }
 .carpick .c { font-weight: 800; font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: var(--flare); }
 .carpick .b { font-size: 15px; color: var(--dust); line-height: 1.3; }
+.carpick.locked { cursor: not-allowed; opacity: .55; border-style: dashed; }
+.carpick.locked .n::after { content: ' · locked'; font-family: var(--ui); font-size: 14px; font-weight: 800; letter-spacing: .12em; color: var(--dust); }
+.carpick.locked .b { color: var(--sand); }
+.livs { display: flex; gap: 8px; flex-wrap: wrap; }
+.liv { display: flex; gap: 8px; align-items: center; border: 2px solid rgba(242,230,211,.25); background: rgba(18,12,9,.55); padding: 6px 10px; cursor: pointer; font-weight: 800; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; }
+.liv i { width: 16px; height: 16px; border: 2px solid var(--ink); flex: none; }
+.liv.sel { border-color: var(--flare); background: rgba(255,106,26,.14); }
+.liv.locked { cursor: not-allowed; opacity: .5; border-style: dashed; }
+.chal { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 14px; }
+.chal div { display: grid; gap: 3px; font-size: 14px; color: var(--dust); }
+.chal b { font-weight: 800; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: var(--sand); }
+.chal div.done b { color: var(--flare); }
+.chal i { height: 4px; background: rgba(242,230,211,.15); position: relative; display: block; }
+.chal i::after { content: ''; position: absolute; inset: 0; width: var(--v); background: var(--flare); }
+#turn { position: absolute; left: 50%; top: max(16px, env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: none; align-items: center; gap: 12px; background: rgba(18,12,9,.6); border-bottom: 3px solid var(--flare); padding: 6px 16px 6px 10px; }
+#turn.on { display: flex; }
+#turn svg { width: 46px; height: 46px; }
+#turn b { font-family: var(--display); font-weight: 400; font-size: 34px; line-height: 1; color: var(--sand); font-variant-numeric: tabular-nums; }
+#turn span { font-weight: 800; font-size: 15px; letter-spacing: .16em; text-transform: uppercase; color: var(--flare); }
+#turn.near { border-color: var(--hazard); }
+#turn.near b { color: var(--hazard); }
 .stat { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--dust); }
 .stat i { height: 6px; background: rgba(242,230,211,.15); position: relative; }
 .stat i::after { content: ''; position: absolute; inset: 0; width: var(--v); background: var(--sand); }
@@ -282,6 +303,7 @@ table.res td.t { text-align: right; }
     <div class="sub" id="hFree">Drive into a beacon to start an event</div>
   </div>
   <canvas id="minimap" width="344" height="344"></canvas>
+  <div id="turn" class="shadow" aria-live="off"><svg viewBox="0 0 48 48" aria-hidden="true"><path id="turnPath" d="M16 44 V24 Q16 14 26 14 H32" fill="none" stroke="#f2e6d3" stroke-width="6"/><path id="turnHead" d="M30 4 L44 14 L30 24 Z" fill="#f2e6d3"/></svg><div><b id="turnDist">120 m</b><br><span id="turnLabel">Right</span></div></div>
   <div id="waypoint" class="shadow"><div class="arrow" id="wpArrow"></div><div class="sub" id="wpText"></div></div>
   <div id="toasts" class="shadow"></div>
   <div id="countdown" class="shadow"></div>
@@ -349,6 +371,7 @@ table.res td.t { text-align: right; }
     </div>
     <div class="eyebrow" style="color:var(--dust)">Your car</div>
     <div class="cars" id="titleCars"></div>
+    <div class="livs" id="titleLivs"></div>
     <div class="keys">
       <div><b>W / ↑</b> throttle</div><div><b>S / ↓</b> brake · reverse</div><div><b>A D / ← →</b> steer</div>
       <div><b>Shift</b> boost</div><div><b>Space</b> handbrake</div><div><b>R</b> reset car</div>
@@ -395,6 +418,10 @@ table.res td.t { text-align: right; }
     <h2 id="pauseTitle">Free roam</h2>
     <div class="eyebrow" id="garageLabel" style="color:var(--dust)">Garage · swap your machine</div>
     <div class="cars" id="pauseCars"></div>
+    <div class="eyebrow" id="livLabel" style="color:var(--dust)">Livery</div>
+    <div class="livs" id="pauseLivs"></div>
+    <div class="eyebrow" id="chalLabel" style="color:var(--dust)">Challenges · unlock liveries</div>
+    <div class="chal" id="pauseChal"></div>
     <div class="row" id="pauseRow">
       <button class="btn primary" id="btnResume">Resume</button>
       <button class="btn" id="btnQuit">Leave event</button>
@@ -484,6 +511,18 @@ const CITY = { x0: 3460, z0: -940, pitch: 125, nx: 13, nz: 12, hw: 9, y: 5 };
 CITY.x1 = CITY.x0 + (CITY.nx - 1) * CITY.pitch; CITY.z1 = CITY.z0 + (CITY.nz - 1) * CITY.pitch;
 const DOCKS = { x0: CITY.x0, x1: 5150, z0: CITY.z1 + CITY.hw, z1: 800 };
 const FLAT = { x0: CITY.x0 - 24, x1: 5150, z0: CITY.z0 - 24, z1: 800 };
+/* the harbour: water dredged deep against the south and east quays, and a slipway down into it */
+const HARBOUR = [{ x0: 4250, x1: 5700, z0: FLAT.z1, z1: 1600 }, { x0: FLAT.x1, x1: 5700, z0: -760, z1: FLAT.z1 }];
+const SLIP = { x: 4650, z0: FLAT.z1 - 6, z1: FLAT.z1 + 62, hw: 8, y1: -4.6 };
+/* a ro-ro container ship tied up at the east quay: a ramp from the quay onto its deck */
+const SHIP = { x0: 5153, x1: 5191, z0: -650, z1: -390, y: 12.5, rampZ: -555, rampHw: 6, rampX0: 5106 };
+/* rooftop car parks: a ramp up the side of each block, a kicker on the high roof aimed at the low one */
+const ROOFTOPS = [{ bi: 10, bj: 1, h: 15, side: -1 }, { bi: 11, bj: 1, h: 11, side: 1 }];
+/* where boats go in: a parking spot on land and a mooring on the water, facing out */
+const BOAT_DOCKS = [
+  { id: 'harbour', name: 'Port Calder slipway', land: { x: SLIP.x + 14, z: FLAT.z1 - 22, yaw: Math.PI }, water: { x: SLIP.x, z: FLAT.z1 + 110, yaw: Math.PI } },
+  { id: 'lake', name: 'Lake Mesa jetty', land: { x: -30, z: 692, yaw: Math.atan2(-130, -60) }, water: { x: 52, z: 734, yaw: Math.atan2(-130, -60) } },
+];
 const REGIONS = [
   { id: 'desert', name: 'Red Mesa Desert', x: 0, z: 0, lx: -80, lz: -760 },
   { id: 'valley', name: 'Calder Valley', x: 2300, z: -400, lx: 2620, lz: 60 },
@@ -570,6 +609,12 @@ function eastHeight(x, z) {
   // the port: dead flat, quay drops straight into the harbour
   const f = boxMask(x, z, FLAT, 90);
   if (f > 0) h = lerp(h, CITY.y, f);
+  if (f < 1) for (const b of HARBOUR) { // deep water right up to the quay walls
+    const dd = Math.hypot(Math.max(b.x0 - x, x - b.x1, 0), Math.max(b.z0 - z, z - b.z1, 0));
+    if (dd < 140) h = Math.min(h, lerp(-13 - 3 * Noise.fbm(x / 150, z / 150, 2), h, smooth(0, 140, dd)));
+  }
+  // the slipway: a concrete ramp from the quay straight down under the water
+  if (Math.abs(x - SLIP.x) <= SLIP.hw && z >= SLIP.z0 && z <= SLIP.z1 + 8) h = lerp(CITY.y, SLIP.y1, clamp((z - SLIP.z0) / (SLIP.z1 - SLIP.z0), 0, 1)) - Math.max(0, z - SLIP.z1) * 0.5;
   return h;
 }
 const eastWeight = (x) => smooth(1150, 1420, x);
@@ -650,6 +695,16 @@ const ROUTE_DEFS = [
       [2420, -2060], [2400, -1920], [2150, -1870], [1990, -1845], [1895, -1805], [1885, -1750], [1960, -1725], [2100, -1690], [2400, -1580], [2420, -1400], [2400, -1262]] },
   { id: 'harbour', closed: true, width: 16, surface: 'asphalt', street: true,
     pts: streetPath([[CX(3), CZ(2)], [CX(8), CZ(2)], [CX(8), CZ(5)], [CX(10), CZ(5)], [CX(10), CZ(9)], [CX(6), CZ(9)], [CX(6), CZ(6)], [CX(3), CZ(6)]], true) },
+  // ---- country roads: gravel tracks across the desert, farm lanes through the valley, logging roads in the pines ----
+  { id: 'trail-west', closed: false, width: 10, trail: true, country: true, pts: [[-230, 270], [-380, 450], [-350, 650], [-180, 760], [-20, 700]] },
+  { id: 'trail-mesa', closed: false, width: 10, trail: true, country: true, pts: [[-700, -40], [-560, -60], [-420, -30], [-260, -40], [-135, -60]] },
+  { id: 'trail-spires', closed: false, width: 10, trail: true, country: true, pts: [[264, -302], [380, -235], [500, -180], [560, -130]] },
+  { id: 'lane-valley', closed: false, width: 9, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
+    pts: [[2499, -1300], [2600, -950], [2450, -600], [2650, -250], [2601, 200]] },
+  { id: 'lane-farm', closed: false, width: 9, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
+    pts: [[3300, -250], [3000, -420], [2800, -700], [2950, -1000], [3219, -1272]] },
+  { id: 'track-pines', closed: false, width: 9, country: true, grade: 0.14, pts: [[2400, -1920], [2550, -1895], [2700, -1905], [2810, -1870], [2900, -1800]] },
+  { id: 'track-logging', closed: false, width: 9, country: true, grade: 0.14, pts: [[2050, -1050], [2000, -1250], [2030, -1450], [2060, -1600], [2100, -1690]] },
   { id: 'rail', closed: true, width: 8, surface: 'rail', smoothWin: 70, passes: 6, grade: 0.03, noFeatures: true,
     pts: [[1950, -250], [2100, 100], [2250, 330], [2600, 560], [3100, 760], [3700, 690], [4150, 600], [4650, 600], [5060, 460], [5080, -200], [5050, -900], [4600, -1300], [4000, -1580], [3400, -1700], [2800, -1650], [2350, -1450], [2150, -1000], [2000, -650]] },
 ];
@@ -734,6 +789,22 @@ class Route {
     const lat = (x - this.sample(this.x, s)) * (-dz) + (z - this.sample(this.z, s)) * dx;
     return { s: this.wrapS(s), dist: Math.sqrt(bestD), lat };
   }
+  /* corners worth warning about: where the heading swings by a fair angle within a short stretch */
+  turns() {
+    if (this._turns) return this._turns;
+    const out = [], n = this.count, W = Math.round(30 / this.step);
+    for (let i = 0; i < n; i++) {
+      const k = Math.abs(this.curv[i]); if (k < 0.012) continue;
+      let peak = true; for (let j = -W; j <= W; j++) if (j && Math.abs(this.curv[this.idx(i + j)]) > k) { peak = false; break; }
+      if (!peak || (!this.closed && (i < 5 || i > n - 5))) continue;
+      let ang = 0; for (let j = -W; j <= W; j++) ang += this.curv[this.idx(i + j)] * this.step;
+      if (Math.abs(ang) < 0.5) continue;
+      const s = i * this.step;
+      if (out.length && Math.abs(out[out.length - 1].s - s) < 45) continue;
+      out.push({ s, ang, sharp: Math.abs(ang) > 1.15 || k > 0.06 });
+    }
+    return (this._turns = out);
+  }
   /* walk along existing routes to build a point-to-point event route without re-carving */
   static compose(def, parts) {
     // sample each part, then fillet every junction with a quadratic curve around the corner
@@ -765,14 +836,52 @@ class Route {
 }
 
 /* ---------- City layout (deterministic) ---------- */
+/* street kicker: a long run-up, a short deck and a steep back, all raised on the physics ground */
+const RAMP = { up: 16, top: 2.5, down: 7, H: 2.4, hw: 3.2 };
+function rampLift(r, x, z) { // height above the street at (x, z), or -1 when off this ramp
+  const rx = x - r.x, rz = z - r.z, a = rx * r.dx + rz * r.dz, l = Math.abs(rx * r.dz - rz * r.dx);
+  if (a < 0 || a > r.L || l > RAMP.hw) return -1;
+  const P = RAMP; let h;
+  if (a < P.up) h = P.H * Math.pow(a / P.up, 1.25);
+  else if (a < P.up + P.top) h = P.H;
+  else h = P.H * (1 - (a - P.up - P.top) / P.down);
+  return h * clamp((P.hw - l) / 0.6, 0, 1);
+}
+/* raised drivable ground laid over the terrain: street kickers, roof decks, car-park ramps, the ship */
+function overlayLift(o, x, z) { // absolute height, or -Infinity off this piece
+  if (o.kind === 'deck') return x >= o.x0 && x <= o.x1 && z >= o.z0 && z <= o.z1 ? o.y : -Infinity;
+  if (o.kind === 'slope') {
+    const rx = x - o.x, rz = z - o.z, a = rx * o.dx + rz * o.dz, l = Math.abs(rx * o.dz - rz * o.dx);
+    if (a < 0 || a > o.Lt || l > o.hw) return -Infinity;
+    return o.y0 + (o.y1 - o.y0) * Math.min(1, a / o.L);
+  }
+  const l = rampLift(o, x, z); return l > 0 ? o.y + l : -Infinity;
+}
+function overlayBox(o) {
+  if (o.kind === 'deck') return [o.x0, o.z0, o.x1, o.z1];
+  const L = o.kind === 'slope' ? o.Lt : o.L, w = o.kind === 'slope' ? o.hw : RAMP.hw, xs = [], zs = [];
+  for (const [a, l] of [[0, -w], [0, w], [L, -w], [L, w]]) { xs.push(o.x + o.dx * a + o.dz * l); zs.push(o.z + o.dz * a - o.dx * l); }
+  return [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)];
+}
 class City {
   constructor(T) {
     const rng = mulberry32(2024);
     this.buildings = []; this.lamps = []; this.parkTrees = []; this.containers = []; this.cranes = []; this.palms = [];
+    this.decks = []; this.ramps = []; this.carParks = [];
     const C = CITY, cx = 4210, cz = -250;
     for (let bi = 0; bi < C.nx - 1; bi++) for (let bj = 0; bj < C.nz - 1; bj++) {
       const bx0 = C.x0 + bi * C.pitch + C.hw + 4, bz0 = C.z0 + bj * C.pitch + C.hw + 4, size = C.pitch - 2 * (C.hw + 4);
       const kind = cityBlockKind(bi, bj);
+      const roof = ROOFTOPS.find((r) => r.bi === bi && r.bj === bj);
+      if (roof) { // rooftop car park: one big building, a ramp strip up one side from the south street
+        const W = 11, y = CITY.y + roof.h, rx0 = roof.side < 0 ? bx0 : bx0 + size - W;
+        const b = { x0: roof.side < 0 ? bx0 + W : bx0, x1: roof.side < 0 ? bx0 + size : bx0 + size - W, z0: bz0, z1: bz0 + size, h: roof.h, style: 'office', tone: 0.5, seed: rng(), deck: true };
+        this.buildings.push(b);
+        this.decks.push({ kind: 'deck', x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1, y });
+        const sl = { kind: 'slope', x: rx0 + W / 2, z: bz0 + size, dx: 0, dz: -1, L: size - 18, Lt: size, hw: W / 2, y0: CITY.y, y1: y };
+        this.decks.push(sl); this.carParks.push({ b, sl, y, side: roof.side });
+        continue;
+      }
       const mx = bx0 + size / 2, mz = bz0 + size / 2;
       const core = 1 - smooth(150, 700, Math.hypot(mx - cx, (mz - cz) * 1.2));
       if (kind === 'park') {
@@ -822,6 +931,35 @@ class City {
         }
       }
     }
+    // kicker ramps down the middle of quiet streets (never on a race route or the rail)
+    const L = RAMP.up + RAMP.top + RAMP.down, cand = [];
+    for (let i = 0; i < C.nx; i++) for (let j = 0; j < C.nz - 1; j++) cand.push([CX(i), CZ(j) + C.pitch / 2, 0, 1]);
+    for (let j = 0; j < C.nz; j++) for (let i = 0; i < C.nx - 1; i++) cand.push([CX(i) + C.pitch / 2, CZ(j), 1, 0]);
+    for (let k = cand.length - 1; k > 0; k--) { const q = Math.floor(rng() * (k + 1)); [cand[k], cand[q]] = [cand[q], cand[k]]; }
+    for (const [mx, mz, ax, az] of cand) {
+      if (this.ramps.length >= 14) break;
+      let ok = true;
+      for (let d = -L / 2 - 6; d <= L / 2 + 6; d += 4) for (const l of [-5, 0, 5]) { const px = mx + ax * d - az * l, pz = mz + az * d + ax * l, gi = T.gi(px, pz); if (T.rdist[gi] < 18 || T.rail[gi] > 0) ok = false; }
+      if (!ok || this.ramps.some((r) => Math.hypot(r.cx - mx, r.cz - mz) < 260)) continue;
+      const sg = rng() < 0.5 ? 1 : -1, dx = ax * sg, dz = az * sg;
+      this.ramps.push({ cx: mx, cz: mz, x: mx - dx * L / 2, z: mz - dz * L / 2, dx, dz, y: CITY.y, L });
+    }
+    // the roof-to-roof jump: a kicker on the high roof aimed across the street at the low one
+    { const [A, B] = this.carParks, dir = Math.sign((B.b.x0 + B.b.x1) - (A.b.x0 + A.b.x1)), edge = dir > 0 ? A.b.x1 : A.b.x0, zc = (A.b.z0 + A.b.z1) / 2;
+      this.ramps.push({ cx: edge - dir * L / 2, cz: zc, x: edge - dir * L, z: zc, dx: dir, dz: 0, y: A.y, L, roof: true }); }
+    // the ship: deck, a ramp up from the quay, and container stacks in bays with lanes between them
+    this.decks.push({ kind: 'deck', x0: SHIP.x0, x1: SHIP.x1, z0: SHIP.z0, z1: SHIP.z1 - 14, y: SHIP.y });
+    this.decks.push({ kind: 'slope', x: SHIP.rampX0, z: SHIP.rampZ, dx: 1, dz: 0, L: SHIP.x0 - SHIP.rampX0, Lt: SHIP.x0 - SHIP.rampX0 + 1, hw: SHIP.rampHw, y0: CITY.y, y1: SHIP.y, ship: true });
+    this.shipBoxes = [];
+    for (const [x0, x1] of [[SHIP.x0 + 4, SHIP.x0 + 16.2], [SHIP.x1 - 16.2, SHIP.x1 - 4]]) {
+      for (let zb = SHIP.z0 + 34; zb < SHIP.z1 - 30; zb += 24) for (let k = 0; k < 5; k++) {
+        const z = zb + k * 3.1;
+        if (x0 < SHIP.x0 + 10 && z > SHIP.rampZ - SHIP.rampHw - 6 && z < SHIP.rampZ + SHIP.rampHw + 4) continue; // keep the ramp mouth clear
+        if (rng() < 0.12) continue;
+        const n = 1 + Math.floor(rng() * 3);
+        this.containers.push({ x0, x1, z0: z, z1: z + 2.5, h: n * 2.6, n, y: SHIP.y, color: colors[Math.floor(rng() * colors.length)] });
+      }
+    }
     for (let k = 0; k < 4; k++) this.cranes.push({ x: 3700 + k * 380, z: 792, yaw: 0, color: k % 2 ? 0xd94c22 : 0xe0b020 });
     for (let k = 0; k < 3; k++) this.cranes.push({ x: 5136, z: -500 + k * 260, yaw: Math.PI / 2, color: 0xd94c22 });
   }
@@ -834,7 +972,7 @@ class Terrain {
     this.Nx = Nx; this.Nz = Nz; this.cell = cell; this.x0 = WORLD.x0; this.z0 = WORLD.z0;
     this.h = new Float32Array(n);
     this.road = new Float32Array(n); this.mud = new Float32Array(n); this.asph = new Float32Array(n); this.rail = new Float32Array(n);
-    this.rdist = new Float32Array(n).fill(1e9); this.rlat = new Float32Array(n).fill(40); this.rhw = new Float32Array(n).fill(8); this.rs = new Float32Array(n); this.rlanes = new Uint8Array(n);
+    this.rdist = new Float32Array(n).fill(1e9); this.rlat = new Float32Array(n).fill(40); this.rhw = new Float32Array(n).fill(8); this.rs = new Float32Array(n); this.rlanes = new Uint8Array(n); this.rown = new Uint8Array(n);
     this.rfade = new Uint8Array(n); // 255 = junction mouth: hide markings and lane patterns that would clash
     this.green = new Uint8Array(n); this.beach = new Uint8Array(n); this.city = new Uint8Array(n); this.tun = new Uint8Array(n); this.forest = new Uint8Array(n);
   }
@@ -868,6 +1006,17 @@ class Terrain {
     ]);
     for (let i = 0; i <= fin.count; i++) fin.y[i] = this.height(fin.x[i], fin.z[i]);
     this.routes.push(fin);
+    // traffic lanes: the open roads driven the other way, and loops round the downtown blocks
+    const rev = (id) => { const d = R(id).def; return { ...d, id: id + '-rev', pts: d.pts.slice().reverse(), keepStart: true, rails: false, tunnel: false }; };
+    const loop = (id, a, b, c, d) => ({ id, closed: true, width: 16, surface: 'asphalt', pts: streetPath([[CX(a), CZ(b)], [CX(c), CZ(b)], [CX(c), CZ(d)], [CX(a), CZ(d)]], true), keepStart: true });
+    const tdefs = [rev('hwy'), rev('coast'), rev('tunnel'), rev('pass'), rev('lane-valley'), rev('lane-farm'),
+      loop('city-a', 1, 1, 5, 4), loop('city-b', 7, 1, 11, 6), loop('city-c', 2, 5, 6, 9), loop('city-d', 9, 3, 12, 10)];
+    tdefs.push({ ...tdefs[6], id: 'city-a-rev', pts: tdefs[6].pts.slice().reverse() }, { ...tdefs[8], id: 'city-c-rev', pts: tdefs[8].pts.slice().reverse() });
+    for (const d of tdefs) {
+      const T2 = new Route({ ...d, noCarve: true, trafficOnly: true });
+      for (let i = 0; i <= T2.count; i++) T2.y[i] = this.height(T2.x[i], T2.z[i]);
+      this.routes.push(T2);
+    }
   }
   gi(x, z) { const ix = clamp(Math.round((x - this.x0) / this.cell), 0, this.Nx - 1), iz = clamp(Math.round((z - this.z0) / this.cell), 0, this.Nz - 1); return iz * this.Nx + ix; }
   rawH(x, z) { return this.heightGrid(this.h, x, z); }
@@ -879,8 +1028,34 @@ class Terrain {
     if (tx + tz <= 1) return a + (b - a) * tx + (cc - a) * tz;
     return d + (cc - d) * (1 - tx) + (b - d) * (1 - tz);
   }
-  height(x, z) { return this.heightGrid(this.h, x, z); }
+  height(x, z) { const h = this.heightGrid(this.h, x, z); return this.ovGrid && x > CITY.x0 - 30 ? this.overlayHeight(x, z, h) : h; }
+  setOverlays(list) {
+    this.ovGrid = new Map(); this.overlays = list;
+    for (const o of list) {
+      const [x0, z0, x1, z1] = overlayBox(o);
+      for (let i = Math.floor(x0 / 32); i <= Math.floor(x1 / 32); i++) for (let j = Math.floor(z0 / 32); j <= Math.floor(z1 / 32); j++) {
+        const k = i * 100000 + j; let a = this.ovGrid.get(k); if (!a) this.ovGrid.set(k, a = []); a.push(o);
+      }
+    }
+  }
+  /* the overlay piece under (x, z), kickers first (they sit on top of roofs) */
+  overlayAt(x, z, kickOnly) {
+    const a = this.ovGrid && this.ovGrid.get(Math.floor(x / 32) * 100000 + Math.floor(z / 32)); if (!a) return null;
+    let hit = null;
+    for (const o of a) if (overlayLift(o, x, z) > -Infinity) { if (!o.kind) return o; if (!kickOnly) hit = hit || o; }
+    return hit;
+  }
+  rampAt(x, z) { return this.overlayAt(x, z, true); }
+  overlayHeight(x, z, h) {
+    const a = this.ovGrid.get(Math.floor(x / 32) * 100000 + Math.floor(z / 32)); if (!a) return h;
+    for (const o of a) { const y = overlayLift(o, x, z); if (y > h) h = y; }
+    return h;
+  }
   normal(x, z, out) {
+    if (this.ovGrid && x > CITY.x0 - 30 && this.overlayAt(x, z)) { // raised pieces: slope from the overlay
+      const e = 0.3, dhdx = (this.height(x + e, z) - this.height(x - e, z)) / (2 * e), dhdz = (this.height(x, z + e) - this.height(x, z - e)) / (2 * e), l = Math.hypot(dhdx, 1, dhdz);
+      out.x = -dhdx / l; out.y = 1 / l; out.z = -dhdz / l; return out;
+    }
     const Nx = this.Nx, c = this.cell, H = this.h;
     const fx = clamp((x - this.x0) / c, 0, Nx - 1.001), fz = clamp((z - this.z0) / c, 0, this.Nz - 1.001);
     const ix = Math.floor(fx), iz = Math.floor(fz); const tx = fx - ix, tz = fz - iz;
@@ -1048,7 +1223,7 @@ class Terrain {
             // markings follow one road per cell; where roads meet, the wider road keeps its tarmac and paint
             const e = d - hw, oe = ownD[gi] - this.rhw[gi], cIn = e < MARGIN, oIn = oe < MARGIN;
             const win = cIn && oIn ? prio > ownP[gi] || (prio === ownP[gi] && d < ownD[gi]) : cIn ? true : oIn ? false : d < ownD[gi];
-            if (win) { ownD[gi] = d; ownP[gi] = prio; const cr = vx * (pz - az) - vz * (px - ax); this.rlat[gi] = clamp(cr < 0 ? d : -d, -40, 40); this.rhw[gi] = hw; this.rs[gi] = (i + t) * R.step; this.rlanes[gi] = lanes; }
+            if (win) { ownD[gi] = d; ownP[gi] = prio; const cr = vx * (pz - az) - vz * (px - ax); this.rlat[gi] = clamp(cr < 0 ? d : -d, -40, 40); this.rhw[gi] = hw; this.rs[gi] = (i + t) * R.step; this.rlanes[gi] = lanes; this.rown[gi] = rid; }
             if (e < ZONE) {
               if (!zid[gi]) zid[gi] = rid; else if (zid[gi] !== rid) multi[gi] = 1;
               if (prio > majP[gi] || (prio === majP[gi] && e < majE[gi])) { majP[gi] = prio; majE[gi] = e; }
@@ -1197,8 +1372,8 @@ class Scatter {
     yield 'Raising the skyline';
     // city obstacles
     const C = this.city;
-    for (const b of C.buildings) if (!b.crown) this.addBox(b.x0, b.z0, b.x1, b.z1, CITY.y + b.h, 'building');
-    for (const k of C.containers) this.addBox(k.x0, k.z0, k.x1, k.z1, CITY.y + k.h, 'container');
+    for (const b of C.buildings) if (!b.crown) this.addBox(b.x0, b.z0, b.x1, b.z1, CITY.y + b.h - (b.deck ? 1.2 : 0), 'building'); // roof decks sit under the wheels
+    for (const k of C.containers) this.addBox(k.x0, k.z0, k.x1, k.z1, (k.y ?? CITY.y) + k.h, 'container');
     for (const l of C.lamps) this.addObstacle(l.x, l.z, 0.22, CITY.y + 8, 'pole');
     for (const t of C.parkTrees) this.addObstacle(t.x, t.z, 0.45 * t.s, CITY.y + 6, 'tree');
     for (const c of C.cranes) {
@@ -1249,7 +1424,7 @@ class Props {
     this.T = T; this.list = [];
     const rng = mulberry32(99);
     for (const R of T.routes) {
-      if (R.def.trail || R.def.noCarve || R.surface === 'rail' || (R.surface === 'asphalt' && !R.def.street)) continue;
+      if (R.def.trail || R.def.country || R.def.noCarve || R.surface === 'rail' || (R.surface === 'asphalt' && !R.def.street)) continue;
       for (let i = 0; i < R.count; i += 6) {
         const k = R.curv[i];
         if (Math.abs(k) < 0.012 || rng() < 0.45) continue;
@@ -1325,7 +1500,34 @@ const VEHICLES = {
     engine: { torque: 720, idle: 750, red: 6800, inertia: 0.22, gears: [2.9, 1.95, 1.42, 1.12, 0.9, 0.76], final: 3.9, rev: 3.4 },
     brake: 2800, hbrake: 2600, steer: 0.54, cda: 0.75, down: 0.8, boost: { force: 4.6, heat: 0.33 }, tough: 16, mudGrip: 0.7,
     aiGrip: 5.2, aiGripAsph: 11.0, street: true, stats: { speed: 1.0, grip: 0.8, armour: 0.65 }, color: 0xb0161e },
+  boat: { id: 'boat', name: 'Calder Skiff', cls: 'Boat · outboard', blurb: 'Twin-outboard harbour runabout. Planes at speed, slides in the turns. Water only.',
+    mass: 1100, dims: [2.3, 1.2, 6.2], hull: { hx: 1.1, hy: 0.55, hz: 3.0, y: 0.25 },
+    wheels: { x: 0.9, zf: -2, zr: 2, y: -0.3, r: 0.3, w: 0.2, I: 1 },
+    susp: { rest: 0.3, k: 40000, c: 3000, arb: 0 },
+    tire: { mu: 1, dirt: 1, asphalt: 1, stiff: 0.7 }, drive: { type: 'rwd' },
+    engine: { torque: 300, idle: 1100, red: 6200, inertia: 0.1, gears: [1], final: 1, rev: 1 },
+    brake: 1000, hbrake: 1000, steer: 0.5, cda: 0.8, down: 0, boost: { force: 3.0, heat: 0.24 }, tough: 18, mudGrip: 1,
+    boat: { thrust: 6.2, drag: 0.011, keel: 2.6, turn: 0.72, ride: 0.32 },
+    aiGrip: 6, aiGripAsph: 6, stats: { speed: 0.7, grip: 0.5, armour: 0.7 }, color: 0xf2efe6 },
+  // ---- civilian traffic (not driveable) ----
+  sedan: { id: 'sedan', name: 'Calder Cruiser', cls: 'Sedan', blurb: 'Family four-door.', traffic: true,
+    mass: 1350, dims: [1.8, 1.45, 4.6], hull: { hx: 0.88, hy: 0.55, hz: 2.25, y: 0.2 },
+    wheels: { x: 0.78, zf: -1.4, zr: 1.35, y: 0.0, r: 0.33, w: 0.22, I: 1.0 },
+    susp: { rest: 0.3, k: 38000, c: 3200, arb: 8000 },
+    tire: { mu: 0.95, dirt: 0.85, asphalt: 1.15, stiff: 0.6 }, drive: { type: 'fwd' },
+    engine: { torque: 240, idle: 800, red: 6000, inertia: 0.14, gears: [3.3, 2.0, 1.4, 1.05, 0.85], final: 3.9, rev: 3.3 },
+    brake: 2200, hbrake: 1800, steer: 0.55, cda: 0.75, down: 0, boost: { force: 0, heat: 0.3 }, tough: 13, mudGrip: 0.8,
+    aiGrip: 5.0, aiGripAsph: 7.5, stats: { speed: 0.4, grip: 0.5, armour: 0.4 }, color: 0x8a9aa6 },
+  van: { id: 'van', name: 'Mesa Hauler', cls: 'Delivery van', blurb: 'Boxy, slow, always late.', traffic: true,
+    mass: 2100, dims: [2.0, 2.3, 5.2], hull: { hx: 0.98, hy: 0.95, hz: 2.55, y: 0.65 },
+    wheels: { x: 0.86, zf: -1.75, zr: 1.55, y: 0.05, r: 0.37, w: 0.25, I: 1.6 },
+    susp: { rest: 0.32, k: 62000, c: 5200, arb: 14000 },
+    tire: { mu: 0.95, dirt: 0.9, asphalt: 1.1, stiff: 0.7 }, drive: { type: 'rwd' },
+    engine: { torque: 420, idle: 750, red: 5200, inertia: 0.25, gears: [3.6, 2.2, 1.45, 1.05, 0.82], final: 4.1, rev: 3.6 },
+    brake: 3200, hbrake: 2800, steer: 0.52, cda: 1.3, down: 0, boost: { force: 0, heat: 0.3 }, tough: 17, mudGrip: 0.9,
+    aiGrip: 4.4, aiGripAsph: 6.2, stats: { speed: 0.3, grip: 0.4, armour: 0.7 }, color: 0xe9e2d6 },
 };
+const DRIVEABLE = ['rally', 'buggy', 'truck', 'kaze', 'ironside', 'boat'];
 
 function engineCurve(f) { // f = rpm/redline → torque fraction
   const t = [0.52, 0.72, 0.88, 0.98, 1.0, 0.93, 0.8];
@@ -1334,8 +1536,8 @@ function engineCurve(f) { // f = rpm/redline → torque fraction
 }
 
 const _v1 = typeof THREE !== 'undefined' ? null : null;
-let V3, Q4;
-function coreInit(THREE_) { V3 = THREE_.Vector3; Q4 = THREE_.Quaternion; }
+let V3, Q4, EU;
+function coreInit(THREE_) { V3 = THREE_.Vector3; Q4 = THREE_.Quaternion; EU = THREE_.Euler; }
 
 class Car {
   constructor(spec, opts = {}) {
@@ -1362,6 +1564,13 @@ class Car {
   }
   reset(x, z, yaw, T, lift = 0.6) {
     const sp = this.spec;
+    if (sp.boat) { // afloat (or sat on the slipway) at ride height
+      this.pos.set(x, Math.max(T.height(x, z) + 0.6, WATER_Y + sp.boat.ride) + lift * 0.3, z);
+      this.q.setFromAxisAngle(new V3(0, 1, 0), yaw); this.boatYaw = yaw;
+      this.vel.set(0, 0, 0); this.w.set(0, 0, 0);
+      this.heat = Math.min(this.heat, 0.3); this.invuln = 3; this.wrecked = false; this.wreckT = 0; this.gear = 1; this.reverse = false; this.rpm = sp.engine.idle; this.airTime = 0;
+      return;
+    }
     const groundY = T.height(x, z);
     const restCom = -(sp.wheels.y - (sp.susp.rest - sp.mass * 9.81 / 4 / sp.susp.k) - sp.wheels.r);
     this.pos.set(x, groundY + restCom + lift, z);
@@ -1394,7 +1603,83 @@ class Car {
       this.w.set(this.w.x + r() * 5, this.w.y + r() * 3, this.w.z + r() * 6);
     }
   }
+  /* boats: buoyant hull, thrust from the outboards, a keel that resists sideways motion */
+  stepBoat(dt, W) {
+    const sp = this.spec, B = sp.boat, T = W.terrain, inp = this.input;
+    if (this.boatYaw === undefined) this.boatYaw = this.yaw();
+    // collisions spin the hull through w.y; the keel damps the rest
+    this.boatYaw += this.w.y * dt;
+    const yaw = this.boatYaw, fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = -fz, rz = fx;
+    const vF = this.vel.x * fx + this.vel.z * fz, vR = this.vel.x * rx + this.vel.z * rz;
+    this.speedKmh = Math.abs(vF) * 3.6;
+    let thr = this.frozen || this.wrecked ? 0 : inp.throttle, brk = this.frozen || this.wrecked ? 0 : inp.brake;
+    if (!this.reverse && brk > 0.3 && thr < 0.1 && vF < 1) this.reverse = true; else if (this.reverse && thr > 0.3) this.reverse = false;
+    const drive = this.reverse ? -brk * 0.45 : thr;
+    // where is the hull: afloat, grounded or flying
+    const hl = sp.hull.hz * 0.85;
+    const keelY = this.pos.y - 0.45;
+    let gMax = -1e9;
+    for (const k of [-1, 0, 1]) {
+      const g = T.height(this.pos.x + fx * hl * k, this.pos.z + fz * hl * k), v = vF * k;
+      if (k && g > keelY + 0.6) { // a quay, bank or step too tall to ride up: bounce off it
+        if (v > 0) { this.vel.x -= fx * vF * 1.4; this.vel.z -= fz * vF * 1.4; if (v > 3) { this.impact = Math.max(this.impact, v); this.events.push({ type: 'hit', v, kind: 'quay' }); if (v > sp.tough) this.wreck('crash'); } }
+        continue;
+      }
+      if (!k) gMax = g; // the hull rides on what is under its middle
+    }
+    const rideY = WATER_Y + B.ride + 0.05 * Math.sin(W.time * 1.6 + this.pos.x * 0.05 + this.pos.z * 0.03);
+    const afloat = keelY < WATER_Y + 0.3 && gMax < WATER_Y - 0.2, grounded = keelY <= gMax + 0.05;
+    this.inWater = afloat ? 1 : 0; this.surfaceMud = 0;
+    this.onGround = afloat || grounded;
+    const boostOn = !this.wrecked && !this.frozen && inp.boost && this.heat < 1 && drive > 0.05 && (afloat || grounded);
+    this.boosting = boostOn;
+    if (boostOn) this.heat += sp.boost.heat * dt; else this.heat = Math.max(0, this.heat - (0.16 + (afloat ? 0.1 : 0)) * dt);
+    if (this.heat >= 1 && !this.wrecked) { this.heat = 1; this.wreck('overheat'); }
+    // vertical: gravity, buoyancy toward ride height, ground contact
+    this.vel.y -= 9.81 * dt;
+    if (this.pos.y < rideY + 0.6) {
+      const sub = clamp(rideY + 0.6 - this.pos.y, 0, 1.5);
+      if (this.pos.y < rideY) this.vel.y += (rideY - this.pos.y) * 60 * dt;
+      if (sub > 0.2) { if (this.airTime > 0.6) this.events.push({ type: 'land', air: this.airTime }); this.vel.y *= Math.exp(-6 * dt); }
+    }
+    if (grounded) {
+      if (this.pos.y < gMax + 0.45) { this.pos.y = gMax + 0.45; if (this.vel.y < 0) { if (this.vel.y < -6) this.events.push({ type: 'land', air: this.airTime }); this.vel.y = 0; } }
+      const n = T.normal(this.pos.x, this.pos.z, this._t.a); this.vel.x += n.x * 9.81 * dt * 0.9; this.vel.z += n.z * 9.81 * dt * 0.9; // slide down slipways
+    }
+    if (afloat || grounded) this.airTime = 0; else this.airTime += dt;
+    // propulsion and drag
+    const push = (afloat ? 1 : grounded ? 0.18 : 0) * B.thrust * (boostOn ? 1 + sp.boost.force / B.thrust : 1) * drive;
+    let aF = push - (afloat ? B.drag * vF * Math.abs(vF) + (brk > 0 && !this.reverse ? 2.5 * Math.sign(vF) * brk : 0) + 0.15 * vF : 0);
+    let aR = 0;
+    if (afloat) aR = -vR * B.keel * (inp.handbrake > 0.5 ? 0.25 : 1);
+    if (grounded && !afloat) { const slick = Math.abs(this.pos.x - SLIP.x) < SLIP.hw + 2 && this.pos.z > SLIP.z0 ? 0.5 : 1.8; aF -= Math.sign(vF) * Math.min(Math.abs(vF) / dt, slick); aR = -Math.sign(vR) * Math.min(Math.abs(vR) / dt, slick * 2); }
+    this.vel.x += (fx * aF + rx * aR) * dt; this.vel.z += (fz * aF + rz * aR) * dt;
+    // steering: rudder needs flow, outboards give a little at rest
+    const flow = clamp(vF / 7, -1, 1);
+    const wantW = -(this.frozen ? 0 : inp.steer) * B.turn * (afloat ? flow * (inp.handbrake > 0.5 ? 1.35 : 1) + 0.28 * Math.sign(drive || 1) * (1 - Math.abs(flow)) : grounded ? flow * 0.3 : 0);
+    this.w.y += (wantW - this.w.y) * (1 - Math.exp(-dt * (afloat ? 3.2 : 6)));
+    this.w.x = 0; this.w.z = 0;
+    this.steerAngle = inp.steer * 0.4;
+    // planing attitude: bow up with speed, lean into the turn
+    const plane = afloat ? clamp(Math.abs(vF) / 20, 0, 1) : 0;
+    const pitch = afloat ? plane * 0.075 - (boostOn ? -0.02 : 0) : grounded ? 0 : clamp(Math.atan2(this.vel.y, Math.max(2, Math.abs(vF))) * 0.6, -0.5, 0.4);
+    const roll = afloat ? -inp.steer * plane * 0.14 + clamp(vR * 0.02, -0.08, 0.08) : 0;
+    this.q.setFromEuler((this._eu || (this._eu = new EU())).set(pitch, yaw, roll, 'YXZ'));
+    this.pos.addScaledVector(this.vel, dt);
+    // engine note follows the props
+    const E = sp.engine; this.gear = 1;
+    this.rpm = lerp(this.rpm, E.idle + (E.red - E.idle) * clamp(Math.abs(drive) * (afloat ? 0.55 : 0.8) + Math.abs(vF) / 30 * 0.45, 0, 1), 1 - Math.exp(-dt * 5));
+    const bm = 40;
+    if (this.pos.x < WORLD.x0 + bm) { this.pos.x = WORLD.x0 + bm; this.vel.x = Math.abs(this.vel.x) * 0.3; }
+    if (this.pos.x > WORLD.x1 - bm) { this.pos.x = WORLD.x1 - bm; this.vel.x = -Math.abs(this.vel.x) * 0.3; }
+    if (this.pos.z < WORLD.z0 + bm) { this.pos.z = WORLD.z0 + bm; this.vel.z = Math.abs(this.vel.z) * 0.3; }
+    if (this.pos.z > WORLD.z1 - bm) { this.pos.z = WORLD.z1 - bm; this.vel.z = -Math.abs(this.vel.z) * 0.3; }
+    for (const w of this.wheels) { w.contact = false; w.omega = 0; }
+    if (this.wrecked) this.wreckT += dt;
+    if (this.invuln > 0) this.invuln -= dt;
+  }
   step(dt, W) {
+    if (this.spec.boat) { this.stepBoat(dt, W); return; }
     const sp = this.spec, m = sp.mass, t = this._t, T = W.terrain;
     const right = t.right.set(1, 0, 0).applyQuaternion(this.q), up = t.up.set(0, 1, 0).applyQuaternion(this.q), fwd = t.fwd.set(0, 0, -1).applyQuaternion(this.q);
     const F = t.F.set(0, -9.81 * m, 0), Tq = t.T.set(0, 0, 0);
@@ -1715,12 +2000,14 @@ class World {
     this.terrain = new Terrain();
     yield* this.terrain.build();
     this.city = new City(this.terrain);
+    this.terrain.setOverlays([...this.city.ramps, ...this.city.decks]);
     this.scatter = new Scatter(this.terrain, this.city);
     yield* this.scatter.build();
     this.props = new Props(this.terrain);
     this.train = new Train(this, this.route('rail'));
     this.crossings = this.findCrossings();
     this.addTunnelWalls();
+    this.addQuays();
     yield 'World ready';
   }
   buildSync() { for (const _ of this.build()); return this; }
@@ -1768,6 +2055,42 @@ class World {
         const o = S.addSegment(pa[0], pa[1], pb[0], pb[1], P.p.y + Math.max(at(la), at(lb)), 'barrier'); o.r = 0.6;
       }
     }
+  }
+  /* harbour quay faces: low walls that stop boats but sit under the wheels of anything on the quay */
+  addQuays() {
+    const S = this.scatter, top = CITY.y - 1.2, zq = FLAT.z1 + 1.2, xq = FLAT.x1 + 1.2;
+    const south = [[4150, SLIP.x - SLIP.hw - 0.6], [SLIP.x + SLIP.hw + 0.6, xq]];
+    for (const [a, b] of south) for (let x = a; x < b; x += 40) { const o = S.addSegment(x, zq, Math.min(b, x + 40), zq, top, 'barrier'); o.r = 0.8; }
+    for (let z = -760; z < zq; z += 40) { const o = S.addSegment(xq, z, xq, Math.min(zq, z + 40), top, 'barrier'); o.r = 0.8; }
+    for (const sd of [-1, 1]) { const o = S.addSegment(SLIP.x + sd * (SLIP.hw + 0.6), zq, SLIP.x + sd * (SLIP.hw + 0.6), SLIP.z1, top - 1.5, 'barrier'); o.r = 0.6; }
+    // car-park ramps: a parapet along the open side and across the top landing
+    for (const P of this.city.carParks) {
+      const { sl } = P, xo = sl.x + P.side * (sl.hw + 0.3), zEnd = sl.z - sl.Lt;
+      for (let a = 4; a < sl.Lt; a += 8) { const b = Math.min(sl.Lt, a + 8), o = S.addSegment(xo, sl.z - a, xo, sl.z - b, overlayLift(sl, sl.x, sl.z - b) + 1.0, 'rail'); o.r = 0.3; }
+      const o = S.addSegment(sl.x - sl.hw, zEnd + 0.3, sl.x + sl.hw, zEnd + 0.3, P.y + 1.0, 'rail'); o.r = 0.3;
+    }
+    // the ship: solid hull below the deck, bridge block at the stern, bulwarks round the deck (open at the ramp)
+    S.addBox(SHIP.x0, SHIP.z0, SHIP.x1, SHIP.z1, SHIP.y - 1.2, 'container');
+    S.addBox(SHIP.x0 + 10, SHIP.z1 - 14, SHIP.x1 - 10, SHIP.z1, SHIP.y + 0.5, 'container'); // the bow
+    S.addBox(SHIP.x0 + 2, SHIP.z0, SHIP.x1 - 2, SHIP.z0 + 26, SHIP.y + 24, 'building');
+    const bw = (ax, az, bx, bz) => { const o = S.addSegment(ax, az, bx, bz, SHIP.y + 1.0, 'rail'); o.r = 0.35; };
+    const ra = SHIP.rampZ - SHIP.rampHw - 0.5, rb = SHIP.rampZ + SHIP.rampHw + 0.5;
+    bw(SHIP.x0 + 0.4, SHIP.z0 + 26, SHIP.x0 + 0.4, ra); bw(SHIP.x0 + 0.4, rb, SHIP.x0 + 0.4, SHIP.z1 - 14.4);
+    bw(SHIP.x1 - 0.4, SHIP.z0 + 26, SHIP.x1 - 0.4, SHIP.z1 - 14.4); bw(SHIP.x0 + 0.4, SHIP.z1 - 14.4, SHIP.x1 - 0.4, SHIP.z1 - 14.4);
+  }
+  /* nearest open water deep enough to float a boat */
+  findWetSpot(x, z) {
+    const T = this.terrain;
+    const ok = (px, pz) => {
+      if (px < WORLD.x0 + 60 || px > WORLD.x1 - 60 || pz < WORLD.z0 + 60 || pz > WORLD.z1 - 60) return false;
+      for (const rr of [0, 7]) for (let k = 0; k < (rr ? 8 : 1); k++) { const a = k / 8 * TAU; if (T.height(px + Math.cos(a) * rr, pz + Math.sin(a) * rr) > WATER_Y - 2) return false; }
+      const near = this.scatter.near(px, pz); return !(near && near.some((o) => !o.off && this.obstacleDist(o, px, pz) < 5));
+    };
+    for (let r = 0; r <= 1500; r += 8) {
+      const steps = r === 0 ? 1 : Math.ceil(r / 5);
+      for (let k = 0; k < steps; k++) { const a = k / steps * TAU, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (ok(px, pz)) return { x: px, z: pz, yaw: null }; }
+    }
+    const d = BOAT_DOCKS[0].water; return { x: d.x, z: d.z, yaw: d.yaw };
   }
   /* construction barrier across the west approach of the Calder Tunnel (story mode) */
   tunnelGatePose() {
@@ -1863,7 +2186,7 @@ class World {
   step(dt) {
     this.time += dt;
     if (this.train) this.train.update(dt);
-    for (const c of this.cars) c.step(dt, this);
+    for (const c of this.cars) if (!c.asleep) c.step(dt, this);
     this.collideCars();
     this.collideStatic();
   }
@@ -1871,6 +2194,7 @@ class World {
     const S = this.scatter, P = this.props;
     const sph = [];
     for (const c of this.cars) {
+      if (c.asleep) continue;
       c.spheres(sph);
       for (const s of sph) {
         const list = S.near(s.p.x, s.p.z);
@@ -1939,7 +2263,7 @@ class World {
     const cars = this.cars, A = [], Bs = [];
     for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) {
       const a = cars[i], b = cars[j];
-      if (a.pos.distanceToSquared(b.pos) > 100) continue;
+      if (a.asleep || b.asleep || a.pos.distanceToSquared(b.pos) > 100) continue;
       a.spheres(A); b.spheres(Bs);
       for (const sa of A) for (const sb of Bs) {
         const d = sa.p.distanceTo(sb.p), md = sa.r + sb.r;
@@ -1975,6 +2299,7 @@ class World {
 class AIDriver {
   constructor(car, route, opts) {
     this.car = car; this.route = route; this.s = opts.s || 0; this.lane = opts.lane || 0; this.baseLane = this.lane;
+    this.traffic = !!opts.traffic; this.vcap = opts.vcap || 99;
     this.skill = opts.skill || 0.9; this.aggr = opts.aggr || 0.5; this.stuck = 0; this.bestS = 0; this.revT = 0; this.boostT = 0; this.respawn = false; this.rnd = mulberry32(opts.seed || 1);
     this._p = new V3(); this._l = new V3(); this._qi = new Q4();
   }
@@ -1986,10 +2311,16 @@ class AIDriver {
     const pr = R.project(c.pos.x, c.pos.z, this.s, 40);
     this.s = pr.s;
     const speed = c.vel.length();
-    // avoidance: steer lane around cars ahead
-    let want = this.baseLane;
+    // avoidance: steer lane around cars ahead (traffic keeps its lane and queues instead)
+    let want = this.baseLane; this.gap = 1e9;
     for (const o of cars) {
-      if (o === c) continue;
+      if (o === c || o.asleep) continue;
+      if (this.traffic) {
+        const dx = o.pos.x - c.pos.x, dz = o.pos.z - c.pos.z; if (dx * dx + dz * dz > 1600) continue;
+        this._l.set(dx, 0, dz).applyQuaternion(this._qi.copy(c.q).invert());
+        if (this._l.z < -1 && Math.abs(this._l.x) < 2.8) this.gap = Math.min(this.gap, -this._l.z);
+        continue;
+      }
       const dx = o.pos.x - c.pos.x, dz = o.pos.z - c.pos.z; if (dx * dx + dz * dz > 400) continue;
       this._l.set(dx, 0, dz).applyQuaternion(this._qi.copy(c.q).invert());
       if (this._l.z < -2 && this._l.z > -18 && Math.abs(this._l.x) < 2.6) { want += this._l.x > 0 ? -3.2 : 3.2; if (this.aggr > 0.7 && o.isPlayer) want = this.baseLane + this._l.x * 0.6; }
@@ -2033,6 +2364,7 @@ class AIDriver {
       if (v < vmax) vmax = v;
     }
     vmax *= this.skill * (rubber || 1);
+    if (this.traffic) { vmax = Math.min(vmax, this.vcap); if (this.gap < 40) vmax = Math.min(vmax, Math.max(0, (this.gap - 9) * 0.7)); }
     if (c.surfaceMud > 0.3) vmax *= 0.92;
     if (pr.dist > R.width) { vmax = Math.min(vmax, 20); }
     this.dbg = { vmax, ang, beta, k: R.curvAt(this.s + 10) };
@@ -2042,13 +2374,14 @@ class AIDriver {
     // recovery
     if (this.s > this.bestS + 1 || (R.closed && this.s < this.bestS - R.length / 2)) { this.bestS = this.s; this.stuck = 0; } else this.stuck += dt;
     if (speed > 3) this.stuck = Math.max(0, this.stuck - dt * 0.5);
+    if (this.traffic && (this.gap < 22 || (!R.closed && this.s > R.length - 40))) this.stuck = 0; // queueing, not stuck
     if (this.revT > 0) { this.revT -= dt; thr = 0; brk = 1; steer = -steer; }
     else if (this.stuck > 2.5 && speed < 1.5) { this.revT = 1.4; }
     if (this.stuck > 6) { this.respawn = true; this.stuck = 0; }
     // boost
     this.boostT -= dt;
     let boost = 0;
-    if (c.heat < 0.45 + this.aggr * 0.35 && vmax > speed + 6 && Math.abs(ang) < 0.12 && c.onGround) boost = 1;
+    if (!this.traffic && c.heat < 0.45 + this.aggr * 0.35 && vmax > speed + 6 && Math.abs(ang) < 0.12 && c.onGround) boost = 1;
     if (boost && this.boostT < 0) { this.boostT = 0.5 + this.rnd() * 1.5; }
     c.input.throttle = thr; c.input.brake = brk; c.input.steer = steer; c.input.boost = boost; c.input.handbrake = 0;
   }
@@ -2419,6 +2752,51 @@ class Gfx {
     g.position.set(x, y - 0.3, z); g.rotation.y = yaw;
     return g;
   }
+  /* corner warnings for an event: chevron boards across the far side of each corner, arrows painted on the approach */
+  addTurnMarkers(R, color, group, opts = {}) {
+    const T = this.world.terrain, col = '#' + new THREE.Color(color).getHexString();
+    if (!this._chev) {
+      this._chev = makeCanvasTex(512, 128, (x, w, h) => {
+        x.fillStyle = '#16100c'; x.fillRect(0, 0, w, h);
+        x.fillStyle = '#f4f1e8';
+        for (let i = 0; i < 5; i++) { const cx = 60 + i * 98; x.beginPath(); x.moveTo(cx - 30, 14); x.lineTo(cx + 10, 14); x.lineTo(cx + 46, h / 2); x.lineTo(cx + 10, h - 14); x.lineTo(cx - 30, h - 14); x.lineTo(cx + 6, h / 2); x.closePath(); x.fill(); }
+      });
+      this._arrow = makeCanvasTex(256, 256, (x, w, h) => {
+        x.clearRect(0, 0, w, h); x.strokeStyle = 'rgba(244,241,232,0.92)'; x.fillStyle = 'rgba(244,241,232,0.92)'; x.lineWidth = 34; x.lineCap = 'butt';
+        x.beginPath(); x.moveTo(w * 0.36, h); x.lineTo(w * 0.36, h * 0.62); x.quadraticCurveTo(w * 0.36, h * 0.36, w * 0.62, h * 0.36); x.stroke();
+        x.beginPath(); x.moveTo(w * 0.6, h * 0.14); x.lineTo(w * 0.96, h * 0.36); x.lineTo(w * 0.6, h * 0.58); x.closePath(); x.fill();
+      });
+    }
+    const board = new THREE.MeshStandardMaterial({ map: this._chev, emissive: 0xffffff, emissiveMap: this._chev, emissiveIntensity: 0.55, roughness: 0.6, side: THREE.DoubleSide });
+    const trim = new THREE.MeshStandardMaterial({ color, emissive: new THREE.Color(color), emissiveIntensity: 0.6, roughness: 0.5 });
+    const post = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6, metalness: 0.5 });
+    const arrowMat = new THREE.MeshBasicMaterial({ map: this._arrow, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    const hw = R.width / 2;
+    for (const t of R.turns()) {
+      if (opts.sharpOnly && !t.sharp) continue;
+      const right = t.ang > 0, sIn = R.wrapS(t.s - 22), [dx, dz] = R.dirAt(sIn), pin = R.posAt(sIn, {});
+      // board: straight ahead of the approach, just past the far kerb
+      const reach = 22 + hw + 4, bx = pin.x + dx * reach, bz = pin.z + dz * reach, by = T.height(bx, bz);
+      const g = new THREE.Group();
+      const w = Math.min(12, R.width * 0.75), pl = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 4), board);
+      pl.position.y = 1.4 + w / 8; if (!right) pl.scale.x = -1; g.add(pl);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.18, 0.12), trim); bar.position.set(0, 1.25, -0.05); g.add(bar);
+      const bar2 = bar.clone(); bar2.position.y = 1.55 + w / 4; g.add(bar2);
+      for (const sx of [-w / 2 + 0.3, w / 2 - 0.3]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.4 + w / 4, 0.16), post); p.position.set(sx, (1.4 + w / 4) / 2, -0.12); g.add(p); }
+      g.position.set(bx, by, bz); g.rotation.y = Math.atan2(-dx, -dz); // faces the oncoming car
+      g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      group.add(g);
+      // arrows painted down the approach
+      for (const back of [72, 46, 22]) {
+        const sa = R.wrapS(t.s - back); if (!R.closed && sa < 5) continue;
+        const pa = R.posAt(sa, {}), [ax, az] = R.dirAt(sa);
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), arrowMat);
+        m.rotation.order = 'YXZ'; m.rotation.set(-Math.PI / 2, Math.atan2(-ax, -az), 0); if (!right) m.scale.x = -1;
+        m.position.set(pa.x, T.height(pa.x, pa.z) + 0.05, pa.z); m.renderOrder = 2;
+        group.add(m);
+      }
+    }
+  }
   buildJumpFlags() {
     const T = this.world.terrain, poles = [], flags = [];
     for (const R of T.routes) {
@@ -2494,7 +2872,7 @@ class Gfx {
     this.beacons.push(b);
     return b;
   }
-  render() { this.renderer.render(this.scene, this.camera); }
+  render() { this.sky.position.copy(this.camera.position); this.renderer.render(this.scene, this.camera); }
 }
 
 /* ---------- Particles ---------- */
@@ -3193,6 +3571,9 @@ Object.assign(Gfx.prototype, {
     this.buildFarLand();
     this.buildCity();
     this.buildDocks();
+    this.buildRamps();
+    this.buildDecks();
+    this.buildShip();
     this.buildRoadside();
     this.buildTunnel();
     this.buildTunnelGate();
@@ -3269,7 +3650,7 @@ ${NOISE_GLSL}`).replace('#include <color_fragment>', `#include <color_fragment>
     for (const b of C.buildings) {
       const top = CITY.y + b.h, w = b.x1 - b.x0, dd = b.z1 - b.z0;
       if (b.h > 70 && b.crown) masts.push({ x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, y: top, h: 8 + rng() * 14 });
-      if (b.crown) continue;
+      if (b.crown || b.deck) continue;
       for (let k = 0; k < 1 + Math.floor(rng() * 3); k++) ac.push({ x: b.x0 + 3 + rng() * (w - 6), z: b.z0 + 3 + rng() * (dd - 6), y: top, s: 1.5 + rng() * 2.5, rot: Math.floor(rng() * 4) * Math.PI / 2 });
       if (b.style === 'brick' && rng() < 0.45) tanks.push({ x: b.x0 + 4 + rng() * (w - 8), z: b.z0 + 4 + rng() * (dd - 8), y: top });
     }
@@ -3295,7 +3676,7 @@ ${NOISE_GLSL}`).replace('#include <color_fragment>', `#include <color_fragment>
       ['COASTLINE FREIGHT', 'WE DO NOT STOP · DO NOT RACE THE TRAIN', '#2b2f36', '#f2c230'],
     ];
     const route = this.world.route('harbour');
-    const cands = C.buildings.filter((b) => !b.crown && b.h > 14 && b.h < 45 && route.project((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2, 0, -1).dist < 80);
+    const cands = C.buildings.filter((b) => !b.crown && !b.deck && b.h > 14 && b.h < 45 && route.project((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2, 0, -1).dist < 80);
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6, metalness: 0.5 });
     for (let k = 0; k < Math.min(cands.length, 10); k++) {
       const b = cands[Math.floor(k * cands.length / 10)], ad = ads[k % ads.length];
@@ -3330,7 +3711,7 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
   diffuseColor.rgb *= mix(1.0, rib, 1.0 - step(0.5, abs(N.y))) * mix(0.45, 1.0, seam); }`);
     };
     mat.customProgramCacheKey = () => 'container';
-    this.cellInstances(box, mat, C.containers, (k, d, col) => { d.position.set((k.x0 + k.x1) / 2, CITY.y, (k.z0 + k.z1) / 2); d.scale.set(k.x1 - k.x0, k.h, k.z1 - k.z0); col.setHex(k.color); }, { cast: true, dist: 1600, cell: 500 });
+    this.cellInstances(box, mat, C.containers, (k, d, col) => { d.position.set((k.x0 + k.x1) / 2, k.y ?? CITY.y, (k.z0 + k.z1) / 2); d.scale.set(k.x1 - k.x0, k.h, k.z1 - k.z0); col.setHex(k.color); }, { cast: true, dist: 1600, cell: 500 });
     // gantry cranes
     for (const c of C.cranes) {
       const parts = [], col = new THREE.Color(c.color);
@@ -3348,9 +3729,156 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     }
     // quay walls along the harbour edges
     const wall = new THREE.MeshStandardMaterial({ color: 0x6f6a63, roughness: 0.95 });
-    const q1 = new THREE.Mesh(new THREE.BoxGeometry(3, 12, FLAT.z1 - FLAT.z0), wall); q1.position.set(FLAT.x1 + 1.5, CITY.y - 6, (FLAT.z0 + FLAT.z1) / 2);
-    const q2 = new THREE.Mesh(new THREE.BoxGeometry(FLAT.x1 - 3600, 12, 3), wall); q2.position.set((3600 + FLAT.x1) / 2, CITY.y - 6, FLAT.z1 + 1.5);
-    for (const q of [q1, q2]) { q.receiveShadow = true; this.scene.add(q); }
+    const qa = SLIP.x - SLIP.hw - 1, qb = SLIP.x + SLIP.hw + 1, QH = 20;
+    const q1 = new THREE.Mesh(new THREE.BoxGeometry(3, QH, FLAT.z1 - FLAT.z0 + 3), wall); q1.position.set(FLAT.x1 + 1.5, CITY.y - QH / 2, (FLAT.z0 + FLAT.z1 + 3) / 2);
+    const q2 = new THREE.Mesh(new THREE.BoxGeometry(qa - 3600, QH, 3), wall); q2.position.set((3600 + qa) / 2, CITY.y - QH / 2, FLAT.z1 + 1.5);
+    const q3 = new THREE.Mesh(new THREE.BoxGeometry(FLAT.x1 - qb, QH, 3), wall); q3.position.set((qb + FLAT.x1) / 2, CITY.y - QH / 2, FLAT.z1 + 1.5);
+    for (const q of [q1, q2, q3]) { q.receiveShadow = true; this.scene.add(q); }
+    this.buildHarbour(wall);
+  },
+  /* ---------- the slipway, a pontoon with moored boats, and the lake jetty ---------- */
+  buildHarbour(wall) {
+    const T = this.world.terrain, S = this.world.scatter;
+    // slipway deck and its side walls follow the physics ramp
+    const pos = [], nor = [], uv = [], idx = [], quad = (a, b, c, d, n) => { const v = pos.length / 3; for (const q of [a, b, c, d]) { pos.push(...q); nor.push(...n); } uv.push(0, 0, 1, 0, 0, 1, 1, 1); idx.push(v, v + 2, v + 1, v + 1, v + 2, v + 3); };
+    const hz = (z) => T.height(SLIP.x, z) + 0.04, z0 = SLIP.z0, z1 = SLIP.z1 + 6, step = 2;
+    for (let z = z0; z < z1; z += step) {
+      const za = z, zb = Math.min(z1, z + step), ya = hz(za), yb = hz(zb), sl = Math.atan2(ya - yb, step);
+      quad([SLIP.x - SLIP.hw, ya, za], [SLIP.x + SLIP.hw, ya, za], [SLIP.x - SLIP.hw, yb, zb], [SLIP.x + SLIP.hw, yb, zb], [0, Math.cos(sl), Math.sin(sl)]);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+    const conc = makeCanvasTex(128, 128, (x, w, h) => { x.fillStyle = '#8d8780'; x.fillRect(0, 0, w, h); for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#7f7972' : '#99938b'; x.fillRect(0, i * h / 8, w, 3); } }, { repeat: true });
+    const deck = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: conc, roughness: 0.9 })); deck.receiveShadow = true; this.scene.add(deck);
+    for (const sd of [-1, 1]) {
+      const L = SLIP.z1 - FLAT.z1, m = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1, L), wall);
+      const yTop = (hz(FLAT.z1) + hz(SLIP.z1)) / 2 + 0.6, bottom = -14;
+      m.scale.y = yTop - bottom; m.position.set(SLIP.x + sd * (SLIP.hw + 0.6), (yTop + bottom) / 2, FLAT.z1 + L / 2); m.receiveShadow = true; this.scene.add(m);
+    }
+    // a pontoon off the east side of the slip, boats tied up along it
+    const wood = new THREE.MeshStandardMaterial({ color: 0x7a5a3a, roughness: 0.9 });
+    const px = SLIP.x + 42, pz0 = FLAT.z1 + 3, pz1 = FLAT.z1 + 78;
+    const pont = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.5, pz1 - pz0), wood); pont.position.set(px, WATER_Y + 0.45, (pz0 + pz1) / 2); pont.receiveShadow = true; pont.castShadow = true; this.scene.add(pont);
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.2, 9), wood); ramp.position.set(px, (CITY.y + WATER_Y) / 2 + 0.4, FLAT.z1 + 4); ramp.rotation.x = Math.atan2(CITY.y - WATER_Y - 0.6, 9); this.scene.add(ramp);
+    { const o = S.addSegment(px, pz0, px, pz1, WATER_Y + 1.2, 'barrier'); o.r = 1.8; }
+    const moored = [[px - 4.2, 818, 0x1f4e79], [px - 4.2, 846, 0xd9481c], [px + 4.2, 826, 0xf0b50a], [px + 4.2, 858, 0x2f6f53], [SLIP.x - 70, FLAT.z1 + 6, 0xe9e2d6, Math.PI / 2]];
+    moored.forEach(([x, z, color, yaw], i) => {
+      const m = buildCar(VEHICLES.boat, { color, number: 60 + i * 7, livery: 'PORT CALDER' }, this).root;
+      m.position.set(x, WATER_Y + VEHICLES.boat.boat.ride, z); m.rotation.y = yaw || 0; this.scene.add(m);
+      const fx = -Math.sin(yaw || 0), fz = -Math.cos(yaw || 0); S.addSegment(x - fx * 2.6, z - fz * 2.6, x + fx * 2.6, z + fz * 2.6, WATER_Y + 1.5, 'barrier').r = 1.1;
+    });
+    // bollards along the quay edge
+    const boll = [];
+    for (let x = 4300; x < FLAT.x1; x += 24) if (Math.abs(x - SLIP.x) > SLIP.hw + 4) boll.push({ x, z: FLAT.z1 - 0.8 });
+    for (let z = -740; z < FLAT.z1; z += 24) boll.push({ x: FLAT.x1 - 0.8, z });
+    this.cellInstances(new THREE.CylinderGeometry(0.28, 0.34, 0.8, 8).translate(0, 0.4, 0), new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.6, metalness: 0.4 }), boll, (b, d) => d.position.set(b.x, CITY.y, b.z), { cast: true, dist: 600 });
+    // lake jetty
+    const L = BOAT_DOCKS[1], dx = L.water.x - L.land.x, dz = L.water.z - L.land.z, len = Math.hypot(dx, dz);
+    const jet = new THREE.Mesh(new THREE.BoxGeometry(3, 0.4, len * 0.75), wood);
+    jet.position.set(L.land.x + dx * 0.5, WATER_Y + 1.1, L.land.z + dz * 0.5); jet.rotation.y = Math.atan2(dx, dz); jet.castShadow = true; jet.receiveShadow = true; this.scene.add(jet);
+    // launch signs
+    for (const D of BOAT_DOCKS) {
+      const grp = new THREE.Group(), y = T.height(D.land.x, D.land.z);
+      const panel = new THREE.Mesh(new THREE.PlaneGeometry(4, 1), new THREE.MeshStandardMaterial({ map: signFace(['BOAT LAUNCH'], { bg: '#1f4e79' }), roughness: 0.5, side: THREE.DoubleSide }));
+      panel.position.y = 3; grp.add(panel);
+      for (const sx of [-1.7, 1.7]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 3, 0.12), wall); post.position.set(sx, 1.5, 0); grp.add(post); }
+      grp.position.set(D.land.x + 7, y, D.land.z); grp.rotation.y = D.land.yaw; this.scene.add(grp);
+    }
+  },
+  /* ---------- rooftop car parks: ramp strips, parapets, bay lines on the roofs ---------- */
+  buildDecks() {
+    const para = new THREE.MeshStandardMaterial({ color: 0xd9481c, roughness: 0.6 });
+    for (const P of this.world.city.carParks) {
+      const { sl } = P, n = 24;
+      // the ramp deck as a solid wedge, sloped top
+      const pos = [], idx = [], add = (a, b, c, d) => { const v = pos.length / 3; pos.push(...a, ...b, ...c, ...d); idx.push(v, v + 2, v + 1, v + 1, v + 2, v + 3); };
+      for (let k = 0; k < n; k++) {
+        const a0 = sl.Lt * k / n, a1 = sl.Lt * (k + 1) / n, z0 = sl.z - a0, z1 = sl.z - a1, y0 = overlayLift(sl, sl.x, z0) + 0.03, y1 = overlayLift(sl, sl.x, z1) + 0.03, xl = sl.x - sl.hw, xr = sl.x + sl.hw;
+        add([xl, y0, z0], [xr, y0, z0], [xl, y1, z1], [xr, y1, z1]);
+        add([xl, CITY.y - 0.5, z0], [xl, y0, z0], [xl, CITY.y - 0.5, z1], [xl, y1, z1]);
+        add([xr, y0, z0], [xr, CITY.y - 0.5, z0], [xr, y1, z1], [xr, CITY.y - 0.5, z1]);
+        // parapet on the open side
+        const xo = sl.x + P.side * (sl.hw + 0.15);
+        add([xo, y0, z0], [xo, y0 + 1.0, z0], [xo, y1, z1], [xo, y1 + 1.0, z1]);
+      }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x8d8780, roughness: 0.9, side: THREE.DoubleSide })); m.castShadow = true; m.receiveShadow = true; this.scene.add(m);
+      const zEnd = sl.z - sl.Lt, cap = new THREE.Mesh(new THREE.BoxGeometry(sl.hw * 2, 1.0, 0.3), para); cap.position.set(sl.x, P.y + 0.5, zEnd + 0.15); this.scene.add(cap);
+      // parking bays painted on the roof
+      const b = P.b, lines = [];
+      for (let x = b.x0 + 8; x < b.x1 - 6; x += 2.8) for (const z of [b.z0 + 6, b.z1 - 11]) { const l = new THREE.PlaneGeometry(0.15, 5); l.rotateX(-Math.PI / 2); l.translate(x, P.y + 0.04, z + 2.5); lines.push(l); }
+      const lm = new THREE.Mesh(mergeGeos(lines), new THREE.MeshBasicMaterial({ color: 0xe9e2d6 })); this.scene.add(lm);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.2), new THREE.MeshStandardMaterial({ map: signFace(['ROOF PARKING ↑'], { bg: '#1f4e79' }), roughness: 0.5, side: THREE.DoubleSide }));
+      sign.position.set(sl.x, CITY.y + 4.2, sl.z + 0.4); this.scene.add(sign);
+    }
+  },
+  /* ---------- the container ship at the east quay ---------- */
+  buildShip() {
+    const S = SHIP, L = S.z1 - S.z0, B = S.x1 - S.x0, cx = (S.x0 + S.x1) / 2, g = new THREE.Group();
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0x1d3a5c, roughness: 0.6, metalness: 0.3 }), red = new THREE.MeshStandardMaterial({ color: 0x8c2a1e, roughness: 0.7 });
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0x4f6b4a, roughness: 0.85 }), white = new THREE.MeshStandardMaterial({ color: 0xe9e6de, roughness: 0.6 });
+    const bottom = -10, top = S.y - 0.02;
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(B, top - WATER_Y, L - 14), hullMat); hull.position.set(cx, (top + WATER_Y) / 2, S.z0 + (L - 14) / 2); g.add(hull);
+    const keel = new THREE.Mesh(new THREE.BoxGeometry(B - 0.4, WATER_Y - bottom, L - 16), red); keel.position.set(cx, (WATER_Y + bottom) / 2, S.z0 + (L - 16) / 2); g.add(keel);
+    // raked bow
+    const bow = new THREE.Shape(); bow.moveTo(-B / 2, 0); bow.lineTo(B / 2, 0); bow.lineTo(B * 0.12, 14); bow.lineTo(-B * 0.12, 14); bow.closePath();
+    const bg = new THREE.ExtrudeGeometry(bow, { depth: top - bottom, bevelEnabled: false }); bg.rotateX(Math.PI / 2); bg.translate(cx, top, S.z1 - 14);
+    const bm = new THREE.Mesh(bg, hullMat); g.add(bm);
+    const deck = new THREE.Mesh(new THREE.PlaneGeometry(B, L - 14), deckMat); deck.rotation.x = -Math.PI / 2; deck.position.set(cx, S.y + 0.02, S.z0 + (L - 14) / 2); deck.receiveShadow = true; g.add(deck);
+    // bridge block, wings and funnel at the stern
+    const br = new THREE.Mesh(new THREE.BoxGeometry(B - 4, 24, 26), this.buildingMaterial('office')); br.position.set(cx, S.y + 12, S.z0 + 13); g.add(br);
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(B + 6, 1.2, 6), white); wing.position.set(cx, S.y + 21, S.z0 + 24); g.add(wing);
+    const fun = new THREE.Mesh(new THREE.BoxGeometry(6, 10, 8), red); fun.position.set(cx, S.y + 29, S.z0 + 8); g.add(fun);
+    // bulwarks
+    for (const [x, z, w, d] of [[S.x0 + 0.3, (S.z0 + 26 + S.rampZ - S.rampHw) / 2, 0.4, S.rampZ - S.rampHw - S.z0 - 26], [S.x0 + 0.3, (S.rampZ + S.rampHw + S.z1 - 14) / 2, 0.4, S.z1 - 14 - S.rampZ - S.rampHw], [S.x1 - 0.3, (S.z0 + 26 + S.z1 - 14) / 2, 0.4, S.z1 - 14 - S.z0 - 26], [cx, S.z1 - 14.3, B, 0.4]]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.1, d), hullMat); m.position.set(x, S.y + 0.55, z); g.add(m);
+    }
+    // name on the hull
+    const name = new THREE.Mesh(new THREE.PlaneGeometry(40, 5), new THREE.MeshStandardMaterial({ map: textTex(1024, 128, (x, w, h) => { x.clearRect(0, 0, w, h); x.fillStyle = '#f4f1e8'; x.font = '400 100px "Saira Stencil One", Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('CALDER STAR', w / 2, h / 2 + 4); }), transparent: true, side: THREE.DoubleSide }));
+    name.position.set(S.x1 + 0.05, S.y - 4, S.z1 - 60); name.rotation.y = Math.PI / 2; g.add(name);
+    // ro-ro ramp from the quay
+    const rl = S.x0 - S.rampX0 + 1, ang = Math.atan2(S.y - CITY.y, rl - 1), ramp = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(rl, S.y - CITY.y), 0.5, S.rampHw * 2), new THREE.MeshStandardMaterial({ color: 0x6b6f75, roughness: 0.6, metalness: 0.5 }));
+    ramp.position.set(S.rampX0 + rl / 2, (S.y + CITY.y) / 2 - 0.2, S.rampZ); ramp.rotation.z = ang; g.add(ramp);
+    for (const sd of [-1, 1]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(rl, S.y - CITY.y), 1.0, 0.25), red); rail.position.set(S.rampX0 + rl / 2, (S.y + CITY.y) / 2 + 0.6, S.rampZ + sd * (S.rampHw + 0.1)); rail.rotation.z = ang; g.add(rail); }
+    g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    this.scene.add(g);
+  },
+  /* ---------- street kickers in Port Calder ---------- */
+  buildRamps() {
+    const list = this.world.city.ramps; if (!list.length) return;
+    const tex = makeCanvasTex(256, 512, (x, w, h) => {
+      x.fillStyle = '#2b2d31'; x.fillRect(0, 0, w, h);
+      for (let i = 0; i < 9; i++) { const y = h * 0.08 + i * h * 0.075; x.fillStyle = '#f2c230'; x.beginPath(); x.moveTo(w * 0.15, y + 34); x.lineTo(w * 0.5, y); x.lineTo(w * 0.85, y + 34); x.lineTo(w * 0.85, y + 52); x.lineTo(w * 0.5, y + 18); x.lineTo(w * 0.15, y + 52); x.closePath(); x.fill(); }
+      x.fillStyle = '#d9481c'; x.fillRect(0, h * 0.86, w, h * 0.14);
+      for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#f4f1e8' : '#16100c'; x.fillRect(i * w / 8, h * 0.94, w / 8, h * 0.06); }
+    });
+    const side = makeCanvasTex(256, 64, (x, w, h) => { for (let i = 0; i < 16; i++) { x.fillStyle = i % 2 ? '#f2c230' : '#16100c'; x.beginPath(); x.moveTo(i * w / 16, h); x.lineTo(i * w / 16 + w / 32, 0); x.lineTo((i + 1) * w / 16 + w / 32, 0); x.lineTo((i + 1) * w / 16, h); x.fill(); } });
+    const P = RAMP, A = [0, 2, 4, 6, 8, 10, 12, 14, 16, P.up + P.top, P.up + P.top + P.down];
+    const prof = (a) => (a < P.up ? P.H * Math.pow(a / P.up, 1.25) : a < P.up + P.top ? P.H : P.H * (1 - (a - P.up - P.top) / P.down));
+    const top = [], sides = [];
+    const pushQ = (arr, q, uvs, n) => { arr.push({ q, uvs, n }); };
+    const hw = P.hw - 0.3;
+    for (let k = 0; k < A.length - 1; k++) {
+      const a0 = A[k], a1 = A[k + 1], h0 = prof(a0) + 0.03, h1 = prof(a1) + 0.03, v0 = a0 / (P.up + P.top + P.down), v1 = a1 / (P.up + P.top + P.down);
+      const n = new THREE.Vector3(0, a1 - a0, -(h1 - h0)).normalize();
+      pushQ(top, [[-hw, h0, a0], [hw, h0, a0], [-hw, h1, a1], [hw, h1, a1]], [0, v0, 1, v0, 0, v1, 1, v1], [n.x, n.y, n.z]);
+      for (const sd of [-1, 1]) pushQ(sides, [[sd * hw, -0.05, a0], [sd * hw, -0.05, a1], [sd * hw, h0, a0], [sd * hw, h1, a1]], [v0 * 4, 0, v1 * 4, 0, v0 * 4, h0 / P.H, v1 * 4, h1 / P.H], [sd, 0, 0]);
+    }
+    const geoOf = (quads) => {
+      const pos = [], nor = [], uv = [], idx = [];
+      for (const r of list) {
+        const yaw = Math.atan2(r.dx, r.dz), c = Math.cos(yaw), s = Math.sin(yaw);
+        for (const { q, uvs, n } of quads) {
+          const v = pos.length / 3;
+          for (const [lx, ly, lz] of q) pos.push(r.x + lx * c + lz * s, r.y + ly, r.z - lx * s + lz * c);
+          for (let i = 0; i < 4; i++) nor.push(n[0] * c + n[2] * s, n[1], -n[0] * s + n[2] * c);
+          uv.push(...uvs); idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2, v, v + 2, v + 1, v + 1, v + 2, v + 3);
+        }
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeBoundingSphere(); return g;
+    };
+    const mt = new THREE.Mesh(geoOf(top), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, metalness: 0.5 }));
+    const ms = new THREE.Mesh(geoOf(sides), new THREE.MeshStandardMaterial({ map: side, roughness: 0.6, metalness: 0.4 }));
+    for (const m of [mt, ms]) { m.castShadow = true; m.receiveShadow = true; this.scene.add(m); }
   },
   /* ---------- guard rails + sign gantries ---------- */
   buildRoadside() {
@@ -3914,14 +4442,14 @@ function buildCar(spec, opts, gfx) {
   const color = opts.color || spec.color, num = opts.number || 7, name = opts.livery || LIVERY_NAMES[num % LIVERY_NAMES.length];
   const root = new THREE.Group();
   const dirt = { amount: { value: opts.dirt || 0.15 }, sun: { value: 1 }, top: 0, bottom: -0.6 };
-  const S = { rally: [0.3, -0.35], buggy: [0.6, -0.3], truck: [0.6, -0.4], kaze: [0.05, -0.32], ironside: [0.05, -0.34] }[spec.id] || [0.3, -0.4];
+  const S = { rally: [0.3, -0.35], buggy: [0.6, -0.3], truck: [0.6, -0.4], kaze: [0.05, -0.32], ironside: [0.05, -0.34], sedan: [0.0, -0.36], van: [0.1, -0.4], boat: [-0.1, -0.45] }[spec.id] || [0.3, -0.4];
   dirt.top = S[0]; dirt.bottom = S[1];
   const paint = paintMaterial(color, dirt);
   const black = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.6, metalness: 0.2 }); addDirt(black, dirt);
   const metal = new THREE.MeshStandardMaterial({ color: 0x9a9da3, roughness: 0.3, metalness: 0.95 }); sunOnly(metal, dirt);
   const glass = new THREE.MeshPhysicalMaterial({ color: 0x0b1116, roughness: 0.04, metalness: 0.6, envMapIntensity: 1.6, clearcoat: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }); sunOnly(glass, dirt);
   const rubber = new THREE.MeshStandardMaterial({ color: 0x1a1716, roughness: 0.92, bumpMap: treadTex(), bumpScale: 2 }); rubber.bumpMap.repeat.set(1, 3); addDirt(rubber, { ...dirt, top: 0.4, bottom: -0.4 });
-  const rimCol = { rally: 0xe8e8e8, buggy: 0x1d1d1d, truck: 0x2a2a2a, kaze: 0xc9ced4, ironside: 0x9ea3a8 }[spec.id];
+  const rimCol = { rally: 0xe8e8e8, buggy: 0x1d1d1d, truck: 0x2a2a2a, kaze: 0xc9ced4, ironside: 0x9ea3a8, sedan: 0xb9bdc2, van: 0x8d9196, boat: 0x9ea3a8 }[spec.id];
   const rim = new THREE.MeshStandardMaterial({ color: rimCol, roughness: 0.25, metalness: 0.9 }); sunOnly(rim, dirt);
   const rimDark = new THREE.MeshStandardMaterial({ color: 0x0e0e0e, roughness: 0.6, metalness: 0.5 });
   const lightW = new THREE.MeshStandardMaterial({ color: 0xfff6e8, emissive: new THREE.Color(1.6, 1.5, 1.3), roughness: 0.2, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
@@ -3933,7 +4461,55 @@ function buildCar(spec, opts, gfx) {
   const decal = (x, y, z, sx, flip) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(sx, sx * 0.5), new THREE.MeshStandardMaterial({ map: liveryTex(num, color, name), transparent: true, roughness: 0.35, polygonOffset: true, polygonOffsetFactor: -2 })); m.position.set(x, y, z); m.rotation.y = flip ? -Math.PI / 2 : Math.PI / 2; root.add(m); return m; };
   let driverPos;
 
-  if (spec.id === 'rally') {
+  if (spec.boat) {
+    // deep-vee runabout: pointed bow, flat transom, centre console and twin outboards
+    const hullG = profileGeo([[3.15, 0.46], [2.75, 0.12], [2.0, -0.28], [0.6, -0.44], [-2.9, -0.42], [-3.06, -0.22], [-3.06, 0.44]], 2.24, 0.06);
+    { const p = hullG.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i), z = p.getZ(i); const t = clamp((-z - 0.4) / 2.75, 0, 1); p.setX(i, p.getX(i) * (1 - t * t * 0.92) * (1 - clamp((0.15 - y) * 0.8, 0, 0.55))); } hullG.computeVertexNormals(); }
+    const hull = add(hullG, paint);
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0xcfc6b4, roughness: 0.85 }); addDirt(deckMat, dirt);
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.06, 4.6), deckMat); deck.position.set(0, 0.3, 0.55); deck.receiveShadow = true; root.add(deck);
+    const stripe = new THREE.MeshStandardMaterial({ color: 0x16100c, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2 });
+    for (const sd of [-1, 1]) { bodyDecal(add, [hull], stripe, v3(sd * 1.1, 0.24, 0.5), v3(0, 0, -1), v3(0, 1, 0), v3(-sd, 0, 0), 4.6, 0.08, { nu: 12, nv: 1, thr: 0.3 }); decal(sd * 1.07, 0.02, 0.6, 1.1, sd < 0); }
+    // console + screen
+    add(new THREE.BoxGeometry(0.9, 0.85, 0.75), paint, 0, 0.72, -0.2);
+    const scr = add(new THREE.BoxGeometry(0.95, 0.42, 0.05), glass, 0, 1.32, -0.5); scr.rotation.x = -0.45;
+    add(new THREE.BoxGeometry(0.5, 0.55, 0.5), black, 0, 0.6, 0.75); // seat
+    // grab rails round the bow
+    const rail = new THREE.MeshStandardMaterial({ color: 0xd8dbe0, roughness: 0.25, metalness: 0.9 });
+    for (const sd of [-1, 1]) { root.add(tube(V(sd * 0.95, 0.75, 0.6), V(sd * 0.7, 0.75, -1.9), 0.03, rail)); root.add(tube(V(sd * 0.7, 0.75, -1.9), V(sd * 0.12, 0.72, -2.85), 0.03, rail)); for (const z of [0.4, -0.9, -1.9]) root.add(tube(V(sd * (z < -1 ? 0.7 : 0.9), 0.45, z), V(sd * (z < -1 ? 0.7 : 0.92), 0.75, z), 0.025, rail)); }
+    // twin outboards on the transom
+    for (const sd of [-0.48, 0.48]) {
+      add(new THREE.BoxGeometry(0.42, 0.62, 0.55), black, sd, 0.62, 3.25);
+      add(new THREE.BoxGeometry(0.44, 0.12, 0.57), paint, sd, 0.96, 3.25);
+      add(new THREE.BoxGeometry(0.14, 0.95, 0.24), black, sd, -0.1, 3.36);
+    }
+    for (const sd of [-1, 1]) bodyDecal(add, [hull], lightR, v3(sd * 0.6, 0.3, 3.07), v3(1, 0, 0), v3(0, 1, 0), v3(0, 0, -1), 0.2, 0.1);
+    driverPos = V(0, 0.55, 0.35);
+  } else if (spec.id === 'sedan' || spec.id === 'van') {
+    const van = spec.id === 'van';
+    const yb = -0.36, archR = ws.r + 0.07, ay = -0.2;
+    const body = add(shapeBody(profileGeo(van
+      ? [[2.5, yb], [2.58, -0.1], [2.55, 0.35], [2.3, 0.62], [-2.55, 0.66], [-2.6, 0.2], [-2.58, yb], Object.assign([-1.0, yb], { arch: { x: -ws.zr, y: ay, r: archR } }), Object.assign([2.5, yb], { arch: { x: -ws.zf, y: ay, r: archR } })]
+      : [[2.22, yb], [2.3, -0.16], [2.27, 0.06], [1.95, 0.17], [0.95, 0.24], [-1.5, 0.29], [-2.1, 0.27], [-2.3, 0.1], [-2.32, -0.16], [-2.24, yb], Object.assign([-1.0, yb], { arch: { x: -ws.zr, y: ay, r: archR } }), Object.assign([2.22, yb], { arch: { x: -ws.zf, y: ay, r: archR } })],
+    van ? 1.98 : 1.8, 0.1), 0.0, 0.2, 1.7, 2.4, 0.1, [-0.2, 0.25]), paint);
+    const cab = add(shapeBody(profileGeo(van
+      ? [[2.3, 0.6], [1.75, 1.42], [-2.55, 1.46], [-2.55, 0.62]]
+      : [[0.95, 0.22], [0.45, 0.66], [0.1, 0.78], [-1.0, 0.78], [-1.55, 0.28]], van ? 1.96 : 1.62, 0.08), van ? 0.7 : 0.25, van ? 0.04 : 0.36, 9, 10, 0), van ? paint : paint);
+    cabinGlass(add, [cab], glass, van
+      ? { front: [[2.2, 0.72], [1.82, 1.36]], rear: [[-2.55, 0.9], [-2.55, 1.35]], width: 2.1, side: [[2.15, 0.76], [1.78, 1.36], [1.0, 1.38], [1.0, 0.78]] }
+      : { front: [[0.88, 0.27], [0.15, 0.75]], rear: [[-1.48, 0.32], [-1.05, 0.75]], width: 1.8, side: [[0.82, 0.29], [0.42, 0.62], [0.1, 0.73], [-0.95, 0.73], [-1.42, 0.33]], bpillar: -0.35 });
+    const chrome = new THREE.MeshStandardMaterial({ color: 0xc9cdd2, roughness: 0.25, metalness: 0.9 }); sunOnly(chrome, dirt);
+    const L = van ? 2.6 : 2.32, hw = van ? 0.98 : 0.89;
+    add(new THREE.BoxGeometry(hw * 2 + 0.04, 0.16, 0.12), black, 0, -0.24, -L); add(new THREE.BoxGeometry(hw * 2 + 0.04, 0.16, 0.12), black, 0, -0.24, L);
+    add(new THREE.BoxGeometry(0.9, 0.16, 0.04), chrome, 0, 0.0, -L - 0.02);
+    for (const sd of [-1, 1]) {
+      bodyDecal(add, [body], lightW, v3(sd * hw * 0.68, van ? 0.12 : 0.02, -L), v3(1, 0, 0), v3(0, 1, 0), v3(0, 0, 1), 0.36, 0.12);
+      bodyDecal(add, [body], lightR, v3(sd * hw * 0.72, van ? 0.3 : 0.08, L), v3(1, 0, 0), v3(0, 1, 0), v3(0, 0, -1), 0.3, 0.14);
+      add(new THREE.BoxGeometry(0.12, 0.08, 0.1), black, sd * (hw + 0.05), van ? 1.0 : 0.5, van ? -1.75 : -0.45);
+      if (van) decal(sd * 1.0, 0.75, 0.3, 2.0, sd < 0);
+    }
+    driverPos = van ? V(-0.45, 0.5, -1.35) : V(-0.38, -0.08, 0.05);
+  } else if (spec.id === 'rally') {
     const fz = -ws.zf, rz = -ws.zr; // forward-positive x in profile space
     const yb = -0.33, archR = 0.43, ay = -0.27;
     const body = add(shapeBody(profileGeo([[2.06, yb], [2.14, -0.05], [2.13, 0.1], [2.02, 0.22], [1.7, 0.29], [1.2, 0.35], [0.95, 0.38], [-1.6, 0.43], [-1.95, 0.4], [-2.1, 0.3], [-2.13, 0.08], [-2.06, yb], Object.assign([-1.0, yb], { arch: { x: -ws.zr, y: ay, r: archR } }), Object.assign([2.08, yb], { arch: { x: -ws.zf, y: ay, r: archR } })], 1.8, 0.1), 0.05, 0.2, 1.45, 2.2, 0.16, [-0.15, 0.25]), paint);
@@ -4057,11 +4633,11 @@ function buildCar(spec, opts, gfx) {
   const visor = add(new THREE.SphereGeometry(0.152, 14, 8, -0.9, 1.8, 1.1, 0.7), glass, driverPos.x, driverPos.y + 0.6, driverPos.z); visor.rotation.y = Math.PI;
 
   // wheels + visible suspension struts
-  const style = { rally: { knobby: 0.015, spokes: 6, rimScale: 0.66 }, buggy: { knobby: 0.035, spokes: 5, rimScale: 0.55 }, truck: { knobby: 0.05, spokes: 6, rimScale: 0.52 }, kaze: { knobby: 0, spokes: 5, rimScale: 0.74, ri: 0.72 }, ironside: { knobby: 0, spokes: 10, rimScale: 0.7, ri: 0.7 } }[spec.id];
+  const style = { sedan: { knobby: 0, spokes: 5, rimScale: 0.62, ri: 0.66 }, van: { knobby: 0, spokes: 6, rimScale: 0.58, ri: 0.62 }, rally: { knobby: 0.015, spokes: 6, rimScale: 0.66 }, buggy: { knobby: 0.035, spokes: 5, rimScale: 0.55 }, truck: { knobby: 0.05, spokes: 6, rimScale: 0.52 }, kaze: { knobby: 0, spokes: 5, rimScale: 0.74, ri: 0.72 }, ironside: { knobby: 0, spokes: 10, rimScale: 0.7, ri: 0.7 } }[spec.id];
   const wheels = [];
   const strutMat = new THREE.MeshStandardMaterial({ color: 0xe0b020, roughness: 0.4, metalness: 0.6 });
   for (const w of [[1, 1], [1, 0], [0, 1], [0, 0]]) {
-    const { steer, spin } = buildWheel(spec, mats, style);
+    const { steer, spin } = spec.boat ? { steer: new THREE.Group(), spin: new THREE.Group() } : buildWheel(spec, mats, style);
     const left = w[1];
     if (left) spin.rotation.y = 0; // spin group handles rotation, mirror the face below
     if (left) spin.scale.x = -1;
@@ -4126,6 +4702,17 @@ class CarView {
       const a = kind === 3 ? 0 : kind === 5 ? (slip > 0.5 ? Math.min(0.6, (slip - 0.5) * 0.7) : 0) : Math.min(0.55, (kind === 2 ? 0.45 : kind === 1 ? 0.08 : kind === 6 ? 0.12 : 0.18) + slip * 0.25);
       const f = c._t.fwd; const nx = -f.z, nz = f.x; const ln = Math.hypot(nx, nz) || 1;
       marks.add(c.id * 4 + i, w.cp.x, w.cp.y, w.cp.z, nx / ln, nz / ln, c.spec.wheels.w * 0.9, near ? a : 0);
+    }
+    if (c.spec.boat && c.inWater && speed > 1.5) { // wake off the transom, spray off the bow when planing
+      let n = Math.min(40, speed * 1.1) * dt * (near ? 1 : 0.3);
+      while (n > 0) {
+        if (Math.random() < n) {
+          const sd = Math.random() < 0.5 ? -1 : 1, p = this._a.set(sd * 0.9, 0, c.spec.hull.hz + 0.2).applyQuaternion(c.q).add(c.pos);
+          fx.dust(p.x, WATER_Y, p.z, c.vel.x * 0.15, c.vel.z * 0.15, 0.6, 4);
+          if (speed > 9 && Math.random() < 0.5) { const b = this._b.set(sd * 0.8, 0, -c.spec.hull.hz * 0.45).applyQuaternion(c.q).add(c.pos), side = this._v.set(sd * 4, 0, 0).applyQuaternion(c.q); fx.dust(b.x, WATER_Y, b.z, c.vel.x * 0.5 + side.x, c.vel.z * 0.5 + side.z, 0.8, 4); }
+        }
+        n -= 1;
+      }
     }
     if (c.boosting) {
       const back = this._v.set(0, 0, 1).applyQuaternion(c.q);
@@ -4727,6 +5314,37 @@ class Dialogue {
   }
 }
 
+/* story mode: what unlocks each machine (free roam has them all) */
+const CAR_UNLOCKS = {
+  rally: { ch: 0 },
+  buggy: { ch: 1, hint: 'Unlocks: win your first desert event' },
+  truck: { ch: 2, hint: 'Unlocks: win a second desert event' },
+  kaze: { ch: 3, hint: 'Unlocks: drive through the Calder Tunnel' },
+  ironside: { city: 1, hint: "Unlocks: beat Calder's crew in a city event" },
+  boat: { ch: 3, hint: 'Unlocks: reach Port Calder' },
+};
+/* liveries, each earned by a story challenge */
+const LIVERIES = [
+  { id: 'festival', name: 'Festival', text: 'RED MESA', helmet: 0xff6a1a, num: 7 },
+  { id: 'sundog', name: 'Sundog', text: 'SUNDOG', color: 0xf29a16, helmet: 0x16100c, num: 11, ch: 'air' },
+  { id: 'midnight', name: 'Midnight', text: 'TAKEDOWN', color: 0x15171c, helmet: 0xd94c22, num: 13, ch: 'takedown' },
+  { id: 'chrome', name: 'Interstate Chrome', text: 'FLAT OUT', color: 0xb9bfc7, helmet: 0x1f4e79, num: 99, ch: 'speed' },
+  { id: 'portcalder', name: 'Port Calder', text: 'PORT CALDER', color: 0x1f4e79, helmet: 0xf2c230, num: 21, ch: 'ramps' },
+  { id: 'swamp', name: 'Swamp Thing', text: 'MUD BOWL', color: 0x4c5a2c, helmet: 0x9b5a2a, num: 4, ch: 'mud' },
+  { id: 'gold', name: 'Gold Rush', text: 'RIDGE GOLD', color: 0xc9a227, helmet: 0x16100c, num: 1, ch: 'gold' },
+  { id: 'backroads', name: 'Back Roads', text: 'COUNTRY MILE', color: 0x7b4a2b, helmet: 0xe9e2d6, num: 66, ch: 'country' },
+  { id: 'pilot', name: 'Harbour Pilot', text: 'HARBOUR PILOT', color: 0xe9e2d6, helmet: 0x2a8c8c, num: 8, ch: 'sailor' },
+];
+const CHALLENGES = [
+  { id: 'air', name: 'Big air', desc: 'Stay airborne 2.5 s in one jump', goal: 2.5, fmt: (v) => v.toFixed(1) + ' s' },
+  { id: 'takedown', name: 'Takedown artist', desc: 'Take out 5 rivals in races', goal: 5 },
+  { id: 'speed', name: 'Speed trap', desc: 'Hit 220 km/h', goal: 220, fmt: (v) => Math.round(v) + ' km/h' },
+  { id: 'ramps', name: 'Ramp rat', desc: 'Jump 6 different Port Calder street ramps', goal: 6 },
+  { id: 'mud', name: 'Mud lark', desc: 'Win the Mud Bowl in the Brute 4x4', goal: 1 },
+  { id: 'gold', name: 'Ridge gold', desc: 'Take gold on Ridge Attack', goal: 1 },
+  { id: 'country', name: 'Country mile', desc: 'Drive 8 km on the country roads', goal: 8000, fmt: (v) => (v / 1000).toFixed(1) + ' km' },
+  { id: 'sailor', name: 'Old salt', desc: 'Cover 3 km by boat', goal: 3000, fmt: (v) => (v / 1000).toFixed(1) + ' km' },
+];
 const SAVE_SLOTS = 3;
 const CHAPTERS = ['The Festival', 'One More Win', 'The Tunnel', "Calder's Crews", 'Coast to Canyon', 'Epilogue'];
 class Story {
@@ -4744,16 +5362,51 @@ class Story {
     if (!(D.slot >= 0 && D.slot < SAVE_SLOTS)) D.slot = 0;
     this.s = D.slots[D.slot] || Story.blank();
     this.mode = Store.data.mode === 'free' ? 'free' : 'story';
+    this.checkCars(false);
     this.radioT = 90 + Math.random() * 60; this.lastRadio = []; this.trainWarnT = 0; this.inTunnel = false; this.region = null; this.fenceT = 0;
   }
-  static blank() { return { ch: 0, flags: {}, won: {}, t: 0 }; }
+  static blank() { return { ch: 0, flags: {}, won: {}, t: 0, stats: {} }; }
+  /* ----- unlocks ----- */
+  carUnlocked(id) {
+    if (this.free) return true;
+    const u = CAR_UNLOCKS[id]; if (!u) return false;
+    if (u.city) return this.cityWins() >= u.city || this.s.ch >= 4;
+    return this.s.ch >= u.ch;
+  }
+  unlockedCars() { return DRIVEABLE.filter((id) => this.carUnlocked(id)); }
+  get stats() { return this.s.stats || (this.s.stats = {}); }
+  chalValue(c) { const v = this.stats[c.id]; return typeof v === 'object' && v ? Object.keys(v).length : v || 0; }
+  chalDone(id) { const c = CHALLENGES.find((q) => q.id === id); return !!c && this.chalValue(c) >= c.goal; }
+  liveryUnlocked(L) { return this.free || !L.ch || this.chalDone(L.ch); }
+  /* record challenge progress (story only); mode 'max' keeps the best, 'add' accumulates, 'key' collects distinct keys */
+  stat(id, v, mode) {
+    if (this.free || !this.g.player) return;
+    const st = this.stats, was = this.chalDone(id);
+    if (mode === 'add' || mode === 'inc') st[id] = (st[id] || 0) + v;
+    else if (mode === 'key') { if (!st[id] || typeof st[id] !== 'object') st[id] = {}; if (st[id][v]) return; st[id][v] = 1; }
+    else { if ((st[id] || 0) >= v) return; st[id] = v; }
+    this.dirtyT = (this.dirtyT || 0) + 1;
+    if (!was && this.chalDone(id)) {
+      const L = LIVERIES.find((q) => q.ch === id), c = CHALLENGES.find((q) => q.id === id);
+      this.save();
+      this.g.toast('Livery unlocked', `${c.name} · ${L.name}`, 'hot');
+    } else if (mode === 'key' || mode === 'inc' || this.dirtyT > 240) { this.dirtyT = 0; this.save(); }
+  }
+  /* announce any machine the latest progress unlocked */
+  checkCars(announce) {
+    const now = this.unlockedCars(), had = this._cars || now;
+    this._cars = now;
+    if (!announce || this.free) return;
+    const fresh = now.filter((id) => !had.includes(id));
+    if (fresh.length) setTimeout(() => this.g.toast(fresh.length > 1 ? 'New machines unlocked' : 'New machine unlocked', fresh.map((id) => VEHICLES[id].name).join(' · '), 'hot'), 3400);
+  }
   /* the slot story mode continues; null when it has never been played */
   get slot() { return Store.data.slots[Store.data.slot]; }
   /* play from slot i, wiping it first when fresh */
   useSlot(i, fresh) {
     const D = Store.data;
     if (fresh || !D.slots[i]) D.slots[i] = Story.blank();
-    D.slot = i; this.s = D.slots[i]; this.save();
+    D.slot = i; this.s = D.slots[i]; this._cars = null; this.checkCars(false); this.save();
   }
   deleteSlot(i) {
     const D = Store.data; D.slots[i] = null;
@@ -4761,12 +5414,12 @@ class Story {
     this.save();
   }
   freeSlot() { return Store.data.slots.findIndex((x) => !x); }
-  setMode(m) { this.mode = m; Store.data.mode = m; this.save(); }
+  setMode(m) { this.mode = m; Store.data.mode = m; this._cars = null; this.checkCars(false); this.save(); }
   get free() { return this.mode === 'free'; }
   save() { if (!this.free && this.s === this.slot) this.s.t = Date.now(); Store.save(); }
   get ch() { return this.s.ch; }
   chapterName() { return CHAPTERS[Math.min(this.s.ch, CHAPTERS.length - 1)]; }
-  setCh(c) { if (c > this.s.ch) { this.s.ch = c; this.save(); this.g.refreshStory(true); } }
+  setCh(c) { if (c > this.s.ch) { this.s.ch = c; this.save(); this.g.refreshStory(true); this.checkCars(true); } }
   desertWins() { return DESERT_EVENTS.filter((id) => this.s.won[id]).length; }
   cityWins() { return CITY_EVENTS.filter((id) => this.s.won[id]).length; }
   finaleUnlocked() { return this.free || this.s.ch >= 4; }
@@ -4810,6 +5463,9 @@ class Story {
     const first = won && !s.won[ev.id];
     if (won) s.won[ev.id] = 1;
     this.save();
+    if (won && ev.id === 'mudbowl' && this.g.player.spec.id === 'truck') this.stat('mud', 1);
+    if (ev.id === 'ridge' && this.g.race && this.g.race.prog.get(this.g.player).time <= ev.medals[0]) this.stat('gold', 1);
+    if (won && city) this.checkCars(true);
     if (ev.id === 'finale') {
       if (won) { d.say(['fin_win_1', 'fin_win_2', 'fin_win_3'], { interrupt: true }); this.setCh(5); }
       else d.say('fin_lose', { interrupt: true });
@@ -5091,7 +5747,7 @@ class CameraRig {
     const k = 1 - Math.exp(-dt * (c.onGround ? 4.5 : 1.6));
     this.dir.lerp(desiredDir, k).normalize();
     const dir = this.back ? this.dir.clone().negate() : this.dir;
-    const big = (c.spec.id === 'truck' ? 1.25 : c.spec.id === 'buggy' ? 0.95 : 1) * (this.cam.aspect < 1 ? 1.25 : 1);
+    const big = (c.spec.id === 'truck' ? 1.25 : c.spec.boat ? 1.35 : c.spec.id === 'buggy' ? 0.95 : 1) * (this.cam.aspect < 1 ? 1.25 : 1) * (opts && opts.far ? opts.far : 1);
     let dist, h, lookH;
     if (opts && opts.orbit) { // wreck / title orbit
       this.orbitA += dt * (opts.orbitSpeed || 0.4);
@@ -5112,7 +5768,7 @@ class CameraRig {
     }
     if (this.mode === 0) { dist = (6.4 + Math.min(2.5, speed * 0.04)) * big; h = 2.25 * big; lookH = 1.05 * big; } else { dist = (9 + Math.min(3, speed * 0.05)) * big; h = 3.4 * big; lookH = 1.2 * big; }
     const target = new THREE.Vector3(c.pos.x - dir.x * dist, c.pos.y + h, c.pos.z - dir.z * dist);
-    const gy = this.T.height(target.x, target.z) + 1.3; if (target.y < gy) target.y = gy;
+    const gy = Math.max(this.T.height(target.x, target.z), WATER_Y) + 1.3; if (target.y < gy) target.y = gy;
     if (!this.init) this.pos.copy(target); else { const kp = 1 - Math.exp(-dt * 10); this.pos.lerp(target, kp); this.pos.y = lerp(this.pos.y, target.y, 1 - Math.exp(-dt * (c.onGround ? 6 : 3))); }
     const ly = c.pos.y + lookH;
     const lookT = new THREE.Vector3(c.pos.x + dir.x * 3, ly, c.pos.z + dir.z * 3);
@@ -5120,7 +5776,7 @@ class CameraRig {
     this.init = true;
     const sh = this.shake; this.shake = Math.max(0, this.shake - dt * 2.2);
     const jitter = new THREE.Vector3((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh).multiplyScalar(0.35);
-    const camGy = this.T.height(this.pos.x, this.pos.z) + 0.9; if (this.pos.y < camGy) this.pos.y = camGy;
+    const camGy = Math.max(this.T.height(this.pos.x, this.pos.z), WATER_Y + 0.3) + 0.9; if (this.pos.y < camGy) this.pos.y = camGy;
     this.cam.position.copy(this.pos).add(jitter);
     this.cam.lookAt(this.look);
     this.setFov(dt, 60 + Math.min(20, speed * 0.24) + (c.boosting ? 9 : 0));
@@ -5317,6 +5973,67 @@ class StoryIntro {
   }
 }
 
+/* ---------------- Traffic: civilians on the public roads ---------------- */
+// [route, cars, lane offset (m, right of centre), cruise speed (m/s)]
+const TRAFFIC_PLAN = [['hwy', 4, 5.5, 27], ['hwy-rev', 4, 5.5, 27], ['coast', 2, 3.6, 22], ['coast-rev', 2, 3.6, 22], ['tunnel', 1, 3.2, 21], ['tunnel-rev', 1, 3.2, 21],
+  ['pass', 1, 2.6, 15], ['pass-rev', 1, 2.6, 15], ['lane-valley', 1, 2.3, 16], ['lane-valley-rev', 1, 2.3, 16], ['lane-farm', 1, 2.3, 16], ['lane-farm-rev', 1, 2.3, 16],
+  ['city-a', 2, 4.8, 13], ['city-a-rev', 1, 4.8, 13], ['city-b', 2, 4.8, 13], ['city-c', 1, 4.8, 13], ['city-c-rev', 1, 4.8, 13], ['city-d', 2, 4.8, 13]];
+const TRAFFIC_COLORS = [0x8a9aa6, 0x6b2d2d, 0xe9e2d6, 0x2b3a4a, 0x9c8a64, 0x3d5a3d, 0xc9c4ba, 0x23262b, 0x7a1f1f, 0x4a6a8a];
+class Traffic {
+  constructor(game) { this.g = game; this.list = []; this.WAKE = 520; this.SLEEP = 650; }
+  spawn() {
+    this.clear();
+    const g = this.g, W = g.world; let n = 0;
+    for (const [rid, count, lane, vcap] of TRAFFIC_PLAN) {
+      const R = W.route(rid); if (!R) continue;
+      for (let k = 0; k < count; k++, n++) {
+        const s = R.length * (k + 0.35 + 0.3 * hash2(n, 7)) / count, v = (n % 3 === 1) ? 'van' : 'sedan';
+        const car = g.addCar(VEHICLES[v], { id: 80 + n, color: TRAFFIC_COLORS[n % TRAFFIC_COLORS.length], number: 100 + n, livery: v === 'van' ? ['MESA HAULER', 'CALDER POST', 'KRMR 98.7'][n % 3] : 'CALDER COUNTY', helmet: 0x3a3330 });
+        car.name = v === 'van' ? 'Delivery van' : 'Local driver'; car.civilian = true;
+        const a = new AIDriver(car, R, { s, lane, skill: 0.8 + 0.1 * hash2(n, 3), vcap: vcap * (0.85 + 0.25 * hash2(n, 11)), traffic: true, seed: 300 + n });
+        a.cruise = a.vcap * 0.9; a.asleepS = s;
+        this.place(a, true);
+        car.asleep = true;
+        this.list.push(a);
+      }
+    }
+  }
+  clear() { for (const a of this.list) this.g.removeCar(a.car); this.list = []; }
+  partner(R) { return this.g.world.route(R.id.endsWith('-rev') ? R.id.slice(0, -4) : R.id + '-rev'); }
+  /* pose the car on its lane at a.s (used while asleep, and to wake it) */
+  place(a, wake) {
+    const R = a.route, s = a.s, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), c = a.car;
+    c.reset(p.x - dz * a.baseLane, p.z + dx * a.baseLane, Math.atan2(-dx, -dz), this.g.world.terrain, 0.05);
+    c.invuln = 0;
+    if (wake) { const v = Math.min(a.cruise, 14); c.vel.set(dx * v, 0, dz * v); for (const w of c.wheels) w.omega = v / c.spec.wheels.r; }
+  }
+  /* open roads end: turn round onto the lane coming back */
+  uturn(a) { const P = this.partner(a.route); if (!P) return false; a.route = P; a.s = 25; a.bestS = 25; a.stuck = 0; return true; }
+  update(dt) {
+    const g = this.g, P = g.player, cam = g.gfx.camera.position;
+    for (const a of this.list) {
+      const c = a.car, R = a.route, d = Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z);
+      c.hidden = g.world.tunnelGateClosed && R.id.startsWith('tunnel'); // the closed tunnel carries no traffic
+      if (c.hidden) { c.asleep = true; continue; }
+      if (c.asleep) {
+        a.s += a.cruise * dt;
+        if (!R.closed && a.s > R.length - 30) this.uturn(a); else a.s = R.wrapS(a.s);
+        const dc = Math.hypot(c.pos.x - cam.x, c.pos.z - cam.z);
+        if (d < this.WAKE) { this.place(a, true); c.asleep = false; a.stuck = 0; a.bestS = a.s; a.respawn = false; }
+        else if (dc < 950 && (this.poseT = (this.poseT || 0) + 1) % 8 === 0) this.place(a, false); // keep distant cars visibly moving
+        continue;
+      }
+      if (d > this.SLEEP) { c.asleep = true; continue; }
+      a.update(dt, g.world.cars, 1);
+      const seen = d < 160;
+      if (!R.closed && a.s > R.length - 40 && !seen) { this.uturn(a); this.place(a, true); continue; }
+      if ((c.wrecked && c.wreckT > 4) || a.respawn) { // clear the wreck away from the player's eyes
+        if (!seen || c.wreckT > 9 || a.respawn) { a.s = R.wrapS(a.s + (seen ? -140 : 60)); if (!R.closed && a.s > R.length - 40) this.uturn(a); this.place(a, true); a.respawn = false; a.stuck = 0; }
+      }
+    }
+  }
+}
+
 /* ---------------- Game ---------------- */
 class Game {
   constructor() {
@@ -5327,7 +6044,9 @@ class Game {
     this.state = 'loading';
     this.timeScale = 1; this.slowmo = 0;
     this.toastQ = []; this.takedowns = 0;
-    this.vehicle = VEHICLES[Store.data.vehicle] ? Store.data.vehicle : 'rally';
+    this.vehicle = DRIVEABLE.includes(Store.data.vehicle) ? Store.data.vehicle : 'rally';
+    this.landVehicle = VEHICLES[this.vehicle].boat ? 'rally' : this.vehicle;
+    this.livery = LIVERIES.some((l) => l.id === Store.data.livery) ? Store.data.livery : 'festival';
     this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
     this.quality = Store.data.quality || (this.isTouch ? 'low' : 'high');
   }
@@ -5349,6 +6068,7 @@ class Game {
     this.views = new Map();
     this.spawnPlayer(this.vehicle, hot && hot.player);
     this.spawnRoamers();
+    this.traffic = new Traffic(this); this.traffic.spawn();
     this.story = new Story(this);
     this.buildUI();
     this.refreshStory();
@@ -5373,16 +6093,34 @@ class Game {
   }
   removeCar(car) { this.world.cars = this.world.cars.filter((c) => c !== car); const v = this.views.get(car); if (v) v.dispose(); this.views.delete(car); }
   spawnPlayer(vid, at) {
-    const old = this.player;
-    let x = HUB.x + 18, z = HUB.z + 46, yaw = Math.PI * 0.9;
+    const old = this.player, W = this.world, boat = !!VEHICLES[vid].boat;
+    let x = HUB.x + 18, z = HUB.z + 46, yaw = Math.PI * 0.9, note = null;
     if (at) { x = at.x; z = at.z; yaw = at.yaw; vid = at.vehicle || vid; }
-    else if (old) { x = old.pos.x; z = old.pos.z; yaw = old.yaw(); }
+    else if (old) {
+      x = old.pos.x; z = old.pos.z; yaw = old.yaw();
+      const wasBoat = !!old.spec.boat, dock = this.nearestDock(x, z);
+      if (boat && !wasBoat) { // put the boat in the water: right here if there is water, else at the nearest launch
+        const wet = W.terrain.height(x, z) < WATER_Y - 2;
+        if (!wet) { ({ x, z, yaw } = dock.water); note = dock.name; }
+      } else if (!boat && wasBoat) { // back on dry land at a launch, or the nearest beach
+        if (Math.hypot(dock.water.x - x, dock.water.z - z) < 500) { ({ x, z, yaw } = dock.land); note = dock.name; }
+        else { const p = W.findDrySpot(x, z); x = p.x; z = p.z; if (p.yaw !== null) yaw = p.yaw; }
+      }
+    }
     if (old) this.removeCar(old);
     this.vehicle = vid; Store.data.vehicle = vid; Store.save();
-    this.player = this.addCar(VEHICLES[vid], { id: 0, player: true, color: VEHICLES[vid].color, number: 7, livery: 'RED MESA', helmet: 0xff6a1a });
-    this.player.reset(x, z, yaw, this.world.terrain, 0.5);
+    if (!boat) this.landVehicle = vid;
+    const L = this.currentLivery();
+    this.player = this.addCar(VEHICLES[vid], { id: 0, player: true, color: L.color || VEHICLES[vid].color, number: L.num, livery: L.text, helmet: L.helmet });
+    this.player.reset(x, z, yaw, W.terrain, 0.5); this.player.liveryId = L.id;
     this.rig.snap();
+    if (note && this.state === 'free') this.toast(boat ? 'Boat launched' : 'Ashore', note, 'region');
   }
+  currentLivery() {
+    const L = LIVERIES.find((l) => l.id === this.livery) || LIVERIES[0];
+    return this.story && !this.story.liveryUnlocked(L) ? LIVERIES[0] : L;
+  }
+  nearestDock(x, z) { let best = BOAT_DOCKS[0], bd = 1e18; for (const D of BOAT_DOCKS) { const d = Math.hypot(D.land.x - x, D.land.z - z); if (d < bd) { bd = d; best = D; } } return best; }
   spawnRoamers() {
     this.roamers = [];
     const plan = [['canyon', 'rally', 0.3], ['ridge', 'buggy', 0.55], ['mudbowl', 'truck', 0.2], ['canyon', 'truck', 0.75], ['hwy', 'kaze', 0.2], ['hwy', 'ironside', 0.62], ['coast', 'kaze', 0.4], ['harbour', 'ironside', 0.3], ['pass', 'kaze', 0.5]];
@@ -5414,14 +6152,49 @@ class Game {
     }
   }
   /* ----- UI ----- */
-  carCards(container, onPick) {
+  carCards(container, onPick, opts = {}) {
     container.innerHTML = '';
-    for (const v of Object.values(VEHICLES)) {
-      const b = document.createElement('button'); b.className = 'carpick' + (v.id === this.vehicle ? ' sel' : ''); b.type = 'button';
-      b.innerHTML = `<span class="c">${v.cls}</span><span class="n">${v.name}</span><span class="b">${v.blurb}</span>
+    const sel = opts.sel || this.vehicle;
+    for (const id of DRIVEABLE) {
+      const v = VEHICLES[id];
+      if (v.boat && !opts.boats) continue;
+      const open = !this.story || this.story.carUnlocked(id);
+      const b = document.createElement('button'); b.className = 'carpick' + (id === sel ? ' sel' : '') + (open ? '' : ' locked'); b.type = 'button';
+      b.innerHTML = `<span class="c">${v.cls}</span><span class="n">${v.name}</span><span class="b">${open ? v.blurb : CAR_UNLOCKS[id].hint}</span>
         <span class="stat">Speed<i style="--v:${v.stats.speed * 100}%"></i></span><span class="stat">Grip<i style="--v:${v.stats.grip * 100}%"></i></span><span class="stat">Armour<i style="--v:${v.stats.armour * 100}%"></i></span>`;
-      b.addEventListener('click', () => { this.audio.start(); [...container.children].forEach((c) => c.classList.remove('sel')); b.classList.add('sel'); onPick(v.id); });
+      if (!open) { b.setAttribute('aria-disabled', 'true'); b.title = CAR_UNLOCKS[id].hint; }
+      b.addEventListener('click', () => { if (!open) { this.audio.start(); return; } this.audio.start(); [...container.children].forEach((c) => c.classList.remove('sel')); b.classList.add('sel'); onPick(id); });
       container.appendChild(b);
+    }
+  }
+  /* livery chips (locked ones name their challenge) and the challenge board */
+  liveryChips(container) {
+    container.innerHTML = '';
+    for (const L of LIVERIES) {
+      const open = this.story.liveryUnlocked(L), c = L.ch && CHALLENGES.find((q) => q.id === L.ch);
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'liv' + (L.id === this.currentLivery().id ? ' sel' : '') + (open ? '' : ' locked');
+      const col = '#' + new THREE.Color(L.color || this.player.spec.color).getHexString();
+      b.innerHTML = `<i style="background:${col}"></i><span></span>`; b.lastChild.textContent = L.name;
+      b.title = open ? L.name : `Locked · ${c.name}: ${c.desc}`;
+      b.addEventListener('click', () => {
+        if (!open) { this.toast(L.name + ' is locked', c.desc, ''); return; }
+        this.livery = L.id; Store.data.livery = L.id; Store.save();
+        if (!this.race) this.spawnPlayer(this.player.spec.id);
+        this.liveryChips(container);
+      });
+      container.appendChild(b);
+    }
+  }
+  challengeBoard(container) {
+    const S = this.story; container.innerHTML = '';
+    if (S.free) { container.innerHTML = '<div><b>Free roam</b>Every livery is open. Challenges run in story mode.</div>'; return; }
+    for (const c of CHALLENGES) {
+      const v = S.chalValue(c), done = v >= c.goal, L = LIVERIES.find((l) => l.ch === c.id), f = c.fmt || ((x) => String(Math.floor(x)));
+      const d = document.createElement('div'); if (done) d.className = 'done';
+      d.innerHTML = `<b></b><span></span><i style="--v:${Math.min(100, v / c.goal * 100)}%"></i>`;
+      d.firstChild.textContent = `${c.name} · ${L.name}`;
+      d.children[1].textContent = done ? 'Complete · livery unlocked' : `${c.desc} · ${f(Math.min(v, c.goal))} / ${f(c.goal)}`;
+      container.appendChild(d);
     }
   }
   buildUI() {
@@ -5451,7 +6224,7 @@ class Game {
     $('btnMapClose').addEventListener('click', () => this.toggleMap(false));
     $('btnTravel').addEventListener('click', () => { const s = this.mapSel; if (!s || s.hidden) return; this.toggleMap(false); this.travelTo(s); });
     $('btnWaypoint').addEventListener('click', () => { this.waypoint = this.mapSel; this.toggleMap(false); });
-    $('prompt').addEventListener('click', () => { if (this.nearSpot) this.openEventScreen(this.nearSpot.ev); });
+    $('prompt').addEventListener('click', () => { if (this.nearSpot) this.openEventScreen(this.nearSpot.ev); else if (this.nearDock) this.useDock(); });
     $('tReset').addEventListener('click', () => this.requestReset());
     $('tCam').addEventListener('click', () => { this.rig.mode = (this.rig.mode + 1) % 3; });
     $('tMap').addEventListener('click', () => this.toggleMap());
@@ -5525,7 +6298,8 @@ class Game {
   }
   showTitle() {
     this.state = 'title'; this.savesOpen = false; this.screen('saves', false);
-    this.carCards($('titleCars'), (vid) => { if (vid !== this.player.spec.id) this.spawnPlayer(vid); });
+    this.carCards($('titleCars'), (vid) => { if (vid !== this.player.spec.id) this.spawnPlayer(vid); }, { sel: this.player.spec.boat ? this.landVehicle : this.vehicle });
+    this.liveryChips($('titleLivs'));
     this.refreshMenu();
     this.screen('title', true); $('hud').classList.remove('on');
   }
@@ -5539,8 +6313,10 @@ class Game {
     if (on) {
       if (!['free', 'race'].includes(this.state)) return;
       this.prevState = this.state; this.state = 'pause';
-      this.carCards($('pauseCars'), (vid) => { if (this.race) return; this.spawnPlayer(vid); });
+      this.carCards($('pauseCars'), (vid) => { if (this.race) return; this.spawnPlayer(vid); }, { boats: true });
       $('pauseCars').hidden = !!this.race; $('garageLabel').hidden = !!this.race;
+      this.liveryChips($('pauseLivs')); $('pauseLivs').hidden = !!this.race; $('livLabel').hidden = !!this.race;
+      this.challengeBoard($('pauseChal'));
       this.refreshPauseButtons(); this.screen('pause', true);
     } else if (this.state === 'pause') { this.state = this.prevState; this.screen('pause', false); this.last = performance.now(); }
   }
@@ -5549,7 +6325,14 @@ class Game {
     if (on) { if (!['free', 'race'].includes(this.state)) return; this.prevState = this.state; this.state = 'map'; $('mapInfo').classList.remove('on'); this.mapSel = null; this.screen('mapScreen', true); this.drawBigMap(); $('btnTravel').hidden = !!this.race; $('btnWaypoint').hidden = !!this.race; }
     else if (this.state === 'map') { this.state = this.prevState; this.screen('mapScreen', false); this.last = performance.now(); }
   }
+  useDock() {
+    if (this.state !== 'free' || !this.nearDock) return;
+    if (this.player.spec.boat) this.spawnPlayer(this.landVehicle);
+    else if (this.story.carUnlocked('boat')) this.spawnPlayer('boat');
+    this.audio.start();
+  }
   travelTo(spot) {
+    if (this.player.spec.boat) this.spawnPlayer(this.landVehicle);
     const R = this.world.route(spot.ev.route);
     const p = R.posAt(R.closed ? R.length - 60 : 0, {}); const dx = spot.x - p.x, dz = spot.z - p.z;
     const x = spot.x - dx * 0.4, z = spot.z - dz * 0.4;
@@ -5558,20 +6341,21 @@ class Game {
   }
   openEventScreen(ev) {
     if (this.state !== 'free') return;
-    this.state = 'event'; this.pendingEvent = ev; this.pendingVehicle = this.vehicle;
+    this.state = 'event'; this.pendingEvent = ev; this.pendingVehicle = VEHICLES[this.vehicle].boat ? this.landVehicle : this.vehicle;
     $('evType').textContent = this.typeLabel(ev); $('evName').textContent = ev.name; $('evBlurb').textContent = ev.blurb;
     const best = Store.data.best[ev.id];
     const chips = [`${Math.round(this.world.route(ev.route).length * (ev.type === 'sprint' ? 1 : ev.laps) / 100) / 10} km`, best ? `Your best ${fmtTime(best.time)}` : 'No time set'];
     if (ev.medals) chips.push(`Gold ${fmtTime(ev.medals[0])}`, `Silver ${fmtTime(ev.medals[1])}`, `Bronze ${fmtTime(ev.medals[2])}`);
     $('evChips').innerHTML = chips.map((c) => `<span class="chip">${c}</span>`).join('');
-    this.carCards($('evCars'), (vid) => { this.pendingVehicle = vid; });
+    this.carCards($('evCars'), (vid) => { this.pendingVehicle = vid; }, { sel: this.pendingVehicle });
     this.screen('eventScreen', true);
   }
   closeEventScreen() { this.screen('eventScreen', false); this.state = 'free'; this.cooldownSpot = this.nearSpot; this.last = performance.now(); }
   /* ----- events ----- */
   startEvent(ev, vid) {
     this.screen('eventScreen', false); this.screen('results', false);
-    this.clearRoamers();
+    this.clearRoamers(); this.traffic.clear();
+    if (VEHICLES[vid].boat || !this.story.carUnlocked(vid)) vid = this.story.carUnlocked(this.landVehicle) ? this.landVehicle : 'rally';
     if (vid !== this.player.spec.id) this.spawnPlayer(vid);
     this.vehicle = vid;
     const R = this.world.route(ev.route);
@@ -5600,6 +6384,9 @@ class Game {
     G.add(arch(R.closed ? 0 : 2)); if (!R.closed) G.add(arch(race.finishS));
     const nG = Math.max(4, Math.round(R.length / 320));
     for (let i = 1; i < nG; i++) { const s = R.length * i / nG; const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s); G.add(this.gfx.makeGate(p.x, p.z, Math.atan2(dx, dz), EVENT_COLORS[ev.id])); }
+    // the street circuit hides its corners behind buildings: board and paint every one of them
+    if (R.def.street) this.gfx.addTurnMarkers(R, EVENT_COLORS[ev.id], G);
+    else if (R.surface === 'asphalt' || R.def.noCarve) this.gfx.addTurnMarkers(R, EVENT_COLORS[ev.id], G, { sharpOnly: true });
     G.visible = true;
     for (const s of this.eventSpots) { s.beacon.beam.visible = false; s.beacon.ring.visible = false; s.label.style.display = 'none'; }
     this.state = 'race'; this.countLast = 4; this.raceAnnounced = false; this.finalAnnounced = false; this.musicMode = null;
@@ -5615,7 +6402,7 @@ class Game {
     for (const s of this.eventSpots) { s.beacon.beam.visible = !s.hidden; s.beacon.ring.visible = !s.hidden; s.label.style.display = ''; }
     this.refreshStory();
     this.player.frozen = false;
-    this.spawnRoamers();
+    this.spawnRoamers(); this.traffic.spawn();
     if (!silent) { this.state = 'free'; $('hud').classList.add('on'); $('racebox').hidden = true; $('freebox').hidden = false; $('countdown').textContent = ''; this.cooldownSpot = this.nearestSpot(); }
     this.last = performance.now();
   }
@@ -5651,7 +6438,7 @@ class Game {
     this.rig.snap();
   }
   freeRespawn(c, lift) {
-    const p = this.world.findDrySpot(c.pos.x, c.pos.z);
+    const p = c.spec.boat ? this.world.findWetSpot(c.pos.x, c.pos.z) : this.world.findDrySpot(c.pos.x, c.pos.z);
     c.reset(p.x, p.z, p.yaw !== null ? p.yaw : c.yaw(), this.world.terrain, lift);
   }
   toast(text, small, cls) {
@@ -5700,7 +6487,7 @@ class Game {
       if (I.was('KeyR') || I.padPressed(2)) this.requestReset();
       this.rig.back = I.keys.has('KeyB') || (I.padButtons && navigator.getGamepads && (() => { const p = [...navigator.getGamepads()].find((q) => q && q.connected); return p && p.buttons[5] && p.buttons[5].pressed; })());
     } else { P.input.throttle = 0; P.input.brake = 0; P.input.handbrake = 1; P.input.steer = 0; P.input.boost = 0; }
-    if (this.state === 'free' && (I.was('Enter') || I.padPressed(0)) && this.nearSpot) this.openEventScreen(this.nearSpot.ev);
+    if (this.state === 'free' && (I.was('Enter') || I.padPressed(0))) { if (this.nearSpot) this.openEventScreen(this.nearSpot.ev); else if (this.nearDock) this.useDock(); }
     // slow motion after wrecks
     if (this.slowmo > 0) { this.slowmo -= dt; this.timeScale = lerp(this.timeScale, 0.3, 0.2); } else this.timeScale = lerp(this.timeScale, 1, 0.1);
     const sdt = dt * this.timeScale * (this.intro ? this.intro.slow : 1);
@@ -5723,6 +6510,7 @@ class Game {
       if (race.state === 'finished' && this.state === 'race' && race.t - race.finishT > 2.2) this.showResults();
     } else {
       for (const a of this.roamers) a.update(sdt, W.cars, 1);
+      this.traffic.update(sdt);
       if (this.intro) for (const a of this.intro.ai) a.update(sdt, W.cars, 1.1);
     }
     this.story.update(dt, this.state === 'free');
@@ -5752,6 +6540,18 @@ class Game {
     this.flipT = (upY < 0.3 && P.vel.length() < 2 && !P.wrecked) ? (this.flipT || 0) + dt : 0;
     if (this.flipT > 2) { this.requestReset(); this.flipT = 0; }
     if (race && race.state !== 'countdown' && race.prog.get(P).off > 8 && !P.wrecked) { this.requestReset(); this.toast('Back on track', null, ''); }
+    if (this.state === 'free' || this.state === 'race') this.trackStats(sdt);
+  }
+  /* story challenge progress from the player's driving */
+  trackStats(dt) {
+    const P = this.player, S = this.story, T = this.world.terrain;
+    if (S.free || P.wrecked || dt <= 0) return;
+    const v = P.vel.length();
+    if (P.speedKmh > (S.stats.speed || 0) + 1) S.stat('speed', Math.min(P.speedKmh, 400));
+    if (P.spec.boat) { if (P.inWater && v > 1) S.stat('sailor', v * dt, 'add'); return; }
+    if (P.onGround && P.pos.x > CITY.x0 - 30) { const r = T.rampAt(P.pos.x, P.pos.z); if (r) this.lastRamp = { k: this.world.city.ramps.indexOf(r), t: this.world.time }; }
+    const gi = T.gi(P.pos.x, P.pos.z), rid = T.rown[gi], R = rid && T.routes[rid - 1];
+    if (R && R.def.country && P.onGround && v > 2 && T.rdist[gi] < R.width / 2 + 3) S.stat('country', v * dt, 'add');
   }
   handleEvents(c) {
     const isP = c === this.player, fx = this.gfx.fx;
@@ -5767,13 +6567,17 @@ class Game {
           this.toast('Wrecked', e.reason === 'overheat' ? 'Engine overheated' : e.reason === 'drowned' ? 'Drowned' : e.reason === 'train' ? 'Flattened by the Coastline Freight' : by ? `Taken out by ${by}` : 'Hit too hard', 'bad');
           this.story.onWreck(e.reason);
         } else if (c.lastHit === this.player && this.world.time - c.lastHitT < 2) {
-          this.takedowns++; this.toast('Takedown', c.name, 'hot'); this.rig.shake = Math.max(this.rig.shake, 1);
+          if (c.civilian) this.toast('Traffic wrecked', 'Calder County will hear about this', '');
+          else { this.takedowns++; this.toast('Takedown', c.name, 'hot'); if (this.race) this.story.stat('takedown', 1, 'inc'); }
+          this.rig.shake = Math.max(this.rig.shake, 1);
         }
       } else if (e.type === 'land' && isP) {
         this.rig.shake = Math.max(this.rig.shake, Math.min(1.4, e.air * 0.6));
         fx.burst(c.pos.x, c.pos.y - 0.5, c.pos.z, 10, c.surfaceMud > 0.3 ? 2 : 0);
         this.audio.oneShot('thud', e.air * 0.5);
         if (e.air > 1.4) this.toast(`Big air ${e.air.toFixed(1)}s`, null, 'hot');
+        if (!c.spec.boat) this.story.stat('air', Math.min(e.air, 9));
+        if (this.lastRamp && e.air > 0.5 && this.world.time - this.lastRamp.t < e.air + 0.6) { this.story.stat('ramps', this.lastRamp.k, 'key'); this.lastRamp = null; }
       } else if ((e.type === 'bump' || e.type === 'hit') && isP) {
         if (e.v > 3) { this.rig.shake = Math.max(this.rig.shake, Math.min(1.5, e.v * 0.08)); this.audio.oneShot('crash', e.v / 15); fx.sparks(c.pos.x, c.pos.y, c.pos.z, Math.min(30, e.v * 2)); }
       } else if (e.type === 'scrape' && isP) { if (e.v > 5) { this.rig.shake = Math.max(this.rig.shake, 0.5); this.audio.oneShot('thud', e.v / 12); } }
@@ -5791,7 +6595,7 @@ class Game {
     // views
     for (const [car, view] of this.views) {
       const d = car.pos.distanceTo(g.camera.position);
-      view.root.visible = d < 900 || car === P;
+      view.root.visible = !car.hidden && (d < 900 || car === P);
       if (!view.root.visible) continue;
       view.update(sdt);
       if (sdt > 0) view.effects(sdt, g.fx, g.marks, d < 160);
@@ -5807,7 +6611,7 @@ class Game {
     else if (this.state === 'splash') this.rig.update(dt, P, { orbit: true, orbitSpeed: 0.04, radius: 170, height: 60, fov: 48 });
     else if (this.state === 'title') this.rig.update(dt, P, { orbit: true, orbitSpeed: 0.12, radius: 11, height: 3, fov: 50 });
     else if (P.wrecked && P.wreckT < 2.8) this.rig.update(dt, P, { orbit: true, orbitSpeed: 0.5, radius: 10, height: 4 });
-    else this.rig.update(dt, P);
+    else this.rig.update(dt, P, this.race && this.race.route.def.street ? { far: 1.2 } : undefined);
     g.updateTrain();
     if (sdt > 0) { g.updateCrossings(sdt, g.time.value); g.updateTunnelGate(g.time.value); }
     this.trainAudio(dt);
@@ -5907,6 +6711,9 @@ class Game {
     if (this.savesOpen) { this.savesOpen = false; this.screen('saves', false); }
     S.setMode(m);
     this.refreshStory(false);
+    // story mode only lets you drive what the story has handed you
+    if (!S.carUnlocked(this.player.spec.id)) { const v = S.carUnlocked(this.landVehicle) && !VEHICLES[this.landVehicle].boat ? this.landVehicle : 'rally'; this.spawnPlayer(v, { x: HUB.x + 18, z: HUB.z + 46, yaw: Math.PI * 0.9, vehicle: v }); }
+    else if (this.player.liveryId !== this.currentLivery().id) this.spawnPlayer(this.player.spec.id);
     // story mode starts you on the right side of the closed tunnel
     if (!S.tunnelOpen() && this.player.pos.x > 1180) { this.player.reset(HUB.x + 18, HUB.z + 46, Math.PI * 0.9, this.world.terrain, 0.5); this.rig.snap(); }
     // a fresh story opens with the voiced intro
@@ -5966,7 +6773,8 @@ class Game {
       $('hBest').textContent = race.route.closed ? `Best lap ${fmtTime(pr.best)}${best ? ' · record ' + fmtTime(best.time) : ''}` : (best ? `Record ${fmtTime(best.time)}` : 'No record yet');
       const ww = pr.wrongWay > 1.2 ? 'Wrong way' : (pr.off > 2 ? 'Return to the track' : '');
       $('warn').textContent = ww; $('warn').style.display = ww ? 'block' : 'none';
-    } else { $('warn').style.display = 'none'; }
+      this.turnHint(race, pr);
+    } else { $('warn').style.display = 'none'; $('turn').classList.remove('on'); }
     // free-roam: beacons + prompt
     this.nearSpot = null;
     const cam = g.camera, w = innerWidth, h = innerHeight, v = new THREE.Vector3();
@@ -5986,11 +6794,23 @@ class Game {
       s.label.style.display = vis ? '' : 'none';
       if (vis) { s.label.style.left = sx + 'px'; s.label.style.top = sy + 'px'; s.label.lastChild.textContent = d > 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m'; s.label.style.opacity = clamp(1.4 - d / 1200, 0.35, 1); }
     }
+    // boat launches: take the skiff out, or bring it in
+    this.nearDock = null;
+    if (this.state === 'free' && !this.nearSpot) for (const D of BOAT_DOCKS) {
+      const dl = Math.hypot(D.land.x - P.pos.x, D.land.z - P.pos.z), dw = Math.hypot(D.water.x - P.pos.x, D.water.z - P.pos.z);
+      if (P.spec.boat ? dw < 70 || dl < 45 : dl < 22) this.nearDock = D;
+    }
     const pr = $('prompt');
     if (this.nearSpot && this.state === 'free') {
       const ev = this.nearSpot.ev, best = Store.data.best[ev.id];
       $('pTitle').textContent = ev.name;
       $('pDesc').innerHTML = `${this.typeLabel(ev)}${best ? ' · best ' + fmtTime(best.time) : ''} · <kbd>Enter</kbd> or tap to enter`;
+      pr.classList.add('on');
+    } else if (this.nearDock) {
+      const D = this.nearDock, open = this.story.carUnlocked('boat');
+      $('pTitle').textContent = P.spec.boat ? 'Go ashore' : 'Boat launch';
+      $('pDesc').innerHTML = P.spec.boat ? `${D.name} · <kbd>Enter</kbd> or tap for the ${VEHICLES[this.landVehicle].name}`
+        : open ? `${D.name} · <kbd>Enter</kbd> or tap to take out the ${VEHICLES.boat.name}` : `${D.name} · ${CAR_UNLOCKS.boat.hint}`;
       pr.classList.add('on');
     } else pr.classList.remove('on');
     const obj = this.story.objective();
@@ -6008,6 +6828,21 @@ class Game {
     this.mmFrame = (this.mmFrame || 0) + 1;
     if (this.mmFrame % 2 === 0 && this.state !== 'title') this.drawMinimap();
     if (this.state === 'map') this.drawBigMap();
+  }
+  /* next corner: direction, severity and distance, so blind city corners never come as a surprise */
+  turnHint(race, pr) {
+    const el = $('turn'), R = race.route;
+    let best = null, bd = 1e9;
+    if (!pr.finished && this.state === 'race') for (const t of R.turns()) {
+      let d = t.s - pr.s; if (R.closed) d = ((d % R.length) + R.length) % R.length;
+      if (d > -4 && d < bd) { bd = d; best = t; }
+    }
+    if (!best || bd > 240) { el.classList.remove('on'); return; }
+    const right = best.ang > 0, a = Math.abs(best.ang);
+    $('turnLabel').textContent = `${a > 2.3 ? 'Hairpin' : best.sharp ? 'Sharp' : 'Easy'} ${right ? 'right' : 'left'}`;
+    $('turnDist').textContent = bd < 8 ? 'Now' : `${Math.round(bd / 5) * 5} m`;
+    el.querySelector('svg').style.transform = right ? '' : 'scaleX(-1)';
+    el.classList.toggle('near', bd < 70); el.classList.add('on');
   }
   drawMinimap() {
     const ctx = this.mm, S = 344, P = this.player, scale = MAP_W / WORLD.Sx; // map px per metre
@@ -6029,7 +6864,11 @@ class Game {
     // the train
     for (const c of this.world.train.cars) { const [x, y] = toL(c.pose.x, c.pose.z); ctx.fillStyle = '#e8c22a'; ctx.beginPath(); ctx.arc(x, y, 2.6 / zoom, 0, TAU); ctx.fill(); }
     if (this.world.tunnelGateClosed) { const gp = this.world.tunnelGatePose(), [x, y] = toL(gp.x, gp.z), r = 5 / zoom; ctx.strokeStyle = '#ff3a2a'; ctx.lineWidth = 2.5 / zoom; ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r); ctx.stroke(); }
-    for (const c of this.world.cars) { if (c === P) continue; const [x, y] = toL(c.pos.x, c.pos.z); ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(x, y, 3.2 / zoom, 0, TAU); ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 1 / zoom; ctx.stroke(); }
+    for (const c of this.world.cars) {
+      if (c === P || c.hidden) continue; const [x, y] = toL(c.pos.x, c.pos.z);
+      if (c.civilian) { ctx.fillStyle = 'rgba(232,226,214,.7)'; ctx.beginPath(); ctx.arc(x, y, 2 / zoom, 0, TAU); ctx.fill(); continue; }
+      ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(x, y, 3.2 / zoom, 0, TAU); ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 1 / zoom; ctx.stroke();
+    }
     ctx.restore();
     ctx.save(); ctx.translate(S / 2, S / 2);
     const fwd = P.forward(new THREE.Vector3()); const carYaw = Math.atan2(fwd.x, fwd.z);
@@ -6048,7 +6887,8 @@ class Game {
     const tun = this.world.route('tunnel'), tm = tun.posAt(tun.length * 0.62, {}); label(this.world.tunnelGateClosed ? 'CALDER TUNNEL · CLOSED' : 'CALDER TUNNEL', tm.x, tm.z - 50, this.world.tunnelGateClosed ? '#ff5a3a' : '#ffd23f');
     if (this.world.tunnelGateClosed) { const gp = this.world.tunnelGatePose(), x = mapX(gp.x), y = mapZ(gp.z); ctx.save(); ctx.strokeStyle = '#ff3a2a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x - 7, y - 7); ctx.lineTo(x + 7, y + 7); ctx.moveTo(x + 7, y - 7); ctx.lineTo(x - 7, y + 7); ctx.stroke(); ctx.restore(); }
     for (const c of this.world.train.cars) { ctx.fillStyle = '#e8c22a'; ctx.beginPath(); ctx.arc(mapX(c.pose.x), mapZ(c.pose.z), 3.5, 0, TAU); ctx.fill(); }
-    for (const c of this.world.cars) { if (c === P) continue; ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(mapX(c.pos.x), mapZ(c.pos.z), 4.5, 0, TAU); ctx.fill(); }
+    for (const c of this.world.cars) { if (c === P || c.civilian) continue; ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(mapX(c.pos.x), mapZ(c.pos.z), 4.5, 0, TAU); ctx.fill(); }
+    for (const D of BOAT_DOCKS) { const x = mapX(D.water.x), y = mapZ(D.water.z); ctx.fillStyle = '#6fb7d9'; ctx.beginPath(); ctx.arc(x, y, 6, 0, TAU); ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 4; label('BOAT LAUNCH', D.water.x, D.water.z + 70, '#9fd6ef'); }
     ctx.save(); ctx.translate(mapX(P.pos.x), mapZ(P.pos.z));
     const f = P.forward(new THREE.Vector3()); ctx.rotate(Math.atan2(f.x, -f.z));
     ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(11, 12); ctx.lineTo(0, 6); ctx.lineTo(-11, 12); ctx.closePath(); ctx.fillStyle = '#ff6a1a'; ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 3; ctx.stroke();
