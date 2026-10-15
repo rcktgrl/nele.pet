@@ -219,6 +219,8 @@ table.res td.t { text-align: right; }
 #intro .cap small { display: block; font-weight: 800; font-size: 15px; letter-spacing: .28em; text-transform: uppercase; color: var(--flare); margin-bottom: 6px; }
 #intro .cap b { display: block; font-family: var(--display); font-weight: 400; font-size: clamp(30px, 5.4vw, 66px); line-height: .95; color: var(--sand); }
 #intro .cap.show { animation: capin 3.2s ease both; }
+#intro.story .cap { bottom: auto; top: calc(12vh + 22px); }
+#intro .dlg { left: max(16px, env(safe-area-inset-left, 0px)); top: auto; bottom: calc(12vh + 18px); transform: none; }
 @keyframes capin { 0% { opacity: 0; transform: translateX(-24px); } 12% { opacity: 1; transform: none; } 82% { opacity: 1; } 100% { opacity: 0; } }
 #intro .final { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity 1s; background: radial-gradient(ellipse at 50% 50%, rgba(18,12,9,.55), transparent 65%); }
 #intro .final.show { opacity: 1; }
@@ -619,9 +621,11 @@ const ROUTE_DEFS = [
   { id: 'hwy', closed: true, width: 22, surface: 'asphalt', lanes: 4, rails: true, smoothWin: 40, grade: 0.06,
     pts: [[1700, 0], [2100, 180], [2600, 200], [3050, 60], [3300, -250], [3420, -700], [3350, -1150], [3000, -1350], [2500, -1300], [2050, -1050], [1750, -650], [1640, -300]] },
   { id: 'coast', closed: false, width: 15, surface: 'asphalt', lanes: 2, rails: true, smoothWin: 30, grade: 0.08,
-    pts: [[2350, 192], [2300, 500], [2450, 850], [2850, 1050], [3350, 1050], [3800, 900], [4100, 700], [4210, 520], [4210, CITY.z1]] },
+    pts: [[2350, 210], [2300, 500], [2450, 850], [2850, 1050], [3350, 1050], [3800, 900], [4100, 700], [4210, 520], [4210, CITY.z1]] },
   { id: 'pass', closed: false, width: 11, surface: 'asphalt', lanes: 2, smoothWin: 25, grade: 0.11, rails: true,
-    pts: [[3000, -1345], [3050, -1600], [2900, -1800], [3150, -1950], [3000, -2200], [2750, -2300], [2850, -2500], [2550, -2600], [2350, -2450], [2400, -2200], [2200, -2050], [2250, -1800], [2150, -1550], [2300, -1240]] },
+    // ends sit on the highway centreline; the north face is too steep to drop straight down, so it switchbacks
+    pts: [[3001, -1350], [3050, -1600], [2900, -1800], [3150, -1950], [3000, -2200], [2750, -2300], [2850, -2500], [2550, -2600], [2350, -2450], [2400, -2200],
+      [2420, -2060], [2400, -1920], [2150, -1870], [1990, -1845], [1895, -1805], [1885, -1750], [1960, -1725], [2100, -1690], [2400, -1580], [2420, -1400], [2400, -1262]] },
   { id: 'harbour', closed: true, width: 16, surface: 'asphalt', street: true,
     pts: streetPath([[CX(3), CZ(2)], [CX(8), CZ(2)], [CX(8), CZ(5)], [CX(10), CZ(5)], [CX(10), CZ(9)], [CX(6), CZ(9)], [CX(6), CZ(6)], [CX(3), CZ(6)]], true) },
   { id: 'rail', closed: true, width: 8, surface: 'rail', smoothWin: 70, passes: 6, grade: 0.03, noFeatures: true,
@@ -809,6 +813,7 @@ class Terrain {
     this.h = new Float32Array(n);
     this.road = new Float32Array(n); this.mud = new Float32Array(n); this.asph = new Float32Array(n); this.rail = new Float32Array(n);
     this.rdist = new Float32Array(n).fill(1e9); this.rlat = new Float32Array(n).fill(40); this.rhw = new Float32Array(n).fill(8); this.rs = new Float32Array(n); this.rlanes = new Uint8Array(n);
+    this.rfade = new Uint8Array(n); // 255 = junction mouth: hide markings and lane patterns that would clash
     this.green = new Uint8Array(n); this.beach = new Uint8Array(n); this.city = new Uint8Array(n); this.tun = new Uint8Array(n); this.forest = new Uint8Array(n);
   }
   *build() {
@@ -833,8 +838,8 @@ class Terrain {
     // the finale reuses existing roads end to end
     const R = (id) => this.routes.find((r) => r.id === id);
     const fin = Route.compose({ id: 'finale', closed: false, width: 14, surface: 'asphalt', noCarve: true }, [
-      { route: R('coast'), from: [4210, CITY.z1 - 4], to: [2350, 192], dir: -1 },
-      { route: R('hwy'), from: [2350, 196], to: [1700, 0], dir: -1 },
+      { route: R('coast'), from: [4210, CITY.z1 - 4], to: [2350, 210], dir: -1 },
+      { route: R('hwy'), from: [2350, 210], to: [1700, 0], dir: -1 },
       { route: R('tunnel'), from: [1700, 0], to: [792, 10], dir: -1 },
       { route: R('ridge'), from: [790, 12], to: [330, 60], dir: 1 },
       { route: R('trail-ridge'), from: [330, 60], to: [70, 110], dir: -1 },
@@ -873,13 +878,32 @@ class Terrain {
     const { Nx, Nz, cell: c, x0, z0 } = this, n = Nx * Nz;
     const wsum = new Float32Array(n), tsum = new Float32Array(n), wmax = new Float32Array(n);
     const rng = mulberry32(42);
-    const order = [...this.routes].sort((a, b) => (b.surface === 'rail') - (a.surface === 'rail'));
+    // rail first (roads meet it at level crossings), then the closed highway loop, then everything that joins it
+    const rank = (r) => r.surface === 'rail' ? 0 : r.closed && r.surface === 'asphalt' && !r.def.street ? 1 : 2;
+    const order = [...this.routes].sort((a, b) => rank(a) - rank(b));
+    const done = [];
+    // junction bookkeeping: which road owns each cell's markings, and how close the widest road nearby is
+    const ownD = new Float32Array(n).fill(1e9), ownP = new Uint8Array(n), zid = new Uint8Array(n), multi = new Uint8Array(n);
+    const majP = new Uint8Array(n), majE = new Float32Array(n).fill(1e9), ZONE = 14, MARGIN = 6;
     const railHash = new Map(), rkey = (x, z) => Math.floor(x / 20) * 100000 + Math.floor(z / 20);
     const railAt = (x, z) => { let best = 1e9, y = 0; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const l = railHash.get(rkey(x + a * 20, z + b * 20)); if (l) for (const [rx, rz, ry] of l) { const d = Math.hypot(rx - x, rz - z); if (d < best) { best = d; y = ry; } } } return best < 6 ? y : null; };
     for (const R of order) {
       const nS = R.count, def = R.def;
       let prof = new Float32Array(nS + 1);
       for (let i = 0; i <= nS; i++) prof[i] = Math.max(this.rawH(R.x[i], R.z[i]), WATER_Y + 0.9);
+      // an open road that ends on another road takes that road's height for the stretch where they share tarmac
+      const pin = new Float32Array(nS + 1).fill(NaN), endY = [null, null];
+      if (!R.closed && R.surface !== 'rail') for (const [e, dir] of [[0, 1], [nS, -1]]) {
+        for (const O of done) {
+          const pe = O.project(R.x[e], R.z[e], 0, -1), reach = O.width / 2 + 4;
+          if (pe.dist > O.width / 2 + 3) continue;
+          for (let k = e, hint = pe.s; k >= 0 && k <= nS; k += dir) {
+            const pk = O.project(R.x[k], R.z[k], hint, 40); if (pk.dist > reach) break;
+            pin[k] = O.sample(O.y, pk.s); hint = pk.s;
+          }
+          endY[e ? 1 : 0] = pin[e]; prof[e] = pin[e]; break;
+        }
+      }
       if (def.tunnel) { // bore straight through the mountain between the portal approaches
         const a = prof[0], b = prof[nS];
         for (let i = 0; i <= nS; i++) prof[i] = Math.min(prof[i], lerp(a, b, i / nS) + 0.5);
@@ -894,21 +918,37 @@ class Terrain {
         for (let i = 0; i <= nS; i++) { out[i] = acc / cnt; acc += prof[R.idx(i + win + 1)] - prof[R.idx(i - win)]; }
         prof = out;
       }
-      if (!R.closed) for (let i = 0; i <= nS; i++) { const t = Math.min(i, nS - i) * R.step; const w = smooth(0, 40, t); prof[i] = lerp(Math.max(this.rawH(R.x[i], R.z[i]), WATER_Y + 0.9), prof[i], w); }
+      if (!R.closed) for (let i = 0; i <= nS; i++) {
+        const t = Math.min(i, nS - i) * R.step, w = smooth(0, 40, t), ey = endY[i * 2 <= nS ? 0 : 1];
+        prof[i] = lerp(ey !== null ? ey : Math.max(this.rawH(R.x[i], R.z[i]), WATER_Y + 0.9), prof[i], w);
+      }
+      // level crossings: engineered roads pin the rail height into the grade limiter below
+      const hits = [];
+      if (R.surface !== 'rail' && railHash.size) {
+        for (let i = 0; i <= nS; i++) { const ry = railAt(R.x[i], R.z[i]); if (ry !== null && (!hits.length || i - hits[hits.length - 1][0] > 30)) hits.push([i, ry]); }
+        if (def.grade) for (const [c, ry] of hits) for (let k = -3; k <= 3; k++) { const i = R.idx(c + k); if (R.closed || (c + k >= 0 && c + k <= nS)) pin[i] = ry; }
+      }
+      const pinned = pin.some((v) => !isNaN(v));
       if (def.grade) { // engineered roads: limit the gradient with alternating sweeps, then soften the kinks
         const g = def.grade * R.step;
-        for (let it = 0; it < 3; it++) {
-          for (let i = 1; i <= nS; i++) { const a = prof[R.idx(i - 1)]; prof[i] = clamp(prof[i], a - g, a + g); }
-          for (let i = nS - 1; i >= 0; i--) { const a = prof[R.idx(i + 1)]; prof[i] = clamp(prof[i], a - g, a + g); }
+        for (let i = 0; i <= nS; i++) if (!isNaN(pin[i])) prof[i] = pin[i];
+        for (let it = 0; it < 4; it++) {
+          for (let i = 1; i <= nS; i++) { const a = prof[R.idx(i - 1)]; prof[i] = isNaN(pin[i]) ? clamp(prof[i], a - g, a + g) : pin[i]; }
+          for (let i = nS - 1; i >= 0; i--) { const a = prof[R.idx(i + 1)]; prof[i] = isNaN(pin[i]) ? clamp(prof[i], a - g, a + g) : pin[i]; }
         }
         const out = new Float32Array(nS + 1), W2 = 6;
         for (let i = 0; i <= nS; i++) { let a = 0, k = 0; for (let j = -W2; j <= W2; j++) { a += prof[R.idx(i + j)]; k++; } out[i] = a / k; }
         prof = out;
       }
-      if (R.surface === 'rail') { /* indexed below once final */ }
-      else if (railHash.size) { // level crossings: bring the road to the rail height smoothly
-        const hits = [];
-        for (let i = 0; i <= nS; i++) { const ry = railAt(R.x[i], R.z[i]); if (ry !== null && (!hits.length || i - hits[hits.length - 1][0] > 30)) hits.push([i, ry]); }
+      if (pinned) { // smoothing moved the pins a little: put them back exactly, fading the correction over ~24 m
+        const near = new Int32Array(nS + 1).fill(-1), FADE = 12;
+        let last = -1; for (let i = 0; i <= nS; i++) { if (!isNaN(pin[i])) last = i; near[i] = last; }
+        last = -1; for (let i = nS; i >= 0; i--) { if (!isNaN(pin[i])) last = i; if (last >= 0 && (near[i] < 0 || last - i < i - near[i])) near[i] = last; }
+        const res = new Float32Array(nS + 1); for (let i = 0; i <= nS; i++) if (!isNaN(pin[i])) res[i] = pin[i] - prof[i];
+        for (let i = 0; i <= nS; i++) { const p = near[i]; if (p >= 0) prof[i] += res[p] * (1 - smooth(0, FADE, Math.abs(i - p))); }
+      }
+      if (R.surface === 'rail' || def.grade) { /* rail is indexed below once final; graded roads pinned their crossings above */ }
+      else if (hits.length) { // level crossings on ungraded roads: bring the road to the rail height smoothly
         for (const [c, ry] of hits) {
           const off = ry - prof[c], span = Math.round(Math.max(40, Math.abs(off) / 0.07) / R.step);
           for (let k = -span; k <= span; k++) { const i = R.idx(c + k); if (!R.closed && (c + k < 0 || c + k > nS)) continue; const w = 1 - smooth(4 / R.step, span, Math.abs(k)); prof[i] += off * w; }
@@ -969,7 +1009,7 @@ class Terrain {
       const hw = R.width / 2, shoulder = def.trail ? 10 : def.tunnel ? 16 : R.surface === 'rail' ? 14 : 16, reach = hw + shoulder;
       const rc = Math.ceil(reach / c) + 1;
       const isA = R.surface === 'asphalt', isR = R.surface === 'rail';
-      const lanes = def.lanes || 0;
+      const lanes = def.lanes || 0, prio = Math.round(R.width * 4), rid = this.routes.indexOf(R) + 1;
       for (let i = 0; i < nS; i++) {
         const j = R.idx(i + 1);
         const ax = R.x[i], az = R.z[i], bx = R.x[j], bz = R.z[j];
@@ -981,8 +1021,17 @@ class Terrain {
           const t = clamp(((px - ax) * vx + (pz - az) * vz) / L2, 0, 1);
           const d = Math.hypot(px - (ax + vx * t), pz - (az + vz * t));
           const gi = gz * Nx + gx;
-          if (d < this.rdist[gi] && !isR) { this.rdist[gi] = d; const cr = vx * (pz - az) - vz * (px - ax); this.rlat[gi] = clamp(cr < 0 ? d : -d, -40, 40); this.rhw[gi] = hw; this.rs[gi] = (i + t) * R.step; this.rlanes[gi] = lanes; }
-          if (isR && d < this.rdist[gi] && d < hw + 2) this.rdist[gi] = d;
+          if (d < this.rdist[gi] && (!isR || d < hw + 2)) this.rdist[gi] = d;
+          if (!isR) {
+            // markings follow one road per cell; where roads meet, the wider road keeps its tarmac and paint
+            const e = d - hw, oe = ownD[gi] - this.rhw[gi], cIn = e < MARGIN, oIn = oe < MARGIN;
+            const win = cIn && oIn ? prio > ownP[gi] || (prio === ownP[gi] && d < ownD[gi]) : cIn ? true : oIn ? false : d < ownD[gi];
+            if (win) { ownD[gi] = d; ownP[gi] = prio; const cr = vx * (pz - az) - vz * (px - ax); this.rlat[gi] = clamp(cr < 0 ? d : -d, -40, 40); this.rhw[gi] = hw; this.rs[gi] = (i + t) * R.step; this.rlanes[gi] = lanes; }
+            if (e < ZONE) {
+              if (!zid[gi]) zid[gi] = rid; else if (zid[gi] !== rid) multi[gi] = 1;
+              if (prio > majP[gi] || (prio === majP[gi] && e < majE[gi])) { majP[gi] = prio; majE[gi] = e; }
+            }
+          }
           if (d > reach) continue;
           const cov = R.covered && (R.covered[i] || R.covered[j]);
           const w = cov ? 1 - smooth(hw + 6, reach, d) : 1 - smooth(hw + 1.5, reach, d);
@@ -997,6 +1046,13 @@ class Terrain {
           if (cov && d < hw + 3) this.tun[gi] = 255;
         }
       }
+      if (!isR) done.push(R);
+    }
+    for (let i = 0; i < n; i++) if (multi[i]) {
+      const e = ownD[i] - this.rhw[i];
+      // the main road's paint runs on to its edge; the side road's paint fades out before it reaches the mouth
+      const f = ownP[i] >= majP[i] ? smooth(1.5, 4.5, e) : 1 - smooth(MARGIN, ZONE, majE[i]);
+      this.rfade[i] = Math.round(f * 255);
     }
     for (let i = 0; i < n; i++) {
       if (wmax[i] > 0) this.h[i] = lerp(this.h[i], tsum[i] / wsum[i], wmax[i]);
@@ -1651,8 +1707,9 @@ class World {
     if (this._gatePose) return this._gatePose;
     const R = this.route('tunnel'); let i0 = 0;
     if (R.covered) for (let i = 0; i <= R.count; i++) if (R.covered[i]) { i0 = i; break; }
-    const s = Math.max(8, i0 * R.step - 16), p = R.posAt(s, {}), [dx, dz] = R.dirAt(s);
-    return (this._gatePose = { s, x: p.x, y: p.y, z: p.z, dx, dz, half: R.width / 2 + 20 });
+    // just inside the west portal, where the cut walls are already too tall and steep to drive round
+    const s = i0 * R.step + 8, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s);
+    return (this._gatePose = { s, x: p.x, y: p.y, z: p.z, dx, dz, half: R.width / 2 + 10, bore: R.width / 2 + 1.2 });
   }
   setTunnelGate(closed) {
     if (!this._gate) {
@@ -2539,8 +2596,8 @@ class TyreMarks {
    sea, vegetation, horizon
    =================================================================== */
 const TERRAIN_GLSL_PARS = `
-attribute vec4 aA; attribute vec4 aB; attribute vec4 aC; attribute vec2 aD;
-varying vec4 vA; varying vec4 vB; varying vec4 vC; varying vec2 vD; varying vec3 vWPos; varying vec3 vWNrm;`;
+attribute vec4 aA; attribute vec4 aB; attribute vec4 aC; attribute vec3 aD;
+varying vec4 vA; varying vec4 vB; varying vec4 vC; varying vec3 vD; varying vec3 vWPos; varying vec3 vWNrm;`;
 const cellKey = (x, z, C) => Math.floor((x - WORLD.x0) / C) * 1000 + Math.floor((z - WORLD.z0) / C);
 
 Object.assign(Gfx.prototype, {
@@ -2609,7 +2666,7 @@ Object.assign(Gfx.prototype, {
 vWPos = (modelMatrix * vec4(position,1.0)).xyz; vWNrm = normal; vA = aA; vB = aB; vC = aC; vD = aD;`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
-varying vec4 vA; varying vec4 vB; varying vec4 vC; varying vec2 vD; varying vec3 vWPos; varying vec3 vWNrm;
+varying vec4 vA; varying vec4 vB; varying vec4 vC; varying vec3 vD; varying vec3 vWPos; varying vec3 vWNrm;
 ${NOISE_GLSL}
 float gWet; float gBump; float gGloss; vec3 gEmis;
 float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smoothstep(w - f, w + f, abs(d)); }`)
@@ -2617,7 +2674,7 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
 {
   vec3 P = vWPos; vec3 Nw = normalize(vWNrm); float slope = 1.0 - Nw.y;
   float vRoad = vA.x, vMud = vA.y, lat = vB.x, hw = vB.y, asph = vB.z, rail = vB.w;
-  float green = vC.x, beach = vC.y, city = vC.z, tun = vC.w, rs = vD.x, lanes = vD.y;
+  float green = vC.x, beach = vC.y, city = vC.z, tun = vC.w, rs = vD.x, lanes = vD.y, jfade = 1.0 - vD.z;
   float dist = length(vViewPosition);
   float n1 = fbm2(P.xz * 0.012), n2 = fbm2(P.xz * 0.11), n3 = vnoise(P.xz * 0.8), n4 = vnoise(P.xz * 3.1);
   gEmis = vec3(0.0); gGloss = 0.0;
@@ -2651,8 +2708,8 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
   col = mix(col, beachC, beach * (1.0 - cliff));
   // graded dirt road: pale crown, two worn lanes, loose edges
   float al = abs(lat), lw = hw * 0.42;
-  float lanesW = exp(-pow((al - lw) / (hw * 0.17), 2.0));
-  float edge = smoothstep(hw - 2.5, hw + 0.5, al);
+  float lanesW = exp(-pow((al - lw) / (hw * 0.17), 2.0)) * jfade;
+  float edge = smoothstep(hw - 2.5, hw + 0.5, al) * jfade;
   vec3 roadC = vec3(0.74, 0.52, 0.34) * (0.9 + 0.14 * n3);
   roadC = mix(mix(roadC, vec3(0.42, 0.25, 0.14), lanesW * 0.6 * (0.7 + 0.3 * n2)), vec3(0.36, 0.17, 0.09) * (0.8 + 0.4 * n4), edge * 0.75);
   roadC = mix(roadC, roadC * vec3(0.95, 1.0, 0.85) * 0.9, gw);
@@ -2664,7 +2721,7 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
   {
     vec3 tar = vec3(0.085, 0.087, 0.092) * (0.82 + 0.3 * n3 + 0.12 * n4);
     float wear = lanes > 2.5 ? exp(-pow((al - hw * 0.25) / 1.1, 2.0)) + exp(-pow((al - hw * 0.75) / 1.1, 2.0)) : exp(-pow((al - hw * 0.5) / 1.0, 2.0));
-    tar *= 1.0 - 0.18 * wear * fineFade;
+    tar *= 1.0 - 0.18 * wear * fineFade * jfade;
     tar = mix(tar, vec3(0.13, 0.13, 0.135), smoothstep(0.62, 0.8, fbm2(P.xz * 0.06)) * 0.5);
     float m = 0.0; vec3 mc = vec3(0.86);
     float dash = step(0.5, fract(rs / 12.0));
@@ -2680,7 +2737,7 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
       if (e > m) mc = vec3(0.86);
       m = max(m, e);
     }
-    m *= smoothstep(1400.0, 300.0, dist) * (0.75 + 0.25 * n4);
+    m *= smoothstep(1400.0, 300.0, dist) * (0.75 + 0.25 * n4) * jfade;
     tar = mix(tar, mc, m * 0.85);
     col = mix(col, tar, asph);
     gGloss = max(gGloss, asph * 0.35);
@@ -2770,7 +2827,7 @@ reflectedLight.indirectDiffuse *= vA.w; reflectedLight.indirectSpecular *= vA.w;
     for (const S of sup.values()) {
       const parts = S.subs.map((ch) => this.chunkArrays(ch, 4, 14));
       let nv = 0, ni = 0; for (const q of parts) { nv += q.nv; ni += q.idx.length; }
-      const geo = new THREE.BufferGeometry(), names = ['position', 'normal', 'aA', 'aB', 'aC', 'aD'], sizes = [3, 3, 4, 4, 4, 2];
+      const geo = new THREE.BufferGeometry(), names = ['position', 'normal', 'aA', 'aB', 'aC', 'aD'], sizes = [3, 3, 4, 4, 4, 3];
       names.forEach((nm, k) => {
         const arr = new Float32Array(nv * sizes[k]); let o = 0;
         for (const q of parts) { arr.set(q[nm], o); o += q[nm].length; }
@@ -2800,7 +2857,7 @@ reflectedLight.indirectDiffuse *= vA.w; reflectedLight.indirectSpecular *= vA.w;
     for (let k = 0; k < ch.ni; k += step) xs.push(ch.x0 + k); xs.push(ch.x0 + ch.ni);
     for (let k = 0; k < ch.nj; k += step) zs.push(ch.z0 + k); zs.push(ch.z0 + ch.nj);
     const nx = xs.length, nz = zs.length, ring = 2 * (nx + nz) - 4, nv = nx * nz + ring;
-    const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), A = new Float32Array(nv * 4), B = new Float32Array(nv * 4), Cc = new Float32Array(nv * 4), D = new Float32Array(nv * 2);
+    const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), A = new Float32Array(nv * 4), B = new Float32Array(nv * 4), Cc = new Float32Array(nv * 4), D = new Float32Array(nv * 3);
     const put = (k, ix, iz, dy) => {
       const gi = iz * Nx + ix, x = T.x0 + ix * c, z = T.z0 + iz * c;
       pos[k * 3] = x; pos[k * 3 + 1] = H[gi] - dy; pos[k * 3 + 2] = z;
@@ -2810,7 +2867,7 @@ reflectedLight.indirectDiffuse *= vA.w; reflectedLight.indirectSpecular *= vA.w;
       A[k * 4] = T.road[gi]; A[k * 4 + 1] = T.mud[gi]; A[k * 4 + 2] = this.sunVisAt(x, z); A[k * 4 + 3] = this.aoMap[gi] / 255;
       B[k * 4] = T.rlat[gi]; B[k * 4 + 1] = T.rhw[gi]; B[k * 4 + 2] = T.asph[gi]; B[k * 4 + 3] = T.rail[gi];
       Cc[k * 4] = T.green[gi] / 255; Cc[k * 4 + 1] = T.beach[gi] / 255; Cc[k * 4 + 2] = T.city[gi] / 255; Cc[k * 4 + 3] = T.tun[gi] / 255;
-      D[k * 2] = T.rs[gi]; D[k * 2 + 1] = T.rlanes[gi];
+      D[k * 3] = T.rs[gi]; D[k * 3 + 1] = T.rlanes[gi]; D[k * 3 + 2] = T.rfade[gi] / 255;
     };
     let k = 0;
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) put(k++, xs[i], zs[j], 0);
@@ -2836,7 +2893,7 @@ reflectedLight.indirectDiffuse *= vA.w; reflectedLight.indirectSpecular *= vA.w;
     geo.setAttribute('position', new THREE.BufferAttribute(q.position, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(q.normal, 3));
     geo.setAttribute('aA', new THREE.BufferAttribute(q.aA, 4)); geo.setAttribute('aB', new THREE.BufferAttribute(q.aB, 4));
-    geo.setAttribute('aC', new THREE.BufferAttribute(q.aC, 4)); geo.setAttribute('aD', new THREE.BufferAttribute(q.aD, 2));
+    geo.setAttribute('aC', new THREE.BufferAttribute(q.aC, 4)); geo.setAttribute('aD', new THREE.BufferAttribute(q.aD, 3));
     geo.setIndex(q.idx);
     geo.computeBoundingSphere();
     return geo;
@@ -3183,6 +3240,7 @@ ${NOISE_GLSL}`).replace('#include <color_fragment>', `#include <color_fragment>
       for (const sx of [-w / 3, w / 3]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4, 0.3), frameMat); leg.position.set(sx, 2, -0.2); grp.add(leg); }
       const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, pr = route.project(cx, cz, 0, -1), rp = route.posAt(pr.s, {});
       grp.position.set(cx, CITY.y + b.h, cz); grp.rotation.y = Math.atan2(rp.x - cx, rp.z - cz);
+      if (k === 0) this.stadiumAd = { x: cx, y: CITY.y + b.h + panel.position.y, z: cz, nx: Math.sin(grp.rotation.y), nz: Math.cos(grp.rotation.y), w };
       grp.traverse((o) => { if (o.isMesh) o.castShadow = true; });
       this.scene.add(grp);
     }
@@ -3320,13 +3378,13 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
         const nx = naturalHeight(x - e, z) - naturalHeight(x + e, z), nz = naturalHeight(x, z - e) - naturalHeight(x, z + e), L = Math.hypot(nx, 2 * e, nz);
         cn.push(nx / L, 2 * e / L, nz / L);
         const b = biomeAt(x, z, h);
-        cA.push(0, 0, 0.85, 1); cB.push(40, 8, 0, 0); cC.push(b.green, 0, 0, 0); cD.push(0, 0);
+        cA.push(0, 0, 0.85, 1); cB.push(40, 8, 0, 0); cC.push(b.green, 0, 0, 0); cD.push(0, 0, 0);
       }
     }
     for (let i = 0; i < i1 - i0; i++) for (let k = 0; k < W; k++) { const a = i * (W + 1) + k, b = a + W + 1; ci.push(a, b, a + 1, a + 1, b, b + 1); }
     const cg = new THREE.BufferGeometry();
     cg.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3)); cg.setAttribute('normal', new THREE.Float32BufferAttribute(cn, 3));
-    cg.setAttribute('aA', new THREE.Float32BufferAttribute(cA, 4)); cg.setAttribute('aB', new THREE.Float32BufferAttribute(cB, 4)); cg.setAttribute('aC', new THREE.Float32BufferAttribute(cC, 4)); cg.setAttribute('aD', new THREE.Float32BufferAttribute(cD, 2));
+    cg.setAttribute('aA', new THREE.Float32BufferAttribute(cA, 4)); cg.setAttribute('aB', new THREE.Float32BufferAttribute(cB, 4)); cg.setAttribute('aC', new THREE.Float32BufferAttribute(cC, 4)); cg.setAttribute('aD', new THREE.Float32BufferAttribute(cD, 3));
     cg.setIndex(ci); cg.computeBoundingSphere();
     const cover = new THREE.Mesh(cg, this.terrainMat); cover.castShadow = true; cover.receiveShadow = true; this.scene.add(cover);
     // portals: concrete headwalls with the tunnel name
@@ -3370,14 +3428,14 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     const grp = new THREE.Group(); this.tunnelGate = grp; this.gateLamps = [];
     const nx = -g.dz, nz = g.dx, yaw = Math.atan2(g.dx, g.dz);
     const at = (lat, fwd = 0) => { const x = g.x + nx * lat + g.dx * fwd, z = g.z + nz * lat + g.dz * fwd; return [x, T.height(x, z), z]; };
-    // chain-link fence across the whole cut, following the ground
+    // chain-link fence wall to wall across the bore (the barrier segments run on into the rock)
     const wire = textTex(128, 128, (c, w, h) => {
       c.clearRect(0, 0, w, h); c.strokeStyle = 'rgba(190,196,200,1)'; c.lineWidth = 3;
       for (let i = -h; i < w + h; i += 16) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i + h, h); c.stroke(); c.beginPath(); c.moveTo(i, h); c.lineTo(i + h, 0); c.stroke(); }
     }, { repeat: true, srgb: true });
-    const H = 2.8, n = Math.ceil(g.half * 2 / 2.5), pos = [], uv = [], idx = [], posts = [];
+    const H = 2.8, fh = g.bore - 0.15, n = Math.ceil(fh * 2 / 2.5), pos = [], uv = [], idx = [], posts = [];
     for (let k = 0; k <= n; k++) {
-      const lat = -g.half + 2 * g.half * k / n, [x, y, z] = at(lat, 1.2);
+      const lat = -fh + 2 * fh * k / n, [x, y, z] = at(lat, 1.2);
       pos.push(x, y + 0.1, z, x, y + H, z); uv.push(lat / 1.4, 0, lat / 1.4, H / 1.4);
       if (k < n) { const a = k * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
       if (k % 2 === 0) posts.push([x, y, z]);
@@ -3390,7 +3448,7 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     for (const [x, y, z] of posts) parts.push(new THREE.CylinderGeometry(0.05, 0.05, H + 0.2, 6).translate(x, y + H / 2, z));
     const up = new THREE.Vector3(0, 1, 0);
     const beam = (ax, ay, az, bx, by, bz, r) => { const d = new THREE.Vector3(bx - ax, by - ay, bz - az), L = d.length(); const q = new THREE.Quaternion().setFromUnitVectors(up, d.normalize()); return new THREE.CylinderGeometry(r, r, L, 5).applyQuaternion(q).translate((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2); };
-    for (let k = 0; k < n; k++) { const [ax, ay, az] = at(-g.half + 2 * g.half * k / n, 1.2), [bx, by, bz] = at(-g.half + 2 * g.half * (k + 1) / n, 1.2); parts.push(beam(ax, ay + H, az, bx, by + H, bz, 0.035)); }
+    for (let k = 0; k < n; k++) { const [ax, ay, az] = at(-fh + 2 * fh * k / n, 1.2), [bx, by, bz] = at(-fh + 2 * fh * (k + 1) / n, 1.2); parts.push(beam(ax, ay + H, az, bx, by + H, bz, 0.035)); }
     const steelMesh = new THREE.Mesh(mergeGeos(parts.map((q) => tint(q, 0.55, 0.57, 0.6))), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.7 }));
     steelMesh.castShadow = true; grp.add(steelMesh); void steel;
     // jersey barriers across the carriageway, striped
@@ -3398,7 +3456,7 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     const shape = new THREE.Shape(); shape.moveTo(-0.32, 0); shape.lineTo(0.32, 0); shape.lineTo(0.32, 0.08); shape.lineTo(0.14, 0.3); shape.lineTo(0.1, 0.82); shape.lineTo(-0.1, 0.82); shape.lineTo(-0.14, 0.3); shape.lineTo(-0.32, 0.08); shape.lineTo(-0.32, 0);
     const jg = new THREE.ExtrudeGeometry(shape, { depth: 3.0, bevelEnabled: false }); jg.translate(0, 0, -1.5); jg.rotateY(Math.PI / 2);
     const jm = new THREE.MeshStandardMaterial({ map: stripe, roughness: 0.85 });
-    const span = R.width / 2 + 2.5, nb = Math.ceil(span * 2 / 3.1);
+    const span = g.bore - 0.4, nb = Math.ceil(span * 2 / 3.1);
     const lampMat = new THREE.MeshStandardMaterial({ color: 0x5a3a08, emissive: new THREE.Color(0, 0, 0), roughness: 0.3 }); this.gateLampMat = lampMat;
     const lamps = [];
     for (let k = 0; k < nb; k++) {
@@ -4313,6 +4371,41 @@ const VO_DATA = {
 }
 },
 "lines": {
+"si_1": {
+"who": "sunny",
+"text": "Good evening, Red Mesa! This is K R M R, and the festival is back for one more summer.",
+"dur": 5.85
+},
+"si_2": {
+"who": "sunny",
+"text": "For thirty years, Rosa Delgado's rally has torn up these canyons. Dirt, gravel and nerve. No marshals, no mercy.",
+"dur": 7.85
+},
+"si_3": {
+"who": "sunny",
+"text": "But over the mountains, Port Calder's street king, Vic Calder, wants the whole valley paved for his new stadium. Festival and all.",
+"dur": 7.96
+},
+"si_4": {
+"who": "vic",
+"text": "The desert has had its fun. Next season, it's concrete.",
+"dur": 3.87
+},
+"si_5": {
+"who": "sunny",
+"text": "The only road east is the old Calder Tunnel, and it's been locked up tight for years.",
+"dur": 4.67
+},
+"si_6": {
+"who": "rosa",
+"text": "So we settle it the festival way. Win out here, earn your shot at that tunnel, and beat Calder's crews on their own streets.",
+"dur": 6.85
+},
+"si_7": {
+"who": "sunny",
+"text": "And look at that. A brand new driver just rolled into the paddock. Let's see what you've got.",
+"dur": 5.21
+},
 "pro_1": {
 "who": "rosa",
 "text": "Hey, new blood! Rosa Delgado. I run this circus. Welcome to the Red Mesa Rally.",
@@ -4674,7 +4767,10 @@ class Story {
     // story mode: the east stays closed until Rosa sends you through
     if (!this.free && !this.tunnelOpen()) {
       this.fenceT -= dt;
-      if (P.pos.x > 1180 && this.fenceT <= 0) {
+      // anyone who scrambles over the cut and drops in behind the barrier gets sent back too
+      const gp = g.world.tunnelGatePose(), tr = g.world.route('tunnel');
+      const behind = P.pos.x > gp.x - 40 && P.pos.x < 1400 && (() => { const pr = tr.project(P.pos.x, P.pos.z, gp.s, 600); return pr.s > gp.s + 2 && pr.dist < 16 && P.pos.y < gp.y + 8; })();
+      if ((P.pos.x > 1180 || behind) && this.fenceT <= 0) {
         this.fenceT = 3;
         const R = g.world.route('tunnel'), p = R.posAt(0, {}), [dx, dz] = R.dirAt(0);
         P.reset(p.x - dx * 30, p.z - dz * 30, Math.atan2(dx, dz), g.world.terrain, 0.4); g.rig.snap();
@@ -5075,6 +5171,76 @@ class IntroDirector {
   dispose() { for (const c of this.cars) this.g.removeCar(c); this.cars = []; this.ai = []; }
 }
 
+/* ---------------- Story intro: KRMR tells the story over a fly-through ---------------- */
+const STORY_INTRO = ['si_1', 'si_2', 'si_3', 'si_4', 'si_5', 'si_6', 'si_7'];
+class StoryIntro {
+  constructor(game) {
+    this.g = game; this.shot = -1; this.shotT = 0; this.t = 0; this.idleT = 0;
+    this.cam = new THREE.Vector3(); this.look = new THREE.Vector3(); this.focus = new THREE.Vector3();
+    const d = game.story.d; d.skip(); d.queue.length = 0; d.say(STORY_INTRO);
+  }
+  caption(c) {
+    const cap = $('introCap'); cap.classList.remove('show'); void cap.offsetWidth;
+    if (c) { $('introEyebrow').textContent = c[0]; $('introText').textContent = c[1]; cap.classList.add('show'); }
+  }
+  next(k) {
+    this.shot = k; this.shotT = 0;
+    this.caption([['KRMR 98.7 · Red Mesa radio', 'The festival is back'], ['Red Mesa Desert', 'Thirty years of dirt'], ['Port Calder', 'Vic Calder\'s city'], null,
+      ['Calder Tunnel', 'Closed for years'], null, ['Chapter 1', 'The Festival']][k]);
+  }
+  done() { return this.t > 1.5 && this.idleT > 0.6; }
+  update(dt) {
+    const g = this.g, d = g.story.d, W = g.world, T = W.terrain;
+    this.t += dt; this.shotT += dt;
+    const k = d.cur ? STORY_INTRO.indexOf(d.cur) : -1;
+    if (k > this.shot) this.next(k);
+    this.idleT = d.busy() ? 0 : this.idleT + dt;
+    if (this.shot < 0) this.next(0); // open on the festival while the first line loads
+    const dur = d.cur && VO_DATA.lines[d.cur] ? d.dur : 6, u = clamp(this.shotT / Math.max(3, dur), 0, 1), e = u * u * (3 - 2 * u);
+    const B = g.gfx.bonfire, P = g.player;
+    let pos, look, fov = 50, k2 = 1 - Math.exp(-dt * 2.5);
+    switch (Math.max(0, this.shot)) {
+      case 0: // dusk over the festival paddock
+        pos = new THREE.Vector3(B.x - lerp(150, 70, e), B.y + lerp(75, 28, e), B.z + lerp(170, 80, e));
+        look = new THREE.Vector3(B.x, B.y + 4, B.z - 20); fov = 48; break;
+      case 1: { // high over the canyon and the mesas
+        const R = W.route('canyon'), J = R.posAt(R.jumps ? R.jumps[0] : 0, {}), M = MESAS[1];
+        pos = new THREE.Vector3(lerp(J.x - 380, J.x - 150, e), J.y + lerp(210, 120, e), lerp(J.z + 420, J.z + 260, e));
+        look = new THREE.Vector3(lerp(J.x, M.x, e), lerp(J.y, M.h * 0.6, e), lerp(J.z, M.z, e)); fov = 46; break;
+      }
+      case 2: // in over the docks toward the towers
+        pos = new THREE.Vector3(lerp(3120, 3420, e), lerp(170, 105, e), lerp(760, 470, e));
+        look = new THREE.Vector3(4180, lerp(30, 60, e), -260); fov = 48; break;
+      case 3: { // Vic's stadium billboard
+        const A = g.gfx.stadiumAd || { x: 4200, y: 40, z: -250, nx: 0, nz: 1, w: 20 }, sx = -A.nz, sz = A.nx, r = A.w * 1.7;
+        pos = new THREE.Vector3(A.x + A.nx * lerp(r * 1.4, r, e) + sx * lerp(r * 0.6, -r * 0.3, e), A.y + lerp(8, 2, e), A.z + A.nz * lerp(r * 1.4, r, e) + sz * lerp(r * 0.6, -r * 0.3, e));
+        look = new THREE.Vector3(A.x, A.y, A.z); fov = 42; break;
+      }
+      case 4: { // the locked west portal
+        const G = W.tunnelGatePose(), sx = -G.dz, sz = G.dx, back = lerp(140, 34, e);
+        pos = new THREE.Vector3(G.x - G.dx * back + sx * lerp(26, 5, e), G.y + lerp(16, 3.2, e), G.z - G.dz * back + sz * lerp(26, 5, e));
+        look = new THREE.Vector3(G.x + G.dx * 4, G.y + 2.6, G.z + G.dz * 4); fov = 50; break;
+      }
+      case 5: { // back at the bonfire with Rosa's crowd
+        const a = 0.6 + this.shotT * 0.07;
+        pos = new THREE.Vector3(B.x + Math.cos(a) * 38, B.y + 14, B.z + Math.sin(a) * 38);
+        look = new THREE.Vector3(B.x, B.y + 2, B.z); fov = 50; break;
+      }
+      default: { // the new driver
+        const f = P.forward(new THREE.Vector3()); f.y = 0; f.normalize();
+        const side = new THREE.Vector3(-f.z, 0, f.x), dist = lerp(26, 9, e);
+        pos = P.pos.clone().addScaledVector(f, dist * 0.8).addScaledVector(side, dist * 0.6); pos.y += lerp(9, 2.4, e);
+        look = P.pos.clone(); look.y += 0.8; fov = 50;
+      }
+    }
+    const gy = T.height(pos.x, pos.z) + 1.2; if (pos.y < gy) pos.y = gy;
+    if (this.shotT < dt * 1.5) { this.cam.copy(pos); this.look.copy(look); } else { this.cam.lerp(pos, k2); this.look.lerp(look, k2); }
+    this.focus.copy(this.look);
+    const cam = g.gfx.camera; cam.position.copy(this.cam); cam.up.set(0, 1, 0); cam.lookAt(this.look);
+    cam.fov = cam.aspect < 1 ? fov * 1.35 : fov; cam.updateProjectionMatrix();
+  }
+}
+
 /* ---------------- Game ---------------- */
 class Game {
   constructor() {
@@ -5262,7 +5428,7 @@ class Game {
   updateMusic(dt) {
     const A = this.audio, M = A.music; if (!M) return;
     const st = this.state, P = this.player;
-    const modes = { intro: 'intro', title: 'title', race: this.race && this.race.ev.id, results: 'results', free: 'free' };
+    const modes = { intro: 'intro', storyintro: 'title', title: 'title', race: this.race && this.race.ev.id, results: 'results', free: 'free' };
     const want = modes[st];
     if (want && want !== this.musicMode) {
       this.musicMode = want;
@@ -5424,6 +5590,7 @@ class Game {
     const I = this.input;
     if (this.state === 'splash' && (I.pressed.size || (I.padButtons && I.padButtons.length))) { I.pressed.clear(); this.startIntro(); }
     if (this.state === 'intro' && (I.was('Escape') || I.was('Enter') || I.was('Space') || I.padPressed(0) || I.padPressed(9))) { I.pressed.clear(); this.endIntro(); }
+    if (this.state === 'storyintro' && (I.was('Escape') || I.was('Enter') || I.was('Space') || I.padPressed(0) || I.padPressed(9))) { I.pressed.clear(); this.endStoryIntro(); }
     // global keys
     if (I.was('Escape') || I.padPressed(9)) { if (this.state === 'map') this.toggleMap(false); else if (this.state === 'event') this.closeEventScreen(); else this.togglePause(); }
     if ((I.was('KeyM') || I.padPressed(8)) && ['free', 'race', 'map'].includes(this.state)) this.toggleMap();
@@ -5436,7 +5603,7 @@ class Game {
     else if (this.state === 'event' && (I.was('Enter') || I.padPressed(0))) { this.audio.start(); this.startEvent(this.pendingEvent, this.pendingVehicle || this.vehicle); }
     else if (this.state === 'results' && (I.was('Enter') || I.padPressed(0))) this.endEvent();
     if (I.keys.size || I.usingPad) this.audio.start();
-    const running = ['free', 'race', 'title', 'results', 'splash', 'intro'].includes(this.state);
+    const running = ['free', 'race', 'title', 'results', 'splash', 'intro', 'storyintro'].includes(this.state);
     const inp = I.poll(dt);
     if (running) this.simulate(dt, inp);
     this.gfx.time.value += dt;
@@ -5554,6 +5721,7 @@ class Game {
     for (const b of g.beacons) { b.ring.rotation.z += dt * 0.4; b.beam.material.uniforms.uFade.value = clamp((Math.hypot(b.x - g.camera.position.x, b.z - g.camera.position.z) - 5) / 30, 0.08, 1); }
     // camera
     if (this.state === 'intro' && this.intro) { this.intro.update(dt); if (this.intro.done()) this.endIntro(); }
+    else if (this.state === 'storyintro' && this.sintro) { this.sintro.update(dt); if (this.sintro.done()) this.endStoryIntro(); }
     else if (this.state === 'splash') this.rig.update(dt, P, { orbit: true, orbitSpeed: 0.04, radius: 170, height: 60, fov: 48 });
     else if (this.state === 'title') this.rig.update(dt, P, { orbit: true, orbitSpeed: 0.12, radius: 11, height: 3, fov: 50 });
     else if (P.wrecked && P.wreckT < 2.8) this.rig.update(dt, P, { orbit: true, orbitSpeed: 0.5, radius: 10, height: 4 });
@@ -5561,7 +5729,7 @@ class Game {
     g.updateTrain();
     if (sdt > 0) { g.updateCrossings(sdt, g.time.value); g.updateTunnelGate(g.time.value); }
     this.trainAudio(dt);
-    g.updateSun(P.pos);
+    g.updateSun(this.sintro ? this.sintro.focus : P.pos);
     g.updateCulling(g.camera.position);
     g.render();
     this.updateHUD(dt);
@@ -5619,7 +5787,24 @@ class Game {
     this.refreshStory(false);
     // story mode starts you on the right side of the closed tunnel
     if (!S.tunnelOpen() && this.player.pos.x > 1180) { this.player.reset(HUB.x + 18, HUB.z + 46, Math.PI * 0.9, this.world.terrain, 0.5); this.rig.snap(); }
-    this.enterFree();
+    // a fresh story opens with the voiced intro
+    if (m === 'story' && S.ch === 0 && !S.s.flags.pro) this.startStoryIntro();
+    else this.enterFree();
+  }
+  startStoryIntro() {
+    this.screen('title', false); this.screen('splash', false); this.state = 'storyintro';
+    for (const id of STORY_INTRO) this.story.d.load(id);
+    this.sintro = new StoryIntro(this);
+    const el = $('intro'); el.classList.add('on', 'story'); requestAnimationFrame(() => el.classList.add('bars'));
+    el.appendChild($('dlg')); // subtitles ride on the letterbox while the HUD is hidden
+    $('skip').textContent = 'Skip story'; $('skip').onclick = () => this.endStoryIntro();
+  }
+  endStoryIntro() {
+    if (this.state !== 'storyintro') return;
+    this.sintro = null; const d = this.story.d; d.skip(); d.queue.length = 0;
+    const el = $('intro'); el.classList.remove('bars', 'on', 'story'); $('introCap').classList.remove('show'); $('skip').textContent = 'Skip intro';
+    $('hud').appendChild($('dlg'));
+    this.state = 'title'; this.rig.snap(); this.enterFree();
   }
   goMenu() {
     if (this.race) return;
