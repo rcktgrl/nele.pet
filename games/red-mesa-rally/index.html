@@ -183,6 +183,19 @@ table.res td.t { text-align: right; }
 .linkbtn:hover { color: var(--sand); }
 .touchdev .mode .mk { display: none; }
 .linkbtn[hidden] { display: none; }
+.menulinks { margin-left: auto; display: flex; gap: 18px; }
+.menulinks .linkbtn { margin-left: 0; }
+.slots { display: grid; gap: 10px; }
+.slot { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 16px; align-items: center; border: 2px solid rgba(242,230,211,.28); background: rgba(18,12,9,.6); padding: 12px 16px; }
+.slot.cur { border-color: var(--flare); background: rgba(255,106,26,.14); }
+.slot .sn { font-weight: 800; font-size: 14px; letter-spacing: .2em; text-transform: uppercase; color: var(--flare); }
+.slot .si { display: grid; gap: 4px; min-width: 0; }
+.slot .si b { font-family: var(--display); font-weight: 400; font-size: clamp(22px, 3.4vw, 30px); line-height: 1; color: var(--sand); }
+.slot .si span { font-weight: 700; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--dust); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.slot .sa { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.slot .btn { font-size: 15px; padding: 7px 12px; }
+.slot.empty .si b { color: var(--dust); }
+@media (max-width: 560px) { .slot { grid-template-columns: 1fr; } .slot .sa { justify-content: flex-start; } }
 .menu { width: min(820px, 100%); }
 #gateNote { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); text-align: center; display: none; }
 #gateNote.on { display: block; }
@@ -342,7 +355,16 @@ table.res td.t { text-align: right; }
       <div><b>C</b> camera · <b>B</b> look back</div><div><b>M</b> map</div><div><b>Esc</b> pause</div>
     </div>
     <p class="muted touchhint">Steer with the arrows on the left, gas and brake on the right. Boost burns heat.</p>
-    <div class="row"><span class="muted" id="menuHint">Press 1 or 2, or Enter to continue.</span><button class="linkbtn" id="btnResetStory" type="button">Start story over</button></div>
+    <div class="row"><span class="muted" id="menuHint">Press 1 or 2, or Enter to continue.</span><span class="menulinks"><button class="linkbtn" id="btnNewGame" type="button">New game</button><button class="linkbtn" id="btnSaves" type="button">Saves</button></span></div>
+  </div>
+</div>
+
+<div class="screen scrim" id="saves">
+  <div class="card menu">
+    <div class="eyebrow">Story mode</div>
+    <h1>Saves</h1>
+    <div class="slots" id="slotList"></div>
+    <div class="row"><button class="btn primary" id="btnSlotNew" type="button">Start new game</button><button class="btn" id="btnSlotsBack" type="button">Back</button><span class="muted" id="savesHint"></span></div>
   </div>
 </div>
 
@@ -1698,10 +1720,55 @@ class World {
     this.props = new Props(this.terrain);
     this.train = new Train(this, this.route('rail'));
     this.crossings = this.findCrossings();
+    this.addTunnelWalls();
     yield 'World ready';
   }
   buildSync() { for (const _ of this.build()); return this; }
   route(id) { return this.terrain.routes.find((r) => r.id === id); }
+  /* Calder Tunnel: the lined bore and its portal headwalls, shared by the meshes and the colliders */
+  tunnelSpan() {
+    if (this._tun !== undefined) return this._tun;
+    const R = this.route('tunnel'), T = this.terrain;
+    let i0 = -1, i1 = -1;
+    if (R.covered) for (let i = 0; i <= R.count; i++) if (R.covered[i]) { if (i0 < 0) i0 = i; i1 = i; }
+    if (i0 < 0) return (this._tun = null);
+    i0 = Math.max(0, i0 - 2); i1 = Math.min(R.count, i1 + 2);
+    const hw = R.width / 2 + 1.2, reach = R.width / 2 + 20, N = 16, portals = [];
+    for (const [iP, facing] of [[i0, 1], [i1, -1]]) {
+      const s = iP * R.step, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), rx = dz, rz = -dx;
+      const top = Math.max(12, naturalHeight(p.x, p.z) - p.y + 4), line = [];
+      for (let k = N; k >= 0; k--) {
+        const lx = -reach + 2 * reach * k / N, x = p.x - rx * lx * facing, z = p.z - rz * lx * facing;
+        // the wings rise to the mountain cover laid over the bore, so no gap opens between the two
+        const th = Math.max(T.height(x, z), naturalHeight(x, z)) - p.y + 0.8;
+        line.push([lx, Math.abs(lx) < hw + 3 ? top : Math.max(0.6, th)]);
+      }
+      portals.push({ s, p, dx, dz, facing, top, line });
+    }
+    return (this._tun = { R, i0, i1, hw, reach, portals });
+  }
+  addTunnelWalls() {
+    const tun = this.tunnelSpan(); if (!tun) return;
+    const { R, i0, i1, hw, reach } = tun, S = this.scatter, r = 0.35, off = hw + r;
+    // bore walls: solid up to the crown
+    for (let i = i0; i < i1; i += 2) {
+      const j = Math.min(i + 2, i1), a = R.posAt(i * R.step, {}), b = R.posAt(j * R.step, {}), [adx, adz] = R.dirAt(i * R.step), [bdx, bdz] = R.dirAt(j * R.step);
+      for (const side of [-1, 1]) {
+        const o = S.addSegment(a.x + adz * side * off, a.z - adx * side * off, b.x + bdz * side * off, b.z - bdx * side * off, Math.max(a.y, b.y) + 8.2, 'barrier'); o.r = r;
+      }
+    }
+    // headwall wings either side of each portal mouth
+    for (const P of tun.portals) {
+      const rx = P.dz, rz = -P.dx, at = (lx) => { // wall height at lateral offset lx, from the headwall outline
+        const L = P.line; for (let k = 0; k < L.length - 1; k++) { const [x0, h0] = L[k], [x1, h1] = L[k + 1]; if ((lx - x0) * (lx - x1) <= 0) return lerp(h0, h1, (lx - x0) / ((x1 - x0) || 1)); } return 0.6;
+      };
+      for (const side of [-1, 1]) for (let k = 0; k < 6; k++) {
+        const la = side * lerp(hw, reach, k / 6), lb = side * lerp(hw, reach, (k + 1) / 6);
+        const pa = [P.p.x - rx * la * P.facing, P.p.z - rz * la * P.facing], pb = [P.p.x - rx * lb * P.facing, P.p.z - rz * lb * P.facing];
+        const o = S.addSegment(pa[0], pa[1], pb[0], pb[1], P.p.y + Math.max(at(la), at(lb)), 'barrier'); o.r = 0.6;
+      }
+    }
+  }
   /* construction barrier across the west approach of the Calder Tunnel (story mode) */
   tunnelGatePose() {
     if (this._gatePose) return this._gatePose;
@@ -3326,13 +3393,8 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
   },
   /* ---------- Calder Tunnel: lined bore, mountain cover, portals ---------- */
   buildTunnel() {
-    const R = this.world.route('tunnel'), T = this.world.terrain;
-    if (!R.covered) return;
-    let i0 = -1, i1 = -1;
-    for (let i = 0; i <= R.count; i++) if (R.covered[i]) { if (i0 < 0) i0 = i; i1 = i; }
-    if (i0 < 0) return;
-    i0 = Math.max(0, i0 - 2); i1 = Math.min(R.count, i1 + 2);
-    const hw = R.width / 2 + 1.2;
+    const tun = this.world.tunnelSpan(); if (!tun) return;
+    const { R, i0, i1, hw } = tun;
     // cross-section, inward-facing
     const prof = [];
     prof.push([-hw, -0.4], [-hw, 4.6]);
@@ -3367,7 +3429,7 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     };
     const tube = new THREE.Mesh(g, tm); tube.castShadow = true; tube.receiveShadow = true; this.scene.add(tube);
     // mountain cover: the untouched mountainside laid back over the bore
-    const reach = R.width / 2 + 14 + 6, W = 12;
+    const reach = tun.reach, W = 12;
     const cp = [], cn = [], cA = [], cB = [], cC = [], cD = [], ci = [];
     for (let i = i0; i <= i1; i++) {
       const s = i * R.step, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), rx = dz, rz = -dx;
@@ -3399,17 +3461,10 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     concTex.repeat.set(1 / 4, 1 / 3);
     const conc = new THREE.MeshStandardMaterial({ map: concTex, color: 0xd8d2c8, roughness: 0.92 });
     const capMat = new THREE.MeshStandardMaterial({ color: 0x6d6760, roughness: 0.85 });
-    for (const [iP, facing] of [[i0, 1], [i1, -1]]) {
-      const s = iP * R.step, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s);
-      const top = Math.max(12, naturalHeight(p.x, p.z) - p.y + 4);
-      // the headwall top steps down with the cut slopes either side instead of standing proud of them
+    for (const { p, dx, dz, facing, top, line } of tun.portals) {
+      // the headwall top follows the ground and the mountain cover either side instead of standing proud of them
       const shape = new THREE.Shape(); shape.moveTo(-reach, -1); shape.lineTo(reach, -1);
-      const rx = dz, rz = -dx, N = 16;
-      for (let k = N; k >= 0; k--) {
-        const lx = -reach + 2 * reach * k / N;
-        const th = T.height(p.x - rx * lx * facing, p.z - rz * lx * facing) - p.y + 0.8;
-        shape.lineTo(lx, Math.abs(lx) < hw + 3 ? top : clamp(th, 0.6, top));
-      }
+      for (const [lx, h] of line) shape.lineTo(lx, h);
       shape.lineTo(-reach, -1);
       const hole = new THREE.Path(); hole.moveTo(-hw, -0.5); hole.lineTo(-hw, 4.6); hole.absarc(0, 4.6, hw, Math.PI, 0, true); hole.lineTo(hw, -0.5); hole.lineTo(-hw, -0.5);
       shape.holes.push(hole);
@@ -4672,22 +4727,43 @@ class Dialogue {
   }
 }
 
+const SAVE_SLOTS = 3;
 const CHAPTERS = ['The Festival', 'One More Win', 'The Tunnel', "Calder's Crews", 'Coast to Canyon', 'Epilogue'];
 class Story {
   constructor(game) {
     this.g = game; this.d = new Dialogue(game);
-    this.reset(false);
+    const D = Store.data;
+    // story progress lives in save slots; older saves had a single story, which becomes slot 1
+    if (!Array.isArray(D.slots)) {
+      D.slots = new Array(SAVE_SLOTS).fill(null); D.slot = 0;
+      const o = D.story;
+      if (o && (o.ch || Object.keys(o.flags || {}).length || Object.keys(o.won || {}).length)) D.slots[0] = { ch: o.ch || 0, flags: o.flags || {}, won: o.won || {}, t: Date.now() };
+      delete D.story; Store.save();
+    }
+    while (D.slots.length < SAVE_SLOTS) D.slots.push(null);
+    if (!(D.slot >= 0 && D.slot < SAVE_SLOTS)) D.slot = 0;
+    this.s = D.slots[D.slot] || Story.blank();
     this.mode = Store.data.mode === 'free' ? 'free' : 'story';
     this.radioT = 90 + Math.random() * 60; this.lastRadio = []; this.trainWarnT = 0; this.inTunnel = false; this.region = null; this.fenceT = 0;
   }
-  reset(wipe) {
-    const st = wipe ? {} : (Store.data.story || {});
-    this.s = Store.data.story = { ch: st.ch || 0, flags: st.flags || {}, won: st.won || {} };
-    if (wipe) this.save();
+  static blank() { return { ch: 0, flags: {}, won: {}, t: 0 }; }
+  /* the slot story mode continues; null when it has never been played */
+  get slot() { return Store.data.slots[Store.data.slot]; }
+  /* play from slot i, wiping it first when fresh */
+  useSlot(i, fresh) {
+    const D = Store.data;
+    if (fresh || !D.slots[i]) D.slots[i] = Story.blank();
+    D.slot = i; this.s = D.slots[i]; this.save();
   }
+  deleteSlot(i) {
+    const D = Store.data; D.slots[i] = null;
+    if (D.slot === i) { const k = D.slots.findIndex(Boolean); D.slot = k < 0 ? 0 : k; this.s = D.slots[D.slot] || Story.blank(); }
+    this.save();
+  }
+  freeSlot() { return Store.data.slots.findIndex((x) => !x); }
   setMode(m) { this.mode = m; Store.data.mode = m; this.save(); }
   get free() { return this.mode === 'free'; }
-  save() { Store.save(); }
+  save() { if (!this.free && this.s === this.slot) this.s.t = Date.now(); Store.save(); }
   get ch() { return this.s.ch; }
   chapterName() { return CHAPTERS[Math.min(this.s.ch, CHAPTERS.length - 1)]; }
   setCh(c) { if (c > this.s.ch) { this.s.ch = c; this.save(); this.g.refreshStory(true); } }
@@ -5355,10 +5431,10 @@ class Game {
     this.bigmap = $('bigmap').getContext('2d');
     $('mStory').addEventListener('click', () => this.startMode('story'));
     $('mFree').addEventListener('click', () => this.startMode('free'));
-    $('btnResetStory').addEventListener('click', () => {
-      if (!this.resetArm) { this.resetArm = true; $('btnResetStory').textContent = 'Click again to wipe story progress'; return; }
-      this.story.reset(true); this.refreshMenu();
-    });
+    $('btnNewGame').addEventListener('click', () => this.newGame());
+    $('btnSaves').addEventListener('click', () => this.showSaves(true));
+    $('btnSlotNew').addEventListener('click', () => this.newGame());
+    $('btnSlotsBack').addEventListener('click', () => this.showSaves(false));
     $('btnMenu').addEventListener('click', () => this.goMenu());
     $('btnStart').addEventListener('click', () => { this.audio.start(); this.startEvent(this.pendingEvent, this.pendingVehicle || this.vehicle); });
     $('btnNotNow').addEventListener('click', () => this.closeEventScreen());
@@ -5448,7 +5524,7 @@ class Game {
     }
   }
   showTitle() {
-    this.state = 'title';
+    this.state = 'title'; this.savesOpen = false; this.screen('saves', false);
     this.carCards($('titleCars'), (vid) => { if (vid !== this.player.spec.id) this.spawnPlayer(vid); });
     this.refreshMenu();
     this.screen('title', true); $('hud').classList.remove('on');
@@ -5595,8 +5671,14 @@ class Game {
     if (I.was('Escape') || I.padPressed(9)) { if (this.state === 'map') this.toggleMap(false); else if (this.state === 'event') this.closeEventScreen(); else this.togglePause(); }
     if ((I.was('KeyM') || I.padPressed(8)) && ['free', 'race', 'map'].includes(this.state)) this.toggleMap();
     if (I.was('KeyC') || I.padPressed(3)) this.rig.mode = (this.rig.mode + 1) % 3;
-    if (this.state === 'title') {
-      if (I.was('Digit1') || I.was('Numpad1')) this.startMode('story');
+    if (this.state === 'title' && this.savesOpen) {
+      if (I.was('Escape') || I.padPressed(1)) { I.pressed.clear(); this.showSaves(false); }
+      else for (let i = 0; i < SAVE_SLOTS; i++) if (I.was('Digit' + (i + 1)) || I.was('Numpad' + (i + 1))) this.startMode('story', i, !Store.data.slots[i]);
+    }
+    else if (this.state === 'title') {
+      if (I.was('KeyN')) this.newGame();
+      else if (I.was('KeyL') && Store.data.slots.some(Boolean)) this.showSaves(true);
+      else if (I.was('Digit1') || I.was('Numpad1')) this.startMode('story');
       else if (I.was('Digit2') || I.was('Numpad2')) this.startMode('free');
       else if (I.was('Enter') || I.padPressed(0)) this.startMode(Store.data.mode === 'free' ? 'free' : 'story');
     }
@@ -5772,23 +5854,63 @@ class Game {
   }
   /* ----- main menu ----- */
   refreshMenu() {
-    const S = this.story, ch = S.s.ch;
-    $('mPips').innerHTML = [0, 1, 2, 3, 4].map((i) => `<i class="${i < Math.min(ch, 5) ? 'on' : ''}"></i>`).join('');
-    $('mChapter').textContent = ch >= 5 ? 'Story complete' : ch === 0 && !S.s.flags.pro ? 'New game' : `Chapter ${ch + 1} · ${S.chapterName()}`;
-    $('btnResetStory').hidden = ch === 0 && !S.s.flags.pro; $('btnResetStory').textContent = 'Start story over'; this.resetArm = false;
+    const S = this.story, sl = S.slot, ch = sl ? sl.ch : 0;
+    $('mPips').innerHTML = this.pips(ch);
+    $('mChapter').textContent = !sl ? 'New game' : `Slot ${Store.data.slot + 1} · ` + (ch >= 5 ? 'Story complete' : `Chapter ${ch + 1} · ${CHAPTERS[ch]}`);
+    $('btnSaves').hidden = !Store.data.slots.some(Boolean);
     const last = Store.data.mode === 'free' ? 'mFree' : 'mStory';
     $('mStory').classList.toggle('last', last === 'mStory'); $('mFree').classList.toggle('last', last === 'mFree');
-    $('menuHint').textContent = this.isTouch ? 'Pick a mode to start driving.' : `Press 1 or 2, or Enter for ${last === 'mFree' ? 'free roam' : 'story'}.`;
+    $('menuHint').textContent = this.isTouch ? 'Pick a mode to start driving.' : `Press 1 or 2, or Enter for ${last === 'mFree' ? 'free roam' : 'story'}. N for a new game${Store.data.slots.some(Boolean) ? ', L for saves' : ''}.`;
   }
-  startMode(m) {
+  pips(ch) { return [0, 1, 2, 3, 4].map((i) => `<i class="${i < Math.min(ch, 5) ? 'on' : ''}"></i>`).join(''); }
+  /* ----- save slots ----- */
+  showSaves(on, hint) {
+    this.savesOpen = on; this.delArm = -1;
+    this.screen('saves', on); this.screen('title', !on);
+    if (on) this.renderSaves(hint || ''); else this.refreshMenu();
+  }
+  renderSaves(hint) {
+    const D = Store.data, list = $('slotList'); list.innerHTML = '';
+    D.slots.forEach((sl, i) => {
+      const row = document.createElement('div'); row.className = 'slot' + (sl ? '' : ' empty') + (sl && i === D.slot ? ' cur' : '');
+      const when = sl && sl.t ? new Date(sl.t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
+      const wins = sl ? Object.keys(sl.won).length : 0;
+      row.innerHTML = `<span class="sn">Slot ${i + 1}</span><span class="si"><b></b><span></span></span><span class="sa"></span>`;
+      row.querySelector('b').textContent = !sl ? 'Empty' : sl.ch >= 5 ? 'Story complete' : `Chapter ${sl.ch + 1} · ${CHAPTERS[sl.ch]}`;
+      const info = row.querySelector('.si span');
+      if (sl) info.innerHTML = `<span class="pips">${this.pips(sl.ch)}</span>`, info.append(`${wins} ${wins === 1 ? 'win' : 'wins'}${when ? ' · ' + when : ''}`);
+      else info.textContent = 'No story yet';
+      const act = row.querySelector('.sa'), btn = (label, cls, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (cls ? ' ' + cls : ''); b.textContent = label; b.onclick = fn; act.appendChild(b); return b; };
+      if (sl) {
+        btn('Continue', 'primary', () => this.startMode('story', i));
+        btn(this.delArm === i ? 'Really delete?' : 'Delete', '', () => {
+          if (this.delArm !== i) { this.delArm = i; this.renderSaves(''); return; }
+          this.delArm = -1; this.story.deleteSlot(i); this.renderSaves('Slot ' + (i + 1) + ' deleted');
+        });
+      } else btn('New game', 'primary', () => this.startMode('story', i, true));
+      list.appendChild(row);
+    });
+    const full = this.story.freeSlot() < 0;
+    $('btnSlotNew').disabled = full; $('btnSlotNew').style.opacity = full ? 0.45 : '';
+    $('savesHint').textContent = hint || (full ? 'All slots are full. Delete one to start a new game.' : '');
+  }
+  newGame() {
+    const k = this.story.freeSlot();
+    if (k < 0) { if (!this.savesOpen) this.showSaves(true); else this.renderSaves(''); return; }
+    this.startMode('story', k, true);
+  }
+  startMode(m, slot, fresh) {
     if (this.state !== 'title') return;
     this.audio.start();
-    const S = this.story; S.setMode(m);
+    const S = this.story;
+    if (m === 'story') S.useSlot(slot === undefined ? Store.data.slot : slot, fresh);
+    if (this.savesOpen) { this.savesOpen = false; this.screen('saves', false); }
+    S.setMode(m);
     this.refreshStory(false);
     // story mode starts you on the right side of the closed tunnel
     if (!S.tunnelOpen() && this.player.pos.x > 1180) { this.player.reset(HUB.x + 18, HUB.z + 46, Math.PI * 0.9, this.world.terrain, 0.5); this.rig.snap(); }
     // a fresh story opens with the voiced intro
-    if (m === 'story' && S.ch === 0 && !S.s.flags.pro) this.startStoryIntro();
+    if (m === 'story' && S.ch === 0 && !S.s.flags.intro) this.startStoryIntro();
     else this.enterFree();
   }
   startStoryIntro() {
@@ -5801,6 +5923,7 @@ class Game {
   }
   endStoryIntro() {
     if (this.state !== 'storyintro') return;
+    this.story.s.flags.intro = 1; this.story.save();
     this.sintro = null; const d = this.story.d; d.skip(); d.queue.length = 0;
     const el = $('intro'); el.classList.remove('bars', 'on', 'story'); $('introCap').classList.remove('show'); $('skip').textContent = 'Skip intro';
     $('hud').appendChild($('dlg'));
