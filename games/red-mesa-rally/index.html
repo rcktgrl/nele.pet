@@ -33,6 +33,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--hazard
 .speedlines { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(255,190,120,.10) 70%, transparent 100%); transition: opacity .25s; }
 
 /* ---------- HUD ---------- */
+/* UI scale setting: HUD pieces, touch buttons and menu cards */
+#hud > *, #touch > *, .screen > .card { zoom: var(--uiscale, 1); }
 #hud { display: none; }
 #hud.on { display: block; }
 .racebox { position: absolute; top: max(14px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); display: grid; gap: 2px; }
@@ -153,6 +155,10 @@ p { margin: 0; font-size: 18px; line-height: 1.4; max-width: 62ch; color: var(--
 .stat { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--dust); }
 .stat i { height: 6px; background: rgba(242,230,211,.15); position: relative; }
 .stat i::after { content: ''; position: absolute; inset: 0; width: var(--v); background: var(--sand); }
+.vols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 18px; }
+.vol { display: grid; grid-template-columns: 74px 1fr 46px; align-items: center; gap: 10px; font-size: 14px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--sand); }
+.vol output { text-align: right; color: var(--dust); font-variant-numeric: tabular-nums; }
+.vol input { width: 100%; min-width: 0; margin: 0; accent-color: var(--flare); cursor: pointer; height: 28px; }
 .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 16px; font-size: 16px; color: var(--dust); }
 .keys b { color: var(--sand); font-weight: 800; }
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -428,9 +434,14 @@ table.res td.t { text-align: right; }
       <button class="btn" id="btnRestart">Restart event</button>
       <button class="btn" id="btnMenu">Main menu</button>
       <button class="btn" id="btnQuality">Quality: high</button>
-      <button class="btn" id="btnSound">Sound: on</button>
-      <button class="btn" id="btnMusic">Music: on</button>
-      <button class="btn" id="btnVoice">Voices: on</button>
+    </div>
+    <div class="eyebrow" style="color:var(--dust)">Settings</div>
+    <div class="vols" id="pauseVols">
+      <label class="vol">Master<input type="range" min="0" max="100" step="5" data-vol="master"><output></output></label>
+      <label class="vol">Effects<input type="range" min="0" max="100" step="5" data-vol="fx"><output></output></label>
+      <label class="vol">Music<input type="range" min="0" max="100" step="5" data-vol="music"><output></output></label>
+      <label class="vol">Voices<input type="range" min="0" max="100" step="5" data-vol="voice"><output></output></label>
+      <label class="vol">UI scale<input type="range" min="70" max="150" step="5" id="uiScale"><output></output></label>
     </div>
     <div class="keys">
       <div><b>W / ↑</b> throttle</div><div><b>S / ↓</b> brake · reverse</div><div><b>A D</b> steer</div>
@@ -3501,8 +3512,10 @@ reflectedLight.indirectDiffuse *= vA.w; reflectedLight.indirectSpecular *= vA.w;
     for (let k = 0; k < ch.nj; k += step) zs.push(ch.z0 + k); zs.push(ch.z0 + ch.nj);
     const nx = xs.length, nz = zs.length, ring = 2 * (nx + nz) - 4, nv = nx * nz + ring;
     const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), A = new Float32Array(nv * 4), B = new Float32Array(nv * 4), Cc = new Float32Array(nv * 4), D = new Float32Array(nv * 3);
+    const M = T.metro, overMetro = (x, z) => M && x > M.x0 && z > M.z0 && x < M.x0 + M.nx * M.G && z < M.z0 + M.nz * M.G;
     const put = (k, ix, iz, dy) => {
       const gi = iz * Nx + ix, x = T.x0 + ix * c, z = T.z0 + iz * c;
+      if (dy && overMetro(x, z)) dy = Math.min(dy, Math.max(0, H[gi] - METRO.ceil - 0.05)); // skirts would hang down into the tube
       pos[k * 3] = x; pos[k * 3 + 1] = H[gi] - dy; pos[k * 3 + 2] = z;
       const l = H[iz * Nx + Math.max(0, ix - 1)], r = H[iz * Nx + Math.min(Nx - 1, ix + 1)], d = H[Math.max(0, iz - 1) * Nx + ix], u = H[Math.min(T.Nz - 1, iz + 1) * Nx + ix];
       const nxv = l - r, nzv = d - u, ny = 2 * c, L = Math.hypot(nxv, ny, nzv);
@@ -5180,7 +5193,7 @@ class Music {
     this.ampGain = ctx.createGain(); this.ampGain.gain.value = 0.16;
     this.amp.connect(cab).connect(cab2).connect(this.ampGain).connect(this.bus);
     const nb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; this.noise = nb;
-    this.song = null; this.level = 0; this.target = 0; this.final = false; this.enabled = true;
+    this.song = null; this.level = 0; this.target = 0; this.final = false; this.vol = 1;
     this.freeRoam = false; this.freeBars = 0;
     this.timer = setInterval(() => this.schedule(), 25);
   }
@@ -5199,9 +5212,10 @@ class Music {
   setLevel(l) { this.target = clamp(l, 0, 3); }
   setFinal(on) { if (on === this.final) return; this.final = on; this.target = on ? 3 : this.target; }
   duck(amount, dur) { const t = this.ctx.currentTime; const f = this.filter.frequency; f.cancelScheduledValues(t); f.setValueAtTime(f.value, t); f.exponentialRampToValueAtTime(Math.max(300, 14000 * (1 - amount)), t + 0.08); f.setTargetAtTime(14000, t + dur, 0.4); }
-  setPaused(p) { const t = this.ctx.currentTime; this.out.gain.setTargetAtTime(this.enabled ? (p ? 0.14 : 0.42) : 0, t, 0.15); this.filter.frequency.setTargetAtTime(p ? 900 : 14000, t, 0.15); }
-  setEnabled(on) { this.enabled = on; this.out.gain.setTargetAtTime(on ? 0.42 : 0, this.ctx.currentTime, 0.1); }
-  speaking(on) { this.talk = on; this.out.gain.setTargetAtTime(this.enabled ? (on ? 0.17 : 0.42) : 0, this.ctx.currentTime, 0.2); }
+  gainNow() { return this.vol * (this.paused ? 0.14 : this.talk ? 0.17 : 0.42); }
+  setPaused(p) { const t = this.ctx.currentTime; this.paused = p; this.out.gain.setTargetAtTime(this.gainNow(), t, 0.15); this.filter.frequency.setTargetAtTime(p ? 900 : 14000, t, 0.15); }
+  setVolume(v) { this.vol = v; this.out.gain.setTargetAtTime(this.gainNow(), this.ctx.currentTime, 0.1); }
+  speaking(on) { this.talk = on; this.out.gain.setTargetAtTime(this.gainNow(), this.ctx.currentTime, 0.2); }
   stop() { this.song = null; }
   /* ----- composition ----- */
   makeFreeSong() {
@@ -5724,7 +5738,7 @@ const BACKROAD_EVENTS = ['orchard', 'dunes', 'kestrel'];
 class Dialogue {
   constructor(game) {
     this.g = game; this.queue = []; this.cur = null; this.t = 0; this.buffers = new Map(); this.loading = new Map();
-    this.enabled = Store.data.voice !== false;
+    this.vol = Store.vol('voice');
     this.el = { box: $('dlg'), ini: $('dlgIni'), por: $('dlgPor'), name: $('dlgName'), role: $('dlgRole'), text: $('dlgText') };
     this.el.box.addEventListener('click', () => this.skip());
   }
@@ -5752,7 +5766,7 @@ class Dialogue {
   }
   stopCurrent() { if (this.src) { try { this.src.stop(); } catch (e) { /* already stopped */ } this.src = null; } this.cur = null; }
   skip() { this.stopCurrent(); this.t = 0; }
-  setEnabled(on) { this.enabled = on; Store.data.voice = on; Store.save(); if (!on && this.src) { try { this.src.stop(); } catch (e) { /* ignore */ } this.src = null; } }
+  setVolume(v) { this.vol = v; if (this.vg) this.vg.gain.setTargetAtTime(1.15 * v, this.ctx().currentTime, 0.05); }
   start(id) {
     const L = VO_DATA.lines[id], who = VO_DATA.cast[L.who];
     this.cur = id; this.t = 0; this.dur = L.dur + 0.5;
@@ -5762,13 +5776,13 @@ class Dialogue {
     e.por.style.setProperty('--who', who.color);
     e.box.hidden = false; e.box.classList.remove('in'); void e.box.offsetWidth; e.box.classList.add('in');
     const ctx = this.ctx(), buf = this.buffers.get(id);
-    if (ctx && buf && this.enabled) {
+    if (ctx && buf && this.vol > 0) {
       const t = ctx.currentTime;
       const src = ctx.createBufferSource(); src.buffer = buf;
       const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 260;
       const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4200;
       const peak = ctx.createBiquadFilter(); peak.type = 'peaking'; peak.frequency.value = 1800; peak.gain.value = 5;
-      const g = ctx.createGain(); g.gain.value = 1.15;
+      const g = this.vg = ctx.createGain(); g.gain.value = 1.15 * this.vol;
       src.connect(hp).connect(lp).connect(peak).connect(g).connect(this.g.audio.master);
       src.start(t + 0.12); this.src = src; this.dur = buf.duration + 0.45;
       this.squelch(t); this.squelchAt = t + 0.12 + buf.duration;
@@ -5776,10 +5790,10 @@ class Dialogue {
     if (this.g.audio.music) this.g.audio.music.speaking(true);
   }
   squelch(t) {
-    const ctx = this.ctx(); if (!ctx || !this.enabled) return;
+    const ctx = this.ctx(); if (!ctx || !(this.vol > 0)) return;
     const n = ctx.createBufferSource(); n.buffer = this.g.audio.noiseBuf;
     const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2500; f.Q.value = 0.8;
-    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09 * this.vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
     n.connect(f).connect(g).connect(this.g.audio.master); n.start(t, Math.random()); n.stop(t + 0.12);
   }
   update(dt) {
@@ -6075,6 +6089,14 @@ const Store = {
   data: { best: {}, vehicle: 'rally', quality: null, sound: true },
   load() { try { const s = localStorage.getItem(this.key); if (s) Object.assign(this.data, JSON.parse(s)); } catch (e) { /* storage blocked */ } },
   save() { try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) { /* storage blocked */ } },
+  // 0..1 per channel; falls back to the old on/off toggles
+  vol(k) {
+    const v = this.data.vol && this.data.vol[k];
+    if (typeof v === 'number') return clamp(v, 0, 1);
+    const legacy = { master: 'sound', music: 'music', voice: 'voice' }[k];
+    return legacy && this.data[legacy] === false ? 0 : 1;
+  },
+  setVol(k, v) { this.data.vol = { ...this.data.vol, [k]: clamp(v, 0, 1) }; },
 };
 
 /* ---------------- Input ---------------- */
@@ -6084,7 +6106,7 @@ class Input {
     this.touch = { left: 0, right: 0, gas: 0, brake: 0, boost: 0, hand: 0 };
     this.steer = 0; this.usingPad = false;
     addEventListener('keydown', (e) => {
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Space'].includes(e.key) || e.code === 'Space') e.preventDefault();
+      if ((['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Space'].includes(e.key) || e.code === 'Space') && e.target.type !== 'range') e.preventDefault();
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code); this.usingPad = false;
     });
@@ -6136,14 +6158,15 @@ class Input {
 
 /* ---------------- Audio ---------------- */
 class SoundFX {
-  constructor() { this.ctx = null; this.enabled = Store.data.sound !== false; }
+  constructor() { this.ctx = null; }
   start() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
     const ctx = this.ctx = new AC();
-    const master = this.master = ctx.createGain(); master.gain.value = this.enabled ? 0.7 : 0; master.connect(ctx.destination);
-    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 4; comp.connect(master); this.out = comp;
-    this.music = new Music(ctx, master); this.music.setEnabled(Store.data.music !== false);
+    const master = this.master = ctx.createGain(); master.gain.value = 0.7 * Store.vol('master'); master.connect(ctx.destination);
+    this.fxGain = ctx.createGain(); this.fxGain.gain.value = Store.vol('fx'); this.fxGain.connect(master);
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 4; comp.connect(this.fxGain); this.out = comp;
+    this.music = new Music(ctx, master); this.music.setVolume(Store.vol('music'));
     const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; this.noiseBuf = noiseBuf;
     const noise = () => { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true; s.start(); return s; };
     // engine
@@ -6166,7 +6189,13 @@ class SoundFX {
     this.aiO = ctx.createOscillator(); this.aiO.type = 'sawtooth'; this.aiF = ctx.createBiquadFilter(); this.aiF.type = 'lowpass'; this.aiF.frequency.value = 600; this.aiG = ctx.createGain(); this.aiG.gain.value = 0;
     this.aiO.connect(this.aiF).connect(this.aiG).connect(this.out); this.aiO.start();
   }
-  setEnabled(on) { this.enabled = on; if (this.master) this.master.gain.setTargetAtTime(on ? 0.7 : 0, this.ctx.currentTime, 0.05); }
+  setVolume(k, v) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (k === 'master') this.master.gain.setTargetAtTime(0.7 * v, t, 0.05);
+    else if (k === 'fx') this.fxGain.gain.setTargetAtTime(v, t, 0.05);
+    else if (k === 'music') this.music.setVolume(v);
+  }
   update(car, nearest) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime, sp = car.spec, E = sp.engine;
@@ -6759,10 +6788,22 @@ class Game {
     $('btnQuit').addEventListener('click', () => { this.togglePause(false); this.endEvent(); });
     $('btnRestart').addEventListener('click', () => { this.togglePause(false); const ev = this.race.ev; this.endEvent(true); this.startEvent(ev, this.vehicle); });
     $('btnQuality').addEventListener('click', () => { const order = ['high', 'medium', 'low']; this.quality = order[(order.indexOf(this.quality) + 1) % 3]; Store.data.quality = this.quality; Store.save(); this.gfx.setQuality(this.quality); this.onResize(); this.refreshPauseButtons(); });
-    $('btnMusic').addEventListener('click', () => { this.audio.start(); const on = Store.data.music === false; Store.data.music = on; Store.save(); if (this.audio.music) this.audio.music.setEnabled(on); this.refreshPauseButtons(); });
-    $('btnVoice').addEventListener('click', () => { this.audio.start(); this.story.d.setEnabled(!this.story.d.enabled); this.refreshPauseButtons(); });
+    for (const el of document.querySelectorAll('#pauseVols input[data-vol]')) {
+      const k = el.dataset.vol, out = el.nextElementSibling;
+      el.value = Math.round(Store.vol(k) * 100); out.textContent = el.value;
+      el.addEventListener('input', () => {
+        const v = el.value / 100; out.textContent = el.value;
+        this.audio.start(); Store.setVol(k, v);
+        if (k === 'voice') this.story.d.setVolume(v); else this.audio.setVolume(k, v);
+      });
+      el.addEventListener('change', () => Store.save());
+    }
+    const ui = $('uiScale'), uiOut = ui.nextElementSibling;
+    const setUi = () => { uiOut.textContent = ui.value + '%'; document.documentElement.style.setProperty('--uiscale', ui.value / 100); };
+    ui.value = Math.round((Store.data.uiScale || 1) * 100); setUi();
+    ui.addEventListener('input', setUi);
+    ui.addEventListener('change', () => { Store.data.uiScale = ui.value / 100; Store.save(); });
     $('bigmap').width = MAP_W; $('bigmap').height = MAP_H; $('mapwrap').style.aspectRatio = MAP_W + ' / ' + MAP_H;
-    $('btnSound').addEventListener('click', () => { this.audio.start(); this.audio.setEnabled(!this.audio.enabled); Store.data.sound = this.audio.enabled; Store.save(); this.refreshPauseButtons(); });
     $('btnMapClose').addEventListener('click', () => this.toggleMap(false));
     $('btnTravel').addEventListener('click', () => { const s = this.mapSel; if (!s || s.hidden) return; this.toggleMap(false); this.travelTo(s); });
     $('btnWaypoint').addEventListener('click', () => { this.waypoint = this.mapSel; this.toggleMap(false); });
@@ -6788,9 +6829,6 @@ class Game {
   typeLabel(ev) { return ev.type === 'race' ? `Race · ${ev.laps} laps · ${ev.ai} rivals` : ev.type === 'sprint' ? `Sprint · point to point · ${ev.ai} rivals` : this.world.route(ev.route).closed ? `Time attack · ${ev.laps} laps · solo` : 'Time attack · point to point · solo'; }
   refreshPauseButtons() {
     $('btnQuality').textContent = 'Quality: ' + this.quality;
-    $('btnSound').textContent = 'Sound: ' + (this.audio.enabled ? 'on' : 'off');
-    $('btnMusic').textContent = 'Music: ' + (Store.data.music === false ? 'off' : 'on');
-    $('btnVoice').textContent = 'Voices: ' + (this.story.d.enabled ? 'on' : 'off');
     const inRace = !!this.race;
     $('btnQuit').hidden = !inRace; $('btnRestart').hidden = !inRace;
     $('pauseTitle').textContent = inRace ? this.race.ev.name : this.story.free ? 'Free roam' : 'Story · ' + this.story.chapterName();
