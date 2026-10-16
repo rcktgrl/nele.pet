@@ -529,10 +529,11 @@ const SLIP = { x: 4650, z0: FLAT.z1 - 6, z1: FLAT.z1 + 62, hw: 8, y1: -4.6 };
 const SHIP = { x0: 5153, x1: 5191, z0: -650, z1: -390, y: 12.5, rampZ: -555, rampHw: 6, rampX0: 5106 };
 /* rooftop car parks: a ramp up the side of each block, a kicker on the high roof aimed at the low one */
 const ROOFTOPS = [{ bi: 10, bj: 1, h: 15, side: -1 }, { bi: 11, bj: 1, h: 11, side: 1 }];
-/* Calder Metro: a loop of tube under downtown. The road runs on the outer side of the tube, the train on the inner side behind
-   a barrier, and four portal buildings each have a ramp driven straight through their ground floor down to the loop.
+/* Calder Metro: a loop of twin-track tube under downtown, no road and no barrier. Cars drive on the rails: the inner track
+   carries the stopping service (it runs with the race and waits at the platforms), the outer track the express, which runs
+   the other way and never stops. Four portal buildings each have a ramp driven straight through their ground floor down to it.
    Lateral offsets are measured to the right of the loop's direction of travel, which is the inside of the loop. */
-const METRO = { y: 0.5, ceil: 4.8, under: CITY.y - 1.5, wallL: -7, bar: 6.6, track: 10.2, wallR: 13.6, plat: 20, rampLen: 58, rampHw: 5.5,
+const METRO = { y: 0.5, ceil: 4.8, under: CITY.y - 1.5, wallL: -5.2, tracks: [-2.3, 2.3], wallR: 5, plat: 11.4, rampLen: 58, rampHw: 5.5,
   corners: [[2, 2], [10, 2], [10, 8], [2, 8]],
   portals: [{ bi: 4, bj: 1, dir: 's', name: 'Kingsway' }, { bi: 1, bj: 4, dir: 'e', name: 'Westgate' }, { bi: 6, bj: 8, dir: 'n', name: 'Dock Road' }, { bi: 10, bj: 5, dir: 'w', name: 'Eastside' }],
   stations: [{ name: 'CALDER CENTRAL', at: [6, 2] }, { name: 'HARBOUR STREET', at: [10, 5] }, { name: 'MARKET SQUARE', at: [6, 8] }, { name: 'WESTGATE', at: [2, 5] }],
@@ -2112,23 +2113,38 @@ class Train {
   }
 }
 
-/* ---------- Calder Metro train: four cars round the loop's inner track, stopping at each station ---------- */
+/* ---------- Calder Metro trains: four cars round one of the loop's two tracks. The stopper runs with the loop and waits at
+   each station; the express runs the other way and never stops. ---------- */
 class MetroTrain {
-  constructor(world) {
+  constructor(world, o) {
     const R0 = world.terrain.metro.R, pts = [];
-    for (let s = 0; s < R0.length; s += 6) { const p = R0.posAt(s, {}), [dx, dz] = R0.dirAt(s); pts.push([p.x - dz * METRO.track, p.z + dx * METRO.track]); }
+    this.lat = o.lat; this.dir = o.reverse ? -1 : 1; this.express = !!o.express;
+    for (let s = 0; s < R0.length; s += 6) { const p = R0.posAt(s, {}), [dx, dz] = R0.dirAt(s); pts.push([p.x - dz * o.lat, p.z + dx * o.lat]); }
+    if (o.reverse) pts.reverse();
     const R = this.R = new Route({ id: 'metro-track', closed: true, keepStart: true, width: 4, pts, sub: 3 });
     R.y.fill(METRO.y);
     this.cars = [0, 1, 2, 3].map((k) => ({ k, len: 18, off: 9 + k * 18.6, pose: { x: 0, y: 0, z: 0, yaw: 0, dx: 0, dz: 1 } }));
     this.length = 4 * 18.6;
-    this.stops = METRO.stations.map((st) => R.wrapS(R.project(CX(st.at[0]), CZ(st.at[1]), 0, -1).s + this.length / 2));
-    this.next = 1; this.s = this.stops[0]; this.v = 0; this.wait = 8; this.vmax = 19;
+    this.stops = this.express ? [] : METRO.stations.map((st) => R.wrapS(R.project(CX(st.at[0]), CZ(st.at[1]), 0, -1).s + this.length / 2));
+    this.vmax = o.vmax;
+    this.place(o.at || 0);
+  }
+  /* put the train down at s along its track: the stopper at the next station, doors open; the express at speed */
+  place(s) {
+    this.s = this.R.wrapS(s); this.v = this.stops.length ? 0 : this.vmax; this.wait = 0;
+    if (this.stops.length) {
+      let k = 0; for (let i = 1; i < this.stops.length; i++) if (this.ahead(this.stops[i]) < this.ahead(this.stops[k])) k = i;
+      this.s = this.stops[k]; this.next = (k + 1) % this.stops.length; this.wait = 8;
+    }
     this.update(0);
   }
+  /* place the train at the track point beside (x, z) on the loop */
+  placeNear(x, z, along = 0) { this.place(this.R.project(x, z, 0, -1).s + along); }
   ahead(target) { const L = this.R.length; return (((target - this.s) % L) + L) % L; }
   update(dt) {
     const R = this.R;
-    if (this.wait > 0) { this.wait -= dt; this.v = 0; }
+    if (!this.stops.length) { this.v += clamp(this.vmax - this.v, -1.6 * dt, 1.0 * dt); this.s = R.wrapS(this.s + this.v * dt); }
+    else if (this.wait > 0) { this.wait -= dt; this.v = 0; }
     else {
       const dist = this.ahead(this.stops[this.next]);
       const target = Math.min(this.vmax, Math.sqrt(2 * 0.9 * Math.max(0, dist - 0.5)) + 0.3);
@@ -2144,6 +2160,8 @@ class MetroTrain {
       P.x = (a.x + b.x) / 2; P.z = (a.z + b.z) / 2; P.y = METRO.y + 0.3; P.dx = dx / l; P.dz = dz / l; P.yaw = Math.atan2(P.dx, P.dz);
     }
   }
+  /* there is no barrier any more: whoever is on the track when the train arrives gets hit like the freight hits them */
+  collide(car, sph) { Train.prototype.collide.call(this, car, sph); }
 }
 
 /* ---------- World ---------- */
@@ -2167,10 +2185,29 @@ class World {
     this.addTunnelWalls();
     this.addQuays();
     this.addMetroWalls();
-    this.metroTrain = new MetroTrain(this);
+    this.metroTrains = this.terrain.metro ? [
+      new MetroTrain(this, { lat: METRO.tracks[1], vmax: 19 }),
+      new MetroTrain(this, { lat: METRO.tracks[0], reverse: true, express: true, vmax: 23, at: 1700 }),
+    ] : [];
     yield 'World ready';
   }
   buildSync() { for (const _ of this.build()); return this; }
+  /* the metro track at (x, z) with the most room before a train gets there: where to put a car back down */
+  metroLane(x, z) {
+    let best = METRO.tracks[0], room = -1;
+    for (const l of METRO.tracks) {
+      let d = 1e9;
+      for (const mt of this.metroTrains) if (mt.lat === l) for (const c of mt.cars) d = Math.min(d, Math.hypot(c.pose.x - x, c.pose.z - z) - (mt.v > 1 ? 40 : 0));
+      if (d > room) { room = d; best = l; }
+    }
+    return best;
+  }
+  /* a metro race: both trains out on the far side of the loop from the start line */
+  resetMetro() {
+    const M = this.terrain.metro; if (!M) return;
+    const p = M.R.posAt(M.R.length * 0.5, {});
+    for (const mt of this.metroTrains) mt.placeNear(p.x, p.z);
+  }
   route(id) { return this.terrain.routes.find((r) => r.id === id); }
   /* Calder Tunnel: the lined bore and its portal headwalls, shared by the meshes and the colliders */
   tunnelSpan() {
@@ -2216,7 +2253,7 @@ class World {
       }
     }
   }
-  /* metro walls: the loop's outer wall (open where the portal ramps come in), the barrier in front of the track, the ramp walls.
+  /* metro walls: the loop's outer wall (open where the portal ramps come in), the inner wall, the ramp walls.
      They only touch cars that are down in the metro, and nothing else down there touches those cars. */
   addMetroWalls() {
     const M = this.terrain.metro; if (!M) return;
@@ -2233,7 +2270,6 @@ class World {
     const gaps = M.spurs.map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]).sort((a, b) => a[0] - b[0]);
     let s = gaps[gaps.length - 1][1] - R.length;
     for (const [g0, g1] of gaps) { line(s, g0, METRO.wallL - 0.3, top, 0.3); s = g1; }
-    line(0, R.length, METRO.bar, METRO.y + 1.1, 0.35);
     line(0, R.length, METRO.wallR, top, 0.3);
     for (const sp of M.spurs) for (const sd of [-1, 1]) {
       const l = sd * (METRO.rampHw + 0.3), aEnd = sp.L + METRO.wallL + 2 - 0.3;
@@ -2373,7 +2409,7 @@ class World {
   step(dt) {
     this.time += dt;
     if (this.train) this.train.update(dt);
-    if (this.metroTrain) this.metroTrain.update(dt);
+    for (const mt of this.metroTrains) mt.update(dt);
     const T = this.terrain;
     for (const c of this.cars) if (!c.asleep) { T.probeY = c.under ? Math.min(c.pos.y, METRO.under - 0.5) : c.pos.y; c.step(dt, this); }
     T.probeY = Infinity;
@@ -2439,6 +2475,7 @@ class World {
         }
       }
       if (this.train) this.train.collide(c, sph);
+      if (c.under) for (const mt of this.metroTrains) mt.collide(c, sph);
       for (const p of P.list) {
         const dx = p.x - c.pos.x, dz = p.z - c.pos.z;
         if (dx * dx + dz * dz > 36) continue;
@@ -2499,7 +2536,7 @@ class World {
 class AIDriver {
   constructor(car, route, opts) {
     this.car = car; this.route = route; this.s = opts.s || 0; this.lane = opts.lane || 0; this.baseLane = this.lane;
-    this.traffic = !!opts.traffic; this.vcap = opts.vcap || 99;
+    this.traffic = !!opts.traffic; this.vcap = opts.vcap || 99; this.metro = opts.metro || null;
     this.skill = opts.skill || 0.9; this.aggr = opts.aggr || 0.5; this.stuck = 0; this.bestS = 0; this.revT = 0; this.boostT = 0; this.respawn = false; this.rnd = mulberry32(opts.seed || 1);
     this._p = new V3(); this._l = new V3(); this._qi = new Q4();
   }
@@ -2513,7 +2550,10 @@ class AIDriver {
     const speed = c.vel.length();
     // avoidance: steer lane around cars ahead (traffic keeps its lane and queues instead)
     let want = this.baseLane; this.gap = 1e9;
-    for (const o of cars) {
+    this.switchT = (this.switchT || 0) - dt;
+    const train = this.metro ? this.dodgeTrains(speed, cars) : null;
+    if (train) want = train.lane;
+    if (!train) for (const o of cars) {
       if (o === c || o.asleep) continue;
       if (this.traffic) {
         const dx = o.pos.x - c.pos.x, dz = o.pos.z - c.pos.z; if (dx * dx + dz * dz > 1600) continue;
@@ -2526,8 +2566,8 @@ class AIDriver {
       if (this._l.z < -2 && this._l.z > -18 && Math.abs(this._l.x) < 2.6) { want += this._l.x > 0 ? -3.2 : 3.2; if (this.aggr > 0.7 && o.isPlayer) want = this.baseLane + this._l.x * 0.6; }
     }
     const hw = R.width / 2 - (R.width < 14 ? 3 : 2.2);
-    this.lane = lerp(this.lane, clamp(want, -hw, hw), 1 - Math.exp(-dt * 1.5));
-    const look = 9 + speed * 0.62;
+    this.lane = lerp(this.lane, clamp(want, -hw, hw), 1 - Math.exp(-dt * (train ? 3 : 1.5)));
+    const look = train ? 7 + speed * 0.45 : 9 + speed * 0.62; // the metro's walls hug the rails: aim closer so corners are not cut into them
     const p = R.posAt(this.s + look, this._p);
     const [dx, dz] = R.dirAt(this.s + look);
     p.x += -dz * this.lane; p.z += dx * this.lane;
@@ -2564,6 +2604,7 @@ class AIDriver {
       if (v < vmax) vmax = v;
     }
     vmax *= this.skill * (rubber || 1);
+    if (train) { if (train.brake < 1e9) vmax = Math.min(vmax, Math.sqrt(2 * 6.5 * Math.max(0, train.brake - 10))); vmax = Math.min(vmax, train.follow); }
     if (this.traffic) { vmax = Math.min(vmax, this.vcap); if (this.gap < 40) vmax = Math.min(vmax, Math.max(0, (this.gap - 9) * 0.7)); }
     if (c.surfaceMud > 0.3) vmax *= 0.92;
     if (pr.dist > R.width) { vmax = Math.min(vmax, 20); }
@@ -2587,6 +2628,43 @@ class AIDriver {
   }
 }
 
+/* the metro: ride whichever track has no train bearing down on it, pass slower cars on the other track when it is clear,
+   and stop short if neither track has room */
+AIDriver.prototype.dodgeTrains = function (speed, cars) {
+  const R = this.route, L = R.length, tracks = METRO.tracks, ttc = tracks.map(() => 1e9), gap = tracks.map(() => 1e9);
+  const wrap = (d) => (d > L / 2 ? d - L : d < -L / 2 ? d + L : d), trackOf = (lat) => (Math.abs(lat - tracks[0]) < Math.abs(lat - tracks[1]) ? 0 : 1);
+  for (const tr of this.metro) {
+    const k = tracks.indexOf(tr.lat), vt = tr.dir * tr.v; if (k < 0) continue;
+    let lo = 1e9, hi = -1e9;
+    for (const c of tr.cars) {
+      const pr = R.project(c.pose.x, c.pose.z, this.s, 260); if (pr.dist > 6) continue;
+      const d = wrap(pr.s - this.s); lo = Math.min(lo, d - c.len / 2); hi = Math.max(hi, d + c.len / 2);
+    }
+    if (lo > hi) continue;
+    let t = 1e9;
+    if (lo < 3 && hi > -3) t = 0; // alongside
+    else if (lo >= 3) { gap[k] = Math.min(gap[k], lo); if (speed - vt > 0.1) t = (lo - 3) / (speed - vt); }
+    else if (vt - speed > 0.1) t = (-hi - 3) / (vt - speed); // catching us up from behind
+    ttc[k] = Math.min(ttc[k], t);
+  }
+  // the other cars: who is beside us on each track, and who is ahead on it
+  const busy = [false, false], carGap = [1e9, 1e9], carV = [0, 0];
+  for (const o of cars) {
+    if (o === this.car || o.asleep) continue;
+    const dx = o.pos.x - this.car.pos.x, dz = o.pos.z - this.car.pos.z; if (dx * dx + dz * dz > 2500) continue;
+    const pr = R.project(o.pos.x, o.pos.z, this.s, 60), d = wrap(pr.s - this.s), k = trackOf(pr.lat);
+    if (d > -8 && d < 10) busy[k] = true;
+    if (d > 3 && d < carGap[k]) { carGap[k] = d; carV[k] = o.wrecked ? 0 : o.vel.length(); }
+  }
+  if (this.track === undefined) this.track = trackOf(this.baseLane);
+  let o = 1 - this.track;
+  if (ttc[this.track] < 4.5 && ttc[o] > ttc[this.track] + 1 && (!busy[o] || ttc[this.track] < 1.8)) { this.track = o; this.switchT = 2.5; }
+  else if (this.switchT <= 0 && carGap[this.track] < 28 && carV[this.track] < speed - 1 && ttc[o] > 6 && !busy[o] && carGap[o] > carGap[this.track] + 10) { this.track = o; this.switchT = 2.5; }
+  o = 1 - this.track;
+  const boxed = ttc[this.track] < 3 && ttc[o] < 3, cg = carGap[this.track];
+  return { lane: tracks[this.track], brake: boxed ? gap[this.track] : 1e9, follow: cg < 45 ? carV[this.track] + Math.max(0, cg - 8) * 0.6 : 1e9 };
+};
+
 /* ---------- Race ---------- */
 class Race {
   constructor(world, ev, cars, player) {
@@ -2600,7 +2678,7 @@ class Race {
     const row = Math.floor(i / 2), col = i % 2;
     const ss = R.closed ? R.wrapS(-12 - row * 11) : Math.max(4, 40 - row * 11);
     const p = R.posAt(ss, { x: 0, y: 0, z: 0 }); const [dx, dz] = R.dirAt(ss);
-    const lat = (col ? 1 : -1) * 3.6;
+    const lat = R.def.metro ? METRO.tracks[col] : (col ? 1 : -1) * 3.6; // down in the metro the grid lines up on the rails
     return { x: p.x - dz * lat, z: p.z + dx * lat, y: p.y, yaw: Math.atan2(-dx, -dz), s: ss };
   }
   update(dt) {
@@ -2645,7 +2723,8 @@ class Race {
     const R = this.route, P = this.prog.get(c);
     const s = R.wrapS(P.s - 8);
     const p = R.posAt(s, { x: 0, y: 0, z: 0 }); const [dx, dz] = R.dirAt(s);
-    return { x: p.x, z: p.z, y: p.y, yaw: Math.atan2(-dx, -dz) };
+    const l = R.def.metro ? this.world.metroLane(p.x, p.z) : 0; // back down on whichever track has no train coming
+    return { x: p.x - dz * l, z: p.z + dx * l, y: p.y, yaw: Math.atan2(-dx, -dz) };
   }
 }
 
@@ -2665,7 +2744,7 @@ const EVENTS = [
   { id: 'express', name: 'Exit 5 Express', type: 'sprint', route: 'express', laps: 1, ai: 5, region: 'city', aiCars: ['kaze', 'ironside'], crew: true, blurb: "Out of the tunnel and down the interstate, off at Calder's new Exit 5 and straight through downtown to the docks. His crew paved that ramp. They know every inch." },
   { id: 'metro', name: 'Metro Line', type: 'race', route: 'metro', laps: 2, ai: 5, region: 'city', aiCars: ['ironside', 'kaze'], crew: true, vic: true,
     at: (() => { const sp = metroSpurs()[0]; return { x: sp.x - sp.dx * 16, z: sp.z - sp.dz * 16, yaw: Math.atan2(-sp.dx, -sp.dz) }; })(),
-    blurb: 'Two laps of the Calder Metro loop, under downtown, against Vic Calder and his crew. Start down the Kingsway ramp. The trains run on time; stay your side of the barrier.' },
+    blurb: 'Two laps of the Calder Metro loop, under downtown, against Vic Calder and his crew. Start down the Kingsway ramp. No road down there, just two tracks: the stopping train runs your way, the express comes at you. Switch tracks to stay alive.' },
   { id: 'finale', name: 'Coast to Canyon', type: 'sprint', route: 'finale', laps: 1, ai: 5, region: 'city', aiCars: ['ironside', 'kaze'], boss: true, locked: true, blurb: 'Vic Calder, his best crew and you. From the harbour, along the coast, through the tunnel and home to the festival. Winner keeps the valley.' },
 ];
 
@@ -4254,33 +4333,33 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     const runs = []; let s = cuts[cuts.length - 1][1] - R.length;
     for (const [a, b, st] of cuts) { runs.push([s, a, null]); runs.push([a, b, st]); s = b; }
     const gaps = M.spurs.map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]);
-    const L0 = METRO.wallL, BAR = METRO.bar, WR = METRO.wallR, PL = METRO.plat, TR = METRO.track;
+    const L0 = METRO.wallL, WR = METRO.wallR, PL = METRO.plat, TRS = METRO.tracks;
+    const inGap = (a, b) => gaps.some(([g0, g1]) => [-R.length, 0, R.length].some((k) => b + k > g0 && a + k < g1));
+    // the floor across the tube: a sleeper bed under each track, plain ballast either side
+    const floor = []; let l0 = L0;
+    for (const t of TRS) { if (t - 2.2 > l0) floor.push([l0, t - 2.2, 'ballast']); floor.push([t - 2.2, t + 2.2, 'bed']); l0 = t + 2.2; }
+    if (WR > l0) floor.push([l0, WR, 'ballast']);
     for (const [r0, r1, st] of runs) strip(r0, r1, (a, b) => {
-      const nUp = [0, 1, 0], nDn = [0, -1, 0], va = a / 10, vb = b / 10;
-      quad('road', P(a, L0, Y), P(b, L0, Y), P(a, BAR, Y), P(b, BAR, Y), nUp, [0, va, 0, vb, 1, va, 1, vb]);
-      quad('bed', P(a, BAR, Y), P(b, BAR, Y), P(a, WR, Y), P(b, WR, Y), nUp, [0, a / 2.4, 0, b / 2.4, 1, a / 2.4, 1, b / 2.4]);
+      const nUp = [0, 1, 0], nDn = [0, -1, 0];
+      for (const [la, lb, k] of floor) quad(k, P(a, la, Y), P(b, la, Y), P(a, lb, Y), P(b, lb, Y), nUp, k === 'bed' ? [0, a / 2.4, 0, b / 2.4, 1, a / 2.4, 1, b / 2.4] : [0, a / 4, 0, b / 4, (lb - la) / 4, a / 4, (lb - la) / 4, b / 4]);
       const far = st ? PL : WR;
       quad('ceil', P(a, L0, CE), P(b, L0, CE), P(a, far, CE), P(b, far, CE), nDn, [0, a / 6, 0, b / 6, 1, a / 6, 1, b / 6]);
-      if (!gaps.some(([g0, g1]) => [-R.length, 0, R.length].some((k) => b + k > g0 && a + k < g1))) quad('wall', P(a, L0, Y), P(b, L0, Y), P(a, L0, CE), P(b, L0, CE), latN(a, 1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
+      if (!inGap(a, b)) quad('wall', P(a, L0, Y), P(b, L0, Y), P(a, L0, CE), P(b, L0, CE), latN(a, 1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
       if (st) {
         quad('plat', P(a, WR, Y + 1), P(b, WR, Y + 1), P(a, PL, Y + 1), P(b, PL, Y + 1), nUp, [0, a / 4, 0, b / 4, 1, a / 4, 1, b / 4]);
         quad('edge', P(a, WR, Y), P(b, WR, Y), P(a, WR, Y + 1), P(b, WR, Y + 1), latN(a, -1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
         quad('swall', P(a, PL, Y + 1), P(b, PL, Y + 1), P(a, PL, CE), P(b, PL, CE), latN(a, -1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
       } else quad('wall', P(a, WR, Y), P(b, WR, Y), P(a, WR, CE), P(b, WR, CE), latN(a, -1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
-      // jersey barrier in front of the track
-      quad('jersey', P(a, BAR - 0.3, Y), P(b, BAR - 0.3, Y), P(a, BAR - 0.15, Y + 1), P(b, BAR - 0.15, Y + 1), latN(a, -1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
-      quad('jersey', P(a, BAR + 0.3, Y), P(b, BAR + 0.3, Y), P(a, BAR + 0.15, Y + 1), P(b, BAR + 0.15, Y + 1), latN(a, 1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
-      quad('conc', P(a, BAR - 0.15, Y + 1), P(b, BAR - 0.15, Y + 1), P(a, BAR + 0.15, Y + 1), P(b, BAR + 0.15, Y + 1), nUp, [0, 0, 1, 0, 0, 1, 1, 1]);
-      // the rails
-      for (const off of [-0.72, 0.72]) quad('rail', P(a, TR + off - 0.06, Y + 0.18), P(b, TR + off - 0.06, Y + 0.18), P(a, TR + off + 0.06, Y + 0.18), P(b, TR + off + 0.06, Y + 0.18), nUp, [0, 0, 0, 1, 1, 0, 1, 1]);
+      // the rails, two tracks of them
+      for (const TR of TRS) for (const off of [-0.72, 0.72]) quad('rail', P(a, TR + off - 0.06, Y + 0.18), P(b, TR + off - 0.06, Y + 0.18), P(a, TR + off + 0.06, Y + 0.18), P(b, TR + off + 0.06, Y + 0.18), nUp, [0, 0, 0, 1, 1, 0, 1, 1]);
     });
     // station ends: walls across the platform
     for (const st of stations) for (const [sE, sg] of [[st.s - half, 1], [st.s + half, -1]]) {
       const [dx, dz] = R.dirAt(sE), n = [dx * sg, 0, dz * sg];
       quad('swall', P(sE, WR, Y), P(sE, PL, Y), P(sE, WR, CE), P(sE, PL, CE), n, [0, 0, 2, 0, 0, 1, 2, 1]);
     }
-    // ceiling lamps over the road and the track
-    for (let s0 = 0; s0 < R.length; s0 += 9) for (const l of [-1.5, TR]) {
+    // ceiling lamps over both tracks
+    for (let s0 = 0; s0 < R.length; s0 += 9) for (const l of TRS) {
       const a = s0, b = s0 + 4, w = 0.35;
       quad('lamp', P(a, l - w, CE - 0.03), P(b, l - w, CE - 0.03), P(a, l + w, CE - 0.03), P(b, l + w, CE - 0.03), [0, -1, 0], [0, 0, 0, 1, 1, 0, 1, 1]);
     }
@@ -4306,9 +4385,10 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     }, { repeat: true });
     const bedTex = makeCanvasTex(256, 128, (x, w, h) => {
       noise(x, w, h, '#3b3833', 0.25, 5);
-      x.fillStyle = '#5a5249'; x.fillRect(w * 0.3, h * 0.3, w * 0.42, h * 0.4);
-      x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(w * 0.3, h * 0.66, w * 0.42, h * 0.06);
+      x.fillStyle = '#5a5249'; x.fillRect(w * 0.18, h * 0.3, w * 0.64, h * 0.4);
+      x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(w * 0.18, h * 0.66, w * 0.64, h * 0.06);
     }, { repeat: true });
+    const ballastTex = makeCanvasTex(128, 128, (x, w, h) => noise(x, w, h, '#3b3833', 0.25, 7), { repeat: true });
     const wallTex = makeCanvasTex(256, 256, (x, w, h) => {
       x.fillStyle = '#d9d2c2'; x.fillRect(0, 0, w, h);
       x.strokeStyle = 'rgba(80,70,60,.35)'; x.lineWidth = 2;
@@ -4327,18 +4407,16 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
       x.fillStyle = '#f2c230'; x.fillRect(0, 0, w * 0.06, h);
       x.fillStyle = 'rgba(0,0,0,.25)'; for (let i = 0; i < 8; i++) x.fillRect(w * 0.1, i * h / 8, w * 0.9, 1);
     }, { repeat: true });
-    const jerseyTex = makeCanvasTex(256, 64, (c, w, h) => { c.fillStyle = '#d9d4ca'; c.fillRect(0, 0, w, h); c.fillStyle = '#1f7a8c'; for (let i = -h; i < w; i += 64) { c.beginPath(); c.moveTo(i, h); c.lineTo(i + 32, h); c.lineTo(i + 32 + h, 0); c.lineTo(i + h, 0); c.fill(); } }, { repeat: true });
     const mats = {
       road: this.metroMaterial(roadTex, 0x2a2622, { rough: 0.7 }),
       bed: this.metroMaterial(bedTex, 0x1c1915),
+      ballast: this.metroMaterial(ballastTex, 0x1c1915),
       ceil: this.metroMaterial(ceilTex, 0x262320),
       wall: this.metroMaterial(wallTex, 0x6a6052),
       rwall: this.metroMaterial(rampTex, 0x4a463f),
       swall: this.metroMaterial(wallTex, 0x7a705f, { color: 0xf4efe2 }),
       plat: this.metroMaterial(platTex, 0x5a554c),
       edge: this.metroMaterial(null, 0x000000, { color: 0x6b6760 }),
-      jersey: this.metroMaterial(jerseyTex, 0x55524c),
-      conc: this.metroMaterial(null, 0x2a2826, { color: 0xb8b2a8 }),
       rail: this.metroMaterial(null, 0x302c28, { color: 0x9da3a8, metal: 0.8, rough: 0.35 }),
       lamp: new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.9, 2.4) }),
     };
@@ -4348,14 +4426,7 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
       geo.setIndex(q.idx); geo.computeBoundingSphere();
       const m = new THREE.Mesh(geo, mats[k]); m.name = 'metro-' + k; m.castShadow = k !== 'lamp' && k !== 'rail'; m.receiveShadow = k !== 'lamp'; grp.add(m);
     }
-    // pillars along the barrier
-    const pillars = [];
-    for (let s0 = 0; s0 < R.length; s0 += 14) { const p = P(s0, BAR, Y + 1); pillars.push({ x: p[0], z: p[2], yaw: Math.atan2(...R.dirAt(s0)) }); }
-    const pg = new THREE.BoxGeometry(0.6, CE - Y - 1, 0.9); pg.translate(0, (CE - Y - 1) / 2, 0);
-    const pm = new THREE.InstancedMesh(pg, this.metroMaterial(null, 0x2a2622, { color: 0xbcb4a6 }), pillars.length), d = new THREE.Object3D();
-    pillars.forEach((pp, i) => { d.position.set(pp.x, Y + 1, pp.z); d.rotation.set(0, pp.yaw, 0); d.updateMatrix(); pm.setMatrixAt(i, d.matrix); });
-    pm.castShadow = true; grp.add(pm);
-    // station names on the platform wall and on hanging boards over the road
+    // station names on the platform wall and across the tracks on the outer wall
     const signTex = (name) => textTex(1024, 192, (x, w, h) => {
       x.fillStyle = '#f4f1e8'; x.fillRect(0, 0, w, h); x.fillStyle = '#1f7a8c'; x.fillRect(0, 0, w, 26); x.fillRect(0, h - 26, w, 26);
       x.fillStyle = '#c4161c'; x.beginPath(); x.arc(104, h / 2, 62, 0, TAU); x.fill(); x.fillStyle = '#f4f1e8'; x.font = '400 86px "Saira Stencil One", Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('M', 104, h / 2 + 4);
@@ -4368,8 +4439,12 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
         const sg = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.2), lit); sg.position.set(p[0], p[1], p[2]);
         sg.rotation.y = Math.atan2(dz, -dx); grp.add(sg); // faces back across the track
       }
-      const p = P(st.s - 12, -0.5, CE - 0.9), [dx, dz] = R.dirAt(st.s - 12);
-      const hb = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.2), this.metroMaterial(tex, 0xb0aa9a, { side: THREE.DoubleSide })); hb.position.set(p[0], p[1], p[2]); hb.rotation.y = Math.atan2(dx, dz) + Math.PI; grp.add(hb);
+      for (const off of [-24, 0, 24]) {
+        const ss = st.s + off; if (inGap(ss - 3.5, ss + 3.5)) continue;
+        const p = P(ss, L0 + 0.05, Y + 2.6), [dx, dz] = R.dirAt(ss);
+        const sg = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.2), lit); sg.position.set(p[0], p[1], p[2]);
+        sg.rotation.y = Math.atan2(-dz, dx); grp.add(sg);
+      }
     }
     // portals: a concrete frame on the face of each building and the METRO sign over it
     const frame = new THREE.MeshStandardMaterial({ color: 0x5f5a54, roughness: 0.85 }), teal = new THREE.MeshStandardMaterial({ color: 0x1f7a8c, roughness: 0.5 });
@@ -4389,28 +4464,38 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
       sign.position.set(0, top - CITY.y + 0.8, -0.82); sign.rotation.y = Math.PI; fg.add(sign);
       this.scene.add(fg);
     }
-    // the train
-    const bodyTex = textTex(512, 128, (x, w, h) => {
-      x.fillStyle = '#c9ccd0'; x.fillRect(0, 0, w, h);
-      x.fillStyle = '#1f7a8c'; x.fillRect(0, h * 0.72, w, h * 0.12);
-      x.fillStyle = '#1a2026'; for (let i = 0; i < 6; i++) x.fillRect(18 + i * 82, h * 0.18, 62, h * 0.4);
-      x.fillStyle = '#2b3036'; x.fillRect(w * 0.47, h * 0.12, 26, h * 0.7);
-    });
+    // the trains: the stopper in teal, the express in red, both lit up front so you can see them coming down the tube
     const winTex = textTex(512, 128, (x, w, h) => { x.fillStyle = '#000'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff1cc'; for (let i = 0; i < 6; i++) x.fillRect(18 + i * 82, h * 0.18, 62, h * 0.4); });
-    const side = new THREE.MeshStandardMaterial({ map: bodyTex, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.9, roughness: 0.4, metalness: 0.5 });
-    const plain = new THREE.MeshStandardMaterial({ color: 0xb9bcc0, roughness: 0.45, metalness: 0.5 }), cab = new THREE.MeshStandardMaterial({ color: 0x1f7a8c, roughness: 0.5, emissive: 0x0a2a30 });
-    this.metroCars = this.world.metroTrain.cars.map((c) => {
-      const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(2.9, 3.0, c.len), [side, side, plain, plain, c.k === 0 ? cab : plain, c.k === 3 ? cab : plain]);
-      body.position.y = 1.7; body.castShadow = true; g.add(body);
-      const sk = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.5, c.len - 2), new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.7 })); sk.position.y = 0.25; g.add(sk);
-      grp.add(g); return g;
+    const plain = new THREE.MeshStandardMaterial({ color: 0xb9bcc0, roughness: 0.45, metalness: 0.5 }), skirt = new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.7 });
+    const head = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3.8, 3.2) }), tail = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 0.15, 0.1) });
+    const lampGeo = new THREE.PlaneGeometry(0.5, 0.28);
+    this.metroCars = this.world.metroTrains.map((mt) => {
+      const stripe = mt.express ? '#c4161c' : '#1f7a8c';
+      const bodyTex = textTex(512, 128, (x, w, h) => {
+        x.fillStyle = '#c9ccd0'; x.fillRect(0, 0, w, h);
+        x.fillStyle = stripe; x.fillRect(0, h * 0.72, w, h * 0.12);
+        x.fillStyle = '#1a2026'; for (let i = 0; i < 6; i++) x.fillRect(18 + i * 82, h * 0.18, 62, h * 0.4);
+        if (!mt.express) { x.fillStyle = '#2b3036'; x.fillRect(w * 0.47, h * 0.12, 26, h * 0.7); }
+      });
+      const side = new THREE.MeshStandardMaterial({ map: bodyTex, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.9, roughness: 0.4, metalness: 0.5 });
+      const cab = new THREE.MeshStandardMaterial({ color: mt.express ? 0xc4161c : 0x1f7a8c, roughness: 0.5, emissive: mt.express ? 0x300806 : 0x0a2a30 });
+      return mt.cars.map((c) => {
+        const g = new THREE.Group(), last = c.k === mt.cars.length - 1;
+        const body = new THREE.Mesh(new THREE.BoxGeometry(2.9, 3.0, c.len), [side, side, plain, plain, c.k === 0 ? cab : plain, last ? cab : plain]);
+        body.position.y = 1.7; body.castShadow = true; g.add(body);
+        const sk = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.5, c.len - 2), skirt); sk.position.y = 0.25; g.add(sk);
+        for (const sd of [-1, 1]) {
+          if (c.k === 0) { const l = new THREE.Mesh(lampGeo, head); l.position.set(sd * 0.95, 0.75, c.len / 2 + 0.02); g.add(l); }
+          if (last) { const l = new THREE.Mesh(lampGeo, tail); l.position.set(sd * 0.95, 0.75, -c.len / 2 - 0.02); l.rotation.y = Math.PI; g.add(l); }
+        }
+        grp.add(g); return g;
+      });
     });
     this.updateMetroTrain();
   },
   updateMetroTrain() {
     if (!this.metroCars) return;
-    this.world.metroTrain.cars.forEach((c, i) => { const g = this.metroCars[i], P = c.pose; g.position.set(P.x, P.y, P.z); g.rotation.y = P.yaw; });
+    this.world.metroTrains.forEach((mt, j) => mt.cars.forEach((c, i) => { const g = this.metroCars[j][i], P = c.pose; g.position.set(P.x, P.y, P.z); g.rotation.y = P.yaw; }));
   },
   /* ---------- story-mode road closure at the west portal ---------- */
   buildTunnelGate() {
@@ -5683,8 +5768,9 @@ const VO_DATA = {
 },
 "ug_2": {
 "who": "sunny",
-"text": "The Calder Metro is open to all vehicles tonight. Please stay behind the barrier. The trains will not wait for you.",
-"dur": 6.59
+"text": "The Calder Metro is open to all vehicles tonight. Two tracks, two trains, no barrier. The trains will not wait for you.",
+"dur": 6.59,
+"novo": true
 },
 "ug_win_1": {
 "who": "vic",
@@ -6547,7 +6633,7 @@ class StoryIntro {
 const TRAFFIC_PLAN = [['hwy', 4, 5.5, 27], ['hwy-rev', 4, 5.5, 27], ['coast', 2, 3.6, 22], ['coast-rev', 2, 3.6, 22], ['tunnel', 1, 3.2, 21], ['tunnel-rev', 1, 3.2, 21],
   ['pass', 1, 2.6, 15], ['pass-rev', 1, 2.6, 15], ['lane-valley', 1, 2.3, 16], ['lane-valley-rev', 1, 2.3, 16], ['lane-farm', 1, 2.3, 16], ['lane-farm-rev', 1, 2.3, 16],
   ['city-a', 2, 4.8, 13], ['city-a-rev', 1, 4.8, 13], ['city-b', 2, 4.8, 13], ['city-c', 1, 4.8, 13], ['city-c-rev', 1, 4.8, 13], ['city-d', 2, 4.8, 13],
-  ['exit-5', 2, 3.2, 22], ['exit-5-rev', 1, 3.2, 22], ['lane-orchard', 1, 2.4, 16], ['lane-orchard-rev', 1, 2.4, 16], ['lane-mill', 1, 2.3, 16], ['lane-mill-rev', 1, 2.3, 16], ['metro', 3, -2.6, 17]];
+  ['exit-5', 2, 3.2, 22], ['exit-5-rev', 1, 3.2, 22], ['lane-orchard', 1, 2.4, 16], ['lane-orchard-rev', 1, 2.4, 16], ['lane-mill', 1, 2.3, 16], ['lane-mill-rev', 1, 2.3, 16]];
 const TRAFFIC_COLORS = [0x8a9aa6, 0x6b2d2d, 0xe9e2d6, 0x2b3a4a, 0x9c8a64, 0x3d5a3d, 0xc9c4ba, 0x23262b, 0x7a1f1f, 0x4a6a8a];
 class Traffic {
   constructor(game) { this.g = game; this.list = []; this.WAKE = 520; this.SLEEP = 650; }
@@ -6953,21 +7039,29 @@ class Game {
       car.name = name; cars.push(car);
     }
     const race = this.race = new Race(this.world, ev, cars, this.player);
+    if (R.def.metro) this.world.resetMetro();
     // grid: player starts mid-pack
     const order = [...cars]; if (order.length > 1) { order.splice(0, 1); order.splice(Math.min(3, order.length), 0, this.player); }
     this.ai = [];
     order.forEach((c, i) => {
       const g = race.gridSlot(i); c.reset(g.x, g.z, g.yaw, this.world.terrain, 0.3, g.y); c.heat = 0;
-      if (c !== this.player) this.ai.push(new AIDriver(c, R, { s: g.s, lane: (i % 2 ? 1 : -1) * 2.4, skill: (c.name === 'Vic Calder' ? 0.99 : 0.9 + ((i * 7) % 5) * 0.022), aggr: c.name === 'Vic Calder' ? 0.9 : 0.35 + ((i * 3) % 4) * 0.15, seed: i + 11 }));
+      if (c !== this.player) this.ai.push(new AIDriver(c, R, { s: g.s, lane: (i % 2 ? 1 : -1) * 2.4, metro: R.def.metro ? this.world.metroTrains : null, skill: (c.name === 'Vic Calder' ? 0.99 : 0.9 + ((i * 7) % 5) * 0.022), aggr: c.name === 'Vic Calder' ? 0.9 : 0.35 + ((i * 3) % 4) * 0.15, seed: i + 11 }));
     });
     // gates
     const G = this.gfx.gates; while (G.children.length) G.remove(G.children[0]);
-    // down in the metro the arches and gates shrink to fit under the ceiling
-    const low = (o) => { if (R.def.metro) { o.position.y = METRO.y; o.scale.setScalar(0.42); } return o; };
-    const arch = (s) => { const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s); return low(this.gfx.makeArch(p.x, p.z, Math.atan2(dx, dz), null)); };
+    // down in the metro the trains fill the tube to within a hand of the ceiling: the arch and the gates become thin boards up there
+    const board = (s, mat) => {
+      const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), l = (METRO.wallL + METRO.wallR) / 2, w = METRO.wallR - METRO.wallL - 0.2;
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.55, 0.15), mat); b.position.set(p.x - dz * l, METRO.ceil - 0.35, p.z + dx * l); b.rotation.y = Math.atan2(dx, dz); return b;
+    };
+    const arch = (s) => { if (R.def.metro) { const t = this.gfx.bannerTex.clone(); t.wrapS = THREE.RepeatWrapping; t.repeat.x = 2.5; t.needsUpdate = true; return board(s, new THREE.MeshBasicMaterial({ map: t })); } const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s); return this.gfx.makeArch(p.x, p.z, Math.atan2(dx, dz), null); };
     G.add(arch(R.closed ? 0 : 2)); if (!R.closed) G.add(arch(race.finishS));
     const nG = Math.max(4, Math.round(R.length / 320));
-    for (let i = 1; i < nG; i++) { const s = R.length * i / nG; const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s); G.add(low(this.gfx.makeGate(p.x, p.z, Math.atan2(dx, dz), EVENT_COLORS[ev.id]))); }
+    for (let i = 1; i < nG; i++) {
+      const s = R.length * i / nG;
+      if (R.def.metro) { G.add(board(s, new THREE.MeshBasicMaterial({ color: new THREE.Color(EVENT_COLORS[ev.id]).multiplyScalar(1.6) }))); continue; }
+      const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s); G.add(this.gfx.makeGate(p.x, p.z, Math.atan2(dx, dz), EVENT_COLORS[ev.id]));
+    }
     // the street circuit hides its corners behind buildings: board and paint every one of them
     if (R.def.metro) { /* the tube walls do the warning */ }
     else if (R.def.street) this.gfx.addTurnMarkers(R, EVENT_COLORS[ev.id], G);
@@ -7025,7 +7119,8 @@ class Game {
   freeRespawn(c, lift) {
     if (c.under) {
       const R = this.world.route('metro'), s = R.project(c.pos.x, c.pos.z, 0, -1).s, q = R.posAt(s, {}), [dx, dz] = R.dirAt(s);
-      c.reset(q.x + dz * 2.5, q.z - dx * 2.5, Math.atan2(-dx, -dz), this.world.terrain, lift, q.y); return;
+      const l = this.world.metroLane(q.x, q.z);
+      c.reset(q.x - dz * l, q.z + dx * l, Math.atan2(-dx, -dz), this.world.terrain, lift, q.y); return;
     }
     const p = c.spec.boat ? this.world.findWetSpot(c.pos.x, c.pos.z) : this.world.findDrySpot(c.pos.x, c.pos.z);
     c.reset(p.x, p.z, p.yaw !== null ? p.yaw : c.yaw(), this.world.terrain, lift);
@@ -7227,6 +7322,13 @@ class Game {
     const head = T.cars[0].pose, dh = Math.hypot(head.x - P.pos.x, head.z - P.pos.z);
     this.hornT = (this.hornT || 0) - dt;
     if (dh < 420 && T.v > 6 && this.hornT <= 0) { A.horn(clamp(1.3 - dh / 420, 0.2, 1)); this.hornT = 9 + Math.random() * 6; }
+    // down in the metro: a train sounds off when you're on its track in front of it
+    this.metroHornT = (this.metroHornT || 0) - dt;
+    if (P.under && this.metroHornT <= 0) for (const mt of this.world.metroTrains) {
+      if (mt.v < 3) continue;
+      const pr = mt.R.project(P.pos.x, P.pos.z, mt.s, 200), ahead = mt.ahead(pr.s);
+      if (pr.dist < 2.2 && ahead < 170) { A.horn(clamp(1.4 - ahead / 170, 0.4, 1)); this.metroHornT = 3.5; break; }
+    }
     let bell = 0;
     for (const c of this.world.crossings) if (c.active) { const d = Math.hypot(c.x - P.pos.x, c.z - P.pos.z); bell = Math.max(bell, clamp(1 - d / 220, 0, 1)); }
     A.bell(bell, this.gfx.time.value);
