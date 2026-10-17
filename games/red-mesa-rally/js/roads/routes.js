@@ -73,6 +73,17 @@ const ROUTE_DEFS = [
     pts: [[2627, -313], [2800, -315], [2960, -322], [3121, -339], [3300, -325], [CX(0), CZ(5)]] },
   { id: 'north-rd', closed: false, width: 11, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
     pts: [[2915, -925], [3020, -890], [3150, -860], [3300, -830], [CX(0), CZ(1)]] },
+  // ---- Kestrel high country: a scenic road from the ridge track over to the Heights, a gravel hairpin climb to the summit
+  //      lookout, and a forest road down from the top of the pass through the pines to the Lodge ----
+  { id: 'ridge-rd', closed: false, width: 10, surface: 'asphalt', lanes: 2, country: true, rails: true, smoothWin: 20, grade: 0.1,
+    pts: [[3794, -1699], [3950, -1770], [4150, -1800], [4350, -1790], [4500, -1730], [4620, -1650], [4720, -1560], [4795, -1450], [4800, -1350]] },
+  { id: 'summit', closed: false, width: 9, country: true, grade: 0.14,
+    // found by a grade-limited search over the heightmap: east across the escarpment, one big hairpin, back west to the shoulder
+    pts: [[3874, -1864], [3937, -1904], [4061, -1904], [4178, -1946], [4300, -1958], [4460, -1880], [4603, -1798], [4727, -1782], [4821, -1750], [4896, -1759],
+      [4922, -1799], [4891, -1834], [4800, -1835], [4692, -1828], [4603, -1868], [4520, -1960], [4437, -2052], [4352, -2102], [4328, -2143]] },
+  { id: 'forest-rd', closed: false, width: 10, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.1,
+    pts: [[2577, -2601], [2700, -2648], [2860, -2630], [2980, -2530], [3060, -2420], [3200, -2380], [3330, -2290], [3400, -2180], [3447, -2164], [3469, -2044],
+      [3596, -1895], [3693, -1876], [3756, -1836], [3874, -1864], [3927, -1812], [4000, -1815], [4076, -1794]] },
   // ---- interchanges: two-way slip roads off the viaduct down to the street grid ----
   { id: 'ramp-kestrel', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
     pts: [[3700, -1022], [3655, -1040], [3605, -1050], [3555, -1042], [3510, -1012], [3478, -972], [CX(0), CZ(0) + 10]] },

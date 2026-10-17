@@ -62,5 +62,13 @@ function planVillage(T) {
     add({ x, z, yaw, w, d, h: barn ? 5 + rng() * 1.5 : 3 + rng() * 2.6, y0: f[0] - 1, y1: f[1], kind: barn ? 'barn' : 'house',
       wall: barn ? [0.6, 0.2, 0.16] : WALLS[(rng() * WALLS.length) | 0], roof: barn ? [0.36, 0.34, 0.32] : ROOFS[(rng() * ROOFS.length) | 0] });
   }
+  // the Kestrel Lodge up in the pines, facing Ridge Rd
+  for (let tries = 0; tries < 200; tries++) {
+    const a = rng() * TAU, r = tries * 0.4, x = 4000 + Math.cos(a) * r, z = -1810 + Math.sin(a) * r;
+    const gx = rd(x + 4, z) - rd(x - 4, z), gz = rd(x, z + 4) - rd(x, z - 4), yaw = Math.atan2(-gx, -gz);
+    const f = fits(x, z, yaw, 24, 12, 8); if (!f) continue;
+    add({ x, z, yaw, w: 24, d: 12, h: 6, y0: f[0] - 1.5, y1: f[1], kind: 'lodge', wall: [0.48, 0.32, 0.2], roof: [0.24, 0.3, 0.26] });
+    break;
+  }
   return lots;
 }
