@@ -15,7 +15,7 @@ class Scatter {
     const slopeAt = (x, z) => { T.normal(x, z, nrm); return nrm.y; };
     const okDesert = (x, z, clear) => {
       if (Math.hypot(x, z) > 940) return false;
-      if (T.rdist[T.gi(x, z)] < clear) return false;
+      if (T.rdist[T.gi(x, z)] < clear || T.river[T.gi(x, z)]) return false;
       if (T.height(x, z) < WATER_Y + 0.6) return false;
       if (Math.hypot(x - HUB.x, z - HUB.z) < HUB.r + 20) return false;
       return true;
@@ -64,7 +64,7 @@ class Scatter {
     const okEast = (x, z, clear) => {
       if (x < 1250) return false;
       const gi = T.gi(x, z);
-      if (T.rdist[gi] < clear || T.rail[gi] > 0 || T.city[gi] || T.tun[gi]) return false;
+      if (T.rdist[gi] < clear || T.rail[gi] > 0 || T.city[gi] || T.tun[gi] || T.river[gi]) return false;
       const y = T.h[gi]; if (y < WATER_Y + 1.5) return false;
       if (eastSDF(x, z).d > -10) return false;
       return true;
@@ -141,6 +141,7 @@ class Scatter {
           const ax = p.x - dz * side * off, az = p.z + dx * side * off, bx = q.x - ez * side * off, bz = q.z + ex * side * off;
           const drop = p.y - T.height(p.x - dz * side * (off + 6), p.z + dx * side * (off + 6));
           if (R.id !== 'hwy' && drop < 2.5 && Math.abs(drop) < 3) continue;
+          if (T.river && T.bridges.some((B) => B.route === R.id && s >= B.i0 * R.step - 4 && s <= B.i1 * R.step + 4)) continue; // the bridge has its own parapets
           this.railSegs.push({ ax, az, ay: p.y, bx, bz, by: q.y });
           this.addSegment(ax, az, bx, bz, Math.max(p.y, q.y) + 0.9, 'rail');
         }

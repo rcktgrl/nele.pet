@@ -61,6 +61,7 @@ Object.assign(Gfx.prototype, {
     this.buildShip();
     this.buildRoadside();
     this.buildTunnel();
+    this.buildRiver();
     this.buildMetro();
     this.buildTunnelGate();
     this.buildRail();

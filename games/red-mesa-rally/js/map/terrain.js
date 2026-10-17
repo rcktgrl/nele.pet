@@ -23,6 +23,9 @@ class Terrain {
     this.routes = ROUTE_DEFS.map((d) => new Route(d));
     yield 'Surveying the roads';
     this.carve();
+    yield 'Running the river';
+    carveRiver(this);
+    this.bridges = findBridges(this);
     yield 'Paving Port Calder';
     for (let iz = 0; iz < Nz; iz++) for (let ix = 0; ix < Nx; ix++) {
       const i = iz * Nx + ix, x = x0 + ix * cell, z = z0 + iz * cell;
@@ -80,9 +83,19 @@ class Terrain {
   }
   height(x, z) {
     const h = this.heightGrid(this.h, x, z);
-    if (x < CITY.x0 - 30) return h;
+    const tk = this.riverTunAt(x, z);
+    if (tk) { const M = this.riverTun; return M.mask[tk - 1] === 1 && this.probeY < RIVER.tunnel.under ? RIVER.tunnel.bed : M.top[tk - 1]; }
+    if (x < CITY.x0 - 30) return this.ovGrid ? this.overlayHeight(x, z, h) : h;
     if (this.metro) { const f = this.subFloor(x, z); if (f !== null) return f; }
     return this.ovGrid ? this.overlayHeight(x, z, h) : h;
+  }
+  /* inside the covered bore of the boat tunnel (whoever is asking decides whether that is the ground) */
+  inRiverTunnel(x, z) { const k = this.riverTunAt(x, z); return k > 0 && this.riverTun.mask[k - 1] === 1; }
+  /* 1 + the cell index when (x, z) is under the boat tunnel's lid, else 0 */
+  riverTunAt(x, z) {
+    const M = this.riverTun; if (!M) return 0;
+    const i = Math.round((x - M.x0) / M.G), j = Math.round((z - M.z0) / M.G);
+    return i >= 0 && j >= 0 && i < M.nx && j < M.nz && M.mask[j * M.nx + i] ? j * M.nx + i + 1 : 0;
   }
   /* metro mask on a 2 m grid: 0 solid ground, 1 the loop, 2 + k portal ramp k */
   buildMetro(R) {
@@ -133,17 +146,18 @@ class Terrain {
   overlayAt(x, z, kickOnly) {
     const a = this.ovGrid && this.ovGrid.get(Math.floor(x / 32) * 100000 + Math.floor(z / 32)); if (!a) return null;
     let hit = null;
-    for (const o of a) if (overlayLift(o, x, z) > -Infinity) { if (!o.kind) return o; if (!kickOnly) hit = hit || o; }
+    for (const o of a) if ((o.under === undefined || this.probeY >= o.under) && overlayLift(o, x, z) > -Infinity) { if (!o.kind) return o; if (!kickOnly) hit = hit || o; }
     return hit;
   }
   rampAt(x, z) { return this.overlayAt(x, z, true); }
   overlayHeight(x, z, h) {
     const a = this.ovGrid.get(Math.floor(x / 32) * 100000 + Math.floor(z / 32)); if (!a) return h;
-    for (const o of a) { const y = overlayLift(o, x, z); if (y > h) h = y; }
+    for (const o of a) { if (o.under !== undefined && this.probeY < o.under) continue; const y = overlayLift(o, x, z); if (y > h) h = y; }
     return h;
   }
   normal(x, z, out) {
-    if (this.ovGrid && x > CITY.x0 - 30 && (this.overlayAt(x, z) || (this.metro && this.subFloor(x, z) !== null))) { // raised pieces and the metro: slope from the height function
+    if (this.riverTunAt(x, z)) { out.x = 0; out.y = 1; out.z = 0; return out; } // the bore's water and the lid over it are both flat
+    if (this.ovGrid && (this.overlayAt(x, z) || (x > CITY.x0 - 30 && this.metro && this.subFloor(x, z) !== null))) { // raised pieces and the metro: slope from the height function
       const e = 0.3, dhdx = (this.height(x + e, z) - this.height(x - e, z)) / (2 * e), dhdz = (this.height(x, z + e) - this.height(x, z - e)) / (2 * e), l = Math.hypot(dhdx, 1, dhdz);
       out.x = -dhdx / l; out.y = 1 / l; out.z = -dhdz / l; return out;
     }

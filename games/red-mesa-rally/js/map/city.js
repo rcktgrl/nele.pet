@@ -100,7 +100,7 @@ class City {
         for (let z = zr0; z + 2.6 < zr1; z += 3.1) {
           if (rng() < 0.25) continue;
           let blocked = false;
-          for (const [px, pz] of [[x, z], [x + 6, z + 1.2], [x + 12.2, z + 2.5], [x + 12.2, z], [x, z + 2.5]]) { const gi = T.gi(px, pz); if (T.rdist[gi] < 13 || T.rail[gi] > 0 || T.bilinear(T.rail, px, pz + 4) > 0 || T.bilinear(T.rail, px, pz - 4) > 0) blocked = true; }
+          for (const [px, pz] of [[x, z], [x + 6, z + 1.2], [x + 12.2, z + 2.5], [x + 12.2, z], [x, z + 2.5]]) { const gi = T.gi(px, pz); if (T.rdist[gi] < 13 || T.h[gi] < CITY.y - 0.5 || T.rail[gi] > 0 || T.bilinear(T.rail, px, pz + 4) > 0 || T.bilinear(T.rail, px, pz - 4) > 0) blocked = true; }
           if (blocked) continue;
           const n = 1 + Math.floor(rng() * 4);
           this.containers.push({ x0: x, x1: x + 12.2, z0: z, z1: z + 2.5, h: n * 2.6, n, color: colors[Math.floor(rng() * colors.length)] });
@@ -136,7 +136,7 @@ class City {
         this.containers.push({ x0, x1, z0: z, z1: z + 2.5, h: n * 2.6, n, y: SHIP.y, color: colors[Math.floor(rng() * colors.length)] });
       }
     }
-    for (let k = 0; k < 4; k++) this.cranes.push({ x: 3700 + k * 380, z: 792, yaw: 0, color: k % 2 ? 0xd94c22 : 0xe0b020 });
+    for (let k = 0; k < 4; k++) if (T.h[T.gi(3700 + k * 380, 792)] > CITY.y - 0.5) this.cranes.push({ x: 3700 + k * 380, z: 792, yaw: 0, color: k % 2 ? 0xd94c22 : 0xe0b020 });
     for (let k = 0; k < 3; k++) this.cranes.push({ x: 5136, z: -500 + k * 260, yaw: Math.PI / 2, color: 0xd94c22 });
   }
 }

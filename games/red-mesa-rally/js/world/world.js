@@ -13,7 +13,7 @@ class World {
     this.terrain = new Terrain();
     yield* this.terrain.build();
     this.city = new City(this.terrain);
-    this.terrain.setOverlays([...this.city.ramps, ...this.city.decks]);
+    this.terrain.setOverlays([...this.city.ramps, ...this.city.decks, ...this.terrain.bridges.flatMap((b) => b.pieces)]);
     this.scatter = new Scatter(this.terrain, this.city);
     yield* this.scatter.build();
     this.props = new Props(this.terrain);
@@ -21,6 +21,7 @@ class World {
     this.crossings = this.findCrossings();
     this.addTunnelWalls();
     this.addQuays();
+    this.addBridgeWalls();
     this.addMetroWalls();
     this.metroTrains = this.terrain.metro ? [
       new MetroTrain(this, { lat: METRO.tracks[1], vmax: 19 }),
@@ -114,6 +115,17 @@ class World {
         const b = Math.min(aEnd, a + 6);
         seg(sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l, sp.x + sp.dx * b - sp.dz * l, sp.z + sp.dz * b + sp.dx * l, metroSpurY(a) + 3.6, 0.3);
       }
+    }
+  }
+  /* river bridges: parapets along both edges (boats pass under them) and the piers in the water */
+  addBridgeWalls() {
+    const S = this.scatter;
+    for (const B of this.terrain.bridges) {
+      for (const p of B.pieces) for (const side of [-1, 1]) {
+        const l = side * (p.hw - 0.3), ax = p.x - p.dz * l, az = p.z + p.dx * l, bx = ax + p.dx * p.Lt, bz = az + p.dz * p.Lt;
+        const o = S.addSegment(ax, az, bx, bz, Math.max(p.y0, p.y1) + 1.0, 'rail'); o.r = 0.3; o.bot = Math.min(p.y0, p.y1) - 1.2;
+      }
+      for (const q of B.piers) { const o = S.addObstacle(q.x, q.z, B.rail ? 1.6 : 1.1, q.top, 'barrier'); o.bot = q.bot; }
     }
   }
   /* harbour quay faces: low walls that stop boats but sit under the wheels of anything on the quay */
@@ -276,7 +288,7 @@ class World {
       for (const s of sph) {
         const list = S.near(s.p.x, s.p.z);
         if (list) for (const o of list) {
-          if (o.off || s.p.y - s.r > o.top || !o.sub !== !c.under) continue;
+          if (o.off || s.p.y - s.r > o.top || (o.bot !== undefined && s.p.y + s.r < o.bot) || !o.sub !== !c.under) continue;
           let nx, nz, pen, cx, cz;
           if (o.type === 1) {
             cx = clamp(s.p.x, o.x0, o.x1); cz = clamp(s.p.z, o.z0, o.z1);
