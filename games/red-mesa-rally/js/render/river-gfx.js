@@ -103,6 +103,7 @@ Object.assign(Gfx.prototype, {
     }, { repeat: true });
     const tops = {}, top = (lanes) => tops[lanes] || (tops[lanes] = new THREE.MeshStandardMaterial({ map: lines(lanes), roughness: 0.85 }));
     const ballast = new THREE.MeshStandardMaterial({ color: 0x6b6258, roughness: 1 });
+    const planks = new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 0.95 }); // dirt tracks cross on timber
     const T = this.world.terrain, grp = new THREE.Group();
     for (const B of T.bridges) {
       const R = this.world.route(B.route), hw = B.width / 2 + 1.5, D = B.rail ? 2.2 : 1.4;
@@ -122,7 +123,7 @@ Object.assign(Gfx.prototype, {
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(ind); g.computeVertexNormals();
         const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; grp.add(m);
       };
-      strip(P, ti, B.rail ? ballast : top(R.def.lanes || 2), UV); strip(P, si, conc);
+      strip(P, ti, B.rail ? ballast : R.surface === 'asphalt' ? top(R.def.lanes || 2) : planks, UV); strip(P, si, conc);
       if (!B.rail) { // parapets: inner faces and tops, the outer face is the deck side carried up
         const W = [];
         for (let i = 0; i <= n; i++) {

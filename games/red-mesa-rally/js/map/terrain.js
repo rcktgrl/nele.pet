@@ -235,6 +235,12 @@ class Terrain {
       if (def.viaduct) {
         const lift = (i, y) => { pin[i] = Math.max(isNaN(pin[i]) ? prof[i] : pin[i], y); };
         for (let i = 0; i <= nS; i++) if (cityCell(R.x[i], R.z[i]) > 0 || (R.x[i] > FLAT.x0 && R.x[i] < FLAT.x1 && R.z[i] > FLAT.z0 && R.z[i] < FLAT.z1)) lift(i, CITY.y + 8.5);
+        if (def.crossover) { // a figure of eight: the first pass through the middle goes over the second
+          const C0 = [];
+          for (let i = 0; i < nS; i++) for (let j = i + Math.round(200 / R.step); j < nS; j++) if (Math.hypot(R.x[i] - R.x[j], R.z[i] - R.z[j]) < 4) C0.push(i);
+          const lo = Math.min(...C0), span = Math.round((R.width + 8) / R.step);
+          for (let k = -span; k <= span; k++) lift(R.idx(lo + k), this.rawH(R.x[lo], R.z[lo]) + 7.8);
+        }
         if (!def.ramp) {
           const H = new Map(), C = 24, key = (x, z) => Math.floor(x / C) * 100000 + Math.floor(z / C);
           for (const O of this.routes) {

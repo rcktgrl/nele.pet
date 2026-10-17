@@ -58,9 +58,10 @@ const ROUTE_DEFS = [
   // ---- side roads: an orchard lane down to the coast, a dune loop by the beach, a ridge track over the pines, a mill lane across the valley ----
   { id: 'lane-orchard', closed: false, width: 10, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
     pts: [[2849, 148], [2880, 300], [3040, 420], [3150, 600], [3090, 790], [2960, 930], [2900, 1059]] },
-  { id: 'track-dunes', closed: true, width: 13, country: true, jumps: 2, whoops: 1, mud: 1,
-    pts: [[1900, 650], [2060, 590], [2190, 640], [2245, 760], [2200, 930], [2060, 1060], [1900, 1040], [1820, 900], [1800, 760]] },
-  { id: 'trail-dunes', closed: false, width: 10, trail: true, country: true, pts: [[2368, 731], [2310, 745], [2240, 760]] },
+  // the dune loop is a figure of eight: one pass goes over the other on a timber bridge in the middle
+  { id: 'track-dunes', closed: true, width: 13, country: true, jumps: 2, whoops: 1, mud: 1, grade: 0.12, viaduct: true, crossover: true,
+    pts: [[2020, 830], [2108, 936], [2183, 980], [2232, 936], [2250, 830], [2232, 724], [2183, 680], [2108, 724], [2020, 830], [1932, 936], [1857, 980], [1808, 936], [1790, 830], [1808, 724], [1857, 680], [1932, 724]] },
+  { id: 'trail-dunes', closed: false, width: 10, trail: true, country: true, pts: [[2368, 731], [2310, 790], [2256, 830]] },
   { id: 'track-kestrel', closed: false, width: 10, country: true, grade: 0.13, jumps: 1,
     pts: [[3150, -1950], [3330, -1870], [3560, -1830], [3780, -1720], [3790, -1540], [3600, -1390], [3360, -1205]] },
   { id: 'lane-mill', closed: false, width: 9, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
