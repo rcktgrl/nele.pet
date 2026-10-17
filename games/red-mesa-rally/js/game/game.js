@@ -476,6 +476,7 @@ class Game {
       else if (e.type === 'prop' && isP) { this.audio.oneShot('thud', 0.5); }
       else if (e.type === 'lap' && isP) { const last = this.race.prog.get(c).lastLap; this.toast(e.lap === this.race.laps ? 'Final lap' : `Lap ${e.lap}`, `Last lap ${fmtTime(last)}`); }
       else if (e.type === 'finish' && isP) { this.toast('Finish', null, 'hot'); c.input.throttle = 0; if (this.mp) { const pr = this.race.prog.get(c); this.mp.broadcast({ k: 'fin', time: pr.time, best: pr.best }, true); } }
+      else if (e.type === 'finish' && this.state === 'results') this.renderResults(); // rivals still crossing the line after you
     }
     c.events.length = 0;
     c.impact *= 0.9;
