@@ -213,10 +213,19 @@ class Terrain {
           endY[e ? 1 : 0] = pin[e]; prof[e] = pin[e]; break;
         }
       }
+      // the railway out west: on a viaduct well clear of the desert floor, wherever it is not in a bore
+      const bores = (def.bores || []).map(([a, b]) => { let i = Math.round(R.project(a[0], a[1], 0, -1).s / R.step), j = Math.round(R.project(b[0], b[1], 0, -1).s / R.step); if (i > j) [i, j] = [j, i]; return [Math.max(0, i - 4), Math.min(nS, j + 4)]; });
+      const inBore = (i) => bores.some(([a, b]) => i >= a && i <= b);
+      if (def.lowland) {
+        const env = new Float32Array(nS + 1), W = 40;
+        for (let i = 0; i <= nS; i++) if (R.x[i] < def.lowland) { let m = -1e9; for (let k = -W; k <= W; k++) { const j = R.idx(i + k); if (!inBore(j)) m = Math.max(m, this.rawH(R.x[j], R.z[j])); } env[i] = m; }
+        for (let i = 0; i <= nS; i++) if (R.x[i] < def.lowland && !inBore(i)) prof[i] = env[i] + 7.8;
+      }
       if (def.tunnel) { // bore straight through the mountain between the portal approaches
         const a = prof[0], b = prof[nS];
         for (let i = 0; i <= nS; i++) prof[i] = Math.min(prof[i], lerp(a, b, i / nS) + 0.5);
       }
+      for (const [a, b] of bores) for (let i = a; i <= b; i++) prof[i] = Math.min(prof[i], lerp(prof[a], prof[b], (i - a) / (b - a)) + 0.5);
       if (def.street) for (let i = 0; i <= nS; i++) prof[i] = CITY.y;
       const win = def.smoothWin || (def.trail ? 10 : 18);
       for (let pass = 0; pass < (def.passes || 4); pass++) {
@@ -336,11 +345,11 @@ class Terrain {
       }
       for (let i = 0; i <= nS; i++) R.y[i] = prof[i] + feat[i];
       // well clear of the ground a viaduct stands on piers: no embankment, no tarmac painted underneath
-      const elev = def.viaduct ? R.elev = Uint8Array.from(R.y, (y, i) => y - this.rawH(R.x[i], R.z[i]) > 3.2 ? 1 : 0) : null;
+      const elev = def.viaduct || def.lowland ? R.elev = Uint8Array.from(R.y, (y, i) => y - this.rawH(R.x[i], R.z[i]) > 3.2 && (!def.lowland || R.x[i] < def.lowland + 60) ? 1 : 0) : null;
       R.feature = feat;
-      if (R.surface === 'rail') for (let i = 0; i <= nS; i++) { const k = rkey(R.x[i], R.z[i]); let l = railHash.get(k); if (!l) railHash.set(k, l = []); l.push([R.x[i], R.z[i], R.y[i]]); }
+      if (R.surface === 'rail') for (let i = 0; i <= nS; i++) { if (R.elev && R.elev[i]) continue; const k = rkey(R.x[i], R.z[i]); let l = railHash.get(k); if (!l) railHash.set(k, l = []); l.push([R.x[i], R.z[i], R.y[i]]); }
       // tunnel cover: where the untouched mountain stands well above the road
-      if (def.tunnel) {
+      if (def.tunnel || def.bores) {
         R.covered = new Uint8Array(nS + 1);
         for (let i = 0; i <= nS; i++) R.covered[i] = naturalHeight(R.x[i], R.z[i]) - R.y[i] > 9.5 ? 1 : 0;
         // close tiny gaps

@@ -48,13 +48,27 @@ class World {
   }
   route(id) { return this.terrain.routes.find((r) => r.id === id); }
   /* Calder Tunnel: the lined bore and its portal headwalls, shared by the meshes and the colliders */
-  tunnelSpan() {
-    if (this._tun !== undefined) return this._tun;
-    const R = this.route('tunnel'), T = this.terrain;
-    let i0 = -1, i1 = -1;
-    if (R.covered) for (let i = 0; i <= R.count; i++) if (R.covered[i]) { if (i0 < 0) i0 = i; i1 = i; }
-    if (i0 < 0) return (this._tun = null);
+  tunnelSpan() { return this.tunnelSpans().find((t) => t.R.id === 'tunnel') || null; }
+  /* every bore: the Calder Tunnel, and the railway's tunnels through the rim and the mesas */
+  tunnelSpans() {
+    if (this._tuns) return this._tuns;
+    this._tuns = [];
+    for (const R of this.terrain.routes) {
+      if (!R.covered) continue;
+      for (let i = 0; i <= R.count; i++) {
+        if (!R.covered[i]) continue;
+        let j = i; while (j < R.count && R.covered[j + 1]) j++;
+        if (j - i > 8) this._tuns.push(this.makeTunnelSpan(R, i, j));
+        i = j;
+      }
+    }
+    return this._tuns;
+  }
+  makeTunnelSpan(R, i0, i1) {
+    const T = this.terrain;
     i0 = Math.max(0, i0 - 2); i1 = Math.min(R.count, i1 + 2);
+    const bore = (R.def.bores || []).find(([a, b]) => { const s = (i0 + i1) / 2 * R.step, p = R.posAt(s, {}); return Math.hypot(p.x - (a[0] + b[0]) / 2, p.z - (a[1] + b[1]) / 2) < 400; });
+    const name = R.id === 'tunnel' ? 'CALDER TUNNEL' : bore ? bore[2] : 'RAIL TUNNEL';
     const hw = R.width / 2 + 1.2, reach = R.width / 2 + 20, N = 16, portals = [];
     for (const [iP, facing] of [[i0, 1], [i1, -1]]) {
       const s = iP * R.step, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), rx = dz, rz = -dx;
@@ -67,10 +81,10 @@ class World {
       }
       portals.push({ s, p, dx, dz, facing, top, line });
     }
-    return (this._tun = { R, i0, i1, hw, reach, portals });
+    return { R, i0, i1, hw, reach, portals, name };
   }
-  addTunnelWalls() {
-    const tun = this.tunnelSpan(); if (!tun) return;
+  addTunnelWalls() { for (const tun of this.tunnelSpans()) this.addTunnelWallsFor(tun); }
+  addTunnelWallsFor(tun) {
     const { R, i0, i1, hw, reach } = tun, S = this.scatter, r = 0.35, off = hw + r;
     // bore walls: solid up to the crown
     for (let i = i0; i < i1; i += 2) {

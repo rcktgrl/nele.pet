@@ -412,8 +412,8 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     gantry(pass, [2900, -1800], [['KESTREL PASS', 'SUMMIT 2 km']], [['CALDER VALLEY', '↓ 3 km']]);
   },
   /* ---------- Calder Tunnel: lined bore, mountain cover, portals ---------- */
-  buildTunnel() {
-    const tun = this.world.tunnelSpan(); if (!tun) return;
+  buildTunnel() { for (const tun of this.world.tunnelSpans()) this.buildTunnelFor(tun); },
+  buildTunnelFor(tun) {
     const { R, i0, i1, hw } = tun;
     // cross-section, inward-facing
     const prof = [];
@@ -470,7 +470,7 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     cg.setIndex(ci); cg.computeBoundingSphere();
     const cover = new THREE.Mesh(cg, this.terrainMat); cover.castShadow = true; cover.receiveShadow = true; this.scene.add(cover);
     // portals: concrete headwalls with the tunnel name
-    const nameTex = textTex(1024, 160, (gg, w, h) => { gg.fillStyle = '#5d5953'; gg.fillRect(0, 0, w, h); gg.fillStyle = '#e9e3d6'; gg.font = '400 104px "Saira Stencil One", Impact, sans-serif'; gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillText('CALDER TUNNEL', w / 2, h / 2 + 4); });
+    const nameTex = textTex(1024, 160, (gg, w, h) => { gg.fillStyle = '#5d5953'; gg.fillRect(0, 0, w, h); gg.fillStyle = '#e9e3d6'; gg.font = '400 104px "Saira Stencil One", Impact, sans-serif'; gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillText(tun.name, w / 2, h / 2 + 4); });
     const concTex = textTex(256, 256, (gg, w, h) => {
       gg.fillStyle = '#8a837a'; gg.fillRect(0, 0, w, h);
       const r = mulberry32(31);

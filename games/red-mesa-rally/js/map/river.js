@@ -151,9 +151,9 @@ function findBridges(T) {
     const street = (x, z) => cityCell(x, z) > 0 && Math.min(Math.abs(((x - CITY.x0) % CITY.pitch + CITY.pitch) % CITY.pitch - CITY.pitch / 2), Math.abs(((z - CITY.z0) % CITY.pitch + CITY.pitch) % CITY.pitch - CITY.pitch / 2)) > CITY.pitch / 2 - CITY.hw - 3;
     const dry = (x, z) => { const gi = T.gi(x, z); return !T.river[gi] && !T.rown[gi] && !(T.rail[gi] > 0) && !street(x, z); };
     let acc = 13;
-    if (wet || R.def.viaduct) for (let k = a; k < b; k++) {
+    if (wet || R.elev) for (let k = a; k < b; k++) {
       const gi = T.gi(R.x[k], R.z[k]);
-      acc += R.step; if (acc < 26 || !(T.river[gi] || (R.def.viaduct && R.elev && R.elev[k] && dry(R.x[k], R.z[k])))) continue;
+      acc += R.step; if (acc < 26 || !(T.river[gi] || (R.elev && R.elev[k] && dry(R.x[k], R.z[k])))) continue;
       acc = 0; const [dx, dz] = R.dirAt(k * R.step);
       for (const l of span.rail ? [0] : [-(R.width / 2 - 2), R.width / 2 - 2]) span.piers.push({ x: R.x[k] - dz * l, z: R.z[k] + dx * l, top: R.y[k] - 0.9, bot: T.h[T.gi(R.x[k] - dz * l, R.z[k] + dx * l)] - 0.5, dx, dz });
     }
