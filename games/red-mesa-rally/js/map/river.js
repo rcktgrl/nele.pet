@@ -75,8 +75,11 @@ const RIVER = (() => {
   const tunnel = { pts: TUN, s: ts, length: ts[ts.length - 1], hw: 8, open: [62, ts[ts.length - 1] - 62], ceil: WATER_Y + 5, under: WATER_Y + 3.4, bed: WATER_Y - 3.2 };
   // cut open end to end like the channel; the covered middle gets a lid laid back over it (see carveRiver)
   reaches.push(reach('tunnel', TUN.map(([x, z]) => pt(x, z, tunnel.hw, 3, WATER_Y, true))));
-  const boatStart = up.findIndex((q) => q.z > -560 && q.wl <= WATER_Y);
-  return { CTRL, P, s, wl, reaches, island, tunnel, ISL, boatStart: up[Math.max(0, boatStart)], length: s[n - 1] };
+  // the boat race: Millbrook down the left arm and the open channel, finishing out in the harbour
+  const b0 = Math.max(0, up.findIndex((q) => q.z > -560 && q.wl <= WATER_Y));
+  const line = [...up.slice(b0), ...armL, ...down, { x: 4330, z: 838 }, { x: 4420, z: 860 }];
+  const racePts = line.filter((_, i) => i % 3 === 0 || i === line.length - 1).map((q) => [q.x, q.z]);
+  return { CTRL, P, s, wl, reaches, island, tunnel, ISL, boatStart: up[b0], racePts, length: s[n - 1] };
 })();
 
 /* bed height a reach asks for at distance d from its centre, given the ground h there */
@@ -135,35 +138,45 @@ function carveRiver(T) {
 
 /* road and rail decks wherever the river cut away the ground under a route: raised overlays that boats pass under */
 function findBridges(T) {
-  const out = [];
-  for (const R of T.routes) {
-    if (R.def.noCarve || R.def.trafficOnly) continue;
+  const out = [], Rs = T.routes.filter((R) => !R.def.noCarve && !R.def.trafficOnly);
+  const deck = (R, a, b, wet) => {
+    const span = { route: R.id, i0: a, i1: b, width: R.width, rail: R.surface === 'rail', pieces: [], piers: [] };
+    for (let k = a; k < b; k += 2) {
+      const e = Math.min(b, k + 2), dx = R.x[e] - R.x[k], dz = R.z[e] - R.z[k], L = Math.hypot(dx, dz) || 1;
+      const y0 = R.y[k], y1 = R.y[e];
+      span.pieces.push({ kind: 'slope', x: R.x[k] - dx / L * 0.4, z: R.z[k] - dz / L * 0.4, dx: dx / L, dz: dz / L, L: L + 0.4, Lt: L + 0.8, hw: R.width / 2 + 1.5, y0, y1, under: Math.min(y0, y1) - 3, bridge: true, gap: [false, false] });
+    }
+    // piers: in the water every 26 m, a pair under a road deck and one under the rail
+    let acc = 13;
+    if (wet) for (let k = a; k < b; k++) {
+      acc += R.step; if (acc < 26 || !T.river[T.gi(R.x[k], R.z[k])]) continue;
+      acc = 0; const [dx, dz] = R.dirAt(k * R.step);
+      for (const l of span.rail ? [0] : [-(R.width / 2 - 2), R.width / 2 - 2]) span.piers.push({ x: R.x[k] - dz * l, z: R.z[k] + dx * l, top: R.y[k] - 0.9, bot: T.h[T.gi(R.x[k] - dz * l, R.z[k] + dx * l)] - 0.5, dx, dz });
+    }
+    out.push(span); return span;
+  };
+  // the road deck at (x, z) if a bridge already carries one there at about height y
+  const onDeck = (x, z, y) => out.some((B) => B.pieces.some((p) => { const ax = x - p.x, az = z - p.z, u = ax * p.dx + az * p.dz, v = -ax * p.dz + az * p.dx; return u > -2 && u < p.Lt + 2 && Math.abs(v) < p.hw + 3 && Math.abs(y - (p.y0 + p.y1) / 2) < 2.5; }));
+  for (const pass of [0, 1]) for (const R of Rs) {
     const N = R.count, cut = new Uint8Array(N + 1);
     for (let i = 0; i <= N; i++) cut[i] = T.rawH(R.x[i], R.z[i]) < R.y[i] - 0.12 ? 1 : 0;
-    // only spans that actually cross water count
     let i = 0;
     while (i <= N) {
       if (!cut[i]) { i++; continue; }
       let j = i; while (j < N && cut[j + 1]) j++;
       let wet = false; for (let k = i; k <= j; k++) if (T.river[T.gi(R.x[k], R.z[k])]) wet = true;
-      if (wet) {
-        const a = Math.max(0, i - 3), b = Math.min(N, j + 3), span = { route: R.id, i0: a, i1: b, width: R.width, rail: R.surface === 'rail', pieces: [] };
-        for (let k = a; k < b; k += 2) {
-          const e = Math.min(b, k + 2), dx = R.x[e] - R.x[k], dz = R.z[e] - R.z[k], L = Math.hypot(dx, dz) || 1;
-          const y0 = R.y[k], y1 = R.y[e];
-          span.pieces.push({ kind: 'slope', x: R.x[k] - dx / L * 0.4, z: R.z[k] - dz / L * 0.4, dx: dx / L, dz: dz / L, L: L + 0.4, Lt: L + 0.8, hw: R.width / 2 + 1.5, y0, y1, under: Math.min(y0, y1) - 3, bridge: true });
-        }
-        // piers: in the water every 26 m, a pair under a road deck and one under the rail
-        let acc = 13;
-        for (let k = a; k < b; k++) {
-          acc += R.step; if (acc < 26 || !T.river[T.gi(R.x[k], R.z[k])]) continue;
-          acc = 0; const [dx, dz] = R.dirAt(k * R.step);
-          for (const l of span.rail ? [0] : [-(R.width / 2 - 2), R.width / 2 - 2]) span.piers = (span.piers || []).concat({ x: R.x[k] - dz * l, z: R.z[k] + dx * l, top: R.y[k] - 0.9, bot: T.h[T.gi(R.x[k] - dz * l, R.z[k] + dx * l)] - 0.5, dx, dz });
-        }
-        span.piers = span.piers || [];
-        out.push(span);
-      }
+      // first the spans over water; then dry dips in a road that runs onto one of those decks (a junction at the bridgehead)
+      if (pass === 0 ? wet : !wet && j - i < 40 && (onDeck(R.x[Math.max(0, i - 2)], R.z[Math.max(0, i - 2)], R.y[i]) || onDeck(R.x[Math.min(N, j + 2)], R.z[Math.min(N, j + 2)], R.y[j])))
+        deck(R, Math.max(0, i - 3), Math.min(N, j + 3), wet);
       i = j + 1;
+    }
+  }
+  // leave the parapet open wherever another road joins at deck level
+  for (const B of out) for (const p of B.pieces) for (const R of Rs) {
+    if (R.id === B.route) continue;
+    for (const [si, side] of [[0, -1], [1, 1]]) {
+      const l = side * p.hw, x = p.x - p.dz * l + p.dx * p.Lt / 2, z = p.z + p.dx * l + p.dz * p.Lt / 2, pr = R.project(x, z, 0, -1);
+      if (pr.dist < R.width / 2 + 3 && Math.abs(R.y[R.idx(Math.round(pr.s / R.step))] - (p.y0 + p.y1) / 2) < 2.5) p.gap[si] = true;
     }
   }
   return out;

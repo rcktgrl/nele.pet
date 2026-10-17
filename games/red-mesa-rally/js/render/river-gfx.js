@@ -7,6 +7,49 @@ Object.assign(Gfx.prototype, {
     this.buildBridges();
     this.buildBoatTunnel();
     this.buildChannelWalls();
+    this.buildVillage();
+  },
+  /* Millbrook: whitewashed houses with gable roofs, red barns, the stone mill and its wheel */
+  buildVillage() {
+    const geos = [];
+    const box = (w, h, d, x, y, z, col) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return tint(g, ...col); };
+    const gable = (w, d, rise, y, col) => { // ridge along the length (z)
+      const hw = w / 2 + 0.5, hd = d / 2 + 0.5, P = [-hw, y, -hd, hw, y, -hd, 0, y + rise, -hd, -hw, y, hd, 0, y + rise, hd, hw, y, hd];
+      const v = (i) => P.slice(i * 3, i * 3 + 3), T = [[0, 2, 1], [3, 5, 4], [0, 3, 4], [0, 4, 2], [1, 2, 4], [1, 4, 5]], pos = [];
+      for (const t of T) for (const i of t) pos.push(...v(i));
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return tint(g, ...col);
+    };
+    const DARK = [0.12, 0.13, 0.15], WOOD = [0.36, 0.24, 0.16];
+    for (const o of this.world.terrain.village) {
+      const parts = [], H = o.y1 - o.y0 + o.h, base = o.y0;
+      parts.push(box(o.w, H, o.d, 0, base + H / 2, 0, o.wall));
+      parts.push(gable(o.w, o.d, o.kind === 'barn' ? o.w * 0.45 : o.w * 0.38, base + H, o.roof));
+      if (o.kind === 'barn') parts.push(box(o.w * 0.5, o.h * 0.75, 0.2, 0, o.y1 + o.h * 0.375, o.d / 2 + 0.05, [0.92, 0.9, 0.86]), box(o.w * 0.44, o.h * 0.68, 0.24, 0, o.y1 + o.h * 0.34, o.d / 2 + 0.06, o.wall));
+      else {
+        parts.push(box(1.1, 2.1, 0.2, 0, o.y1 + 1.05, o.d / 2 + 0.05, WOOD));
+        const nw = Math.max(1, Math.floor(o.d / 3.2));
+        for (const side of [-1, 1]) for (let k = 0; k < nw; k++) parts.push(box(0.2, 1.1, 1.1, side * (o.w / 2 + 0.05), o.y1 + 1.6, -o.d / 2 + (k + 0.5) * o.d / nw, DARK));
+        for (const sx of [-1, 1]) parts.push(box(1.1, 1.1, 0.2, sx * o.w * 0.28, o.y1 + 1.6, o.d / 2 + 0.05, DARK));
+        if (o.h > 4.6) parts.push(box(0.8, 2.2, 0.8, o.w * 0.25, base + H + o.w * 0.3, -o.d * 0.25, [0.55, 0.45, 0.4]));
+      }
+      if (o.kind === 'mill') parts.push(box(o.w + 0.6, 1.2, o.d + 0.6, 0, o.y0 + 0.6, 0, [0.5, 0.48, 0.45]));
+      const m = new THREE.Matrix4().makeRotationY(o.yaw).setPosition(o.x, 0, o.z);
+      for (const g of parts) geos.push(g.applyMatrix4(m));
+      if (o.wheel) { // the wheel stands on edge in the water, its axle across the bank
+        const W = o.wheel, wy = WATER_Y + W.r * 0.55, rim = new THREE.TorusGeometry(W.r, 0.18, 6, 24), wg = [tint(rim.clone(), ...WOOD)];
+        const rim2 = rim.clone(); rim2.translate(0, 0, 1.2); wg.push(tint(rim2, ...WOOD));
+        for (let k = 0; k < 12; k++) { const pdl = new THREE.BoxGeometry(0.15, W.r * 0.3, 1.4); pdl.translate(0, W.r * 0.85, 0.6); pdl.rotateZ(k * TAU / 12); wg.push(tint(pdl, ...WOOD)); }
+        for (let k = 0; k < 6; k++) { const sp = new THREE.BoxGeometry(0.14, W.r * 2, 0.14); sp.rotateZ(k * Math.PI / 6); sp.translate(0, 0, 0.6); wg.push(tint(sp, ...WOOD)); }
+        const ax = new THREE.CylinderGeometry(0.25, 0.25, 4, 8); ax.rotateX(Math.PI / 2); ax.translate(0, 0, 0.6); wg.push(tint(ax, ...DARK));
+        const g = mergeGeos(wg); g.translate(0, 0, -0.6);
+        const wm = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
+        wm.position.set(W.x, wy, W.z); wm.rotation.order = 'YXZ'; wm.rotation.y = W.yaw + Math.PI / 2; wm.castShadow = true;
+        this.scene.add(wm); this.millWheel = wm;
+      }
+    }
+    if (!geos.length) return;
+    const mesh = new THREE.Mesh(mergeGeos(geos), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }));
+    mesh.castShadow = mesh.receiveShadow = true; this.scene.add(mesh);
   },
   /* through the docks the river runs between straight concrete walls */
   buildChannelWalls() {
@@ -32,7 +75,7 @@ Object.assign(Gfx.prototype, {
   },
   /* up in the hills the river runs above sea level: a ribbon of water down its own bed */
   buildStream() {
-    const Q = RIVER.reaches.find((r) => r.id === 'upper').pts.filter((q) => q.wl > WATER_Y + 0.3);
+    const Q = RIVER.reaches.find((r) => r.id === 'upper').pts.filter((q) => q.wl > WATER_Y + 1.1); // lower down the bed is under sea level and the real water takes over
     if (Q.length < 2) return;
     const pos = [], uv = [], idx = [];
     for (let i = 0; i < Q.length; i++) {
@@ -88,7 +131,8 @@ Object.assign(Gfx.prototype, {
         }
         for (let k = 0; k < n; k++) {
           const a = k * 8, b = a + 8;
-          for (const [u, v] of [[0, 1], [1, 2], [2, 3], [4, 5], [5, 6], [6, 7]]) pi.push(a + u, b + u, a + v, a + v, b + u, b + v);
+          const gap = (B.pieces[k >> 1] || {}).gap || []; // a road joins here: no wall on that side
+          for (const [u, v] of [[0, 1], [1, 2], [2, 3], [4, 5], [5, 6], [6, 7]]) if (!gap[u < 4 ? 0 : 1]) pi.push(a + u, b + u, a + v, a + v, b + u, b + v);
         }
         strip(W, pi, conc);
       }

@@ -21,7 +21,7 @@ class World {
     this.crossings = this.findCrossings();
     this.addTunnelWalls();
     this.addQuays();
-    this.addBridgeWalls();
+    this.addBridgeWalls(); this.addVillage();
     this.addMetroWalls();
     this.metroTrains = this.terrain.metro ? [
       new MetroTrain(this, { lat: METRO.tracks[1], vmax: 19 }),
@@ -122,10 +122,20 @@ class World {
     const S = this.scatter;
     for (const B of this.terrain.bridges) {
       for (const p of B.pieces) for (const side of [-1, 1]) {
+        if (p.gap[side < 0 ? 0 : 1]) continue; // a road joins the deck here
         const l = side * (p.hw - 0.3), ax = p.x - p.dz * l, az = p.z + p.dx * l, bx = ax + p.dx * p.Lt, bz = az + p.dz * p.Lt;
         const o = S.addSegment(ax, az, bx, bz, Math.max(p.y0, p.y1) + 1.0, 'rail'); o.r = 0.3; o.bot = Math.min(p.y0, p.y1) - 1.2;
       }
       for (const q of B.piers) { const o = S.addObstacle(q.x, q.z, B.rail ? 1.6 : 1.1, q.top, 'barrier'); o.bot = q.bot; }
+    }
+  }
+  /* Millbrook: every house a solid box */
+  addVillage() {
+    const S = this.scatter;
+    for (const o of this.terrain.village) {
+      const c = Math.cos(o.yaw), s = Math.sin(o.yaw), P = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [o.x + a * o.w / 2 * c + b * o.d / 2 * s, o.z - a * o.w / 2 * s + b * o.d / 2 * c]);
+      for (let k = 0; k < 4; k++) { const [ax, az] = P[k], [bx, bz] = P[(k + 1) % 4]; S.addSegment(ax, az, bx, bz, o.y1 + o.h, 'barrier').r = 0.3; }
+      if (o.wheel) S.addObstacle(o.wheel.x, o.wheel.z, 1.4, WATER_Y + o.wheel.r * 1.6, 'barrier');
     }
   }
   /* harbour quay faces: low walls that stop boats but sit under the wheels of anything on the quay */

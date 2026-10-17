@@ -64,7 +64,7 @@ class Scatter {
     const okEast = (x, z, clear) => {
       if (x < 1250) return false;
       const gi = T.gi(x, z);
-      if (T.rdist[gi] < clear || T.rail[gi] > 0 || T.city[gi] || T.tun[gi] || T.river[gi]) return false;
+      if (T.rdist[gi] < clear || T.rail[gi] > 0 || T.city[gi] || T.tun[gi] || T.river[gi] || T.lot[gi]) return false;
       const y = T.h[gi]; if (y < WATER_Y + 1.5) return false;
       if (eastSDF(x, z).d > -10) return false;
       return true;
@@ -87,6 +87,15 @@ class Scatter {
       const s = 0.9 + rng() * 0.8, y = T.h[gi];
       this.oaks.push({ x, z, y, s, rot: rng() * TAU, seed: rng() });
       this.addObstacle(x, z, 0.5 * s, y + 6 * s, 'tree');
+    }
+    // willows and scrub on the river island
+    const [ix0, iz0, ix1, iz1] = RIVER.island.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [1e9, 1e9, -1e9, -1e9]);
+    for (let i = 0, k = 0; i < 4000 && k < 140; i++) {
+      const x = ix0 + rng() * (ix1 - ix0), z = iz0 + rng() * (iz1 - iz0), gi = T.gi(x, z);
+      if (!inPoly(x, z, RIVER.island) || T.river[gi] || T.rdist[gi] < 12 || T.rail[gi] > 0 || T.h[gi] < WATER_Y + 0.8 || slopeAt(x, z) < 0.8) continue;
+      const s = 0.8 + rng() * 0.7, y = T.h[gi]; k++;
+      if (rng() < 0.6) { this.oaks.push({ x, z, y, s, rot: rng() * TAU, seed: rng() }); this.addObstacle(x, z, 0.5 * s, y + 6 * s, 'tree'); }
+      else this.grassBush.push({ x, z, y, s: 0.6 + rng() * 0.9, rot: rng() * TAU, seed: rng(), g: 0.8 });
     }
     for (let i = 0; i < 40000 && this.grassBush.length < 9000; i++) {
       const x = 1200 + rng() * 4000, z = -2800 + rng() * 4000;

@@ -5,13 +5,14 @@ Object.assign(Game.prototype, {
   typeLabel(ev) { return ev.type === 'race' ? `Race · ${ev.laps} laps · ${ev.ai} rivals` : ev.type === 'sprint' ? `Sprint · point to point · ${ev.ai} rivals` : this.world.route(ev.route).closed ? `Time attack · ${ev.laps} laps · solo` : 'Time attack · point to point · solo'; },
   openEventScreen(ev) {
     if (this.state !== 'free') return;
-    this.state = 'event'; this.pendingEvent = ev; this.pendingVehicle = VEHICLES[this.vehicle].boat ? this.landVehicle : this.vehicle;
+    this.state = 'event'; this.pendingEvent = ev; this.pendingVehicle = ev.boat ? 'boat' : VEHICLES[this.vehicle].boat ? this.landVehicle : this.vehicle;
     $('evType').textContent = this.typeLabel(ev); $('evName').textContent = ev.name; $('evBlurb').textContent = ev.blurb;
     const best = Store.data.best[ev.id];
     const chips = [`${Math.round(this.world.route(ev.route).length * (ev.type === 'sprint' ? 1 : ev.laps) / 100) / 10} km`, best ? `Your best ${fmtTime(best.time)}` : 'No time set'];
     if (ev.medals) chips.push(`Gold ${fmtTime(ev.medals[0])}`, `Silver ${fmtTime(ev.medals[1])}`, `Bronze ${fmtTime(ev.medals[2])}`);
     $('evChips').innerHTML = chips.map((c) => `<span class="chip">${c}</span>`).join('');
-    this.carCards($('evCars'), (vid) => { this.pendingVehicle = vid; }, { sel: this.pendingVehicle });
+    if (ev.boat) $('evCars').innerHTML = ''; // boats only: everyone races the Skiff
+    else this.carCards($('evCars'), (vid) => { this.pendingVehicle = vid; }, { sel: this.pendingVehicle });
     this.refreshEventStart();
     this.eventOnline(ev);
     this.screen('eventScreen', true);
@@ -35,7 +36,8 @@ Object.assign(Game.prototype, {
   startEvent(ev, vid, mpOrder) {
     this.screen('eventScreen', false); this.screen('results', false);
     this.clearRoamers(); this.traffic.clear();
-    if (VEHICLES[vid].boat || !this.story.carUnlocked(vid)) vid = this.story.carUnlocked(this.landVehicle) ? this.landVehicle : 'buggy';
+    if (ev.boat) vid = 'boat';
+    else if (VEHICLES[vid].boat || !this.story.carUnlocked(vid)) vid = this.story.carUnlocked(this.landVehicle) ? this.landVehicle : 'buggy';
     if (vid !== this.player.spec.id) this.spawnPlayer(vid);
     this.vehicle = vid;
     const R = this.world.route(ev.route);
@@ -47,6 +49,7 @@ Object.assign(Game.prototype, {
       let v, name, color = AI_COLORS[i % AI_COLORS.length], helmet = AI_COLORS[(i + 3) % AI_COLORS.length], number = [12, 23, 4, 88, 51, 66][i];
       if (ev.aiCars) { v = ev.aiCars[i % ev.aiCars.length]; name = CREW_NAMES[i]; color = crewCol[(i + 1) % crewCol.length]; }
       else { v = i === 2 ? others[0] : i === 4 ? others[1] : (VEHICLES[vid].offroad ? vid : 'rally'); name = AI_NAMES[i]; }
+      if (ev.boat) v = 'boat';
       if ((ev.boss || ev.vic) && i === 0) { v = 'ironside'; name = 'Vic Calder'; color = 0x0d0d0f; helmet = 0xd4af37; number = 1; }
       const car = this.addCar(VEHICLES[v], { id: i + 1, color, number, helmet, livery: ev.aiCars ? 'CALDER CREW' : undefined });
       car.name = name; cars.push(car);

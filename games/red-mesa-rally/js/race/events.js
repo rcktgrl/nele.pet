@@ -17,11 +17,14 @@ const EVENTS = [
   { id: 'metro', name: 'Metro Line', type: 'race', route: 'metro', laps: 2, ai: 5, region: 'city', aiCars: ['ironside', 'kaze'], crew: true, vic: true,
     at: (() => { const sp = metroSpurs()[0]; return { x: sp.x - sp.dx * 16, z: sp.z - sp.dz * 16, yaw: Math.atan2(-sp.dx, -sp.dz) }; })(),
     blurb: 'Two laps of the Calder Metro loop, under downtown, against Vic Calder and his crew. Start down the Kingsway ramp. No road down there, just two tracks: the stopping train runs your way, the express comes at you. Switch tracks to stay alive.' },
+  { id: 'river', name: 'Calder River Run', type: 'sprint', route: 'river', laps: 1, ai: 5, region: 'city', boat: true, finishBack: 40,
+    at: (() => { const q = RIVER.boatStart, dx = 2470 - q.x, dz = -610 - q.z, L = Math.hypot(dx, dz); return { x: q.x + dx / L * 48, z: q.z + dz / L * 48 }; })(),
+    blurb: 'Skiffs from Millbrook down to the harbour. Left or right round the island, then the open channel under the bridges or the dark boat tunnel under the docks. Both ways are the same length.' },
   { id: 'finale', name: 'Coast to Canyon', type: 'sprint', route: 'finale', laps: 1, ai: 5, region: 'city', aiCars: ['ironside', 'kaze'], boss: true, locked: true, blurb: 'Vic Calder, his best crew and you. From the harbour, along the coast, through the tunnel and home to the festival. Winner keeps the valley.' },
 ];
 
 
-const EVENT_COLORS = { canyon: 0xff6a1a, mudbowl: 0x9b5a2a, sprint: 0xf2c230, ridge: 0x6fb7d9, interstate: 0x8fb8ff, harbour: 0xff7ad0, pass: 0x6fd9a8, finale: 0xffd23f, orchard: 0xa8d94a, dunes: 0xe8c27a, kestrel: 0x3fae7a, express: 0xff9a3c, metro: 0x2ab3c8 };
+const EVENT_COLORS = { canyon: 0xff6a1a, mudbowl: 0x9b5a2a, sprint: 0xf2c230, ridge: 0x6fb7d9, interstate: 0x8fb8ff, harbour: 0xff7ad0, pass: 0x6fd9a8, finale: 0xffd23f, orchard: 0xa8d94a, dunes: 0xe8c27a, kestrel: 0x3fae7a, express: 0xff9a3c, metro: 0x2ab3c8, river: 0x3fa9e0 };
 const CREW_NAMES = ['Nico Brand', 'Lena Marsh', 'Ozzie Vale', 'Tess Kurata', 'Ray Dunmore', 'Juno Sato'];
 const AI_NAMES = ['Kade Ruiz', 'Mina Okafor', 'Wes Tamura', 'Ilse Brandt', 'Tomas Reyes', 'June Halloran', 'Rook Abernathy', 'Sasha Petrov'];
 const AI_COLORS = [0x1f4e79, 0xf0b50a, 0x2f6f53, 0xe9e2d6, 0x6b2d8c, 0x23262b, 0xc81e1e, 0x2a8c8c];

@@ -26,6 +26,7 @@ class Terrain {
     yield 'Running the river';
     carveRiver(this);
     this.bridges = findBridges(this);
+    this.village = planVillage(this);
     yield 'Paving Port Calder';
     for (let iz = 0; iz < Nz; iz++) for (let ix = 0; ix < Nx; ix++) {
       const i = iz * Nx + ix, x = x0 + ix * cell, z = z0 + iz * cell;
@@ -58,6 +59,9 @@ class Terrain {
     const metro = new Route({ id: 'metro', closed: true, width: 12, surface: 'asphalt', noCarve: true, metro: true, lanes: 2, sub: 6, pts: arcLoop(METRO.corners.map(([i, j]) => [CX(i), CZ(j)]), 52) });
     metro.y.fill(METRO.y); this.routes.push(metro);
     this.buildMetro(metro);
+    // the river race line: never carved, it just rides the water
+    const river = new Route({ id: 'river', closed: false, width: 40, surface: 'water', noCarve: true, boat: true, slack: 260, pts: RIVER.racePts });
+    river.y.fill(WATER_Y); this.routes.push(river);
     // traffic lanes: the open roads driven the other way, and loops round the downtown blocks
     const rev = (id) => { const d = R(id).def; return { ...d, id: id + '-rev', pts: d.pts.slice().reverse(), keepStart: true, rails: false, tunnel: false }; };
     const loop = (id, a, b, c, d) => ({ id, closed: true, width: 16, surface: 'asphalt', pts: streetPath([[CX(a), CZ(b)], [CX(c), CZ(b)], [CX(c), CZ(d)], [CX(a), CZ(d)]], true), keepStart: true });

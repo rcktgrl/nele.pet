@@ -213,6 +213,7 @@ class Story {
     if (DESERT_EVENTS.includes(ev.id)) return true;
     if (CITY_EVENTS.includes(ev.id) || BACKROAD_EVENTS.includes(ev.id)) return this.s.ch >= 3;
     if (ev.id === 'finale') return this.s.ch >= 4;
+    if (ev.boat) return this.carUnlocked('boat');
     if (ev.id === 'express') return this.s.ch >= 6;
     if (ev.id === 'metro') return this.s.ch >= 7;
     return true;

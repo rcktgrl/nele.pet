@@ -28,9 +28,9 @@ class Race {
       const pr = R.project(c.pos.x, c.pos.z, P.s, 50);
       let ds = pr.s - P.s;
       if (R.closed) { if (ds < -R.length / 2) ds += R.length; if (ds > R.length / 2) ds -= R.length; }
-      P.off = pr.dist > R.width * 0.5 + 25 ? P.off + dt : 0;
+      P.off = pr.dist > (R.def.slack || R.width * 0.5 + 25) ? P.off + dt : 0; // slack: a river race may take either side of the island
       if (this.state === 'countdown') { P.s = pr.s; continue; }
-      if (pr.dist < R.width * 0.5 + 40) {
+      if (pr.dist < (R.def.slack || R.width * 0.5 + 40)) {
         const prevS = P.s; P.s = pr.s;
         if (R.closed && ds > 0 && pr.s < prevS - R.length / 2) { // crossed line
           P.lap++;
