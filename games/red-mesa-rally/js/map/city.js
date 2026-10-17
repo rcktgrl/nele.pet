@@ -138,5 +138,16 @@ class City {
     }
     for (let k = 0; k < 4; k++) if (T.h[T.gi(3700 + k * 380, 792)] > CITY.y - 0.5) this.cranes.push({ x: 3700 + k * 380, z: 792, yaw: 0, color: k % 2 ? 0xd94c22 : 0xe0b020 });
     for (let k = 0; k < 3; k++) this.cranes.push({ x: 5136, z: -500 + k * 260, yaw: Math.PI / 2, color: 0xd94c22 });
+    // the interstate viaduct and its ramps cut through the blocks: clear whatever stands in their way
+    const vm = new Uint8Array(T.h.length);
+    for (const R of T.routes) if (R.def.viaduct) for (let i = 0; i <= R.count; i++) {
+      const [dx, dz] = R.dirAt(i * R.step), w = R.width / 2 + 3;
+      for (let l = -w; l <= w; l += 2) vm[T.gi(R.x[i] - dz * l, R.z[i] + dx * l)] = 1;
+    }
+    const free = (x0, z0, x1, z1) => { for (let x = x0; x <= x1 + 0.1; x += Math.max(1, (x1 - x0) / 8)) for (let z = z0; z <= z1 + 0.1; z += Math.max(1, (z1 - z0) / 8)) if (vm[T.gi(x, z)]) return false; return true; };
+    this.buildings = this.buildings.filter((b) => b.deck || b.bridge || free(b.x0, b.z0, b.x1, b.z1));
+    this.parkTrees = this.parkTrees.filter((t) => !vm[T.gi(t.x, t.z)]);
+    this.lamps = this.lamps.filter((l) => !vm[T.gi(l.x, l.z)]);
+    this.palms = this.palms.filter((t) => !vm[T.gi(t.x, t.z)]);
   }
 }

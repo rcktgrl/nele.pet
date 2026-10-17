@@ -146,10 +146,14 @@ function findBridges(T) {
       const y0 = R.y[k], y1 = R.y[e];
       span.pieces.push({ kind: 'slope', x: R.x[k] - dx / L * 0.4, z: R.z[k] - dz / L * 0.4, dx: dx / L, dz: dz / L, L: L + 0.4, Lt: L + 0.8, hw: R.width / 2 + 1.5, y0, y1, under: Math.min(y0, y1) - 3, bridge: true, gap: [false, false] });
     }
-    // piers: in the water every 26 m, a pair under a road deck and one under the rail
+    // piers: in the water every 26 m, a pair under a road deck and one under the rail; a viaduct stands on them all the way,
+    // except where they would land on a road, the railway or a city street
+    const street = (x, z) => cityCell(x, z) > 0 && Math.min(Math.abs(((x - CITY.x0) % CITY.pitch + CITY.pitch) % CITY.pitch - CITY.pitch / 2), Math.abs(((z - CITY.z0) % CITY.pitch + CITY.pitch) % CITY.pitch - CITY.pitch / 2)) > CITY.pitch / 2 - CITY.hw - 3;
+    const dry = (x, z) => { const gi = T.gi(x, z); return !T.river[gi] && !T.rown[gi] && !(T.rail[gi] > 0) && !street(x, z); };
     let acc = 13;
-    if (wet) for (let k = a; k < b; k++) {
-      acc += R.step; if (acc < 26 || !T.river[T.gi(R.x[k], R.z[k])]) continue;
+    if (wet || R.def.viaduct) for (let k = a; k < b; k++) {
+      const gi = T.gi(R.x[k], R.z[k]);
+      acc += R.step; if (acc < 26 || !(T.river[gi] || (R.def.viaduct && R.elev && R.elev[k] && dry(R.x[k], R.z[k])))) continue;
       acc = 0; const [dx, dz] = R.dirAt(k * R.step);
       for (const l of span.rail ? [0] : [-(R.width / 2 - 2), R.width / 2 - 2]) span.piers.push({ x: R.x[k] - dz * l, z: R.z[k] + dx * l, top: R.y[k] - 0.9, bot: T.h[T.gi(R.x[k] - dz * l, R.z[k] + dx * l)] - 0.5, dx, dz });
     }
@@ -166,7 +170,8 @@ function findBridges(T) {
       let j = i; while (j < N && cut[j + 1]) j++;
       let wet = false; for (let k = i; k <= j; k++) if (T.river[T.gi(R.x[k], R.z[k])]) wet = true;
       // first the spans over water; then dry dips in a road that runs onto one of those decks (a junction at the bridgehead)
-      if (pass === 0 ? wet : !wet && j - i < 40 && (onDeck(R.x[Math.max(0, i - 2)], R.z[Math.max(0, i - 2)], R.y[i]) || onDeck(R.x[Math.min(N, j + 2)], R.z[Math.min(N, j + 2)], R.y[j])))
+      let up = false; if (R.elev) for (let k = i; k <= j; k++) if (R.elev[k]) up = true;
+      if (pass === 0 ? wet || up : !wet && j - i < 40 && (onDeck(R.x[Math.max(0, i - 2)], R.z[Math.max(0, i - 2)], R.y[i]) || onDeck(R.x[Math.min(N, j + 2)], R.z[Math.min(N, j + 2)], R.y[j])))
         deck(R, Math.max(0, i - 3), Math.min(N, j + 3), wet);
       i = j + 1;
     }

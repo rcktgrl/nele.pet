@@ -402,12 +402,12 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
       this.scene.add(g);
     };
     gantry(hwy, [1900, 95], [['PORT CALDER', '6 km ↑'], ['SALT COAST', '2 km ↑']], [['RED MESA ↗', 'CALDER TUNNEL'], ['FESTIVAL', '1.5 km']]);
-    gantry(hwy, [2700, 180], [['DOWNTOWN', '3 km ↑'], ['HARBOUR', 'EXIT 4']], [['SALT COAST', 'NEXT RIGHT'], ['RED MESA', '5 km ↑']]);
+    gantry(hwy, [2700, 535], [['PORT CALDER', '2 km ↑'], ['DOCKS', 'EXIT 4']], [['SALT COAST', 'VALLEY RD'], ['RED MESA', '5 km ↑']]);
     gantry(hwy, [3050, -1345], [['KESTREL PASS', 'NEXT RIGHT ↗']], [['KESTREL PASS', 'NEXT LEFT ↖']]);
-    // Exit 5: the off-ramp into downtown, and the on-ramp back out at the north-west corner
-    gantry(hwy, [3150, -20], [['PORT CALDER', 'EXIT 5 ↗'], ['DOWNTOWN', 'METRO']], [['RED MESA', 'CALDER TUNNEL ↑']]);
-    gantry(this.world.route('exit-5'), [3470, -438], [['DOWNTOWN', 'KINGSWAY ↑'], ['HARBOUR', 'DOCKS →']], [['INTERSTATE', '← ON RAMP']]);
-    gantry(this.world.route('entry-5'), [3452, -890], [['INTERSTATE', 'NORTH ↑'], ['KESTREL PASS', '3 km']], null);
+    // the interchanges on the viaduct
+    gantry(hwy, [3820, -940], [['CALDER CENTRAL', 'EXIT 5 ↘'], ['DOWNTOWN', 'METRO']], [['KESTREL PASS', '2 km ↑']]);
+    gantry(hwy, [3960, 30], [['CALDER CENTRAL', 'EXIT 5 ↗']], [['PORT', 'EXIT 6 ↑'], ['DOCKS', 'MARINA']]);
+    gantry(this.world.route('ramp-kestrel'), [3490, -990], [['INTERSTATE', '↑ ON RAMP']], [['DOWNTOWN', 'KINGSWAY ↓']]);
     gantry(coast, [3600, 980], [['PORT CALDER', 'DOCKS ↑']], [['CALDER VALLEY', 'INTERSTATE ↑']]);
     gantry(pass, [2900, -1800], [['KESTREL PASS', 'SUMMIT 2 km']], [['CALDER VALLEY', '↓ 3 km']]);
   },

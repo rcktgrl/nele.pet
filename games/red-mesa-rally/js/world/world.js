@@ -159,6 +159,12 @@ class World {
     const ra = SHIP.rampZ - SHIP.rampHw - 0.5, rb = SHIP.rampZ + SHIP.rampHw + 0.5;
     bw(SHIP.x0 + 0.4, SHIP.z0 + 26, SHIP.x0 + 0.4, ra); bw(SHIP.x0 + 0.4, rb, SHIP.x0 + 0.4, SHIP.z1 - 14.4);
     bw(SHIP.x1 - 0.4, SHIP.z0 + 26, SHIP.x1 - 0.4, SHIP.z1 - 14.4); bw(SHIP.x0 + 0.4, SHIP.z1 - 14.4, SHIP.x1 - 0.4, SHIP.z1 - 14.4);
+    // the ramp up from the quay: railings both sides, rising with it
+    const sr = this.city.decks.find((d) => d.ship);
+    if (sr) for (const side of [-1, 1]) for (let a = 0; a < sr.Lt; a += 6) {
+      const b = Math.min(sr.Lt, a + 6), zo = sr.z + side * (sr.hw + 0.3), o = S.addSegment(sr.x + a, zo, sr.x + b, zo, overlayLift(sr, sr.x + b, sr.z) + 1.0, 'rail');
+      o.r = 0.3; o.bot = overlayLift(sr, sr.x + a, sr.z) - 2.5;
+    }
   }
   /* nearest open water deep enough to float a boat */
   findWetSpot(x, z) {

@@ -6,7 +6,7 @@
 const TRAFFIC_PLAN = [['hwy', 4, 5.5, 27], ['hwy-rev', 4, 5.5, 27], ['coast', 2, 3.6, 22], ['coast-rev', 2, 3.6, 22], ['tunnel', 1, 3.2, 21], ['tunnel-rev', 1, 3.2, 21],
   ['pass', 1, 2.6, 15], ['pass-rev', 1, 2.6, 15], ['lane-valley', 1, 2.3, 16], ['lane-valley-rev', 1, 2.3, 16], ['lane-farm', 1, 2.3, 16], ['lane-farm-rev', 1, 2.3, 16],
   ['city-a', 2, 4.8, 13], ['city-a-rev', 1, 4.8, 13], ['city-b', 2, 4.8, 13], ['city-c', 1, 4.8, 13], ['city-c-rev', 1, 4.8, 13], ['city-d', 2, 4.8, 13],
-  ['exit-5', 2, 3.2, 22], ['exit-5-rev', 1, 3.2, 22], ['lane-orchard', 1, 2.4, 16], ['lane-orchard-rev', 1, 2.4, 16], ['lane-mill', 1, 2.3, 16], ['lane-mill-rev', 1, 2.3, 16]];
+  ['valley-rd', 2, 3.2, 22], ['valley-rd-rev', 1, 3.2, 22], ['lane-orchard', 1, 2.4, 16], ['lane-orchard-rev', 1, 2.4, 16], ['lane-mill', 1, 2.3, 16], ['lane-mill-rev', 1, 2.3, 16]];
 const TRAFFIC_COLORS = [0x8a9aa6, 0x6b2d2d, 0xe9e2d6, 0x2b3a4a, 0x9c8a64, 0x3d5a3d, 0xc9c4ba, 0x23262b, 0x7a1f1f, 0x4a6a8a];
 class Traffic {
   constructor(game) { this.g = game; this.list = []; this.WAKE = 520; this.SLEEP = 650; this.feedT = -9; }

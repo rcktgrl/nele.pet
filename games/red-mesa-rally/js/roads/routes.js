@@ -30,15 +30,19 @@ const ROUTE_DEFS = [
   { id: 'trail-north', closed: false, width: 9, trail: true, pts: [[-300, -760], [-150, -800], [10, -760]] },
   // ---- the east ----
   { id: 'tunnel', closed: false, width: 13, surface: 'asphalt', tunnel: true, lanes: 2, grade: 0.05,
-    pts: [[792, 10], [850, 12], [1000, 16], [1250, 20], [1480, 18], [1600, 12], [1700, 0]] },
-  { id: 'hwy', closed: true, width: 22, surface: 'asphalt', lanes: 4, rails: true, smoothWin: 40, grade: 0.06,
-    pts: [[1700, 0], [2100, 180], [2600, 200], [3050, 60], [3300, -250], [3420, -700], [3350, -1150], [3000, -1350], [2500, -1300], [2050, -1050], [1750, -650], [1640, -300]] },
+    pts: [[792, 10], [850, 12], [1000, 16], [1250, 20], [1480, 18], [1600, 12], [1700, -10], [1760, -40]] },
+  // the interstate: up the valley past Millbrook to the Kestrel Pass junction, through Port Calder on a viaduct, back west along the coast.
+  // It flies over every road and railway that crosses it (viaduct), so you only get on at a junction or a ramp.
+  { id: 'hwy', closed: true, width: 22, surface: 'asphalt', lanes: 4, rails: true, smoothWin: 40, grade: 0.06, viaduct: true,
+    pts: [[1760, -40], [1690, -420], [1800, -820], [1990, -1060], [2160, -1120], [2380, -1390], [2720, -1440], [3021, -1390], [3150, -1330], [3400, -1180], [3640, -1060],
+      [3870, -900], [3897, -640], [3897, -380], [3897, -120], [4022, 120], [4147, 380], [4120, 560], [3900, 560], [3600, 600], [3300, 640], [3150, 620], [2850, 585],
+      [2550, 480], [2200, 320], [1900, 160]] },
   { id: 'coast', closed: false, width: 15, surface: 'asphalt', lanes: 2, rails: true, smoothWin: 30, grade: 0.08,
     pts: [[2350, 210], [2300, 500], [2450, 850], [2850, 1050], [3350, 1050], [3800, 900], [4100, 700], [4210, 520], [4210, CITY.z1]] },
   { id: 'pass', closed: false, width: 11, surface: 'asphalt', lanes: 2, smoothWin: 25, grade: 0.11, rails: true,
     // ends sit on the highway centreline; the north face is too steep to drop straight down, so it switchbacks
-    pts: [[3001, -1350], [3050, -1600], [2900, -1800], [3150, -1950], [3000, -2200], [2750, -2300], [2850, -2500], [2550, -2600], [2350, -2450], [2400, -2200],
-      [2420, -2060], [2400, -1920], [2150, -1870], [1990, -1845], [1895, -1805], [1885, -1750], [1960, -1725], [2100, -1690], [2400, -1580], [2420, -1400], [2400, -1262]] },
+    pts: [[3021, -1390], [3050, -1600], [2900, -1800], [3150, -1950], [3000, -2200], [2750, -2300], [2850, -2500], [2550, -2600], [2350, -2450], [2400, -2200],
+      [2420, -2060], [2400, -1920], [2150, -1870], [1990, -1845], [1895, -1805], [1885, -1750], [1960, -1725], [2100, -1690], [2400, -1580], [2430, -1480], [2430, -1405]] },
   { id: 'harbour', closed: true, width: 16, surface: 'asphalt', street: true,
     pts: streetPath([[CX(3), CZ(2)], [CX(8), CZ(2)], [CX(8), CZ(5)], [CX(10), CZ(5)], [CX(10), CZ(9)], [CX(6), CZ(9)], [CX(6), CZ(6)], [CX(3), CZ(6)]], true) },
   // ---- country roads: gravel tracks across the desert, farm lanes through the valley, logging roads in the pines ----
@@ -46,9 +50,9 @@ const ROUTE_DEFS = [
   { id: 'trail-mesa', closed: false, width: 10, trail: true, country: true, pts: [[-700, -40], [-560, -60], [-420, -30], [-260, -40], [-135, -60]] },
   { id: 'trail-spires', closed: false, width: 10, trail: true, country: true, pts: [[264, -302], [380, -235], [500, -180], [560, -130]] },
   { id: 'lane-valley', closed: false, width: 9, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
-    pts: [[2499, -1300], [2600, -950], [2450, -600], [2650, -250], [2601, 200]] },
+    pts: [[2430, -1405], [2470, -1340], [2600, -950], [2450, -600], [2650, -250], [2605, 175]] },
   { id: 'lane-farm', closed: false, width: 9, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
-    pts: [[3300, -250], [3000, -420], [2800, -700], [2950, -1000], [3219, -1272]] },
+    pts: [[3060, -332], [3000, -420], [2800, -700], [2950, -1000], [3219, -1272]] },
   { id: 'track-pines', closed: false, width: 9, country: true, grade: 0.14, pts: [[2400, -1920], [2550, -1895], [2700, -1905], [2810, -1870], [2900, -1800]] },
   { id: 'track-logging', closed: false, width: 9, country: true, grade: 0.14, pts: [[2050, -1050], [2000, -1250], [2030, -1450], [2060, -1600], [2100, -1690]] },
   // ---- side roads: an orchard lane down to the coast, a dune loop by the beach, a ridge track over the pines, a mill lane across the valley ----
@@ -58,14 +62,25 @@ const ROUTE_DEFS = [
     pts: [[1900, 650], [2060, 590], [2190, 640], [2245, 760], [2200, 930], [2060, 1060], [1900, 1040], [1820, 900], [1800, 760]] },
   { id: 'trail-dunes', closed: false, width: 10, trail: true, country: true, pts: [[2368, 731], [2310, 745], [2240, 760]] },
   { id: 'track-kestrel', closed: false, width: 10, country: true, grade: 0.13, jumps: 1,
-    pts: [[3150, -1950], [3330, -1870], [3560, -1830], [3780, -1720], [3790, -1540], [3600, -1390], [3350, -1150]] },
+    pts: [[3150, -1950], [3330, -1870], [3560, -1830], [3780, -1720], [3790, -1540], [3600, -1390], [3360, -1205]] },
   { id: 'lane-mill', closed: false, width: 9, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
     pts: [[1750, -650], [1950, -590], [2150, -640], [2300, -570], [2450, -600]] },
-  // ---- Exit 5: the interstate's off-ramp peels away east and runs straight into downtown; the on-ramp leaves the north-west corner of the grid ----
-  { id: 'exit-5', closed: false, width: 12, surface: 'asphalt', lanes: 2, smoothWin: 20, grade: 0.06, rails: true,
-    pts: [[3211, -84], [3269, -164], [3335, -269], [3384, -359], [3425, -420], [3480, -440], [3600, -440], [3720, -440], [CX(3), -440]] },
-  { id: 'entry-5', closed: false, width: 11, surface: 'asphalt', lanes: 2, smoothWin: 20, grade: 0.06,
-    pts: [[CX(0), -760], [3458, -850], [3446, -920], [3430, -970], [3414, -1015], [3398, -1070]] },
+  // ---- links into Port Calder: the old oval's south side kept as Valley Rd, Mesa Blvd and North Rd across the valley to the grid ----
+  { id: 'valley-rd', closed: false, width: 13, surface: 'asphalt', lanes: 2, rails: true, smoothWin: 20, grade: 0.07,
+    pts: [[2200, 320], [2350, 210], [2480, 192], [2605, 175], [2730, 160], [2849, 148], [2990, 160], [3150, 170], [3300, 180], [CX(0), CZ(9)]] },
+  { id: 'mesa-blvd', closed: false, width: 12, surface: 'asphalt', lanes: 2, smoothWin: 20, grade: 0.08,
+    pts: [[2627, -313], [2800, -315], [2960, -322], [3121, -339], [3300, -325], [CX(0), CZ(5)]] },
+  { id: 'north-rd', closed: false, width: 11, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
+    pts: [[2915, -925], [3020, -890], [3150, -860], [3300, -830], [CX(0), CZ(1)]] },
+  // ---- interchanges: two-way slip roads off the viaduct down to the street grid ----
+  { id: 'ramp-kestrel', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
+    pts: [[3700, -1022], [3655, -1040], [3605, -1050], [3555, -1042], [3510, -1012], [3478, -972], [CX(0), CZ(0) + 10]] },
+  { id: 'ramp-central-w', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
+    pts: [[3897, -730], [3893, -685], [3881, -640], [3868, -590], [3866, -520], [3866, -450], [3862, -380], [3850, -335], [CX(3), CZ(5)]] },
+  { id: 'ramp-central-e', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
+    pts: [[3912, -85], [3905, -125], [3912, -170], [3928, -220], [3930, -280], [3942, -308], [CX(4), CZ(5)]] },
+  { id: 'ramp-port', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
+    pts: [[3840, 566], [3795, 562], [3752, 548], [3724, 520], [3713, 482], [CX(2), CZ(11)]] },
   { id: 'rail', closed: true, width: 8, surface: 'rail', smoothWin: 70, passes: 6, grade: 0.03, noFeatures: true,
     pts: [[1950, -250], [2100, 100], [2250, 330], [2600, 560], [3100, 760], [3700, 690], [4150, 600], [4650, 600], [5060, 460], [5080, -200], [5050, -900], [4600, -1300], [4000, -1580], [3400, -1700], [2800, -1650], [2350, -1450], [2150, -1000], [2000, -650]] },
 ];
