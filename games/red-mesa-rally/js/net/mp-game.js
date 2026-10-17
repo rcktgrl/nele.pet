@@ -71,7 +71,7 @@ Object.assign(Game.prototype, {
     const I = p.info || {}, vid = DRIVEABLE.includes(I.v) ? I.v : 'rally', old = p.car;
     const col = (v, d) => (Number.isInteger(v) && v >= 0 && v <= 0xffffff ? v : d);
     const car = this.addCar(VEHICLES[vid], { id: 60 + p.slot, color: col(I.c, VEHICLES[vid].color), number: Number.isInteger(I.n) ? clamp(I.n, 0, 999) : 0, livery: typeof I.x === 'string' ? I.x.slice(0, 16) : undefined, helmet: col(I.h, 0xff6a1a) });
-    car.remote = true; car.invuln = Infinity; car.name = p.name; car.peer = p.id; // only their own machine can wreck them
+    car.remote = true; car.invuln = Infinity; car.name = p.name; car.peer = p.id; car.netId = 'p'; // only their own machine can wreck them
     if (old) {
       car.pos.copy(old.pos); car.q.copy(old.q);
       const R = this.race, i = R ? R.cars.indexOf(old) : -1;
@@ -105,5 +105,81 @@ Object.assign(Game.prototype, {
     if (!pr || pr.finished) return;
     pr.dnf = true;
     if (this.state === 'results') this.renderResults();
+  },
+  /* ----- the host's traffic ----- */
+  /* the host's civilians and roaming rivals by id ('t3', 'r1'): the real car on the host, its ghost everywhere else */
+  aiCar(id) {
+    const L = id[0] === 't' ? this.traffic.list : id[0] === 'r' ? this.roamers : null, a = L && L[Number(id.slice(1))];
+    return a ? a.car : null;
+  },
+  trafficPacket(sleepers) {
+    const a = [], r = [];
+    this.traffic.list.forEach((x, i) => { if (!x.car.asleep && !x.car.hidden) a.push([i, ...packAI(x.car)]); });
+    (this.roamers || []).forEach((x, i) => r.push([i, ...packAI(x.car)]));
+    if (!this.traffic.list.length && !r.length) return null; // mid-race: nothing out on the roads
+    const m = { k: 'tr', a, r };
+    if (sleepers) { const routes = this.world.terrain.routes; m.z = []; this.traffic.list.forEach((x, i) => { if (x.car.asleep) m.z.push([i, routes.indexOf(x.route), rnd(x.s, 10)]); }); }
+    return m;
+  },
+  mpTraffic(p, m) {
+    if (this.race || !Array.isArray(m.a) || !Array.isArray(m.r)) return;
+    const at = p.stamp(Number(m.t));
+    const feed = (list, e) => { const x = Array.isArray(e) && e.length === MP_AI_LEN + 1 && e.every(Number.isFinite) && list[e[0]]; if (x) (x.ghost || (x.ghost = new Ghost())).push(e.slice(1), at); };
+    for (const e of m.a) feed(this.traffic.list, e);
+    for (const e of m.r) feed(this.roamers, e);
+    this.traffic.feedT = mpNow();
+    if (Array.isArray(m.z)) this.traffic.sleepers(m.z);
+  },
+  /* drive an AI car from the host's snapshots while they keep coming; hand it back to the local AI when they stop */
+  ghostDrive(a, now, dt) {
+    const c = a.car, G = a.ghost;
+    if (G && G.live(now, 0.6)) {
+      c.remote = true; c.asleep = false; c.invuln = Infinity;
+      G.apply(c, now, dt); G.wheels(c, this.world, c.pos.distanceTo(this.player.pos) < 160, dt);
+      return true;
+    }
+    if (c.remote) { c.remote = false; c.invuln = 0; a.ghost = null; a.s = a.bestS = a.route.project(c.pos.x, c.pos.z, 0, -1).s; a.stuck = 0; }
+    return false;
+  },
+  /* how far the nearest driver in the session is: traffic wakes up and tidies its wrecks around all of them */
+  driverDist(x, z) {
+    const P = this.player.pos; let d = Math.hypot(x - P.x, z - P.z);
+    if (this.mp) for (const p of this.mp.peers.values()) if (p.car && !p.car.hidden) d = Math.min(d, Math.hypot(x - p.car.pos.x, z - p.car.pos.z));
+    return d;
+  },
+  /* ----- crashes between machines -----
+     Every machine runs the crash with what it can see. When a car simulated here (your own, or the host's AI on the
+     host) hits a ghost, the ghost's owner hears about it: the push, and whether that hit is hard enough to wreck it.
+     The owner skips the push if it already felt that contact itself, and wrecking twice does nothing. */
+  mpContact(a, b, Jb, cp, hardA, hardB, vic) {
+    const M = this.mp; if (!M) return;
+    const t = this.world.time;
+    for (const [mine, other, sg, hard] of [[a, b, 1, hardB], [b, a, -1, hardA]]) {
+      if (mine.remote || !other.remote || !other.netId) continue;
+      (mine.touches || (mine.touches = new Map())).set(other, t);
+      if (!mine.netId || (mine !== this.player && !M.isHost)) continue; // a guest's own copy of the traffic speaks for no one
+      const sent = mine.hitSent || (mine.hitSent = new Map());
+      if (t - (sent.get(other) ?? -9) < 0.15) continue;
+      sent.set(other, t);
+      M.sendTo(other.peer || M.hostId, { k: 'hit', id: other.netId, by: mine.netId, J: [rnd(Jb.x * sg), rnd(Jb.y * sg), rnd(Jb.z * sg)],
+        r: [rnd(cp.x - other.pos.x), rnd(cp.y - other.pos.y), rnd(cp.z - other.pos.z)], h: vic === other ? rnd(hard) : 0 }, true);
+    }
+  },
+  mpHit(p, m) {
+    const M = this.mp, W = this.world;
+    if (typeof m.id !== 'string' || typeof m.by !== 'string' || !this.inWorld()) return;
+    const car = m.id === 'p' ? this.player : M.isHost ? this.aiCar(m.id) : null;
+    const by = m.by === 'p' ? p.car : p.id === M.hostId ? this.aiCar(m.by) : null;
+    if (!car || car.remote || car.asleep || car.frozen || !by) return;
+    const J = m.J, r = m.r, h = Number(m.h);
+    if (!Array.isArray(J) || !Array.isArray(r) || J.length !== 3 || r.length !== 3 || ![...J, ...r, h].every(Number.isFinite)) return;
+    const t = W.time;
+    if (!(car.touches && car.touches.get(by) > t - 0.35)) { // a contact this machine missed: take the push from theirs
+      const j = new THREE.Vector3(J[0], J[1], J[2]), cap = car.spec.mass * 25; if (j.length() > cap) j.setLength(cap);
+      car.applyImpulse(j, new THREE.Vector3(r[0], r[1], r[2]).clampLength(0, 4).add(car.pos));
+      car.events.push({ type: 'bump', v: j.length() / car.spec.mass, other: by });
+      (car.touches || (car.touches = new Map())).set(by, t);
+    }
+    if (h > car.spec.tough * 1.1) { car.lastHit = by; car.lastHitT = t; car.wreck('takedown'); }
   },
 });

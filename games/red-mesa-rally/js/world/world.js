@@ -248,7 +248,11 @@ class World {
     if (this.train) this.train.update(dt);
     for (const mt of this.metroTrains) mt.update(dt);
     const T = this.terrain;
-    for (const c of this.cars) if (!c.asleep && !c.remote) { T.probeY = c.under ? Math.min(c.pos.y, METRO.under - 0.5) : c.pos.y; c.step(dt, this); } // remote players drive on their own machines
+    for (const c of this.cars) {
+      if (c.asleep) continue;
+      if (c.remote) { c.pos.addScaledVector(c.vel, dt); continue; } // driven on another machine: coast between its snapshots
+      T.probeY = c.under ? Math.min(c.pos.y, METRO.under - 0.5) : c.pos.y; c.step(dt, this);
+    }
     T.probeY = Infinity;
     // down in the metro stays down in the metro: tumbling about under the ceiling never lands a car on the street above
     for (const c of this.cars) {
@@ -353,7 +357,7 @@ class World {
         if (vrel >= 0) continue;
         const jj = -(1.25) * vrel / (1 / ma + 1 / mb) * 0.85;
         const J = n.clone().multiplyScalar(jj);
-        b.applyImpulse(J, cp); a.applyImpulse(J.negate(), cp);
+        b.applyImpulse(J, cp); a.applyImpulse(J.clone().negate(), cp);
         const sev = -vrel;
         a.impact = Math.max(a.impact, sev * wa * 2); b.impact = Math.max(b.impact, sev * wb * 2);
         const aTo = a.vel.dot(n), bTo = -b.vel.dot(n);
@@ -362,6 +366,7 @@ class World {
         a.events.push({ type: 'bump', v: sev, other: b }); b.events.push({ type: 'bump', v: sev, other: a });
         const vicW = vic === a ? wa : wb;
         if (sev * vicW * 2 > vic.spec.tough * 1.1) vic.wreck('takedown');
+        if (this.onContact && (a.remote || b.remote)) this.onContact(a, b, J, cp, sev * wa * 2, sev * wb * 2, vic); // a car driven elsewhere: tell its owner
         break;
       }
     }

@@ -9,7 +9,7 @@ const TRAFFIC_PLAN = [['hwy', 4, 5.5, 27], ['hwy-rev', 4, 5.5, 27], ['coast', 2,
   ['exit-5', 2, 3.2, 22], ['exit-5-rev', 1, 3.2, 22], ['lane-orchard', 1, 2.4, 16], ['lane-orchard-rev', 1, 2.4, 16], ['lane-mill', 1, 2.3, 16], ['lane-mill-rev', 1, 2.3, 16]];
 const TRAFFIC_COLORS = [0x8a9aa6, 0x6b2d2d, 0xe9e2d6, 0x2b3a4a, 0x9c8a64, 0x3d5a3d, 0xc9c4ba, 0x23262b, 0x7a1f1f, 0x4a6a8a];
 class Traffic {
-  constructor(game) { this.g = game; this.list = []; this.WAKE = 520; this.SLEEP = 650; }
+  constructor(game) { this.g = game; this.list = []; this.WAKE = 520; this.SLEEP = 650; this.feedT = -9; }
   spawn() {
     this.clear();
     const g = this.g, W = g.world; let n = 0;
@@ -18,7 +18,7 @@ class Traffic {
       for (let k = 0; k < count; k++, n++) {
         const s = R.length * (k + 0.35 + 0.3 * hash2(n, 7)) / count, v = (n % 3 === 1) ? 'van' : 'sedan';
         const car = g.addCar(VEHICLES[v], { id: 80 + n, color: TRAFFIC_COLORS[n % TRAFFIC_COLORS.length], number: 100 + n, livery: v === 'van' ? ['MESA HAULER', 'CALDER POST', 'KRMR 98.7'][n % 3] : 'CALDER COUNTY', helmet: 0x3a3330 });
-        car.name = v === 'van' ? 'Delivery van' : 'Local driver'; car.civilian = true;
+        car.name = v === 'van' ? 'Delivery van' : 'Local driver'; car.civilian = true; car.netId = 't' + this.list.length;
         const a = new AIDriver(car, R, { s, lane, skill: 0.8 + 0.1 * hash2(n, 3), vcap: vcap * (0.85 + 0.25 * hash2(n, 11)), traffic: true, seed: 300 + n });
         a.cruise = a.vcap * 0.9; a.asleepS = s;
         this.place(a, true);
@@ -27,7 +27,17 @@ class Traffic {
       }
     }
   }
-  clear() { for (const a of this.list) this.g.removeCar(a.car); this.list = []; }
+  clear() { for (const a of this.list) this.g.removeCar(a.car); this.list = []; this.feedT = -9; }
+  /* the host's sleeping cars: which lane each is on and how far along, so ours sleep in the same places */
+  sleepers(z) {
+    const routes = this.g.world.terrain.routes;
+    for (const e of z) {
+      const a = Array.isArray(e) && this.list[e[0]], R = a && routes[e[1]];
+      if (!R || !Number.isFinite(e[2])) continue;
+      const c = a.car; if (c.remote) { c.remote = false; c.invuln = 0; c.asleep = true; }
+      a.ghost = null; a.route = R; a.s = R.wrapS(e[2]);
+    }
+  }
   partner(R) { return this.g.world.route(R.id.endsWith('-rev') ? R.id.slice(0, -4) : R.id + '-rev'); }
   /* pose the car on its lane at a.s (used while asleep, and to wake it) */
   place(a, wake) {
@@ -39,16 +49,20 @@ class Traffic {
   /* open roads end: turn round onto the lane coming back */
   uturn(a) { const P = this.partner(a.route); if (!P) return false; a.route = P; a.s = 25; a.bestS = 25; a.stuck = 0; return true; }
   update(dt) {
-    const g = this.g, P = g.player, cam = g.gfx.camera.position;
+    const g = this.g, cam = g.gfx.camera.position, now = mpNow();
+    const fed = now - this.feedT < 2; // in a session the host runs the traffic: a guest replays it and never wakes a car itself
     for (const a of this.list) {
-      const c = a.car, R = a.route, d = Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z);
-      c.hidden = g.world.tunnelGateClosed && R.id.startsWith('tunnel'); // the closed tunnel carries no traffic
+      const R0 = a.route, c = a.car;
+      c.hidden = g.world.tunnelGateClosed && R0.id.startsWith('tunnel'); // the closed tunnel carries no traffic
       if (c.hidden) { c.asleep = true; continue; }
+      if (g.ghostDrive(a, now, dt)) continue;
+      const R = a.route, d = g.driverDist(c.pos.x, c.pos.z);
+      if (fed && !c.asleep) c.asleep = true;
       if (c.asleep) {
         a.s += a.cruise * dt;
         if (!R.closed && a.s > R.length - 30) this.uturn(a); else a.s = R.wrapS(a.s);
         const dc = Math.hypot(c.pos.x - cam.x, c.pos.z - cam.z);
-        if (d < this.WAKE) { this.place(a, true); c.asleep = false; a.stuck = 0; a.bestS = a.s; a.respawn = false; }
+        if (d < this.WAKE && !fed) { this.place(a, true); c.asleep = false; a.stuck = 0; a.bestS = a.s; a.respawn = false; }
         else if (dc < 950 && (this.poseT = (this.poseT || 0) + 1) % 8 === 0) this.place(a, false); // keep distant cars visibly moving
         continue;
       }

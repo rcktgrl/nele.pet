@@ -10,10 +10,10 @@
 const SUPA_URL = 'https://lglcvsptwkqxykapepey.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnbGN2c3B0d2txeHlrYXBlcGV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwNzQ1NDcsImV4cCI6MjA2MjY1MDU0N30.ci7v2g-5wixuPKnG6wUUO87AsbI1bQ8wzRnHHG9QzIQ';
 const SUPA_ESM = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/+esm';
-const MP_MAX = 8, MP_HZ = 15, MP_DELAY = 0.12, MP_STALE = 3; // render remote cars a little behind their newest snapshot
+const MP_MAX = 8, MP_HZ = 20, MP_STALE = 3, MP_EXTRAP = 0.35, MP_PING = 2;
 const MP_ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
 const MP_CODE = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', MP_CODE_LEN = 5;
-const MP_STATE_LEN = 23;
+const MP_POSE_LEN = 14, MP_AI_LEN = 15, MP_STATE_LEN = 26;
 let supaClient = null;
 async function supa() { if (!supaClient) { const { createClient } = await import(SUPA_ESM); supaClient = createClient(SUPA_URL, SUPA_KEY); } return supaClient; }
 const cleanName = (v) => String(v || '').trim().replace(/\s+/g, ' ').slice(0, 24);
@@ -32,22 +32,89 @@ async function arcadeProfile() {
     return { uid: p.user_id, name: p.name };
   } catch (e) { console.warn('arcade profile', e); return null; }
 }
-/* one car's pose and dashboard, small enough to send 15 times a second */
-function packCar(c) {
-  const r = (v, k = 100) => Math.round(v * k) / k, W = c.wheels;
+const rnd = (v, k = 100) => Math.round(v * k) / k;
+const mpNow = () => performance.now() / 1000;
+/* where a car is, how it is moving and spinning, and its lights: [pos, quat, vel, spin, flags] */
+function packPose(c) {
   const f = (c.input.brake > 0.1 ? 1 : 0) | (c.boosting ? 2 : 0) | (c.wrecked ? 4 : 0) | (c.under ? 8 : 0) | (c.reverse ? 16 : 0) | (c.onGround ? 32 : 0);
-  return [r(c.pos.x), r(c.pos.y), r(c.pos.z), r(c.q.x, 1e4), r(c.q.y, 1e4), r(c.q.z, 1e4), r(c.q.w, 1e4), r(c.vel.x), r(c.vel.y), r(c.vel.z),
-    r(c.steerAngle, 1e3), f, Math.round(c.rpm), r(c.heat), r(c.inWater),
-    ...W.map((w) => (w.contact ? r(Math.max(0, w.t - c.spec.wheels.r)) : -1)),
-    ...W.map((w) => r(Math.min(2, Math.abs(w.slipLat) * 4 + Math.abs(w.slip) * 1.5)))];
+  return [rnd(c.pos.x), rnd(c.pos.y), rnd(c.pos.z), rnd(c.q.x, 1e4), rnd(c.q.y, 1e4), rnd(c.q.z, 1e4), rnd(c.q.w, 1e4),
+    rnd(c.vel.x), rnd(c.vel.y), rnd(c.vel.z), rnd(c.w.x), rnd(c.w.y), rnd(c.w.z), f];
+}
+/* a driver's car: the pose plus the dashboard and each wheel's travel and slip, small enough to send 20 times a second */
+function packCar(c) {
+  const W = c.wheels;
+  return [...packPose(c), rnd(c.steerAngle, 1e3), Math.round(c.rpm), rnd(c.heat), rnd(c.inWater),
+    ...W.map((w) => (w.contact ? rnd(Math.max(0, w.t - c.spec.wheels.r)) : -1)),
+    ...W.map((w) => rnd(Math.min(2, Math.abs(w.slipLat) * 4 + Math.abs(w.slip) * 1.5)))];
+}
+/* the host's traffic and roaming rivals: the pose and where the front wheels point */
+const packAI = (c) => [...packPose(c), rnd(c.steerAngle, 1e3)];
+
+/* ---------------- Ghosts: cars driven on another machine ----------------
+   A snapshot says where a car was when its owner sent it. Rather than draw the car back there, each one is carried
+   forward to the present along its velocity and spin, and the jump a fresh snapshot makes is eased out over a few
+   frames. So a ghost sits where the car really is right now, and a crash into it lands where it looks like it should. */
+class Ghost {
+  constructor() {
+    this.snap = null; this.seen = 0; this.fresh = false; this.placed = false;
+    this.err = new THREE.Vector3(); this.qErr = new THREE.Quaternion(); this._p = new THREE.Vector3(); this._q = new THREE.Quaternion();
+    this._qi = new THREE.Quaternion(); this._dq = new THREE.Quaternion(); this._ax = new THREE.Vector3(); this._id = new THREE.Quaternion();
+  }
+  /* d: a packed pose (and extras); at: the local time it describes */
+  push(d, at) {
+    if (this.snap && at < this.snap.at) return; // overtaken on the way here
+    this.snap = { d, at }; this.seen = mpNow(); this.fresh = true;
+  }
+  live(now, max) { return !!this.snap && now - this.seen < max; }
+  apply(c, now, dt) {
+    const D = this.snap.d, ex = clamp(now - this.snap.at, 0, MP_EXTRAP), air = !(D[13] & 32);
+    const p = this._p.set(D[0] + D[7] * ex, D[1] + D[8] * ex - (air ? 4.9 * ex * ex : 0), D[2] + D[9] * ex);
+    const q = this._q.set(D[3], D[4], D[5], D[6]).normalize(), wl = Math.hypot(D[10], D[11], D[12]);
+    if (wl > 1e-4) q.premultiply(this._dq.setFromAxisAngle(this._ax.set(D[10] / wl, D[11] / wl, D[12] / wl), wl * ex));
+    if (this.fresh) { // the gap between where we drew it and where it turns out to be: ease that out, unless it was a reset
+      this.fresh = false;
+      this.err.subVectors(c.pos, p); this.qErr.copy(c.q).multiply(this._qi.copy(q).invert());
+      if (!this.placed || this.err.lengthSq() > 36) { this.err.set(0, 0, 0); this.qErr.identity(); }
+      this.placed = true;
+    }
+    const k = Math.exp(-dt * 9);
+    this.err.multiplyScalar(k); this.qErr.slerp(this._id, 1 - k);
+    c.pos.copy(p).add(this.err); c.q.copy(q).premultiply(this.qErr);
+    c.vel.set(D[7], D[8] - (air ? 9.81 * ex : 0), D[9]); c.w.set(D[10], D[11], D[12]);
+    const f = D[13], wr = !!(f & 4);
+    if (wr && !c.wrecked) c.events.push({ type: 'wreck', reason: 'remote' });
+    c.wrecked = wr; c.wreckT = wr ? c.wreckT + dt : 0;
+    c.input.brake = f & 1 ? 1 : 0; c.boosting = !!(f & 2); c.under = !!(f & 8); c.reverse = !!(f & 16); c.onGround = !!(f & 32);
+    c.steerAngle = D[14]; c.speedKmh = c.vel.length() * 3.6; c._t.fwd.set(0, 0, -1).applyQuaternion(c.q);
+  }
+  /* wheels follow the sender's suspension and slip when it sends them, else they sit at ride height */
+  wheels(c, world, near, dt) {
+    const D = this.snap.d, full = D.length === MP_STATE_LEN, sp = c.spec, vF = c.vel.dot(c._t.fwd);
+    const ride = Math.max(0, sp.susp.rest - sp.mass * 9.81 / 4 / sp.susp.k);
+    for (let i = 0; i < 4; i++) {
+      const w = c.wheels[i], e = full ? D[18 + i] : c.onGround ? ride : -1;
+      w.steer = w.front ? c.steerAngle : 0; w.contact = e >= 0; w.t = sp.wheels.r + Math.max(0, e);
+      w.spin -= vF / sp.wheels.r * dt; w.slipLat = full ? D[22 + i] / 4 : 0; w.slip = 0;
+      if (w.contact && near) { w.cp.set(w.lx, w.ly - w.t, w.lz).applyQuaternion(c.q).add(c.pos); w.surf = world.surface(w.cp.x, w.cp.z, w.cp.y); } else w.surf = null;
+    }
+  }
 }
 class Peer {
   constructor(s, id, slot) {
     this.s = s; this.id = id; this.slot = slot; this.name = 'Driver'; this.t = 0; this.info = null;
     this.pc = null; this.u = null; this.r = null; this.ice = []; this.tries = 0; this.link = 'connecting';
-    this.buf = []; this.car = null; this.label = null; this.rebuild = false;
-    this._qa = new THREE.Quaternion(); this._qb = new THREE.Quaternion();
+    this.ghost = new Ghost(); this.car = null; this.label = null; this.rebuild = false;
+    this.lag = []; this.rtt = 0.1; this.pinged = false;
   }
+  /* the local time a moment stamped t on their clock happened: their clock's offset is the smallest
+     arrival delay seen lately (the least-delayed message), less half the round trip */
+  stamp(t) {
+    const now = mpNow();
+    if (!Number.isFinite(t)) return now - this.rtt / 2;
+    const L = this.lag; L.push(now - t); if (L.length > 60) L.shift();
+    return t + Math.min(...L) - this.rtt / 2;
+  }
+  pong(t) { const rtt = mpNow() - t; if (!(rtt >= 0 && rtt < 5)) return; this.rtt = this.pinged ? lerp(this.rtt, rtt, 0.3) : rtt; this.pinged = true; }
   get initiator() { return this.s.id < this.id; } // exactly one side of each pair makes the offer
   direct() { return !!(this.r && this.r.readyState === 'open'); }
   setInfo(info) { const k = JSON.stringify(info || null); if (k !== this.infoKey) { this.infoKey = k; this.info = info && typeof info === 'object' ? info : {}; this.rebuild = true; } }
@@ -101,41 +168,26 @@ class Peer {
     if (pc) try { pc.close(); } catch (e) { /* already closed */ }
   }
   close() { clearTimeout(this.timer); this.closePc(); }
-  push(d) {
+  push(d, t) {
     if (!Array.isArray(d) || d.length !== MP_STATE_LEN || !d.every(Number.isFinite)) return;
-    this.buf.push({ at: performance.now() / 1000, d }); if (this.buf.length > 30) this.buf.shift();
+    this.ghost.push(d, this.stamp(t));
   }
-  /* ease the car between the last two snapshots; coast on its velocity for a moment if the next one is late */
+  /* their car where it is now, by the latest snapshot carried forward */
   animate(now, dt) {
-    const g = this.s.g, B = this.buf;
-    if (!B.length) return;
+    const g = this.s.g, G = this.ghost;
+    if (!G.snap) return;
     if (!this.car || this.rebuild) g.mpCar(this);
-    const c = this.car, stale = now - B[B.length - 1].at > MP_STALE;
+    const c = this.car, stale = !G.live(now, MP_STALE);
     c.hidden = c.asleep = stale;
     if (stale) return;
-    const rt = now - MP_DELAY;
-    while (B.length > 2 && B[1].at <= rt) B.shift();
-    const a = B[0], b = B[1] || B[0], A = a.d, D = b.d;
-    const k = b !== a ? clamp((rt - a.at) / Math.max(1e-3, b.at - a.at), 0, 1) : 1, over = clamp(rt - b.at, 0, 0.25);
-    c.pos.set(lerp(A[0], D[0], k) + D[7] * over, lerp(A[1], D[1], k) + D[8] * over, lerp(A[2], D[2], k) + D[9] * over);
-    c.q.slerpQuaternions(this._qa.set(A[3], A[4], A[5], A[6]).normalize(), this._qb.set(D[3], D[4], D[5], D[6]).normalize(), k);
-    c.vel.set(lerp(A[7], D[7], k), lerp(A[8], D[8], k), lerp(A[9], D[9], k)); c.w.set(0, 0, 0);
-    const f = D[11], wr = !!(f & 4);
-    if (wr && !c.wrecked) c.events.push({ type: 'wreck', reason: 'remote' });
-    c.wrecked = wr; c.wreckT = wr ? c.wreckT + dt : 0;
-    c.input.brake = f & 1 ? 1 : 0; c.boosting = !!(f & 2); c.under = !!(f & 8); c.reverse = !!(f & 16); c.onGround = !!(f & 32);
-    c.steerAngle = D[10]; c.rpm = D[12]; c.heat = D[13]; c.inWater = D[14]; c.speedKmh = c.vel.length() * 3.6;
-    const sp = c.spec, fwd = c._t.fwd.set(0, 0, -1).applyQuaternion(c.q), vF = c.vel.dot(fwd), near = c.pos.distanceTo(g.player.pos) < 160;
-    for (let i = 0; i < 4; i++) {
-      const w = c.wheels[i], e = D[15 + i];
-      w.steer = w.front ? c.steerAngle : 0; w.contact = e >= 0; w.t = sp.wheels.r + Math.max(0, e);
-      w.spin -= vF / sp.wheels.r * dt; w.slipLat = D[19 + i] / 4; w.slip = 0;
-      if (w.contact && near) { w.cp.set(w.lx, w.ly - w.t, w.lz).applyQuaternion(c.q).add(c.pos); w.surf = g.world.surface(w.cp.x, w.cp.z, w.cp.y); } else w.surf = null;
-    }
+    G.apply(c, now, dt);
+    const D = G.snap.d;
+    c.rpm = D[15]; c.heat = D[16]; c.inWater = D[17];
+    G.wheels(c, g.world, c.pos.distanceTo(g.player.pos) < 160, dt);
   }
 }
 class Session {
-  constructor(game) { this.g = game; this.id = randomId(); this.peers = new Map(); this.active = false; this.ch = null; this.sendT = 0; this.relayN = 0; this.hostId = null; this.early = new Map(); }
+  constructor(game) { this.g = game; this.id = randomId(); this.peers = new Map(); this.active = false; this.ch = null; this.sendT = 0; this.relayN = {}; this.tick = 0; this.pingT = 0; this.hostId = null; this.early = new Map(); }
   /* everyone in the room, oldest first; the oldest one hosts */
   get list() { return [{ id: this.id, name: this.me.name, t: this.t, me: true }, ...this.peers.values()].sort((a, b) => a.t - b.t || (a.id < b.id ? -1 : 1)); }
   get isHost() { return this.active && this.hostId === this.id; }
@@ -150,7 +202,7 @@ class Session {
       if (peer) peer.onSignal(p.data);
       else { const q = this.early.get(p.from) || []; if (q.length < 60) q.push(p.data); this.early.set(p.from, q); } // an offer can beat their presence here
     });
-    ch.on('broadcast', { event: 'relay' }, ({ payload: p }) => { const peer = p && this.peers.get(p.from); if (peer && !peer.direct()) this.onMessage(peer, p.m); });
+    ch.on('broadcast', { event: 'relay' }, ({ payload: p }) => { const peer = p && this.peers.get(p.from); if (peer && !peer.direct() && (!p.to || p.to === this.id)) this.onMessage(peer, p.m); });
     await new Promise((res, rej) => {
       const timer = setTimeout(() => rej(new Error('The session server did not answer')), 12000);
       ch.subscribe((st) => {
@@ -193,13 +245,23 @@ class Session {
   broadcast(m, reliable) {
     const str = JSON.stringify(m); let relay = false;
     for (const p of this.peers.values()) if (!p.send(str, reliable)) relay = true;
-    // anyone without a direct line hears it over the room channel (car state at half rate there)
-    if (relay && this.ch && (reliable || this.relayN++ % 2 === 0)) this.ch.send({ type: 'broadcast', event: 'relay', payload: { from: this.id, m } });
+    // anyone without a direct line hears it over the room channel (car and traffic state at half rate there)
+    const n = this.relayN[m.k] = (this.relayN[m.k] || 0) + 1;
+    if (relay && this.ch && (reliable || n % 2)) this.ch.send({ type: 'broadcast', event: 'relay', payload: { from: this.id, m } });
+  }
+  /* one driver only: straight down their line, or over the room channel addressed to them */
+  sendTo(id, m, reliable) {
+    const p = this.peers.get(id); if (!p) return;
+    if (!p.send(JSON.stringify(m), reliable) && this.ch) this.ch.send({ type: 'broadcast', event: 'relay', payload: { from: this.id, to: id, m } });
   }
   onMessage(p, m) {
     if (!m || typeof m !== 'object') return;
     const g = this.g;
-    if (m.k === 's') p.push(m.d);
+    if (m.k === 's') p.push(m.d, m.t);
+    else if (m.k === 'tr' && p.id === this.hostId) g.mpTraffic(p, m);
+    else if (m.k === 'hit') g.mpHit(p, m);
+    else if (m.k === 'ping') this.sendTo(p.id, { k: 'pong', t: m.t });
+    else if (m.k === 'pong') p.pong(Number(m.t));
     else if (m.k === 'race' && p.id === this.hostId) g.mpRace(m);
     else if (m.k === 'fin') g.mpFinish(p, m);
     else if (m.k === 'quit') g.mpQuit(p);
@@ -209,9 +271,17 @@ class Session {
   update(dt) {
     if (!this.active) return;
     const g = this.g;
+    const now = mpNow(), t = rnd(now, 1000);
     this.sendT -= dt;
-    if (this.sendT <= 0 && g.inWorld()) { this.sendT = 1 / MP_HZ; if (this.peers.size) this.broadcast({ k: 's', d: packCar(g.player) }); }
-    const now = performance.now() / 1000;
+    if (this.sendT <= 0 && g.inWorld()) {
+      this.sendT = 1 / MP_HZ;
+      if (this.peers.size) {
+        this.broadcast({ k: 's', t, d: packCar(g.player) });
+        // the host runs the traffic and the roaming rivals for everyone: half as often, and where the sleeping ones are now and then
+        if (this.isHost && ++this.tick % 2 === 0) { const m = g.trafficPacket(this.tick % 10 === 0); if (m) { m.t = t; this.broadcast(m); } }
+      }
+    }
+    if ((this.pingT -= dt) <= 0) { this.pingT = MP_PING; for (const p of this.peers.values()) this.sendTo(p.id, { k: 'ping', t }); }
     for (const p of this.peers.values()) p.animate(now, dt);
   }
   leave() {

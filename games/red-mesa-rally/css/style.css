@@ -144,9 +144,10 @@ p { margin: 0; font-size: 18px; line-height: 1.4; max-width: 62ch; color: var(--
 #turn span { font-weight: 800; font-size: 15px; letter-spacing: .16em; text-transform: uppercase; color: var(--flare); }
 #turn.near { border-color: var(--hazard); }
 #turn.near b { color: var(--hazard); }
-.stat { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--dust); }
+.stat { display: grid; grid-template-columns: 62px 1fr 66px; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--dust); }
 .stat i { height: 6px; background: rgba(242,230,211,.15); position: relative; }
 .stat i::after { content: ''; position: absolute; inset: 0; width: var(--v); background: var(--sand); }
+.stat b { font-weight: 800; letter-spacing: .04em; text-transform: none; color: var(--sand); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 18px; }
 .vol { display: grid; grid-template-columns: 74px 1fr 46px; align-items: center; gap: 10px; font-size: 14px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--sand); }
 .vol output { text-align: right; color: var(--dust); font-variant-numeric: tabular-nums; }

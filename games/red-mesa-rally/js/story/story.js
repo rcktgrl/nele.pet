@@ -93,11 +93,12 @@ class Dialogue {
 
 /* story mode: what unlocks each machine (free roam has them all) */
 const CAR_UNLOCKS = {
-  rally: { ch: 0 },
-  buggy: { ch: 1, hint: 'Unlocks: win your first desert event' },
-  truck: { ch: 2, hint: 'Unlocks: win a second desert event' },
+  buggy: { ch: 0 },
+  truck: { ch: 1, hint: 'Unlocks: win your first desert event' },
+  rally: { ch: 2, hint: 'Unlocks: win a second desert event' },
   kaze: { ch: 3, hint: 'Unlocks: drive through the Calder Tunnel' },
   ironside: { city: 1, hint: "Unlocks: beat Calder's crew in a city event" },
+  super: { ch: 8, hint: 'Unlocks: beat Vic on the Metro Line' },
   boat: { ch: 3, hint: 'Unlocks: reach Port Calder' },
 };
 /* liveries, each earned by a story challenge */
@@ -112,6 +113,7 @@ const LIVERIES = [
   { id: 'backroads', name: 'Back Roads', text: 'COUNTRY MILE', color: 0x7b4a2b, helmet: 0xe9e2d6, num: 66, ch: 'country' },
   { id: 'pilot', name: 'Harbour Pilot', text: 'HARBOUR PILOT', color: 0xe9e2d6, helmet: 0x2a8c8c, num: 8, ch: 'sailor' },
   { id: 'nightline', name: 'Night Line', text: 'CALDER METRO', color: 0x1f7a8c, helmet: 0xf4f1e8, num: 5, ch: 'metro' },
+  { id: 'haze', name: 'Purple Haze', text: 'PURPLE HAZE', color: 0x7b3fc4, helmet: 0xf2c230, num: 27, ch: 'drift' },
 ];
 const CHALLENGES = [
   { id: 'air', name: 'Big air', desc: 'Stay airborne 2.5 s in one jump', goal: 2.5, fmt: (v) => v.toFixed(1) + ' s' },
@@ -123,6 +125,7 @@ const CHALLENGES = [
   { id: 'country', name: 'Country mile', desc: 'Drive 8 km on the country roads', goal: 8000, fmt: (v) => (v / 1000).toFixed(1) + ' km' },
   { id: 'sailor', name: 'Old salt', desc: 'Cover 3 km by boat', goal: 3000, fmt: (v) => (v / 1000).toFixed(1) + ' km' },
   { id: 'metro', name: 'Mole', desc: 'Drive 2 km in the Calder Metro', goal: 2000, fmt: (v) => (v / 1000).toFixed(1) + ' km' },
+  { id: 'drift', name: 'Sideways', desc: 'Hold one drift for 4 s above 50 km/h', goal: 4, fmt: (v) => v.toFixed(1) + ' s' },
 ];
 const SAVE_SLOTS = 3;
 const CHAPTERS = ['The Festival', 'One More Win', 'The Tunnel', "Calder's Crews", 'Coast to Canyon', 'Back Roads', 'Exit 5', 'Underground', 'Epilogue'];
@@ -268,7 +271,7 @@ class Story {
     if (ev.id === 'metro') {
       if (!won) { d.say('ug_lose', { interrupt: true }); return; }
       d.say(['ug_win_1', 'ug_win_2', 'ug_win_3'], { interrupt: true });
-      if (s.ch === 7) this.setCh(8);
+      if (s.ch === 7) this.setCh(8); // the Vortex V12 comes with it
       return;
     }
     if (BACKROAD_EVENTS.includes(ev.id) && won && first) {
