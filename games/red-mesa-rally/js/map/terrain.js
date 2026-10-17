@@ -8,7 +8,7 @@ class Terrain {
     this.Nx = Nx; this.Nz = Nz; this.cell = cell; this.x0 = WORLD.x0; this.z0 = WORLD.z0;
     this.h = new Float32Array(n);
     this.road = new Float32Array(n); this.mud = new Float32Array(n); this.asph = new Float32Array(n); this.rail = new Float32Array(n);
-    this.rdist = new Float32Array(n).fill(1e9); this.rlat = new Float32Array(n).fill(40); this.rhw = new Float32Array(n).fill(8); this.rs = new Float32Array(n); this.rlanes = new Uint8Array(n); this.rown = new Uint8Array(n);
+    this.rdist = new Float32Array(n).fill(1e9); this.rlat = new Float32Array(n).fill(40); this.rhw = new Float32Array(n).fill(8); this.rs = new Float32Array(n); this.rlanes = new Uint8Array(n); this.rown = new Uint16Array(n);
     this.rfade = new Uint8Array(n); // 255 = junction mouth: hide markings and lane patterns that would clash
     this.green = new Uint8Array(n); this.beach = new Uint8Array(n); this.city = new Uint8Array(n); this.tun = new Uint8Array(n); this.forest = new Uint8Array(n);
     this.probeY = Infinity; // height of whoever is asking: below METRO.under, the metro floor replaces the street above it
@@ -33,7 +33,7 @@ class Terrain {
       if (x < 1100) continue;
       const b = biomeAt(x, z, this.h[i]);
       this.green[i] = b.green * 255; this.beach[i] = b.beach * 255; this.forest[i] = b.forest * 255;
-      this.city[i] = cityCell(x, z) * 255;
+      this.city[i] = DISTRICT.cell(x, z) * 255;
       if (this.city[i]) { this.green[i] = this.city[i] < 200 ? 230 : 40; this.beach[i] = 0; }
     }
     // the finale reuses existing roads end to end
@@ -41,7 +41,7 @@ class Terrain {
     // heights along a composed route: the deck where it runs on a bridge or the viaduct, the ground elsewhere
     const heights = (C, ids) => { for (let i = 0; i <= C.count; i++) { let y = this.height(C.x[i], C.z[i]); for (const id of ids) { const O = R(id), pr = O.project(C.x[i], C.z[i], 0, -1); if (pr.dist < O.width / 2) y = Math.max(y, O.sample(O.y, pr.s)); } C.y[i] = y; } };
     const fin = Route.compose({ id: 'finale', closed: false, width: 14, surface: 'asphalt', noCarve: true }, [
-      { route: R('coast'), from: [4210, CITY.z1 - 4], to: [2350, 210], dir: -1 },
+      { route: R('coast'), from: [4600, 770], to: [2350, 210], dir: -1 },
       { route: R('valley-rd'), from: [2350, 210], to: [2200, 320], dir: -1 },
       { route: R('hwy'), from: [2200, 320], to: [1760, -40], dir: 1 },
       { route: R('tunnel'), from: [1760, -40], to: [792, 10], dir: -1 },
@@ -50,14 +50,22 @@ class Terrain {
     ]);
     heights(fin, ['coast', 'valley-rd', 'hwy']);
     this.routes.push(fin);
-    // Calder Central Express: up the interstate from the tunnel, round over the pass junction, along the viaduct, down the Calder Central ramp and through downtown to the docks
+    // Calder Central Express: up the interstate from the tunnel, round over the pass junction, along the viaduct, down the Calder Central ramp,
+    // across downtown on Mesa Blvd and down Kingsway to the port gate
     const exp = Route.compose({ id: 'express', closed: false, width: 13, surface: 'asphalt', noCarve: true }, [
       { route: R('hwy'), from: [1760, -40], to: [3897, -730], dir: 1 },
-      { route: R('ramp-central-w'), from: [3897, -730], to: [CX(3), CZ(5)], dir: 1 },
-      { route: R('harbour'), from: [CX(3), CZ(5)], to: [CX(8), CZ(9)], dir: 1 },
+      { route: R('ramp-central-w'), from: [3897, -730], to: [3846, -338], dir: 1 },
+      { route: R('mesa-blvd'), from: [3846, -338], to: [4296, -350], dir: 1 },
+      { route: R('kingsway'), from: [4296, -350], to: [4290, 520], dir: 1 },
     ]);
-    heights(exp, ['hwy', 'ramp-central-w']);
+    heights(exp, ['hwy', 'ramp-central-w', 'mesa-blvd', 'kingsway']);
     this.routes.push(exp);
+    // the Harbour street circuit: down Kingsway past the stadium, along the port gate, up Harbour Dr on the waterfront and back across town on Mesa Blvd
+    const hb = [{ route: R('kingsway'), from: [4296, -350], to: [4290, 540], dir: 1 }, { route: R('gate-rd'), from: [4290, 540], to: [4950, 560], dir: 1 },
+      { route: R('harbour-dr'), from: [4950, 560], to: [5116, -346], dir: 1 }, { route: R('mesa-blvd'), from: [5116, -346], to: [4296, -350], dir: -1 }];
+    const harbour = Route.compose({ id: 'harbour', closed: true, width: 16, surface: 'asphalt', noCarve: true, street: true }, hb);
+    heights(harbour, ['kingsway', 'gate-rd', 'harbour-dr', 'mesa-blvd']);
+    this.routes.push(harbour);
     // the Calder Metro loop (its road centreline) and the floor grid that stands in for the ground underneath downtown
     const metro = new Route({ id: 'metro', closed: true, width: 12, surface: 'asphalt', noCarve: true, metro: true, lanes: 2, sub: 6, pts: arcLoop(METRO.corners.map(([i, j]) => [CX(i), CZ(j)]), 52) });
     metro.y.fill(METRO.y); this.routes.push(metro);
@@ -67,11 +75,10 @@ class Terrain {
     river.y.fill(WATER_Y); this.routes.push(river);
     // traffic lanes: the open roads driven the other way, and loops round the downtown blocks
     const rev = (id) => { const d = R(id).def; return { ...d, id: id + '-rev', pts: d.pts.slice().reverse(), keepStart: true, rails: false, tunnel: false }; };
-    const loop = (id, a, b, c, d) => ({ id, closed: true, width: 16, surface: 'asphalt', pts: streetPath([[CX(a), CZ(b)], [CX(c), CZ(b)], [CX(c), CZ(d)], [CX(a), CZ(d)]], true), keepStart: true });
-    const tdefs = [rev('hwy'), rev('coast'), rev('tunnel'), rev('pass'), rev('lane-valley'), rev('lane-farm'),
-      loop('city-a', 1, 1, 5, 4), loop('city-b', 7, 1, 11, 6), loop('city-c', 2, 5, 6, 9), loop('city-d', 9, 3, 12, 10)];
-    tdefs.push({ ...tdefs[6], id: 'city-a-rev', pts: tdefs[6].pts.slice().reverse() }, { ...tdefs[8], id: 'city-c-rev', pts: tdefs[8].pts.slice().reverse() });
-    tdefs.push(rev('valley-rd'), rev('lane-orchard'), rev('lane-mill'));
+    const loop = (id, parts) => { const L = Route.compose({ id, closed: true, width: 14, surface: 'asphalt', noCarve: true, keepStart: true }, parts); return { ...L.def, pts: Array.from(L.x, (x, i) => [x, L.z[i]]).filter((p, i) => i % 3 === 0), sub: 4 }; };
+    const tdefs = [rev('hwy'), rev('coast'), rev('tunnel'), rev('pass'), rev('lane-valley'), rev('lane-farm'), loop('city-a', hb)];
+    tdefs.push({ ...tdefs[6], id: 'city-a-rev', pts: tdefs[6].pts.slice().reverse() });
+    tdefs.push(rev('valley-rd'), rev('lane-orchard'), rev('lane-mill'), rev('kingsway'), rev('mesa-blvd'), rev('north-rd'), rev('harbour-dr'));
     for (const d of tdefs) {
       const T2 = new Route({ ...d, noCarve: true, trafficOnly: true });
       for (let i = 0; i <= T2.count; i++) T2.y[i] = this.height(T2.x[i], T2.z[i]);
@@ -192,7 +199,7 @@ class Terrain {
     const order = [...this.routes].sort((a, b) => rank(a) - rank(b));
     const done = [];
     // junction bookkeeping: which road owns each cell's markings, and how close the widest road nearby is
-    const ownD = new Float32Array(n).fill(1e9), ownP = new Uint8Array(n), zid = new Uint8Array(n), multi = new Uint8Array(n);
+    const ownD = new Float32Array(n).fill(1e9), ownP = new Uint8Array(n), zid = new Uint16Array(n), multi = new Uint8Array(n);
     const majP = new Uint8Array(n), majE = new Float32Array(n).fill(1e9), ZONE = 14, MARGIN = 6;
     const railHash = new Map(), rkey = (x, z) => Math.floor(x / 20) * 100000 + Math.floor(z / 20);
     const railAt = (x, z) => { let best = 1e9, y = 0; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const l = railHash.get(rkey(x + a * 20, z + b * 20)); if (l) for (const [rx, rz, ry] of l) { const d = Math.hypot(rx - x, rz - z); if (d < best) { best = d; y = ry; } } } return best < 6 ? y : null; };
@@ -226,7 +233,6 @@ class Terrain {
         for (let i = 0; i <= nS; i++) prof[i] = Math.min(prof[i], lerp(a, b, i / nS) + 0.5);
       }
       for (const [a, b] of bores) for (let i = a; i <= b; i++) prof[i] = Math.min(prof[i], lerp(prof[a], prof[b], (i - a) / (b - a)) + 0.5);
-      if (def.street) for (let i = 0; i <= nS; i++) prof[i] = CITY.y;
       const win = def.smoothWin || (def.trail ? 10 : 18);
       for (let pass = 0; pass < (def.passes || 4); pass++) {
         const out = new Float32Array(nS + 1);
@@ -243,7 +249,7 @@ class Terrain {
       // viaducts: lifted over Port Calder's streets and over every road or railway that crosses them (one that ends on them is a junction)
       if (def.viaduct) {
         const lift = (i, y) => { pin[i] = Math.max(isNaN(pin[i]) ? prof[i] : pin[i], y); };
-        for (let i = 0; i <= nS; i++) if (cityCell(R.x[i], R.z[i]) > 0 || (R.x[i] > FLAT.x0 && R.x[i] < FLAT.x1 && R.z[i] > FLAT.z0 && R.z[i] < FLAT.z1)) lift(i, CITY.y + 8.5);
+        if (!def.ramp) for (let i = 0; i <= nS; i++) if (DISTRICT.cell(R.x[i], R.z[i]) > 0 || (R.x[i] > FLAT.x0 && R.x[i] < FLAT.x1 && R.z[i] > FLAT.z0 && R.z[i] < FLAT.z1)) lift(i, CITY.y + 8.5);
         if (def.crossover) { // a figure of eight: the first pass through the middle goes over the second
           const C0 = [];
           for (let i = 0; i < nS; i++) for (let j = i + Math.round(200 / R.step); j < nS; j++) if (Math.hypot(R.x[i] - R.x[j], R.z[i] - R.z[j]) < 4) C0.push(i);

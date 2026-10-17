@@ -132,6 +132,13 @@ function desertHeight(x, z) {
 }
 /* north hills (Kestrel Pines) rise beyond z = -1500 */
 const hillMask = (z) => smooth(-1500, -2150, z);
+/* Kestrel Heights: a ridge north of downtown with the suburbs on its south slope, the observatory and the lighthouse on its crest */
+const HEIGHTS = { x0: 4120, z: -1240, top: 34, south: -880, north: -1580 };
+function heightsLift(x, z, sd) {
+  const H = HEIGHTS, crest = H.z + 35 * Math.sin(x / 260 + 1.3);
+  const prof = z > crest ? smooth(H.south, crest, z) : smooth(H.north, crest, z);
+  return prof * smooth(H.x0 - 110, H.x0 + 110, x) * (1 - smooth(-170, -50, sd)) * H.top * (0.85 + 0.3 * Noise.fbm(x / 240 + 4, z / 240, 2));
+}
 function eastLand(x, z) {
   let h = 10 + 14 * Noise.fbm(x / 650 + 7, z / 650 - 3, 4) + 3.5 * Noise.fbm(x / 160 + 2, z / 160, 3);
   const hm = hillMask(z);
@@ -155,6 +162,7 @@ function eastHeight(x, z) {
   // the port: dead flat, quay drops straight into the harbour
   const f = boxMask(x, z, FLAT, 90);
   if (f > 0) h = lerp(h, CITY.y, f);
+  if (z < HEIGHTS.south) h += heightsLift(x, z, sdf.d);
   if (f < 1) for (const b of HARBOUR) { // deep water right up to the quay walls
     const dd = Math.hypot(Math.max(b.x0 - x, x - b.x1, 0), Math.max(b.z0 - z, z - b.z1, 0));
     if (dd < 140) h = Math.min(h, lerp(-13 - 3 * Noise.fbm(x / 150, z / 150, 2), h, smooth(0, 140, dd)));

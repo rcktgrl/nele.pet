@@ -128,6 +128,18 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
   // rail ballast
   vec3 ballast = vec3(0.33, 0.31, 0.29) * (0.65 + 0.6 * vnoise(P.xz * 7.0));
   col = mix(col, ballast, rail);
+  // Port Calder: paved lots, lawns and parks, and a kerbed sidewalk along every street
+  if (city > 0.01) {
+    vec3 lot = vec3(0.31, 0.30, 0.28) * (0.8 + 0.2 * n3);
+    vec2 slab = fract(P.xz / 6.0); lot *= 0.92 + 0.08 * step(0.03, min(slab.x, slab.y));
+    vec3 cg = mix(lot, grassLush * 1.1, smoothstep(0.92, 0.7, city) * step(0.3, city));
+    vec3 walk = vec3(0.46, 0.44, 0.41) * (0.85 + 0.15 * n3);
+    vec2 sl = fract(P.xz / 2.0); walk *= 0.92 + 0.08 * step(0.06, min(sl.x, sl.y));
+    cg = mix(cg, walk, 1.0 - smoothstep(hw + 4.0, hw + 4.6, al));
+    cg = mix(cg, vec3(0.62, 0.6, 0.56), lineAA(al - hw - 0.15, 0.14));
+    col = mix(col, cg, smoothstep(0.02, 0.25, city) * (1.0 - cliff));
+    gGloss = max(gGloss, step(0.8, city) * 0.2);
+  }
   // asphalt with markings
   {
     vec3 tar = vec3(0.085, 0.087, 0.092) * (0.82 + 0.3 * n3 + 0.12 * n4);
@@ -152,40 +164,6 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
     tar = mix(tar, mc, m * 0.85);
     col = mix(col, tar, asph);
     gGloss = max(gGloss, asph * 0.35);
-  }
-  // Port Calder streets, sidewalks, parks and docks
-  if (city > 0.01) {
-    vec2 q = P.xz - vec2(${CITY.x0.toFixed(1)}, ${CITY.z0.toFixed(1)});
-    float pitch = ${CITY.pitch.toFixed(1)}, shw = ${CITY.hw.toFixed(1)};
-    vec2 g = q - pitch * floor(q / pitch + 0.5);
-    float du = abs(g.x), dv = abs(g.y);
-    float inGrid = step(q.x, ${((CITY.nx - 1) * CITY.pitch + CITY.hw).toFixed(1)}) * step(q.y, ${((CITY.nz - 1) * CITY.pitch + CITY.hw).toFixed(1)});
-    float street = min(du, dv);
-    vec3 cg;
-    vec3 tar = vec3(0.075, 0.077, 0.082) * (0.82 + 0.3 * n3 + 0.12 * n4);
-    vec3 walk = vec3(0.46, 0.44, 0.41) * (0.85 + 0.15 * n3);
-    vec2 slab = fract(P.xz / 2.0); walk *= 0.92 + 0.08 * step(0.06, min(slab.x, slab.y));
-    vec3 lot = vec3(0.30, 0.29, 0.27) * (0.8 + 0.2 * n3);
-    if (inGrid > 0.5) {
-      cg = street < shw ? tar : street < shw + 4.0 ? walk : lot;
-      // curb line
-      cg = mix(cg, vec3(0.62, 0.6, 0.56), lineAA(street - shw, 0.12));
-      // markings: centre dashes along each street, crosswalks at intersections
-      float onX = step(du, shw) * step(shw + 1.0, dv), onZ = step(dv, shw) * step(shw + 1.0, du);
-      float along = onX > 0.5 ? P.z : P.x;
-      float cl = (onX > 0.5 ? lineAA(g.x, 0.09) : lineAA(g.y, 0.09)) * step(0.5, fract(along / 9.0));
-      float cross = max(du, dv);
-      float zebra = step(shw + 1.0, cross) * step(cross, shw + 4.5) * step(street, shw - 0.8) * step(0.5, fract((onX > 0.5 || du < shw ? P.x : P.z) / 1.2));
-      cg = mix(cg, vec3(0.82, 0.8, 0.74), max(cl * (onX + onZ), zebra) * 0.85 * smoothstep(900.0, 200.0, dist));
-    } else {
-      cg = vec3(0.34, 0.33, 0.31) * (0.85 + 0.2 * n3);
-      vec2 dk = fract(P.xz / 6.0); cg *= 0.9 + 0.1 * step(0.03, min(dk.x, dk.y));
-      cg = mix(cg, vec3(0.8, 0.62, 0.1), lineAA((fract(P.x / 28.0) - 0.5) * 28.0, 0.1) * 0.6 * smoothstep(700.0, 150.0, dist));
-    }
-    float park = smoothstep(0.92, 0.7, city) * step(0.3, city);
-    cg = mix(cg, grassLush * 1.1, park);
-    col = mix(col, cg, smoothstep(0.02, 0.25, city));
-    gGloss = max(gGloss, (1.0 - park) * 0.25);
   }
   // mud
   vec3 mudC = vec3(0.075, 0.045, 0.028) * (0.75 + 0.5 * n2);

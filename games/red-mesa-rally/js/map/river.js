@@ -148,8 +148,7 @@ function findBridges(T) {
     }
     // piers: in the water every 26 m, a pair under a road deck and one under the rail; a viaduct stands on them all the way,
     // except where they would land on a road, the railway or a city street
-    const street = (x, z) => cityCell(x, z) > 0 && Math.min(Math.abs(((x - CITY.x0) % CITY.pitch + CITY.pitch) % CITY.pitch - CITY.pitch / 2), Math.abs(((z - CITY.z0) % CITY.pitch + CITY.pitch) % CITY.pitch - CITY.pitch / 2)) > CITY.pitch / 2 - CITY.hw - 3;
-    const dry = (x, z) => { const gi = T.gi(x, z); return !T.river[gi] && !T.rown[gi] && !(T.rail[gi] > 0) && !street(x, z); };
+    const dry = (x, z) => { const gi = T.gi(x, z); return !T.river[gi] && !T.rown[gi] && !(T.rail[gi] > 0); };
     let acc = 13;
     if (wet || R.elev) for (let k = a; k < b; k++) {
       const gi = T.gi(R.x[k], R.z[k]);
