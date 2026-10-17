@@ -224,6 +224,23 @@ table.res td.t { text-align: right; }
 .slot.empty .si b { color: var(--dust); }
 @media (max-width: 560px) { .slot { grid-template-columns: 1fr; } .slot .sa { justify-content: flex-start; } }
 .menu { width: min(820px, 100%); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:disabled:hover { background: transparent; color: inherit; border-color: var(--sand); }
+.btn.primary:disabled:hover { background: var(--flare); color: var(--ink); border-color: var(--flare); }
+.mpjoin { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.mpjoin input { width: 9ch; min-width: 0; font-family: var(--display); font-size: 28px; letter-spacing: .14em; text-transform: uppercase; color: var(--sand); background: rgba(18,12,9,.6); border: 2px solid rgba(242,230,211,.35); padding: 4px 10px; -webkit-user-select: text; user-select: text; }
+.mpjoin input:focus { outline: none; border-color: var(--flare); }
+.mpcode { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+.mpcode b { font-family: var(--display); font-weight: 400; font-size: clamp(38px, 8vw, 56px); line-height: 1; letter-spacing: .12em; color: var(--sand); }
+.mpcode .linkbtn { margin-left: 0; }
+.mplist { display: grid; gap: 6px; }
+.mplist div { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline; border-left: 3px solid rgba(242,230,211,.28); padding: 4px 10px; background: rgba(18,12,9,.45); }
+.mplist div.me { border-left-color: var(--flare); }
+.mplist b { font-family: var(--display); font-weight: 400; font-size: 22px; color: var(--sand); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mplist em { font-style: normal; font-weight: 800; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--flare); }
+.mplist span { grid-column: 1 / -1; font-weight: 700; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--dust); }
+.mpwho a { color: var(--sand); }
+.label3d.mp b { color: var(--cool); font-size: 19px; }
 #gateNote { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); text-align: center; display: none; }
 #gateNote.on { display: block; }
 .touchhint { display: none; }
@@ -374,6 +391,13 @@ table.res td.t { text-align: right; }
         <span class="b">The whole map and all 13 events from the start. No story, no locked doors, just driving.</span>
         <span class="prog"><span>Everything unlocked</span></span>
       </button>
+      <button class="mode" id="mMulti" type="button">
+        <span class="mk">3</span>
+        <span class="c">Multiplayer</span>
+        <span class="n">Drive together</span>
+        <span class="b">Host a session or join one with a code. Roam the valley with friends and race any event head to head, peer to peer.</span>
+        <span class="prog"><span id="mMultiState">Up to 8 drivers</span></span>
+      </button>
     </div>
     <div class="eyebrow" style="color:var(--dust)">Your car</div>
     <div class="cars" id="titleCars"></div>
@@ -384,7 +408,7 @@ table.res td.t { text-align: right; }
       <div><b>C</b> camera · <b>B</b> look back</div><div><b>M</b> map</div><div><b>Esc</b> pause</div>
     </div>
     <p class="muted touchhint">Steer with the arrows on the left, gas and brake on the right. Boost burns heat.</p>
-    <div class="row"><span class="muted" id="menuHint">Press 1 or 2, or Enter to continue.</span><span class="menulinks"><button class="linkbtn" id="btnNewGame" type="button">New game</button><button class="linkbtn" id="btnSaves" type="button">Saves</button></span></div>
+    <div class="row"><span class="muted" id="menuHint">Press 1, 2 or 3, or Enter to continue.</span><span class="menulinks"><button class="linkbtn" id="btnNewGame" type="button">New game</button><button class="linkbtn" id="btnSaves" type="button">Saves</button></span></div>
   </div>
 </div>
 
@@ -394,6 +418,23 @@ table.res td.t { text-align: right; }
     <h1>Saves</h1>
     <div class="slots" id="slotList"></div>
     <div class="row"><button class="btn primary" id="btnSlotNew" type="button">Start new game</button><button class="btn" id="btnSlotsBack" type="button">Back</button><span class="muted" id="savesHint"></span></div>
+  </div>
+</div>
+
+<div class="screen scrim" id="mpScreen">
+  <div class="card menu">
+    <div class="eyebrow">Multiplayer · peer to peer</div>
+    <h1>Drive together</h1>
+    <p class="muted mpwho" id="mpWho"></p>
+    <div class="row" id="mpOut">
+      <button class="btn primary" id="btnHost" type="button">Host a session</button>
+      <form class="mpjoin" id="mpJoin"><input id="mpCode" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" aria-label="Session code"><button class="btn" id="btnJoin" type="submit">Join</button></form>
+    </div>
+    <div id="mpIn" hidden style="display:grid;gap:12px">
+      <div class="mpcode"><span class="eyebrow" style="color:var(--dust)">Session code</span><b id="mpCodeShow"></b><button class="linkbtn" id="btnCopyCode" type="button">Copy</button></div>
+      <div class="mplist" id="mpList"></div>
+    </div>
+    <div class="row"><button class="btn primary" id="btnMpDrive" type="button" hidden>Start driving</button><button class="btn" id="btnMpLeave" type="button" hidden>Leave session</button><button class="btn" id="btnMpBack" type="button">Back</button><span class="muted" id="mpStatus"></span></div>
   </div>
 </div>
 
@@ -426,6 +467,8 @@ table.res td.t { text-align: right; }
     <div class="cars" id="pauseCars"></div>
     <div class="eyebrow" id="livLabel" style="color:var(--dust)">Livery</div>
     <div class="livs" id="pauseLivs"></div>
+    <div class="eyebrow" id="mpLabel" style="color:var(--dust)" hidden>Session</div>
+    <div class="mplist" id="pauseMp" hidden></div>
     <div class="eyebrow" id="chalLabel" style="color:var(--dust)">Challenges · unlock liveries</div>
     <div class="chal" id="pauseChal"></div>
     <div class="row" id="pauseRow">
@@ -2411,7 +2454,7 @@ class World {
     if (this.train) this.train.update(dt);
     for (const mt of this.metroTrains) mt.update(dt);
     const T = this.terrain;
-    for (const c of this.cars) if (!c.asleep) { T.probeY = c.under ? Math.min(c.pos.y, METRO.under - 0.5) : c.pos.y; c.step(dt, this); }
+    for (const c of this.cars) if (!c.asleep && !c.remote) { T.probeY = c.under ? Math.min(c.pos.y, METRO.under - 0.5) : c.pos.y; c.step(dt, this); } // remote players drive on their own machines
     T.probeY = Infinity;
     // down in the metro stays down in the metro: tumbling about under the ceiling never lands a car on the street above
     for (const c of this.cars) {
@@ -2430,7 +2473,7 @@ class World {
     const S = this.scatter, P = this.props;
     const sph = [];
     for (const c of this.cars) {
-      if (c.asleep) continue;
+      if (c.asleep || c.remote) continue;
       c.spheres(sph);
       for (const s of sph) {
         const list = S.near(s.p.x, s.p.z);
@@ -2704,7 +2747,7 @@ class Race {
         P.wrongWay = ds < -0.05 && c.vel.length() > 3 ? P.wrongWay + dt : Math.max(0, P.wrongWay - dt * 2);
       }
       P.total = P.lap * R.length + P.s;
-      const done = R.closed ? P.lap >= this.laps : P.s >= this.finishS;
+      const done = !c.remote && (R.closed ? P.lap >= this.laps : P.s >= this.finishS); // remote players report their own finish
       if (done) { P.finished = true; P.time = this.clock; if (!R.closed) { P.best = this.clock; } this.finishOrder.push(c); c.events.push({ type: 'finish', pos: this.finishOrder.length }); }
     }
     if (this.prog.get(this.player).finished && this.state === 'running') { this.state = 'finished'; this.finishT = this.t; }
@@ -2713,6 +2756,7 @@ class Race {
     const arr = [...this.cars];
     arr.sort((a, b) => {
       const A = this.prog.get(a), Bp = this.prog.get(b);
+      if (!A.dnf !== !Bp.dnf) return A.dnf ? 1 : -1;
       if (A.finished && Bp.finished) return A.time - Bp.time;
       if (A.finished) return -1; if (Bp.finished) return 1;
       return Bp.total - A.total;
@@ -6192,6 +6236,7 @@ class Input {
     this.touch = { left: 0, right: 0, gas: 0, brake: 0, boost: 0, hand: 0 };
     this.steer = 0; this.usingPad = false;
     addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' && e.target.type === 'text') return; // typing a session code
       if ((['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Space'].includes(e.key) || e.code === 'Space') && e.target.type !== 'range') e.preventDefault();
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code); this.usingPad = false;
@@ -6691,6 +6736,228 @@ class Traffic {
 }
 
 /* ---------------- Game ---------------- */
+/* ---------------- Multiplayer: peer to peer ----------------
+   Drivers meet in a room on the arcade's Supabase realtime channel, which only carries
+   WebRTC signalling (offers, answers, ICE candidates) and presence. Car state then flows
+   straight between browsers over data channels. A peer we can't reach directly (strict NAT,
+   no TURN server) gets the same messages relayed over the room channel instead.
+   Who you are comes from the arcade profile: the arcade_user the hub caches on login. */
+const SUPA_URL = 'https://lglcvsptwkqxykapepey.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnbGN2c3B0d2txeHlrYXBlcGV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwNzQ1NDcsImV4cCI6MjA2MjY1MDU0N30.ci7v2g-5wixuPKnG6wUUO87AsbI1bQ8wzRnHHG9QzIQ';
+const SUPA_ESM = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/+esm';
+const MP_MAX = 8, MP_HZ = 15, MP_DELAY = 0.12, MP_STALE = 3; // render remote cars a little behind their newest snapshot
+const MP_ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
+const MP_CODE = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', MP_CODE_LEN = 5;
+const MP_STATE_LEN = 23;
+let supaClient = null;
+async function supa() { if (!supaClient) { const { createClient } = await import(SUPA_ESM); supaClient = createClient(SUPA_URL, SUPA_KEY); } return supaClient; }
+const cleanName = (v) => String(v || '').trim().replace(/\s+/g, ' ').slice(0, 24);
+const esc = (v) => String(v).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const randomId = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+const mpCode = () => Array.from({ length: MP_CODE_LEN }, () => MP_CODE[Math.floor(Math.random() * MP_CODE.length)]).join('');
+const cleanCode = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, MP_CODE_LEN);
+/* the arcade profile, same shape the hub and the other arcade games use */
+async function arcadeProfile() {
+  try { const c = JSON.parse(localStorage.getItem('arcade_user') || 'null'); if (c && cleanName(c.name)) return { uid: c.user_id ? String(c.user_id) : null, name: cleanName(c.name) }; } catch (e) { /* storage blocked */ }
+  try {
+    const { data } = await (await supa()).auth.getSession();
+    const u = data && data.session && data.session.user; if (!u) return null;
+    const p = { user_id: u.id, name: cleanName((u.user_metadata && u.user_metadata.username) || (u.email || '').split('@')[0] || 'Player'), email: u.email };
+    try { localStorage.setItem('arcade_user', JSON.stringify(p)); } catch (e) { /* storage blocked */ }
+    return { uid: p.user_id, name: p.name };
+  } catch (e) { console.warn('arcade profile', e); return null; }
+}
+/* one car's pose and dashboard, small enough to send 15 times a second */
+function packCar(c) {
+  const r = (v, k = 100) => Math.round(v * k) / k, W = c.wheels;
+  const f = (c.input.brake > 0.1 ? 1 : 0) | (c.boosting ? 2 : 0) | (c.wrecked ? 4 : 0) | (c.under ? 8 : 0) | (c.reverse ? 16 : 0) | (c.onGround ? 32 : 0);
+  return [r(c.pos.x), r(c.pos.y), r(c.pos.z), r(c.q.x, 1e4), r(c.q.y, 1e4), r(c.q.z, 1e4), r(c.q.w, 1e4), r(c.vel.x), r(c.vel.y), r(c.vel.z),
+    r(c.steerAngle, 1e3), f, Math.round(c.rpm), r(c.heat), r(c.inWater),
+    ...W.map((w) => (w.contact ? r(Math.max(0, w.t - c.spec.wheels.r)) : -1)),
+    ...W.map((w) => r(Math.min(2, Math.abs(w.slipLat) * 4 + Math.abs(w.slip) * 1.5)))];
+}
+class Peer {
+  constructor(s, id, slot) {
+    this.s = s; this.id = id; this.slot = slot; this.name = 'Driver'; this.t = 0; this.info = null;
+    this.pc = null; this.u = null; this.r = null; this.ice = []; this.tries = 0; this.link = 'connecting';
+    this.buf = []; this.car = null; this.label = null; this.rebuild = false;
+    this._qa = new THREE.Quaternion(); this._qb = new THREE.Quaternion();
+  }
+  get initiator() { return this.s.id < this.id; } // exactly one side of each pair makes the offer
+  direct() { return !!(this.r && this.r.readyState === 'open'); }
+  setInfo(info) { const k = JSON.stringify(info || null); if (k !== this.infoKey) { this.infoKey = k; this.info = info && typeof info === 'object' ? info : {}; this.rebuild = true; } }
+  connect(initiator) {
+    this.closePc();
+    if (!window.RTCPeerConnection) { this.fail(); return; }
+    const pc = this.pc = new RTCPeerConnection({ iceServers: MP_ICE });
+    pc.onicecandidate = (e) => { if (e.candidate && pc === this.pc) this.s.signal(this.id, { ice: e.candidate.toJSON() }); };
+    pc.onconnectionstatechange = () => { if (pc !== this.pc) return; if (pc.connectionState === 'failed') this.fail(); this.s.g.mpRefresh(); };
+    pc.ondatachannel = (e) => this.bind(e.channel);
+    if (initiator) {
+      this.ice.length = 0;
+      this.bind(pc.createDataChannel('u', { ordered: false, maxRetransmits: 0 }));
+      this.bind(pc.createDataChannel('r'));
+      pc.createOffer().then((o) => pc.setLocalDescription(o)).then(() => this.s.signal(this.id, { sdp: pc.localDescription.toJSON() })).catch((e) => { console.warn('rtc offer', e); this.fail(); });
+    }
+    clearTimeout(this.timer); this.timer = setTimeout(() => { if (pc === this.pc && !this.direct()) this.fail(); }, 12000);
+  }
+  bind(dc) {
+    if (dc.label === 'u') this.u = dc; else this.r = dc;
+    dc.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (er) { return; } this.s.onMessage(this, m); };
+    dc.onopen = () => { if (dc === this.r) { this.link = 'direct'; this.tries = 0; this.s.g.mpRefresh(); } };
+    dc.onclose = () => { if (dc === this.r && this.s.active) { this.link = 'relay'; this.s.g.mpRefresh(); } };
+  }
+  /* no direct line: messages go over the room channel, and the offering side tries again a couple of times */
+  fail() {
+    this.link = 'relay'; this.s.g.mpRefresh();
+    if (this.initiator && this.tries < 2) { this.tries++; setTimeout(() => { if (this.s.active && this.s.peers.get(this.id) === this && !this.direct()) this.connect(true); }, 3000); }
+  }
+  async onSignal(d) {
+    try {
+      if (d.sdp && (d.sdp.type === 'offer' || d.sdp.type === 'answer')) {
+        if (d.sdp.type === 'offer') { if (this.initiator) return; this.connect(false); } // a fresh offer replaces whatever line we had
+        const pc = this.pc; if (!pc) return;
+        await pc.setRemoteDescription(d.sdp);
+        for (const c of this.ice.splice(0)) await pc.addIceCandidate(c).catch(() => {});
+        if (d.sdp.type === 'offer') { await pc.setLocalDescription(await pc.createAnswer()); this.s.signal(this.id, { sdp: pc.localDescription.toJSON() }); }
+      } else if (d.ice) {
+        if (this.pc && this.pc.remoteDescription) await this.pc.addIceCandidate(d.ice).catch(() => {}); else if (this.ice.length < 60) this.ice.push(d.ice);
+      }
+    } catch (e) { console.warn('rtc signal', e); }
+  }
+  send(str, reliable) {
+    const dc = !reliable && this.u && this.u.readyState === 'open' ? this.u : this.r;
+    if (dc && dc.readyState === 'open') { try { dc.send(str); return true; } catch (e) { /* fall back to the relay */ } }
+    return false;
+  }
+  closePc() {
+    const { pc, u, r } = this; this.pc = this.u = this.r = null;
+    for (const dc of [u, r]) if (dc) try { dc.close(); } catch (e) { /* already closed */ }
+    if (pc) try { pc.close(); } catch (e) { /* already closed */ }
+  }
+  close() { clearTimeout(this.timer); this.closePc(); }
+  push(d) {
+    if (!Array.isArray(d) || d.length !== MP_STATE_LEN || !d.every(Number.isFinite)) return;
+    this.buf.push({ at: performance.now() / 1000, d }); if (this.buf.length > 30) this.buf.shift();
+  }
+  /* ease the car between the last two snapshots; coast on its velocity for a moment if the next one is late */
+  animate(now, dt) {
+    const g = this.s.g, B = this.buf;
+    if (!B.length) return;
+    if (!this.car || this.rebuild) g.mpCar(this);
+    const c = this.car, stale = now - B[B.length - 1].at > MP_STALE;
+    c.hidden = c.asleep = stale;
+    if (stale) return;
+    const rt = now - MP_DELAY;
+    while (B.length > 2 && B[1].at <= rt) B.shift();
+    const a = B[0], b = B[1] || B[0], A = a.d, D = b.d;
+    const k = b !== a ? clamp((rt - a.at) / Math.max(1e-3, b.at - a.at), 0, 1) : 1, over = clamp(rt - b.at, 0, 0.25);
+    c.pos.set(lerp(A[0], D[0], k) + D[7] * over, lerp(A[1], D[1], k) + D[8] * over, lerp(A[2], D[2], k) + D[9] * over);
+    c.q.slerpQuaternions(this._qa.set(A[3], A[4], A[5], A[6]).normalize(), this._qb.set(D[3], D[4], D[5], D[6]).normalize(), k);
+    c.vel.set(lerp(A[7], D[7], k), lerp(A[8], D[8], k), lerp(A[9], D[9], k)); c.w.set(0, 0, 0);
+    const f = D[11], wr = !!(f & 4);
+    if (wr && !c.wrecked) c.events.push({ type: 'wreck', reason: 'remote' });
+    c.wrecked = wr; c.wreckT = wr ? c.wreckT + dt : 0;
+    c.input.brake = f & 1 ? 1 : 0; c.boosting = !!(f & 2); c.under = !!(f & 8); c.reverse = !!(f & 16); c.onGround = !!(f & 32);
+    c.steerAngle = D[10]; c.rpm = D[12]; c.heat = D[13]; c.inWater = D[14]; c.speedKmh = c.vel.length() * 3.6;
+    const sp = c.spec, fwd = c._t.fwd.set(0, 0, -1).applyQuaternion(c.q), vF = c.vel.dot(fwd), near = c.pos.distanceTo(g.player.pos) < 160;
+    for (let i = 0; i < 4; i++) {
+      const w = c.wheels[i], e = D[15 + i];
+      w.steer = w.front ? c.steerAngle : 0; w.contact = e >= 0; w.t = sp.wheels.r + Math.max(0, e);
+      w.spin -= vF / sp.wheels.r * dt; w.slipLat = D[19 + i] / 4; w.slip = 0;
+      if (w.contact && near) { w.cp.set(w.lx, w.ly - w.t, w.lz).applyQuaternion(c.q).add(c.pos); w.surf = g.world.surface(w.cp.x, w.cp.z, w.cp.y); } else w.surf = null;
+    }
+  }
+}
+class Session {
+  constructor(game) { this.g = game; this.id = randomId(); this.peers = new Map(); this.active = false; this.ch = null; this.sendT = 0; this.relayN = 0; this.hostId = null; this.early = new Map(); }
+  /* everyone in the room, oldest first; the oldest one hosts */
+  get list() { return [{ id: this.id, name: this.me.name, t: this.t, me: true }, ...this.peers.values()].sort((a, b) => a.t - b.t || (a.id < b.id ? -1 : 1)); }
+  get isHost() { return this.active && this.hostId === this.id; }
+  async open(code, me) {
+    this.code = code; this.me = me; this.t = Date.now();
+    const sb = await supa();
+    const ch = this.ch = sb.channel('redmesa:' + code, { config: { broadcast: { self: false }, presence: { key: this.id } } });
+    ch.on('presence', { event: 'sync' }, () => this.syncPresence());
+    ch.on('broadcast', { event: 'sig' }, ({ payload: p }) => {
+      if (!p || p.to !== this.id || !p.data || typeof p.from !== 'string') return;
+      const peer = this.peers.get(p.from);
+      if (peer) peer.onSignal(p.data);
+      else { const q = this.early.get(p.from) || []; if (q.length < 60) q.push(p.data); this.early.set(p.from, q); } // an offer can beat their presence here
+    });
+    ch.on('broadcast', { event: 'relay' }, ({ payload: p }) => { const peer = p && this.peers.get(p.from); if (peer && !peer.direct()) this.onMessage(peer, p.m); });
+    await new Promise((res, rej) => {
+      const timer = setTimeout(() => rej(new Error('The session server did not answer')), 12000);
+      ch.subscribe((st) => {
+        if (st === 'SUBSCRIBED') { clearTimeout(timer); res(); }
+        else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') { clearTimeout(timer); rej(new Error('Could not reach the session server')); }
+      });
+    });
+    this.active = true; this.hostId = this.id;
+    await this.track();
+  }
+  track() { if (!this.ch) return Promise.resolve(); return this.ch.track({ id: this.id, name: this.me.name, uid: this.me.uid, t: this.t, car: this.g.carInfo() }).catch((e) => console.warn('presence', e)); }
+  syncPresence() {
+    if (!this.active) return;
+    const seen = new Set();
+    for (const metas of Object.values(this.ch.presenceState())) for (const m of metas) {
+      if (!m || typeof m.id !== 'string' || m.id === this.id || seen.has(m.id)) continue;
+      seen.add(m.id);
+      let p = this.peers.get(m.id), fresh = false;
+      if (!p) {
+        const used = new Set([...this.peers.values()].map((q) => q.slot)); let slot = 0; while (used.has(slot)) slot++;
+        p = new Peer(this, m.id, slot); this.peers.set(m.id, p); fresh = true;
+      }
+      p.name = cleanName(m.name) || 'Driver'; p.uid = m.uid || null; p.t = Number(m.t) || 0; p.setInfo(m.car);
+      if (p.car) p.car.name = p.name;
+      if (fresh) {
+        this.g.mpJoined(p);
+        if (p.initiator) p.connect(true);
+        const early = this.early.get(m.id); this.early.delete(m.id);
+        if (early) (async () => { for (const d of early) await p.onSignal(d); })();
+      }
+    }
+    for (const [id, p] of this.peers) if (!seen.has(id)) { p.close(); this.peers.delete(id); this.g.mpLeft(p); }
+    const L = this.list;
+    if (L.length > MP_MAX && L.findIndex((x) => x.me) >= MP_MAX) { this.g.leaveMp(`That session is full (${MP_MAX} drivers).`); return; }
+    const host = L[0].id;
+    if (host !== this.hostId) { this.hostId = host; this.g.toast(host === this.id ? 'You are hosting' : `${esc(L[0].name)} is hosting`, 'The host starts the events', 'region'); }
+    this.g.mpRefresh();
+  }
+  signal(to, data) { if (this.ch) this.ch.send({ type: 'broadcast', event: 'sig', payload: { from: this.id, to, data } }); }
+  broadcast(m, reliable) {
+    const str = JSON.stringify(m); let relay = false;
+    for (const p of this.peers.values()) if (!p.send(str, reliable)) relay = true;
+    // anyone without a direct line hears it over the room channel (car state at half rate there)
+    if (relay && this.ch && (reliable || this.relayN++ % 2 === 0)) this.ch.send({ type: 'broadcast', event: 'relay', payload: { from: this.id, m } });
+  }
+  onMessage(p, m) {
+    if (!m || typeof m !== 'object') return;
+    const g = this.g;
+    if (m.k === 's') p.push(m.d);
+    else if (m.k === 'race' && p.id === this.hostId) g.mpRace(m);
+    else if (m.k === 'fin') g.mpFinish(p, m);
+    else if (m.k === 'quit') g.mpQuit(p);
+  }
+  /* who lines up for a race: the drivers out on the map right now, in room order */
+  raceOrder() { return this.list.filter((x) => x.me || (x.car && !x.car.hidden)).map((x) => x.id); }
+  update(dt) {
+    if (!this.active) return;
+    const g = this.g;
+    this.sendT -= dt;
+    if (this.sendT <= 0 && g.inWorld()) { this.sendT = 1 / MP_HZ; if (this.peers.size) this.broadcast({ k: 's', d: packCar(g.player) }); }
+    const now = performance.now() / 1000;
+    for (const p of this.peers.values()) p.animate(now, dt);
+  }
+  leave() {
+    this.active = false;
+    for (const p of this.peers.values()) { p.close(); this.g.mpLeft(p, true); }
+    this.peers.clear();
+    const ch = this.ch; this.ch = null;
+    if (ch) { ch.untrack().catch(() => {}).finally(() => supaClient.removeChannel(ch)); }
+  }
+}
+
 class Game {
   constructor() {
     Store.load();
@@ -6705,6 +6972,7 @@ class Game {
     this.livery = LIVERIES.some((l) => l.id === Store.data.livery) ? Store.data.livery : 'festival';
     this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
     this.quality = Store.data.quality || (this.isTouch ? 'low' : 'high');
+    this.mp = null; this.profile = undefined; // multiplayer session; arcade profile once looked up (null: not logged in)
   }
   async boot(hot) {
     coreInit(THREE);
@@ -6770,6 +7038,7 @@ class Game {
     this.player = this.addCar(VEHICLES[vid], { id: 0, player: true, color: L.color || VEHICLES[vid].color, number: L.num, livery: L.text, helmet: L.helmet });
     this.player.reset(x, z, yaw, W.terrain, 0.5, old && old.under && !boat ? old.pos.y : undefined); this.player.liveryId = L.id;
     this.rig.snap();
+    if (this.mp) this.mp.track();
     if (note && this.state === 'free') this.toast(boat ? 'Boat launched' : 'Ashore', note, 'region');
   }
   currentLivery() {
@@ -6861,18 +7130,27 @@ class Game {
     this.bigmap = $('bigmap').getContext('2d');
     $('mStory').addEventListener('click', () => this.startMode('story'));
     $('mFree').addEventListener('click', () => this.startMode('free'));
+    $('mMulti').addEventListener('click', () => { this.audio.start(); this.showMp(true); });
+    $('btnHost').addEventListener('click', () => this.openMp(mpCode()));
+    $('mpJoin').addEventListener('submit', (e) => { e.preventDefault(); const c = cleanCode($('mpCode').value); if (c.length === MP_CODE_LEN) this.openMp(c); else this.renderMp(`Session codes are ${MP_CODE_LEN} letters and numbers.`); });
+    $('mpCode').addEventListener('input', (e) => { const c = cleanCode(e.target.value); if (c !== e.target.value) e.target.value = c; });
+    $('btnCopyCode').addEventListener('click', () => { if (this.mp && navigator.clipboard) navigator.clipboard.writeText(this.mp.code).then(() => this.renderMp('Code copied.'), () => {}); });
+    $('btnMpDrive').addEventListener('click', () => this.startMode('multi'));
+    $('btnMpLeave').addEventListener('click', () => this.leaveMp());
+    $('btnMpBack').addEventListener('click', () => this.showMp(false));
+    addEventListener('pagehide', () => { if (this.mp) this.mp.leave(); });
     $('btnNewGame').addEventListener('click', () => this.newGame());
     $('btnSaves').addEventListener('click', () => this.showSaves(true));
     $('btnSlotNew').addEventListener('click', () => this.newGame());
     $('btnSlotsBack').addEventListener('click', () => this.showSaves(false));
     $('btnMenu').addEventListener('click', () => this.goMenu());
-    $('btnStart').addEventListener('click', () => { this.audio.start(); this.startEvent(this.pendingEvent, this.pendingVehicle || this.vehicle); });
+    $('btnStart').addEventListener('click', () => this.launchEvent(this.pendingEvent, this.pendingVehicle || this.vehicle));
     $('btnNotNow').addEventListener('click', () => this.closeEventScreen());
     $('btnContinue').addEventListener('click', () => this.endEvent());
-    $('btnRetry').addEventListener('click', () => { const ev = this.race.ev; this.endEvent(true); this.startEvent(ev, this.vehicle); });
+    $('btnRetry').addEventListener('click', () => { const ev = this.race.ev; this.endEvent(true); this.launchEvent(ev, this.vehicle); });
     $('btnResume').addEventListener('click', () => this.togglePause(false));
-    $('btnQuit').addEventListener('click', () => { this.togglePause(false); this.endEvent(); });
-    $('btnRestart').addEventListener('click', () => { this.togglePause(false); const ev = this.race.ev; this.endEvent(true); this.startEvent(ev, this.vehicle); });
+    $('btnQuit').addEventListener('click', () => { if (this.mp && this.race) this.mp.broadcast({ k: 'quit' }, true); this.togglePause(false); this.endEvent(); });
+    $('btnRestart').addEventListener('click', () => { this.togglePause(false); const ev = this.race.ev; this.endEvent(true); this.launchEvent(ev, this.vehicle); });
     $('btnQuality').addEventListener('click', () => { const order = ['high', 'medium', 'low']; this.quality = order[(order.indexOf(this.quality) + 1) % 3]; Store.data.quality = this.quality; Store.save(); this.gfx.setQuality(this.quality); this.onResize(); this.refreshPauseButtons(); });
     for (const el of document.querySelectorAll('#pauseVols input[data-vol]')) {
       const k = el.dataset.vol, out = el.nextElementSibling;
@@ -6916,9 +7194,9 @@ class Game {
   refreshPauseButtons() {
     $('btnQuality').textContent = 'Quality: ' + this.quality;
     const inRace = !!this.race;
-    $('btnQuit').hidden = !inRace; $('btnRestart').hidden = !inRace;
-    $('pauseTitle').textContent = inRace ? this.race.ev.name : this.story.free ? 'Free roam' : 'Story · ' + this.story.chapterName();
-    $('btnMenu').hidden = inRace;
+    $('btnQuit').hidden = !inRace; $('btnRestart').hidden = !inRace || (!!this.mp && !this.mp.isHost);
+    $('pauseTitle').textContent = inRace ? this.race.ev.name : this.mp ? 'Multiplayer · ' + this.mp.code : this.story.free ? 'Free roam' : 'Story · ' + this.story.chapterName();
+    $('btnMenu').hidden = inRace; $('btnMenu').textContent = this.mp ? 'Leave session' : 'Main menu';
   }
   screen(id, on) { $(id).classList.toggle('on', on); }
   showSplash() {
@@ -6963,7 +7241,7 @@ class Game {
     }
   }
   showTitle() {
-    this.state = 'title'; this.savesOpen = false; this.screen('saves', false);
+    this.state = 'title'; this.savesOpen = false; this.screen('saves', false); this.mpOpen = false; this.screen('mpScreen', false);
     this.carCards($('titleCars'), (vid) => { if (vid !== this.player.spec.id) this.spawnPlayer(vid); }, { sel: this.player.spec.boat ? this.landVehicle : this.vehicle });
     this.liveryChips($('titleLivs'));
     this.refreshMenu();
@@ -6983,6 +7261,7 @@ class Game {
       $('pauseCars').hidden = !!this.race; $('garageLabel').hidden = !!this.race;
       this.liveryChips($('pauseLivs')); $('pauseLivs').hidden = !!this.race; $('livLabel').hidden = !!this.race;
       this.challengeBoard($('pauseChal'));
+      $('mpLabel').hidden = $('pauseMp').hidden = !this.mp; if (this.mp) this.mpListInto($('pauseMp'));
       this.refreshPauseButtons(); this.screen('pause', true);
     } else if (this.state === 'pause') { this.state = this.prevState; this.screen('pause', false); this.last = performance.now(); }
   }
@@ -7016,11 +7295,26 @@ class Game {
     if (ev.medals) chips.push(`Gold ${fmtTime(ev.medals[0])}`, `Silver ${fmtTime(ev.medals[1])}`, `Bronze ${fmtTime(ev.medals[2])}`);
     $('evChips').innerHTML = chips.map((c) => `<span class="chip">${c}</span>`).join('');
     this.carCards($('evCars'), (vid) => { this.pendingVehicle = vid; }, { sel: this.pendingVehicle });
+    this.refreshEventStart();
     this.screen('eventScreen', true);
+  }
+  refreshEventStart() {
+    const M = this.mp, b = $('btnStart');
+    b.disabled = !!M && !M.isHost;
+    b.textContent = !M ? 'Start event' : M.isHost ? (M.peers.size ? 'Start for everyone' : 'Start event') : 'The host starts events';
+  }
+  /* in a session the host starts an event for every driver on the map */
+  launchEvent(ev, vid) {
+    this.audio.start();
+    if (!this.mp) { this.startEvent(ev, vid); return; }
+    if (!this.mp.isHost) return;
+    const order = this.mp.raceOrder();
+    this.mp.broadcast({ k: 'race', ev: ev.id, order }, true);
+    this.startEvent(ev, vid, order);
   }
   closeEventScreen() { this.screen('eventScreen', false); this.state = 'free'; this.cooldownSpot = this.nearSpot; this.last = performance.now(); }
   /* ----- events ----- */
-  startEvent(ev, vid) {
+  startEvent(ev, vid, mpOrder) {
     this.screen('eventScreen', false); this.screen('results', false);
     this.clearRoamers(); this.traffic.clear();
     if (VEHICLES[vid].boat || !this.story.carUnlocked(vid)) vid = this.story.carUnlocked(this.landVehicle) ? this.landVehicle : 'rally';
@@ -7030,7 +7324,8 @@ class Game {
     const cars = [this.player];
     const others = ['rally', 'buggy', 'truck'].filter((k) => k !== vid);
     const crewCol = [0x16181c, 0x2a7de1, 0xe9e2d6, 0xb0161e, 0x6b2d8c, 0xf2c230];
-    for (let i = 0; i < ev.ai; i++) {
+    if (mpOrder) for (const id of mpOrder) { const p = this.mp && this.mp.peers.get(id); if (p && p.car && !p.car.hidden) cars.push(p.car); }
+    else for (let i = 0; i < ev.ai; i++) {
       let v, name, color = AI_COLORS[i % AI_COLORS.length], helmet = AI_COLORS[(i + 3) % AI_COLORS.length], number = [12, 23, 4, 88, 51, 66][i];
       if (ev.aiCars) { v = ev.aiCars[i % ev.aiCars.length]; name = CREW_NAMES[i]; color = crewCol[(i + 1) % crewCol.length]; }
       else { v = i === 2 ? others[0] : i === 4 ? others[1] : (VEHICLES[vid].offroad ? vid : 'rally'); name = AI_NAMES[i]; }
@@ -7040,10 +7335,11 @@ class Game {
     }
     const race = this.race = new Race(this.world, ev, cars, this.player);
     if (R.def.metro) this.world.resetMetro();
-    // grid: player starts mid-pack
+    // grid: player starts mid-pack; in a session everyone takes the slot the host's order gives them
     const order = [...cars]; if (order.length > 1) { order.splice(0, 1); order.splice(Math.min(3, order.length), 0, this.player); }
     this.ai = [];
-    order.forEach((c, i) => {
+    if (mpOrder) { const i = mpOrder.indexOf(this.mp.id), g = race.gridSlot(i < 0 ? mpOrder.length : i); this.player.reset(g.x, g.z, g.yaw, this.world.terrain, 0.3, g.y); this.player.heat = 0; }
+    else order.forEach((c, i) => {
       const g = race.gridSlot(i); c.reset(g.x, g.z, g.yaw, this.world.terrain, 0.3, g.y); c.heat = 0;
       if (c !== this.player) this.ai.push(new AIDriver(c, R, { s: g.s, lane: (i % 2 ? 1 : -1) * 2.4, metro: R.def.metro ? this.world.metroTrains : null, skill: (c.name === 'Vic Calder' ? 0.99 : 0.9 + ((i * 7) % 5) * 0.022), aggr: c.name === 'Vic Calder' ? 0.9 : 0.35 + ((i * 3) % 4) * 0.15, seed: i + 11 }));
     });
@@ -7101,14 +7397,18 @@ class Game {
     const rec = Store.data.best[ev.id];
     if (!rec || playerTime < rec.time) { Store.data.best[ev.id] = { time: playerTime, vehicle: this.player.spec.id }; Store.save(); note += ' · New personal best'; }
     $('resEyebrow').textContent = `${ev.name} · results`; $('resTitle').textContent = title; $('resNote').textContent = note;
-    const lead = race.prog.get(st[0]);
-    $('resTable').innerHTML = st.map((c, i) => {
-      const p = race.prog.get(c);
-      const t = p.finished ? (i === 0 ? fmtTime(p.time) : '+' + (p.time - lead.time).toFixed(2)) : 'Still racing';
-      return `<tr class="${c === this.player ? 'me' : ''}"><td>${i + 1}</td><td>${c === this.player ? 'You' : c.name}</td><td class="muted">${c.spec.name}</td><td class="t">${t}</td></tr>`;
-    }).join('');
+    this.renderResults();
+    $('btnRetry').hidden = !!this.mp && !this.mp.isHost; $('btnRetry').textContent = this.mp ? 'Rematch' : 'Retry';
     this.screen('results', true);
     this.state = 'results';
+  }
+  renderResults() {
+    const race = this.race, st = race.standings(), lead = race.prog.get(st[0]);
+    $('resTable').innerHTML = st.map((c, i) => {
+      const p = race.prog.get(c);
+      const t = p.dnf ? 'Left' : p.finished ? (i === 0 ? fmtTime(p.time) : '+' + (p.time - lead.time).toFixed(2)) : 'Still racing';
+      return `<tr class="${c === this.player ? 'me' : ''}"><td>${i + 1}</td><td>${c === this.player ? 'You' : esc(c.name)}</td><td class="muted">${c.spec.name}</td><td class="t">${t}</td></tr>`;
+    }).join('');
   }
   requestReset() {
     const c = this.player; if (c.wrecked) return;
@@ -7142,7 +7442,8 @@ class Game {
     if (I.was('Escape') || I.padPressed(9)) { if (this.state === 'map') this.toggleMap(false); else if (this.state === 'event') this.closeEventScreen(); else this.togglePause(); }
     if ((I.was('KeyM') || I.padPressed(8)) && ['free', 'race', 'map'].includes(this.state)) this.toggleMap();
     if (I.was('KeyC') || I.padPressed(3)) this.rig.mode = (this.rig.mode + 1) % 3;
-    if (this.state === 'title' && this.savesOpen) {
+    if (this.state === 'title' && this.mpOpen) { if (I.was('Escape') || I.padPressed(1)) { I.pressed.clear(); this.showMp(false); } }
+    else if (this.state === 'title' && this.savesOpen) {
       if (I.was('Escape') || I.padPressed(1)) { I.pressed.clear(); this.showSaves(false); }
       else for (let i = 0; i < SAVE_SLOTS; i++) if (I.was('Digit' + (i + 1)) || I.was('Numpad' + (i + 1))) this.startMode('story', i, !Store.data.slots[i]);
     }
@@ -7151,14 +7452,17 @@ class Game {
       else if (I.was('KeyL') && Store.data.slots.some(Boolean)) this.showSaves(true);
       else if (I.was('Digit1') || I.was('Numpad1')) this.startMode('story');
       else if (I.was('Digit2') || I.was('Numpad2')) this.startMode('free');
+      else if (I.was('Digit3') || I.was('Numpad3')) this.showMp(true);
       else if (I.was('Enter') || I.padPressed(0)) this.startMode(Store.data.mode === 'free' ? 'free' : 'story');
     }
     else if (this.state === 'event' && (I.was('Enter') || I.padPressed(0))) { this.audio.start(); this.startEvent(this.pendingEvent, this.pendingVehicle || this.vehicle); }
     else if (this.state === 'results' && (I.was('Enter') || I.padPressed(0))) this.endEvent();
     if (I.keys.size || I.usingPad) this.audio.start();
-    const running = ['free', 'race', 'title', 'results', 'splash', 'intro', 'storyintro'].includes(this.state);
+    // a session never stops for one driver's menu: the world keeps turning while you're paused
+    const running = ['free', 'race', 'title', 'results', 'splash', 'intro', 'storyintro'].includes(this.state) || (!!this.mp && this.inWorld());
     const inp = I.poll(dt);
     if (running) this.simulate(dt, inp);
+    if (this.mp) this.mp.update(dt);
     this.gfx.time.value += dt;
     this.renderFrame(dt);
     I.endFrame();
@@ -7268,7 +7572,7 @@ class Game {
       } else if (e.type === 'scrape' && isP) { if (e.v > 5) { this.rig.shake = Math.max(this.rig.shake, 0.5); this.audio.oneShot('thud', e.v / 12); } }
       else if (e.type === 'prop' && isP) { this.audio.oneShot('thud', 0.5); }
       else if (e.type === 'lap' && isP) { const last = this.race.prog.get(c).lastLap; this.toast(e.lap === this.race.laps ? 'Final lap' : `Lap ${e.lap}`, `Last lap ${fmtTime(last)}`); }
-      else if (e.type === 'finish' && isP) { this.toast('Finish', null, 'hot'); c.input.throttle = 0; }
+      else if (e.type === 'finish' && isP) { this.toast('Finish', null, 'hot'); c.input.throttle = 0; if (this.mp) { const pr = this.race.prog.get(c); this.mp.broadcast({ k: 'fin', time: pr.time, best: pr.best }, true); } }
     }
     c.events.length = 0;
     c.impact *= 0.9;
@@ -7282,7 +7586,7 @@ class Game {
   }
   renderFrameAt(dt) {
     const g = this.gfx, P = this.player, W = this.world;
-    const sdt = (this.state === 'pause' || this.state === 'map' || this.state === 'event') ? 0 : dt * this.timeScale;
+    const sdt = !this.mp && (this.state === 'pause' || this.state === 'map' || this.state === 'event') ? 0 : dt * this.timeScale;
     // views
     for (const [car, view] of this.views) {
       const d = car.pos.distanceTo(g.camera.position);
@@ -7348,7 +7652,7 @@ class Game {
     const gateClosed = !S.tunnelOpen();
     const wasClosed = this.world.tunnelGateClosed;
     this.world.setTunnelGate(gateClosed); this.gfx.setTunnelGate(gateClosed);
-    $('freeTitle').textContent = S.free ? 'Free roam' : 'Story · ' + S.chapterName();
+    $('freeTitle').textContent = this.mp ? 'Multiplayer' : S.free ? 'Free roam' : 'Story · ' + S.chapterName();
     if (announce) {
       if (wasClosed && !gateClosed) this.toast('Calder Tunnel open', 'The road east is clear', 'region');
       if (fresh.length) setTimeout(() => this.toast(fresh.length > 1 ? 'New events unlocked' : 'New event unlocked', fresh.join(' · '), 'hot'), wasClosed && !gateClosed ? 2600 : 0);
@@ -7362,7 +7666,8 @@ class Game {
     $('btnSaves').hidden = !Store.data.slots.some(Boolean);
     const last = Store.data.mode === 'free' ? 'mFree' : 'mStory';
     $('mStory').classList.toggle('last', last === 'mStory'); $('mFree').classList.toggle('last', last === 'mFree');
-    $('menuHint').textContent = this.isTouch ? 'Pick a mode to start driving.' : `Press 1 or 2, or Enter for ${last === 'mFree' ? 'free roam' : 'story'}. N for a new game${Store.data.slots.some(Boolean) ? ', L for saves' : ''}.`;
+    $('menuHint').textContent = this.isTouch ? 'Pick a mode to start driving.' : `Press 1, 2 or 3, or Enter for ${last === 'mFree' ? 'free roam' : 'story'}. N for a new game${Store.data.slots.some(Boolean) ? ', L for saves' : ''}.`;
+    $('mMultiState').textContent = this.mp ? `In session ${this.mp.code} · ${this.mp.peers.size + 1} ${this.mp.peers.size ? 'drivers' : 'driver'}` : `Up to ${MP_MAX} drivers`;
   }
   pips(ch) { return [0, 1, 2, 3, 4].map((i) => `<i class="${i < Math.min(ch, 5) ? 'on' : ''}"></i>`).join(''); }
   /* ----- save slots ----- */
@@ -7405,15 +7710,20 @@ class Game {
     if (this.state !== 'title') return;
     this.audio.start();
     const S = this.story;
+    if (m === 'multi' && !this.mp) return;
     if (m === 'story') S.useSlot(slot === undefined ? Store.data.slot : slot, fresh);
     if (this.savesOpen) { this.savesOpen = false; this.screen('saves', false); }
-    S.setMode(m);
+    if (this.mpOpen) { this.mpOpen = false; this.screen('mpScreen', false); }
+    if (m === 'multi') { const keep = Store.data.mode; S.setMode('free'); Store.data.mode = keep; Store.save(); } // a session drives with everything open
+    else { if (this.mp) this.leaveMp(); S.setMode(m); }
     this.refreshStory(false);
     // story mode only lets you drive what the story has handed you
     if (!S.carUnlocked(this.player.spec.id)) { const v = S.carUnlocked(this.landVehicle) && !VEHICLES[this.landVehicle].boat ? this.landVehicle : 'rally'; this.spawnPlayer(v, { x: HUB.x + 18, z: HUB.z + 46, yaw: Math.PI * 0.9, vehicle: v }); }
     else if (this.player.liveryId !== this.currentLivery().id) this.spawnPlayer(this.player.spec.id);
     // story mode starts you on the right side of the closed tunnel
     if (!S.tunnelOpen() && this.player.pos.x > 1180) { this.player.reset(HUB.x + 18, HUB.z + 46, Math.PI * 0.9, this.world.terrain, 0.5); this.rig.snap(); }
+    // a session lines its drivers up side by side in the paddock rather than on top of each other
+    if (m === 'multi') { const i = Math.max(0, this.mp.list.findIndex((x) => x.me)); this.player.reset(HUB.x + 18 - i * 7, HUB.z + 46 + i * 2.5, Math.PI * 0.9, this.world.terrain, 0.5); this.rig.snap(); }
     // a fresh story opens with the voiced intro
     if (m === 'story' && S.ch === 0 && !S.s.flags.intro) this.startStoryIntro();
     else this.enterFree();
@@ -7434,8 +7744,115 @@ class Game {
     $('hud').appendChild($('dlg'));
     this.state = 'title'; this.rig.snap(); this.enterFree();
   }
+  /* ----- multiplayer ----- */
+  inWorld() { return ['free', 'race', 'pause', 'map', 'event', 'results'].includes(this.state); }
+  carInfo() { const P = this.player, L = this.currentLivery(); return { v: P.spec.id, c: P.color, n: L.num, x: L.text, h: L.helmet }; }
+  showMp(on) {
+    if (this.state !== 'title') return;
+    this.mpOpen = on; this.screen('mpScreen', on); this.screen('title', !on);
+    if (!on) { this.refreshMenu(); return; }
+    this.renderMp('');
+    if (this.profile === undefined) arcadeProfile().then((p) => { this.profile = p; this.renderMp(); });
+  }
+  renderMp(status) {
+    if (status !== undefined) this.mpStatus = status;
+    const M = this.mp, P = this.profile, who = $('mpWho');
+    if (P === undefined) who.textContent = 'Checking your arcade profile…';
+    else if (P) { who.textContent = 'Racing as '; const b = document.createElement('b'); b.textContent = P.name; b.style.color = 'var(--sand)'; who.appendChild(b); who.append(M ? '' : '. Host a session and share its code, or join a friend with theirs.'); }
+    else who.innerHTML = 'Online play uses your arcade profile. <a href="../index.html">Log in on the arcade page</a>, then come back here.';
+    $('mpOut').hidden = !!M; $('mpIn').hidden = !M;
+    $('btnHost').disabled = $('btnJoin').disabled = !P || !!this.mpBusy;
+    $('btnMpDrive').hidden = $('btnMpLeave').hidden = !M;
+    if (M) { $('mpCodeShow').textContent = M.code; this.mpListInto($('mpList')); }
+    $('mpStatus').textContent = this.mpBusy ? 'Connecting…' : this.mpStatus || (M && !M.peers.size ? `No one else here yet. Friends join with code ${M.code}.` : '');
+  }
+  async openMp(code) {
+    if (this.mp || this.mpBusy || !this.profile) return;
+    this.mpBusy = true; this.renderMp('');
+    const M = new Session(this);
+    try { this.mp = M; await M.open(code, this.profile); this.mpBusy = false; this.renderMp(''); }
+    catch (e) { console.warn('multiplayer', e); this.mp = null; M.leave(); this.mpBusy = false; this.renderMp(e.message || 'Could not open the session.'); }
+  }
+  leaveMp(why) {
+    const M = this.mp; if (!M) return;
+    this.mp = null; M.leave();
+    this.refreshStory(); this.refreshPauseButtons();
+    if (this.state === 'event') this.refreshEventStart();
+    if (this.mpOpen) this.renderMp(why || '');
+    else { this.refreshMenu(); if (why) this.toast('Left the session', why, 'bad'); }
+  }
+  mpRefresh() {
+    if (!this.mp) return;
+    if (this.mpOpen) this.renderMp(); else if (this.state === 'title' && !this.savesOpen) this.refreshMenu();
+    if (this.state === 'pause') this.mpListInto($('pauseMp'));
+    if (this.state === 'pause' || this.state === 'results') this.refreshPauseButtons();
+    if (this.state === 'results') { $('btnRetry').hidden = !this.mp.isHost; }
+    if (this.state === 'event') this.refreshEventStart();
+  }
+  mpListInto(el) {
+    const M = this.mp; el.innerHTML = ''; if (!M) return;
+    for (const x of M.list) {
+      const d = document.createElement('div'), car = x.me ? this.player.spec : VEHICLES[x.info && DRIVEABLE.includes(x.info.v) ? x.info.v : 'rally'];
+      d.className = x.me ? 'me' : '';
+      d.innerHTML = '<b></b><em></em><span></span>';
+      d.firstChild.textContent = x.me ? `${x.name} (you)` : x.name;
+      d.children[1].textContent = x.id === M.hostId ? 'Host' : '';
+      const out = x.me ? this.inWorld() : !!(x.car && !x.car.hidden);
+      d.lastChild.textContent = [car.name, out ? 'On the map' : 'In the lobby', x.me ? '' : x.direct() ? 'Direct link' : x.link === 'relay' ? 'Relayed' : 'Connecting'].filter(Boolean).join(' · ');
+      el.appendChild(d);
+    }
+  }
+  mpHint() { const M = this.mp, n = M.peers.size + 1; return `${n} ${n === 1 ? 'driver' : 'drivers'} · code ${M.code} · ${M.isHost ? 'you host: start any event for everyone' : 'the host starts events'}`; }
+  mpJoined(p) { if (this.inWorld() || this.state === 'title') this.toast(`${esc(p.name)} joined`, null, 'region'); }
+  mpLeft(p, quiet) {
+    if (p.car) { if (this.race) this.race.cars = this.race.cars.filter((c) => c !== p.car); this.removeCar(p.car); p.car = null; }
+    if (p.label) { p.label.remove(); p.label = null; }
+    if (!quiet) { this.toast(`${esc(p.name)} left`, null, ''); if (this.state === 'results') this.renderResults(); }
+    this.mpRefresh();
+  }
+  /* a remote driver's car, rebuilt whenever they change car or livery */
+  mpCar(p) {
+    const I = p.info || {}, vid = DRIVEABLE.includes(I.v) ? I.v : 'rally', old = p.car;
+    const col = (v, d) => (Number.isInteger(v) && v >= 0 && v <= 0xffffff ? v : d);
+    const car = this.addCar(VEHICLES[vid], { id: 60 + p.slot, color: col(I.c, VEHICLES[vid].color), number: Number.isInteger(I.n) ? clamp(I.n, 0, 999) : 0, livery: typeof I.x === 'string' ? I.x.slice(0, 16) : undefined, helmet: col(I.h, 0xff6a1a) });
+    car.remote = true; car.invuln = Infinity; car.name = p.name; car.peer = p.id; // only their own machine can wreck them
+    if (old) {
+      car.pos.copy(old.pos); car.q.copy(old.q);
+      const R = this.race, i = R ? R.cars.indexOf(old) : -1;
+      if (i >= 0) { R.cars[i] = car; R.prog.set(car, R.prog.get(old)); R.prog.delete(old); }
+      this.removeCar(old);
+    }
+    p.car = car; p.rebuild = false;
+    if (!p.label) { p.label = document.createElement('div'); p.label.className = 'label3d shadow mp'; p.label.innerHTML = '<b></b><span></span>'; p.label.style.display = 'none'; $('labels').appendChild(p.label); }
+    p.label.firstChild.textContent = p.name;
+  }
+  /* the host started an event: drop whatever you're doing and line up */
+  mpRace(m) {
+    const ev = EVENTS.find((e) => e.id === m.ev);
+    if (!ev || !Array.isArray(m.order) || !this.inWorld()) return;
+    const order = m.order.filter((x) => typeof x === 'string').slice(0, MP_MAX);
+    for (const id of ['pause', 'mapScreen', 'eventScreen', 'results']) this.screen(id, false);
+    if (this.race) this.endEvent(true);
+    this.startEvent(ev, this.vehicle, order);
+    this.toast(ev.name, 'Started by the host', 'hot');
+  }
+  mpFinish(p, m) {
+    const R = this.race, pr = R && p.car && R.prog.get(p.car), time = Number(m.time);
+    if (!pr || pr.finished || !(time > 0 && time < 36000)) return;
+    pr.finished = true; pr.time = time; const best = Number(m.best); pr.best = best > 0 ? best : time;
+    R.finishOrder.push(p.car);
+    this.toast(`${esc(p.name)} finished`, fmtTime(time), '');
+    if (this.state === 'results') this.renderResults();
+  }
+  mpQuit(p) {
+    const R = this.race, pr = R && p.car && R.prog.get(p.car);
+    if (!pr || pr.finished) return;
+    pr.dnf = true;
+    if (this.state === 'results') this.renderResults();
+  }
   goMenu() {
     if (this.race) return;
+    if (this.mp) this.leaveMp();
     this.screen('pause', false); this.screen('mapScreen', false);
     this.story.d.skip(); this.story.d.queue.length = 0;
     this.showTitle();
@@ -7492,6 +7909,17 @@ class Game {
       s.label.style.display = vis ? '' : 'none';
       if (vis) { s.label.style.left = sx + 'px'; s.label.style.top = sy + 'px'; s.label.lastChild.textContent = d > 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m'; s.label.style.opacity = clamp(1.4 - d / 1200, 0.35, 1); }
     }
+    // name tags over the other drivers in a session
+    if (this.mp) for (const p of this.mp.peers.values()) {
+      const L = p.label, c = p.car; if (!L) continue;
+      let vis = !!c && !c.hidden && this.inWorld();
+      if (vis) {
+        const d = c.pos.distanceTo(P.pos); v.set(c.pos.x, c.pos.y + 2.2, c.pos.z).project(cam);
+        vis = v.z < 1 && d < 800 && d > 2;
+        if (vis) { L.style.left = ((v.x * 0.5 + 0.5) * w) + 'px'; L.style.top = ((-v.y * 0.5 + 0.5) * h) + 'px'; L.lastChild.textContent = Math.round(d) + ' m'; L.style.opacity = clamp(1.3 - d / 700, 0.4, 1); }
+      }
+      L.style.display = vis ? '' : 'none';
+    }
     // boat launches: take the skiff out, or bring it in
     this.nearDock = null;
     if (this.state === 'free' && !this.nearSpot) for (const D of BOAT_DOCKS) {
@@ -7512,7 +7940,7 @@ class Game {
       pr.classList.add('on');
     } else pr.classList.remove('on');
     const obj = this.story.objective();
-    if (this.state === 'free') { $('hFree').textContent = this.waypoint ? `Waypoint: ${this.waypoint.ev.name}` : obj.text; $('hRegion').textContent = this.story.region || ''; }
+    if (this.state === 'free') { $('hFree').textContent = this.waypoint ? `Waypoint: ${this.waypoint.ev.name}` : this.mp ? this.mpHint() : obj.text; $('hRegion').textContent = this.story.region || ''; }
     // waypoint arrow: a manual waypoint wins, otherwise the story objective
     const wp = $('waypoint');
     const tgt = this.waypoint ? { x: this.waypoint.x, z: this.waypoint.z, name: this.waypoint.ev.name } : obj.target;
@@ -7565,7 +7993,7 @@ class Game {
     for (const c of this.world.cars) {
       if (c === P || c.hidden) continue; const [x, y] = toL(c.pos.x, c.pos.z);
       if (c.civilian) { ctx.fillStyle = 'rgba(232,226,214,.7)'; ctx.beginPath(); ctx.arc(x, y, 2 / zoom, 0, TAU); ctx.fill(); continue; }
-      ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(x, y, 3.2 / zoom, 0, TAU); ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 1 / zoom; ctx.stroke();
+      ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(x, y, (c.remote ? 4.4 : 3.2) / zoom, 0, TAU); ctx.fill(); ctx.strokeStyle = c.remote ? '#6fb7d9' : '#120c09'; ctx.lineWidth = (c.remote ? 2 : 1) / zoom; ctx.stroke(); // other players get a blue ring
     }
     ctx.restore();
     ctx.save(); ctx.translate(S / 2, S / 2);
@@ -7587,7 +8015,7 @@ class Game {
     const tun = this.world.route('tunnel'), tm = tun.posAt(tun.length * 0.62, {}); label(this.world.tunnelGateClosed ? 'CALDER TUNNEL · CLOSED' : 'CALDER TUNNEL', tm.x, tm.z - 50, this.world.tunnelGateClosed ? '#ff5a3a' : '#ffd23f');
     if (this.world.tunnelGateClosed) { const gp = this.world.tunnelGatePose(), x = mapX(gp.x), y = mapZ(gp.z); ctx.save(); ctx.strokeStyle = '#ff3a2a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x - 7, y - 7); ctx.lineTo(x + 7, y + 7); ctx.moveTo(x + 7, y - 7); ctx.lineTo(x - 7, y + 7); ctx.stroke(); ctx.restore(); }
     for (const c of this.world.train.cars) { ctx.fillStyle = '#e8c22a'; ctx.beginPath(); ctx.arc(mapX(c.pose.x), mapZ(c.pose.z), 3.5, 0, TAU); ctx.fill(); }
-    for (const c of this.world.cars) { if (c === P || c.civilian) continue; ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(mapX(c.pos.x), mapZ(c.pos.z), 4.5, 0, TAU); ctx.fill(); }
+    for (const c of this.world.cars) { if (c === P || c.civilian || c.hidden) continue; ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(mapX(c.pos.x), mapZ(c.pos.z), c.remote ? 7 : 4.5, 0, TAU); ctx.fill(); if (c.remote) { ctx.strokeStyle = '#6fb7d9'; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 4; label(c.name, c.pos.x, c.pos.z - 40, '#9fd6ef'); } }
     for (const D of BOAT_DOCKS) { const x = mapX(D.water.x), y = mapZ(D.water.z); ctx.fillStyle = '#6fb7d9'; ctx.beginPath(); ctx.arc(x, y, 6, 0, TAU); ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 4; label('BOAT LAUNCH', D.water.x, D.water.z + 70, '#9fd6ef'); }
     ctx.save(); ctx.translate(mapX(P.pos.x), mapZ(P.pos.z));
     const f = P.forward(new THREE.Vector3()); ctx.rotate(Math.atan2(f.x, -f.z));
