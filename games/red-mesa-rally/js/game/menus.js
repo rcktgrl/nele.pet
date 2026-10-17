@@ -82,7 +82,7 @@ Object.assign(Game.prototype, {
     else { if (this.mp) this.leaveMp(); S.setMode(m); }
     this.refreshStory(false);
     // story mode only lets you drive what the story has handed you
-    if (!S.carUnlocked(this.player.spec.id)) { const v = S.carUnlocked(this.landVehicle) && !VEHICLES[this.landVehicle].boat ? this.landVehicle : 'rally'; this.spawnPlayer(v, { x: HUB.x + 18, z: HUB.z + 46, yaw: Math.PI * 0.9, vehicle: v }); }
+    if (!S.carUnlocked(this.player.spec.id)) { const v = S.carUnlocked(this.landVehicle) && !VEHICLES[this.landVehicle].boat ? this.landVehicle : 'buggy'; this.spawnPlayer(v, { x: HUB.x + 18, z: HUB.z + 46, yaw: Math.PI * 0.9, vehicle: v }); }
     else if (this.player.liveryId !== this.currentLivery().id) this.spawnPlayer(this.player.spec.id);
     // story mode starts you on the right side of the closed tunnel
     if (!S.tunnelOpen() && this.player.pos.x > 1180) { this.player.reset(HUB.x + 18, HUB.z + 46, Math.PI * 0.9, this.world.terrain, 0.5); this.rig.snap(); }

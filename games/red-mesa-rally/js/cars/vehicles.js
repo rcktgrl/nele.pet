@@ -1,5 +1,7 @@
 'use strict';
-/* Red Mesa Rally · Car specs: every machine, its engine, grip and stats */
+/* Red Mesa Rally · Car specs: every machine, its engine, grip and stats
+   stats.top (km/h) and stats.zero (s to 100 km/h, or to stats.to) are measured flat out on level tarmac
+   (open water for the boat) with this physics; rerun the measurement after retuning an engine. */
 
 /* ---------- Vehicles ---------- */
 const VEHICLES = {
@@ -10,7 +12,7 @@ const VEHICLES = {
     tire: { mu: 1.08, dirt: 1.0, asphalt: 1.1, stiff: 0.72 }, drive: { type: 'awd', front: 0.42 },
     engine: { torque: 400, idle: 900, red: 7600, inertia: 0.16, gears: [3.4, 2.3, 1.75, 1.38, 1.12, 0.94], final: 4.1, rev: 3.3 },
     brake: 1900, hbrake: 2600, steer: 0.6, cda: 0.95, down: 0.5, boost: { force: 4.0, heat: 0.30 }, tough: 15.5, mudGrip: 1.0,
-    aiGrip: 7.3, aiGripAsph: 9.4, offroad: true, stats: { speed: 0.75, grip: 0.8, armour: 0.55 }, color: 0xd9481c },
+    aiGrip: 7.3, aiGripAsph: 9.4, offroad: true, stats: { top: 251, zero: 4.7, grip: 0.8, armour: 0.55 }, color: 0xd9481c },
   buggy: { id: 'buggy', name: 'Sandviper', cls: 'Buggy', blurb: 'Light, rear-drive, long-travel suspension. Flies far, breaks easy.',
     mass: 820, dims: [1.9, 1.3, 3.6], hull: { hx: 0.82, hy: 0.55, hz: 1.7, y: 0.4 },
     wheels: { x: 0.9, zf: -1.32, zr: 1.18, y: 0.28, r: 0.38, w: 0.32, I: 1.2 },
@@ -18,7 +20,7 @@ const VEHICLES = {
     tire: { mu: 1.04, dirt: 1.0, asphalt: 1.02, stiff: 0.78 }, drive: { type: 'rwd' },
     engine: { torque: 265, idle: 1000, red: 8200, inertia: 0.1, gears: [3.1, 2.15, 1.6, 1.26, 1.02], final: 4.0, rev: 3.0 },
     brake: 1300, hbrake: 1700, steer: 0.64, cda: 0.8, down: 0.25, boost: { force: 4.6, heat: 0.34 }, tough: 12.5, mudGrip: 0.9,
-    aiGrip: 6.3, aiGripAsph: 7.2, offroad: true, stats: { speed: 0.85, grip: 0.65, armour: 0.3 }, color: 0xf0b50a },
+    aiGrip: 6.3, aiGripAsph: 7.2, offroad: true, stats: { top: 237, zero: 5.1, grip: 0.65, armour: 0.3 }, color: 0xf0b50a },
   truck: { id: 'truck', name: 'Brute 4x4', cls: 'Mud plugger', blurb: 'Heavy, torque-rich four-by-four. Shrugs off mud and smaller rivals.',
     mass: 2300, dims: [2.2, 1.9, 4.8], hull: { hx: 1.08, hy: 0.78, hz: 2.38, y: 0.6 },
     wheels: { x: 1.06, zf: -1.62, zr: 1.55, y: 0.25, r: 0.56, w: 0.44, I: 4.5 },
@@ -26,7 +28,7 @@ const VEHICLES = {
     tire: { mu: 1.0, dirt: 1.0, asphalt: 1.04, stiff: 0.78 }, drive: { type: 'awd', front: 0.5 },
     engine: { torque: 860, idle: 750, red: 5600, inertia: 0.35, gears: [3.6, 2.4, 1.65, 1.22, 0.95], final: 3.6, rev: 3.4 },
     brake: 3400, hbrake: 3500, steer: 0.54, cda: 1.6, down: 0, boost: { force: 3.4, heat: 0.26 }, tough: 21, mudGrip: 1.35,
-    aiGrip: 6.4, aiGripAsph: 7.6, offroad: true, stats: { speed: 0.6, grip: 0.7, armour: 0.95 }, color: 0x2f6f53 },
+    aiGrip: 6.4, aiGripAsph: 7.6, offroad: true, stats: { top: 247, zero: 5.8, grip: 0.7, armour: 0.95 }, color: 0x2f6f53 },
   kaze: { id: 'kaze', name: 'Kaze GT4', cls: 'Street · AWD turbo', blurb: 'Low, stiff, all-wheel-drive turbo coupe. Glued to tarmac, lost on dirt.',
     mass: 1380, dims: [1.85, 1.3, 4.45], hull: { hx: 0.9, hy: 0.46, hz: 2.2, y: 0.16 },
     wheels: { x: 0.8, zf: -1.36, zr: 1.3, y: -0.02, r: 0.33, w: 0.27, I: 1.0 },
@@ -34,7 +36,7 @@ const VEHICLES = {
     tire: { mu: 1.0, dirt: 0.78, asphalt: 1.36, stiff: 0.55 }, drive: { type: 'awd', front: 0.38 },
     engine: { torque: 520, idle: 900, red: 8000, inertia: 0.14, gears: [3.3, 2.2, 1.6, 1.25, 1.02, 0.84], final: 4.3, rev: 3.4 },
     brake: 2700, hbrake: 2400, steer: 0.55, cda: 0.68, down: 1.4, boost: { force: 4.2, heat: 0.3 }, tough: 14, mudGrip: 0.7,
-    aiGrip: 5.4, aiGripAsph: 12.0, street: true, stats: { speed: 0.9, grip: 0.95, armour: 0.4 }, color: 0x2a7de1 },
+    aiGrip: 5.4, aiGripAsph: 12.0, street: true, stats: { top: 275, zero: 3.8, grip: 0.95, armour: 0.4 }, color: 0x2a7de1 },
   ironside: { id: 'ironside', name: 'Ironside V8', cls: 'Street · V8 muscle', blurb: 'Big-block rear-drive muscle car. Monstrous top end, loves to slide.',
     mass: 1560, dims: [1.95, 1.3, 4.8], hull: { hx: 0.95, hy: 0.48, hz: 2.36, y: 0.16 },
     wheels: { x: 0.83, zf: -1.46, zr: 1.4, y: -0.02, r: 0.35, w: 0.3, I: 1.3 },
@@ -42,7 +44,15 @@ const VEHICLES = {
     tire: { mu: 1.0, dirt: 0.76, asphalt: 1.3, stiff: 0.58 }, drive: { type: 'rwd' },
     engine: { torque: 720, idle: 750, red: 6800, inertia: 0.22, gears: [2.9, 1.95, 1.42, 1.12, 0.9, 0.76], final: 3.9, rev: 3.4 },
     brake: 2800, hbrake: 2600, steer: 0.54, cda: 0.75, down: 0.8, boost: { force: 4.6, heat: 0.33 }, tough: 16, mudGrip: 0.7,
-    aiGrip: 5.2, aiGripAsph: 11.0, street: true, stats: { speed: 1.0, grip: 0.8, armour: 0.65 }, color: 0xb0161e },
+    aiGrip: 5.2, aiGripAsph: 11.0, street: true, stats: { top: 300, zero: 3.9, grip: 0.8, armour: 0.65 }, color: 0xb0161e },
+  super: { id: 'super', name: 'Vortex V12', cls: 'Street · hypercar', blurb: "Vic Calder's mid-engined V12. Nothing in the valley catches it on tarmac. Hates dirt.",
+    mass: 1320, dims: [2.0, 1.15, 4.6], hull: { hx: 0.97, hy: 0.42, hz: 2.26, y: 0.12 },
+    wheels: { x: 0.84, zf: -1.42, zr: 1.4, y: -0.04, r: 0.35, w: 0.32, I: 1.1 },
+    susp: { rest: 0.2, k: 70000, c: 4800, arb: 18000 },
+    tire: { mu: 1.0, dirt: 0.72, asphalt: 1.42, stiff: 0.52 }, drive: { type: 'awd', front: 0.32 },
+    engine: { torque: 720, idle: 1000, red: 9000, inertia: 0.13, gears: [3.3, 2.35, 1.8, 1.45, 1.2, 1.0, 0.84], final: 3.9, rev: 3.4 },
+    brake: 3200, hbrake: 2400, steer: 0.52, cda: 0.74, down: 1.9, boost: { force: 4.8, heat: 0.32 }, tough: 14, mudGrip: 0.6,
+    aiGrip: 5.0, aiGripAsph: 13.0, street: true, stats: { top: 348, zero: 2.7, grip: 1.0, armour: 0.45 }, color: 0xe0115f },
   boat: { id: 'boat', name: 'Calder Skiff', cls: 'Boat · outboard', blurb: 'Twin-outboard harbour runabout. Planes at speed, slides in the turns. Water only.',
     mass: 1100, dims: [2.3, 1.2, 6.2], hull: { hx: 1.1, hy: 0.55, hz: 3.0, y: 0.25 },
     wheels: { x: 0.9, zf: -2, zr: 2, y: -0.3, r: 0.3, w: 0.2, I: 1 },
@@ -51,7 +61,7 @@ const VEHICLES = {
     engine: { torque: 300, idle: 1100, red: 6200, inertia: 0.1, gears: [1], final: 1, rev: 1 },
     brake: 1000, hbrake: 1000, steer: 0.5, cda: 0.8, down: 0, boost: { force: 3.0, heat: 0.24 }, tough: 18, mudGrip: 1,
     boat: { thrust: 6.2, drag: 0.011, keel: 2.6, turn: 0.72, ride: 0.32 },
-    aiGrip: 6, aiGripAsph: 6, stats: { speed: 0.7, grip: 0.5, armour: 0.7 }, color: 0xf2efe6 },
+    aiGrip: 6, aiGripAsph: 6, stats: { top: 64, zero: 3.4, to: 50, grip: 0.5, armour: 0.7 }, color: 0xf2efe6 },
   // ---- civilian traffic (not driveable) ----
   sedan: { id: 'sedan', name: 'Calder Cruiser', cls: 'Sedan', blurb: 'Family four-door.', traffic: true,
     mass: 1350, dims: [1.8, 1.45, 4.6], hull: { hx: 0.88, hy: 0.55, hz: 2.25, y: 0.2 },
@@ -60,7 +70,7 @@ const VEHICLES = {
     tire: { mu: 0.95, dirt: 0.85, asphalt: 1.15, stiff: 0.6 }, drive: { type: 'fwd' },
     engine: { torque: 240, idle: 800, red: 6000, inertia: 0.14, gears: [3.3, 2.0, 1.4, 1.05, 0.85], final: 3.9, rev: 3.3 },
     brake: 2200, hbrake: 1800, steer: 0.55, cda: 0.75, down: 0, boost: { force: 0, heat: 0.3 }, tough: 13, mudGrip: 0.8,
-    aiGrip: 5.0, aiGripAsph: 7.5, stats: { speed: 0.4, grip: 0.5, armour: 0.4 }, color: 0x8a9aa6 },
+    aiGrip: 5.0, aiGripAsph: 7.5, stats: { top: 207, zero: 9.6, grip: 0.5, armour: 0.4 }, color: 0x8a9aa6 },
   van: { id: 'van', name: 'Mesa Hauler', cls: 'Delivery van', blurb: 'Boxy, slow, always late.', traffic: true,
     mass: 2100, dims: [2.0, 2.3, 5.2], hull: { hx: 0.98, hy: 0.95, hz: 2.55, y: 0.65 },
     wheels: { x: 0.86, zf: -1.75, zr: 1.55, y: 0.05, r: 0.37, w: 0.25, I: 1.6 },
@@ -68,6 +78,6 @@ const VEHICLES = {
     tire: { mu: 0.95, dirt: 0.9, asphalt: 1.1, stiff: 0.7 }, drive: { type: 'rwd' },
     engine: { torque: 420, idle: 750, red: 5200, inertia: 0.25, gears: [3.6, 2.2, 1.45, 1.05, 0.82], final: 4.1, rev: 3.6 },
     brake: 3200, hbrake: 2800, steer: 0.52, cda: 1.3, down: 0, boost: { force: 0, heat: 0.3 }, tough: 17, mudGrip: 0.9,
-    aiGrip: 4.4, aiGripAsph: 6.2, stats: { speed: 0.3, grip: 0.4, armour: 0.7 }, color: 0xe9e2d6 },
+    aiGrip: 4.4, aiGripAsph: 6.2, stats: { top: 199, zero: 9.2, grip: 0.4, armour: 0.7 }, color: 0xe9e2d6 },
 };
-const DRIVEABLE = ['rally', 'buggy', 'truck', 'kaze', 'ironside', 'boat'];
+const DRIVEABLE = ['buggy', 'truck', 'rally', 'kaze', 'ironside', 'super', 'boat'];

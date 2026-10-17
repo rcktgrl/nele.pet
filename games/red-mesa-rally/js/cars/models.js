@@ -221,14 +221,14 @@ function buildCar(spec, opts, gfx) {
   const color = opts.color || spec.color, num = opts.number || 7, name = opts.livery || LIVERY_NAMES[num % LIVERY_NAMES.length];
   const root = new THREE.Group();
   const dirt = { amount: { value: opts.dirt || 0.15 }, sun: { value: 1 }, top: 0, bottom: -0.6 };
-  const S = { rally: [0.3, -0.35], buggy: [0.6, -0.3], truck: [0.6, -0.4], kaze: [0.05, -0.32], ironside: [0.05, -0.34], sedan: [0.0, -0.36], van: [0.1, -0.4], boat: [-0.1, -0.45] }[spec.id] || [0.3, -0.4];
+  const S = { rally: [0.3, -0.35], buggy: [0.6, -0.3], truck: [0.6, -0.4], kaze: [0.05, -0.32], ironside: [0.05, -0.34], super: [0.0, -0.33], sedan: [0.0, -0.36], van: [0.1, -0.4], boat: [-0.1, -0.45] }[spec.id] || [0.3, -0.4];
   dirt.top = S[0]; dirt.bottom = S[1];
   const paint = paintMaterial(color, dirt);
   const black = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.6, metalness: 0.2 }); addDirt(black, dirt);
   const metal = new THREE.MeshStandardMaterial({ color: 0x9a9da3, roughness: 0.3, metalness: 0.95 }); sunOnly(metal, dirt);
   const glass = new THREE.MeshPhysicalMaterial({ color: 0x0b1116, roughness: 0.04, metalness: 0.6, envMapIntensity: 1.6, clearcoat: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }); sunOnly(glass, dirt);
   const rubber = new THREE.MeshStandardMaterial({ color: 0x1a1716, roughness: 0.92, bumpMap: treadTex(), bumpScale: 2 }); rubber.bumpMap.repeat.set(1, 3); addDirt(rubber, { ...dirt, top: 0.4, bottom: -0.4 });
-  const rimCol = { rally: 0xe8e8e8, buggy: 0x1d1d1d, truck: 0x2a2a2a, kaze: 0xc9ced4, ironside: 0x9ea3a8, sedan: 0xb9bdc2, van: 0x8d9196, boat: 0x9ea3a8 }[spec.id];
+  const rimCol = { rally: 0xe8e8e8, buggy: 0x1d1d1d, truck: 0x2a2a2a, kaze: 0xc9ced4, ironside: 0x9ea3a8, super: 0x2a2b30, sedan: 0xb9bdc2, van: 0x8d9196, boat: 0x9ea3a8 }[spec.id];
   const rim = new THREE.MeshStandardMaterial({ color: rimCol, roughness: 0.25, metalness: 0.9 }); sunOnly(rim, dirt);
   const rimDark = new THREE.MeshStandardMaterial({ color: 0x0e0e0e, roughness: 0.6, metalness: 0.5 });
   const lightW = new THREE.MeshStandardMaterial({ color: 0xfff6e8, emissive: new THREE.Color(1.6, 1.5, 1.3), roughness: 0.2, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
@@ -379,6 +379,27 @@ function buildCar(spec, opts, gfx) {
     add(new THREE.BoxGeometry(1.7, 0.06, 0.25), paint, 0, 0.36, 2.28).rotation.x = -0.25; // ducktail
     for (const s of [-0.5, 0.5]) { const e = add(new THREE.CylinderGeometry(0.065, 0.065, 0.26, 10), metal, s, -0.32, 2.56); e.rotation.x = Math.PI / 2; }
     driverPos = V(-0.4, -0.14, 0.2);
+  } else if (spec.id === 'super') {
+    // mid-engined wedge: long low nose, the cabin pushed forward, the V12 under louvres behind it
+    const yb = -0.34, archR = ws.r + 0.07, ay = -0.2;
+    const body = add(shapeBody(profileGeo([[2.24, yb], [2.32, -0.25], [2.27, -0.14], [1.7, -0.04], [0.95, 0.07], [-0.2, 0.16], [-1.7, 0.22], [-2.18, 0.22], [-2.3, 0.06], [-2.28, -0.2], [-2.2, yb], Object.assign([-1.0, yb], { arch: { x: -ws.zr, y: ay, r: archR } }), Object.assign([2.24, yb], { arch: { x: -ws.zf, y: ay, r: archR } })], 1.98, 0.1), -0.05, 0.3, 1.55, 2.3, 0.12, [-0.2, 0.3]), paint);
+    const cab = add(shapeBody(profileGeo([[0.95, 0.06], [0.45, 0.34], [0.0, 0.47], [-0.55, 0.47], [-1.75, 0.2]], 1.42, 0.08), 0.1, 0.55, 9, 10, 0), paint);
+    cabinGlass(add, [cab], glass, { front: [[0.88, 0.1], [0.05, 0.45]], rear: [[-1.62, 0.23], [-0.62, 0.45]], width: 1.6, side: [[0.82, 0.11], [0.42, 0.33], [0.0, 0.43], [-0.6, 0.43], [-1.3, 0.28]] });
+    add(new THREE.BoxGeometry(1.94, 0.04, 0.46), black, 0, -0.33, -2.22); // splitter
+    for (const s of [-1, 1]) {
+      add(new THREE.BoxGeometry(0.06, 0.24, 0.9), black, s * 0.97, -0.08, 0.35); // side intakes
+      add(new THREE.BoxGeometry(0.08, 0.08, 2.1), black, s * 0.96, -0.31, 0.0); // skirts
+      add(new THREE.BoxGeometry(0.14, 0.05, 0.08), black, s * 0.78, 0.28, -0.75); // mirrors
+      decal(s * 0.985, -0.06, -0.6, 0.85, s < 0);
+      bodyDecal(add, [body], lightW, v3(s * 0.62, -0.08, -2.25), v3(1, 0, 0), v3(0, 1, 0), v3(0, 0, 1), 0.46, 0.06, { thr: 0.6 });
+    }
+    bodyDecal(add, [body], lightR, v3(0, 0.1, 2.3), v3(1, 0, 0), v3(0, 1, 0), v3(0, 0, -1), 1.7, 0.05, { nv: 1, thr: 0.65 }); // full-width tail light
+    for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(1.0, 0.03, 0.08), black, 0, 0.25, 0.95 + i * 0.2); // engine louvres
+    add(new THREE.BoxGeometry(2.0, 0.05, 0.44), black, 0, 0.66, 2.02).rotation.x = -0.14; // wing
+    for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.05, 0.42, 0.3), black, s * 0.55, 0.44, 2.04);
+    add(new THREE.BoxGeometry(1.6, 0.16, 0.22), black, 0, -0.27, 2.24); // diffuser
+    for (const s of [-0.12, 0.12]) for (const y of [-0.12, 0.0]) { const e = add(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 10), metal, s, y, 2.3); e.rotation.x = Math.PI / 2; }
+    driverPos = V(-0.34, -0.26, -0.05);
   } else {
     // truck
     const yb = -0.25, archR = 0.66, ay = ws.y - (sp.susp.rest - 0.1);
@@ -412,7 +433,7 @@ function buildCar(spec, opts, gfx) {
   const visor = add(new THREE.SphereGeometry(0.152, 14, 8, -0.9, 1.8, 1.1, 0.7), glass, driverPos.x, driverPos.y + 0.6, driverPos.z); visor.rotation.y = Math.PI;
 
   // wheels + visible suspension struts
-  const style = { sedan: { knobby: 0, spokes: 5, rimScale: 0.62, ri: 0.66 }, van: { knobby: 0, spokes: 6, rimScale: 0.58, ri: 0.62 }, rally: { knobby: 0.015, spokes: 6, rimScale: 0.66 }, buggy: { knobby: 0.035, spokes: 5, rimScale: 0.55 }, truck: { knobby: 0.05, spokes: 6, rimScale: 0.52 }, kaze: { knobby: 0, spokes: 5, rimScale: 0.74, ri: 0.72 }, ironside: { knobby: 0, spokes: 10, rimScale: 0.7, ri: 0.7 } }[spec.id];
+  const style = { sedan: { knobby: 0, spokes: 5, rimScale: 0.62, ri: 0.66 }, van: { knobby: 0, spokes: 6, rimScale: 0.58, ri: 0.62 }, rally: { knobby: 0.015, spokes: 6, rimScale: 0.66 }, buggy: { knobby: 0.035, spokes: 5, rimScale: 0.55 }, truck: { knobby: 0.05, spokes: 6, rimScale: 0.52 }, kaze: { knobby: 0, spokes: 5, rimScale: 0.74, ri: 0.72 }, ironside: { knobby: 0, spokes: 10, rimScale: 0.7, ri: 0.7 }, super: { knobby: 0, spokes: 10, rimScale: 0.76, ri: 0.74 } }[spec.id];
   const wheels = [];
   const strutMat = new THREE.MeshStandardMaterial({ color: 0xe0b020, roughness: 0.4, metalness: 0.6 });
   for (const w of [[1, 1], [1, 0], [0, 1], [0, 0]]) {

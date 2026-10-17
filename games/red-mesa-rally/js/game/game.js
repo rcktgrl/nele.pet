@@ -10,8 +10,8 @@ class Game {
     this.state = 'loading';
     this.timeScale = 1; this.slowmo = 0;
     this.toastQ = []; this.takedowns = 0;
-    this.vehicle = DRIVEABLE.includes(Store.data.vehicle) ? Store.data.vehicle : 'rally';
-    this.landVehicle = VEHICLES[this.vehicle].boat ? 'rally' : this.vehicle;
+    this.vehicle = DRIVEABLE.includes(Store.data.vehicle) ? Store.data.vehicle : 'buggy';
+    this.landVehicle = VEHICLES[this.vehicle].boat ? 'buggy' : this.vehicle;
     this.livery = LIVERIES.some((l) => l.id === Store.data.livery) ? Store.data.livery : 'festival';
     this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
     this.quality = Store.data.quality || (this.isTouch ? 'low' : 'high');
@@ -36,6 +36,7 @@ class Game {
     this.spawnPlayer(this.vehicle, hot && hot.player);
     this.spawnRoamers();
     this.traffic = new Traffic(this); this.traffic.spawn();
+    this.world.onContact = (...a) => this.mpContact(...a);
     this.story = new Story(this);
     this.buildUI();
     this.refreshStory();
@@ -79,7 +80,7 @@ class Game {
     if (!boat) this.landVehicle = vid;
     const L = this.currentLivery();
     this.player = this.addCar(VEHICLES[vid], { id: 0, player: true, color: L.color || VEHICLES[vid].color, number: L.num, livery: L.text, helmet: L.helmet });
-    this.player.reset(x, z, yaw, W.terrain, 0.5, old && old.under && !boat ? old.pos.y : undefined); this.player.liveryId = L.id;
+    this.player.reset(x, z, yaw, W.terrain, 0.5, old && old.under && !boat ? old.pos.y : undefined); this.player.liveryId = L.id; this.player.netId = 'p';
     this.rig.snap();
     if (this.mp) this.mp.track();
     if (note && this.state === 'free') this.toast(boat ? 'Boat launched' : 'Ashore', note, 'region');
@@ -95,7 +96,7 @@ class Game {
     plan.forEach(([rid, vid, frac], i) => {
       const R = this.world.route(rid), s = R.length * frac;
       const car = this.addCar(VEHICLES[vid], { id: 20 + i, color: AI_COLORS[(i * 3) % AI_COLORS.length], number: 30 + i * 7, helmet: AI_COLORS[(i + 2) % AI_COLORS.length] });
-      car.name = VEHICLES[vid].street ? CREW_NAMES[i % CREW_NAMES.length] : AI_NAMES[(i + 3) % AI_NAMES.length];
+      car.name = VEHICLES[vid].street ? CREW_NAMES[i % CREW_NAMES.length] : AI_NAMES[(i + 3) % AI_NAMES.length]; car.netId = 'r' + i;
       const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s); car.reset(p.x, p.z, Math.atan2(-dx, -dz), this.world.terrain, 0.4);
       this.roamers.push(new AIDriver(car, R, { s, lane: (i % 2 ? 1 : -1) * 2, skill: 0.78, aggr: 0.3, seed: 100 + i }));
     });
@@ -129,8 +130,7 @@ class Game {
       if (v.boat && !opts.boats) continue;
       const open = !this.story || this.story.carUnlocked(id);
       const b = document.createElement('button'); b.className = 'carpick' + (id === sel ? ' sel' : '') + (open ? '' : ' locked'); b.type = 'button';
-      b.innerHTML = `<span class="c">${v.cls}</span><span class="n">${v.name}</span><span class="b">${open ? v.blurb : CAR_UNLOCKS[id].hint}</span>
-        <span class="stat">Speed<i style="--v:${v.stats.speed * 100}%"></i></span><span class="stat">Grip<i style="--v:${v.stats.grip * 100}%"></i></span><span class="stat">Armour<i style="--v:${v.stats.armour * 100}%"></i></span>`;
+      b.innerHTML = `<span class="c">${v.cls}</span><span class="n">${v.name}</span><span class="b">${open ? v.blurb : CAR_UNLOCKS[id].hint}</span>${statRows(v.stats)}`;
       if (!open) { b.setAttribute('aria-disabled', 'true'); b.title = CAR_UNLOCKS[id].hint; }
       b.addEventListener('click', () => { if (!open) { this.audio.start(); return; } this.audio.start(); [...container.children].forEach((c) => c.classList.remove('sel')); b.classList.add('sel'); onPick(id); });
       container.appendChild(b);
@@ -400,7 +400,8 @@ class Game {
       } else if (!this.raceAnnounced) { this.raceAnnounced = true; $('countdown').textContent = 'GO'; $('countdown').className = 'go shadow'; this.audio.oneShot('go'); setTimeout(() => { if ($('countdown').textContent === 'GO') $('countdown').textContent = ''; }, 900); }
       if (race.state === 'finished' && this.state === 'race' && race.t - race.finishT > 2.2) this.showResults();
     } else {
-      for (const a of this.roamers) a.update(sdt, W.cars, 1);
+      const now = mpNow(); // in a session, the host's rivals come over the wire
+      for (const a of this.roamers) if (!this.ghostDrive(a, now, dt)) a.update(sdt, W.cars, 1);
       this.traffic.update(sdt);
       if (this.intro) for (const a of this.intro.ai) a.update(sdt, W.cars, 1.1);
     }
@@ -413,7 +414,7 @@ class Game {
     // car events & respawns
     for (const c of W.cars) this.handleEvents(c);
     for (const a of (race ? this.ai : this.roamers)) {
-      const c = a.car;
+      const c = a.car; if (c.remote) continue;
       const off = race ? race.prog.get(c).off > 6 : false;
       if ((c.wrecked && c.wreckT > 3) || a.respawn || off) {
         if (race) { const p = race.respawnPoint(c); c.reset(p.x, p.z, p.yaw, W.terrain, 0.5, p.y); }
@@ -440,6 +441,11 @@ class Game {
     const v = P.vel.length();
     if (P.speedKmh > (S.stats.speed || 0) + 1) S.stat('speed', Math.min(P.speedKmh, 400));
     if (P.spec.boat) { if (P.inWater && v > 1) S.stat('sailor', v * dt, 'add'); return; }
+    // one unbroken slide: the car pointing 17° or more off where it is going, with a moment's grace to link corners
+    const f = (this._fwd || (this._fwd = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(P.q), vf = P.vel.dot(f);
+    const slide = P.onGround && !P.reverse && v > 50 / 3.6 && vf > 0 && Math.acos(clamp(vf / v, -1, 1)) > 0.3;
+    if (slide) { this.driftT = (this.driftT || 0) + dt; this.driftGap = 0; S.stat('drift', Math.min(this.driftT, 30)); }
+    else if ((this.driftGap = (this.driftGap || 0) + dt) > 0.3) this.driftT = 0;
     if (P.onGround && P.pos.x > CITY.x0 - 30) { const r = T.rampAt(P.pos.x, P.pos.z); if (r) this.lastRamp = { k: this.world.city.ramps.indexOf(r), t: this.world.time }; }
     const gi = T.gi(P.pos.x, P.pos.z), rid = T.rown[gi], R = rid && T.routes[rid - 1];
     if (R && R.def.country && P.onGround && v > 2 && T.rdist[gi] < R.width / 2 + 3) S.stat('country', v * dt, 'add');
@@ -454,7 +460,7 @@ class Game {
         if (near) this.audio.oneShot('boom');
         if (isP) {
           if (this.audio.music) this.audio.music.duck(0.85, 1.4);
-          this.slowmo = 1.3; this.rig.shake = 2.5; this.rig.orbitA = Math.atan2(this.rig.pos.z - c.pos.z, this.rig.pos.x - c.pos.x);
+          this.slowmo = this.mp ? 0 : 1.3; this.rig.shake = 2.5; // a session's clock runs on for everyone this.rig.orbitA = Math.atan2(this.rig.pos.z - c.pos.z, this.rig.pos.x - c.pos.x);
           const by = c.lastHit && this.world.time - c.lastHitT < 1.5 ? c.lastHit.name : null;
           this.toast('Wrecked', e.reason === 'overheat' ? 'Engine overheated' : e.reason === 'drowned' ? 'Drowned' : e.reason === 'train' ? 'Flattened by the Coastline Freight' : by ? `Taken out by ${by}` : 'Hit too hard', 'bad');
           this.story.onWreck(e.reason);

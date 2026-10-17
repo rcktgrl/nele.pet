@@ -44,7 +44,7 @@ class SoundFX {
   update(car, nearest) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime, sp = car.spec, E = sp.engine;
-    const cyl = sp.id === 'truck' || sp.id === 'ironside' ? 8 : sp.id === 'kaze' ? 6 : 4;
+    const cyl = sp.id === 'super' ? 12 : sp.id === 'truck' || sp.id === 'ironside' ? 8 : sp.id === 'kaze' ? 6 : 4;
     const f0 = Math.max(18, car.rpm / 60 * cyl / 2);
     const thr = car.reverse ? car.input.brake : car.input.throttle;
     this.o1.frequency.setTargetAtTime(f0, t, 0.02); this.o2.frequency.setTargetAtTime(f0 * 0.5, t, 0.02); this.o3.frequency.setTargetAtTime(f0 * 2.01, t, 0.02);

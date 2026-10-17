@@ -35,7 +35,7 @@ Object.assign(Game.prototype, {
   startEvent(ev, vid, mpOrder) {
     this.screen('eventScreen', false); this.screen('results', false);
     this.clearRoamers(); this.traffic.clear();
-    if (VEHICLES[vid].boat || !this.story.carUnlocked(vid)) vid = this.story.carUnlocked(this.landVehicle) ? this.landVehicle : 'rally';
+    if (VEHICLES[vid].boat || !this.story.carUnlocked(vid)) vid = this.story.carUnlocked(this.landVehicle) ? this.landVehicle : 'buggy';
     if (vid !== this.player.spec.id) this.spawnPlayer(vid);
     this.vehicle = vid;
     const R = this.world.route(ev.route);
