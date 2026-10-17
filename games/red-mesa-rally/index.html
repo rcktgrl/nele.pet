@@ -157,6 +157,8 @@
     <h2 id="evName">Canyon Run</h2>
     <p id="evBlurb"></p>
     <div class="chips" id="evChips"></div>
+    <div class="eyebrow" style="color:var(--dust)">Online top 5</div>
+    <div class="wrap-x"><table class="res lb" id="evOnline"></table></div>
     <div class="cars" id="evCars"></div>
     <div class="row"><button class="btn primary" id="btnStart">Start event</button><button class="btn" id="btnNotNow">Not now</button></div>
   </div>
@@ -168,6 +170,9 @@
     <h2 id="resTitle">1st place</h2>
     <p id="resNote" class="muted"></p>
     <div class="wrap-x"><table class="res" id="resTable"></table></div>
+    <div class="eyebrow" style="color:var(--dust)">Online leaderboard</div>
+    <div class="wrap-x"><table class="res lb" id="resOnline"></table></div>
+    <p class="muted" id="resOnlineNote"></p>
     <div class="row"><button class="btn primary" id="btnContinue">Back to free roam</button><button class="btn" id="btnRetry">Retry</button></div>
   </div>
 </div>
@@ -250,6 +255,7 @@
 <script src="js/net/multiplayer.js"></script>
 <script src="js/game/game.js"></script>
 <script src="js/race/race-flow.js"></script>
+<script src="js/race/leaderboard.js"></script>
 <script src="js/game/menus.js"></script>
 <script src="js/net/mp-game.js"></script>
 <script src="js/game/hud.js"></script>

@@ -13,6 +13,7 @@ Object.assign(Game.prototype, {
     $('evChips').innerHTML = chips.map((c) => `<span class="chip">${c}</span>`).join('');
     this.carCards($('evCars'), (vid) => { this.pendingVehicle = vid; }, { sel: this.pendingVehicle });
     this.refreshEventStart();
+    this.eventOnline(ev);
     this.screen('eventScreen', true);
   },
   refreshEventStart() {
@@ -115,6 +116,7 @@ Object.assign(Game.prototype, {
     if (!rec || playerTime < rec.time) { Store.data.best[ev.id] = { time: playerTime, vehicle: this.player.spec.id }; Store.save(); note += ' · New personal best'; }
     $('resEyebrow').textContent = `${ev.name} · results`; $('resTitle').textContent = title; $('resNote').textContent = note;
     this.renderResults();
+    this.resultsOnline(ev, playerTime, P.best, this.player.spec.id);
     $('btnRetry').hidden = !!this.mp && !this.mp.isHost; $('btnRetry').textContent = this.mp ? 'Rematch' : 'Retry';
     this.screen('results', true);
     this.state = 'results';

@@ -160,6 +160,8 @@ table.res td { padding: 6px 8px; border-bottom: 1px solid rgba(242,230,211,.12);
 table.res td:first-child { font-family: var(--display); width: 44px; }
 table.res tr.me td { color: var(--hazard); }
 table.res td.t { text-align: right; }
+table.res.lb { font-size: 16px; }
+#resOnlineNote a { color: inherit; }
 .wrap-x { overflow-x: auto; }
 #loading .bar { width: min(360px, 80vw); height: 4px; background: rgba(242,230,211,.15); }
 #loading .bar i { display: block; height: 100%; width: 10%; background: var(--flare); transition: width .3s; }
