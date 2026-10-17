@@ -460,7 +460,7 @@ class Game {
         if (near) this.audio.oneShot('boom');
         if (isP) {
           if (this.audio.music) this.audio.music.duck(0.85, 1.4);
-          this.slowmo = this.mp ? 0 : 1.3; this.rig.shake = 2.5; // a session's clock runs on for everyone this.rig.orbitA = Math.atan2(this.rig.pos.z - c.pos.z, this.rig.pos.x - c.pos.x);
+          this.slowmo = this.mp ? 0 : 1.3; this.rig.shake = 2.5; this.rig.orbitA = Math.atan2(this.rig.pos.z - c.pos.z, this.rig.pos.x - c.pos.x); // no slow-mo in a session: its clock runs on for everyone
           const by = c.lastHit && this.world.time - c.lastHitT < 1.5 ? c.lastHit.name : null;
           this.toast('Wrecked', e.reason === 'overheat' ? 'Engine overheated' : e.reason === 'drowned' ? 'Drowned' : e.reason === 'train' ? 'Flattened by the Coastline Freight' : by ? `Taken out by ${by}` : 'Hit too hard', 'bad');
           this.story.onWreck(e.reason);
