@@ -35,7 +35,7 @@ Object.assign(Game.prototype, {
     }
     for (const s of this.eventSpots) { if (this.race || s.hidden) continue; const [x, y] = toL(s.x, s.z); const w = 7 / zoom; ctx.fillStyle = '#' + new THREE.Color(EVENT_COLORS[s.ev.id]).getHexString(); ctx.fillRect(x - w / 2, y - w / 2, w, w); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 1.4 / zoom; ctx.strokeRect(x - w / 2, y - w / 2, w, w); }
     // the train
-    for (const c of this.world.train.cars) { const [x, y] = toL(c.pose.x, c.pose.z); ctx.fillStyle = '#e8c22a'; ctx.beginPath(); ctx.arc(x, y, 2.6 / zoom, 0, TAU); ctx.fill(); }
+    for (const T of this.world.trains) for (const c of T.cars) { const [x, y] = toL(c.pose.x, c.pose.z); ctx.fillStyle = '#e8c22a'; ctx.beginPath(); ctx.arc(x, y, 2.6 / zoom, 0, TAU); ctx.fill(); }
     if (this.world.tunnelGateClosed) { const gp = this.world.tunnelGatePose(), [x, y] = toL(gp.x, gp.z), r = 5 / zoom; ctx.strokeStyle = '#ff3a2a'; ctx.lineWidth = 2.5 / zoom; ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r); ctx.stroke(); }
     for (const c of this.world.cars) {
       if (c === P || c.hidden) continue; const [x, y] = toL(c.pos.x, c.pos.z);
@@ -61,7 +61,7 @@ Object.assign(Game.prototype, {
     label('EXIT 5', 3330, -300, '#f2c230');
     const tun = this.world.route('tunnel'), tm = tun.posAt(tun.length * 0.62, {}); label(this.world.tunnelGateClosed ? 'CALDER TUNNEL · CLOSED' : 'CALDER TUNNEL', tm.x, tm.z - 50, this.world.tunnelGateClosed ? '#ff5a3a' : '#ffd23f');
     if (this.world.tunnelGateClosed) { const gp = this.world.tunnelGatePose(), x = mapX(gp.x), y = mapZ(gp.z); ctx.save(); ctx.strokeStyle = '#ff3a2a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x - 7, y - 7); ctx.lineTo(x + 7, y + 7); ctx.moveTo(x + 7, y - 7); ctx.lineTo(x - 7, y + 7); ctx.stroke(); ctx.restore(); }
-    for (const c of this.world.train.cars) { ctx.fillStyle = '#e8c22a'; ctx.beginPath(); ctx.arc(mapX(c.pose.x), mapZ(c.pose.z), 3.5, 0, TAU); ctx.fill(); }
+    for (const T of this.world.trains) for (const c of T.cars) { ctx.fillStyle = '#e8c22a'; ctx.beginPath(); ctx.arc(mapX(c.pose.x), mapZ(c.pose.z), 3.5, 0, TAU); ctx.fill(); }
     for (const c of this.world.cars) { if (c === P || c.civilian || c.hidden) continue; ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(mapX(c.pos.x), mapZ(c.pos.z), c.remote ? 7 : 4.5, 0, TAU); ctx.fill(); if (c.remote) { ctx.strokeStyle = '#6fb7d9'; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 4; label(c.name, c.pos.x, c.pos.z - 40, '#9fd6ef'); } }
     for (const D of BOAT_DOCKS) { const x = mapX(D.water.x), y = mapZ(D.water.z); ctx.fillStyle = '#6fb7d9'; ctx.beginPath(); ctx.arc(x, y, 6, 0, TAU); ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 4; label('BOAT LAUNCH', D.water.x, D.water.z + 70, '#9fd6ef'); }
     ctx.save(); ctx.translate(mapX(P.pos.x), mapZ(P.pos.z));

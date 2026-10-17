@@ -17,18 +17,53 @@ class World {
     this.scatter = new Scatter(this.terrain, this.city);
     yield* this.scatter.build();
     this.props = new Props(this.terrain);
-    this.train = new Train(this, this.route('rail'));
+    this.addTrains();
     this.crossings = this.findCrossings();
     this.addTunnelWalls();
     this.addQuays();
     this.addBridgeWalls(); this.addVillage();
     this.addMetroWalls();
+    // two trains each way on the metro: stoppers with the loop, expresses against it, each pair half a round apart
     this.metroTrains = this.terrain.metro ? [
-      new MetroTrain(this, { lat: METRO.tracks[1], vmax: 19 }),
-      new MetroTrain(this, { lat: METRO.tracks[0], reverse: true, express: true, vmax: 23, at: 1700 }),
+      new MetroTrain(this, { lat: METRO.tracks[1], vmax: 19 }), new MetroTrain(this, { lat: METRO.tracks[1], vmax: 19 }),
+      new MetroTrain(this, { lat: METRO.tracks[0], reverse: true, express: true, vmax: 23 }), new MetroTrain(this, { lat: METRO.tracks[0], reverse: true, express: true, vmax: 23 }),
     ] : [];
+    for (let k = 0; k < this.metroTrains.length; k += 2) { const a = this.metroTrains[k], b = this.metroTrains[k + 1], P = a.timetable(); b.timetable(); b.phase = P / 2; }
     yield 'World ready';
   }
+  /* the mainline: stations where the line passes them, the freight and the passenger train on one shared period */
+  addTrains() {
+    const R = this.route('rail');
+    this.stations = STATIONS.map((st) => {
+      const pr = R.project(st.at[0], st.at[1], 0, -1), s = pr.s, p = R.posAt(s - 60, {}), [dx, dz] = R.dirAt(s - 60), T = this.terrain;
+      // the platform goes on whichever side has more room from the roads
+      const side = [1, -1].map((k) => { let m = 1e9; for (let a = -60; a <= 60; a += 20) { const q = R.posAt(s - 60 + a, {}); m = Math.min(m, T.rdist[T.gi(q.x + dz * k * 8, q.z - dx * k * 8)]); } return m; });
+      return { ...st, s, side: side[0] >= side[1] ? 1 : -1, elevated: p.y - T.h[T.gi(p.x, p.z)] > 3 };
+    });
+    this.train = new Train(this, R);
+    this.passenger = new Train(this, R, { name: 'Calder Valley Line', consist: ['loco', 'coach', 'coach', 'coach', 'coach'], stops: ['millbrook', 'redmesa', 'port'], vmax: 31, dwell: 20 });
+    this.trains = [this.train, this.passenger];
+    // one single track, so both trains keep the same period: the quicker one runs slower to match, and makes up the last
+    // few seconds at its first stop; then the passenger's phase is set where the two stay furthest apart all round
+    const P = Math.max(...this.trains.map((t) => t.timetable()));
+    for (const t of this.trains) if (t.period < P) {
+      let lo = 6, hi = t.vmax;
+      for (let k = 0; k < 18; k++) { t.vmax = (lo + hi) / 2; if (t.timetable() > P) lo = t.vmax; else hi = t.vmax; }
+      t.vmax = hi; t.timetable(); t.timetable(P - t.period);
+    }
+    const [A, B] = this.trains, L = R.length, gapAt = (t) => {
+      A.sync(t); B.sync(t); const d = (((B.s - A.s) % L) + L) % L; return Math.min(d - B.length, L - d - A.length);
+    };
+    let best = -1e9;
+    for (let ph = 0; ph < P; ph += 5) {
+      B.phase = ph; let m = 1e9; for (let t = 0; t < P && m > best; t += 2) m = Math.min(m, gapAt(t));
+      if (m > best) { best = m; this.trainPhase = ph; }
+    }
+    B.phase = this.trainPhase; this.trainGap = best;
+    this.clock = Date.now() / 1000;
+  }
+  /* trains go home to their platforms while a race is on, and back to the timetable after */
+  parkTrains(on) { this.trainsParked = on; }
   buildSync() { for (const _ of this.build()); return this; }
   /* the metro track at (x, z) with the most room before a train gets there: where to put a car back down */
   metroLane(x, z) {
@@ -44,6 +79,7 @@ class World {
   resetMetro() {
     const M = this.terrain.metro; if (!M) return;
     const p = M.R.posAt(M.R.length * 0.5, {});
+    this.metroLive = true;
     for (const mt of this.metroTrains) mt.placeNear(p.x, p.z);
   }
   route(id) { return this.terrain.routes.find((r) => r.id === id); }
@@ -213,6 +249,28 @@ class World {
     }
     for (const o of this._gate) o.off = !closed;
     this.tunnelGateClosed = closed;
+    for (const g of this.railGates()) if (!g.walls) {
+      const nx = -g.dz, nz = g.dx; g.walls = [];
+      for (let k = 0; k < 2; k++) { const a = -g.half + g.half * k, b = a + g.half; const o = this.scatter.addSegment(g.x + nx * a, g.z + nz * a, g.x + nx * b, g.z + nz * b, g.y + 7, 'barrier'); o.r = 0.5; g.walls.push(o); }
+    }
+    this.updateRailGates();
+  }
+  /* the railway's two tunnels through the rim get steel doors at their valley mouths while the road tunnel is shut:
+     they roll aside for a train and close behind it */
+  railGates() {
+    if (this._railGates) return this._railGates;
+    const R = this.route('rail');
+    return (this._railGates = this.tunnelSpans().filter((t) => t.R === R && t.name.startsWith('RIM')).map((t) => {
+      const P = t.portals.reduce((a, b) => (b.p.x > a.p.x ? b : a)), s = R.wrapS(P.s + P.facing * 6), p = R.posAt(s, {}), [dx, dz] = R.dirAt(s);
+      return { s, x: p.x, y: p.y, z: p.z, dx, dz, half: t.hw, name: t.name, open: 0 };
+    }));
+  }
+  updateRailGates() {
+    for (const g of this.railGates()) {
+      const train = this.trains.some((T) => { const ahead = T.ahead(g.s); return ahead < 260 || T.R.length - ahead < T.length + 20; });
+      g.shut = this.tunnelGateClosed && !train;
+      if (g.walls) for (const o of g.walls) o.off = !g.shut;
+    }
   }
   findCrossings() {
     const T = this.terrain, rail = this.route('rail'), out = [];
@@ -287,8 +345,10 @@ class World {
   }
   step(dt) {
     this.time += dt;
-    if (this.train) this.train.update(dt);
-    for (const mt of this.metroTrains) mt.update(dt);
+    // one clock for every train; in a session it is the wall clock, so the timetables agree everywhere
+    this.clock = this.wallClock ? Date.now() / 1000 : (this.clock || 0) + dt;
+    if (this.trains) { for (const t of this.trains) t.update(dt, this.clock); this.updateRailGates(); }
+    for (const mt of this.metroTrains) mt.update(dt, this.clock);
     const T = this.terrain;
     for (const c of this.cars) {
       if (c.asleep) continue;
@@ -357,7 +417,7 @@ class World {
           }
         }
       }
-      if (this.train) this.train.collide(c, sph);
+      if (this.trains) for (const t of this.trains) t.collide(c, sph);
       if (c.under) for (const mt of this.metroTrains) mt.collide(c, sph);
       for (const p of P.list) {
         const dx = p.x - c.pos.x, dz = p.z - c.pos.z;

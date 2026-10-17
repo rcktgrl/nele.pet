@@ -518,7 +518,7 @@ class Game {
     else if (P.wrecked && P.wreckT < 2.8) this.rig.update(dt, P, { orbit: true, orbitSpeed: 0.5, radius: 10, height: 4 });
     else this.rig.update(dt, P, this.race && this.race.route.def.street ? { far: 1.2 } : undefined);
     g.updateTrain(); g.updateMetroTrain();
-    if (sdt > 0) { g.updateCrossings(sdt, g.time.value); g.updateTunnelGate(g.time.value); }
+    if (sdt > 0) { g.updateCrossings(sdt, g.time.value); g.updateTunnelGate(g.time.value); g.updateRailGates(sdt); }
     this.trainAudio(dt);
     g.updateSun(this.sintro ? this.sintro.focus : P.pos);
     g.updateCulling(g.camera.position);
@@ -532,8 +532,8 @@ class Game {
     this.audio.update(P, nearest);
   }
   trainAudio(dt) {
-    const T = this.world.train, P = this.player, A = this.audio;
-    const head = T.cars[0].pose, dh = Math.hypot(head.x - P.pos.x, head.z - P.pos.z);
+    const P = this.player, A = this.audio, near = (T) => Math.hypot(T.cars[0].pose.x - P.pos.x, T.cars[0].pose.z - P.pos.z);
+    const T = this.world.trains.reduce((a, b) => (near(b) < near(a) ? b : a)), dh = near(T);
     this.hornT = (this.hornT || 0) - dt;
     if (dh < 420 && T.v > 6 && this.hornT <= 0) { A.horn(clamp(1.3 - dh / 420, 0.2, 1)); this.hornT = 9 + Math.random() * 6; }
     // down in the metro: a train sounds off when you're on its track in front of it

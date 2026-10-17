@@ -1,31 +1,65 @@
 'use strict';
 /* Red Mesa Rally · Coastline Freight and the Calder Metro trains */
 
-/* ---------- Freight train ---------- */
+/* ---------- Mainline trains: the Coastline Freight and the Calder Valley passenger train. Both run to a timetable on the
+   world clock, so everyone in a session sees them in the same place, and both park in a station while a race is on. ---------- */
 const CONSIST = ['loco', 'loco', 'box', 'tank', 'flat', 'box', 'hopper', 'flat', 'box', 'tank', 'box', 'flat'];
+const STATIONS = [
+  { id: 'redmesa', name: 'RED MESA', at: [150, 458] },
+  { id: 'port', name: 'PORT CALDER', at: [4420, 600] },
+  { id: 'millbrook', name: 'MILLBROOK', at: [1835, -618] },
+];
 class Train {
-  constructor(world, R) {
-    this.w = world; this.R = R;
+  constructor(world, R, o = {}) {
+    this.w = world; this.R = R; this.name = o.name || 'Coastline Freight';
     this.cars = []; let off = 0;
-    for (const kind of CONSIST) { const len = kind === 'loco' ? 19 : 15.5; this.cars.push({ kind, len, off: off + len / 2, pose: { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, dx: 0, dz: 1 } }); off += len + 1.0; }
+    for (const kind of o.consist || CONSIST) { const len = kind === 'loco' ? 19 : kind === 'coach' ? 21 : 15.5; this.cars.push({ kind, len, off: off + len / 2, pose: { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, dx: 0, dz: 1 } }); off += len + 1.0; }
     this.length = off;
-    this.station = R.project(4420, 600, 0, -1).s;
-    this.s = R.wrapS(this.station + 1800); this.v = 22; this.vmax = 27; this.wait = 0; this.departed = true;
-    this.horn = 0;
-    this.update(0);
+    // stops: s of the head at the platform end, and how long it waits there
+    this.stops = (o.stops || ['port']).map((id) => { const st = world.stations.find((q) => q.id === id); return { st, s: st.s, dwell: o.dwell || 16 }; });
+    this.station = this.stops[0].s;
+    this.vmax = o.vmax || 27; this.horn = 0;
+    this.s = this.station; this.v = 0; this.next = 0; this.wait = 0;
   }
   ahead(target) { const L = this.R.length; return (((target - this.s) % L) + L) % L; }
-  update(dt) {
+  /* one step of driving: run at line speed, brake for the next stop, wait out its dwell */
+  drive(dt) {
+    if (this.wait > 0) { this.wait -= dt; this.v = 0; if (this.wait <= 0) { this.next = (this.next + 1) % this.stops.length; this.s = this.R.wrapS(this.s + 0.1); } return; }
+    const dist = this.ahead(this.stops[this.next].s);
+    const target = Math.min(this.vmax, Math.sqrt(2 * 0.7 * Math.max(0, dist - 0.5)) + 0.4);
+    this.v += clamp(target - this.v, -1.1 * dt, 0.55 * dt);
+    const ds = Math.min(this.v * dt, dist);
+    this.s = this.R.wrapS(this.s + ds);
+    if (dist - ds < 0.05) { this.wait = this.stops[this.next].dwell; this.v = 0; }
+  }
+  /* drive one whole round, from doors open at the first stop until they open there again, and keep where the train is
+     every half second; pad stretches the wait at the first stop so trains sharing the line can share one period */
+  timetable(pad = 0) {
+    const S0 = this.stops[0]; S0.dwell = (S0.base = S0.base || S0.dwell) + pad;
+    this.s = S0.s; this.v = 0; this.next = 0; this.wait = S0.dwell;
+    const tab = [[this.s, 0]]; let n = 0;
+    for (;;) {
+      const w0 = this.wait; this.drive(0.05); n++;
+      if (w0 <= 0 && this.wait > 0 && this.next === 0) break;
+      if (n % 10 === 0) tab.push([this.s, this.v]);
+      if (n > 400000) break;
+    }
+    tab.push([this.s, 0]);
+    this.tab = tab; this.period = (tab.length - 1) * 0.5; this.phase = this.phase || 0;
+    return this.period;
+  }
+  /* where the timetable puts the train at world time t (seconds), offset by its phase */
+  sync(t) {
+    const tab = this.tab, P = this.period, u = ((((t + this.phase) % P) + P) % P) / 0.5, i = Math.floor(u), f = u - i;
+    const [s0, v0] = tab[i], [s1, v1] = tab[Math.min(i + 1, tab.length - 1)], L = this.R.length;
+    let ds = s1 - s0; if (ds < -L / 2) ds += L;
+    this.s = this.R.wrapS(s0 + ds * f); this.v = lerp(v0, v1, f);
+  }
+  /* parked for a race: standing at its home platform */
+  park() { this.s = this.station; this.v = 0; }
+  update(dt, t) {
+    if (this.w.trainsParked) this.park(); else if (this.tab) this.sync(t); else this.drive(dt);
     const R = this.R;
-    const dist = this.ahead(this.station);
-    let target = this.vmax;
-    if (dist < 520) target = Math.min(target, Math.sqrt(2 * 0.7 * Math.max(0, dist - 4)) + 0.6);
-    if (this.wait > 0) { this.wait -= dt; target = 0; if (this.wait <= 0) this.departed = true; }
-    else if (dist < 5 && !this.departed) { this.wait = 16; target = 0; this.v = 0; }
-    if (dist > 600 && dist < R.length - 600) this.departed = false;
-    if (this.wait > 0) this.v = 0;
-    else this.v += clamp(target - this.v, -1.1 * dt, 0.55 * dt);
-    this.s = R.wrapS(this.s + this.v * dt);
     const a = {}, b = {};
     for (const c of this.cars) {
       const sc = this.s - c.off, k = c.len * 0.36;
@@ -70,6 +104,7 @@ class Train {
 class MetroTrain {
   constructor(world, o) {
     const R0 = world.terrain.metro.R, pts = [];
+    this.w = world; this.phase = o.phase || 0;
     this.lat = o.lat; this.dir = o.reverse ? -1 : 1; this.express = !!o.express;
     for (let s = 0; s < R0.length; s += 6) { const p = R0.posAt(s, {}), [dx, dz] = R0.dirAt(s); pts.push([p.x - dz * o.lat, p.z + dx * o.lat]); }
     if (o.reverse) pts.reverse();
@@ -93,7 +128,7 @@ class MetroTrain {
   /* place the train at the track point beside (x, z) on the loop */
   placeNear(x, z, along = 0) { this.place(this.R.project(x, z, 0, -1).s + along); }
   ahead(target) { const L = this.R.length; return (((target - this.s) % L) + L) % L; }
-  update(dt) {
+  drive(dt) {
     const R = this.R;
     if (!this.stops.length) { this.v += clamp(this.vmax - this.v, -1.6 * dt, 1.0 * dt); this.s = R.wrapS(this.s + this.v * dt); }
     else if (this.wait > 0) { this.wait -= dt; this.v = 0; }
@@ -105,6 +140,29 @@ class MetroTrain {
       this.s = R.wrapS(this.s + ds);
       if (dist - ds < 0.05) { this.wait = 12; this.v = 0; this.next = (this.next + 1) % this.stops.length; }
     }
+  }
+  /* the stopper's round of the loop, from doors open at the first station until they open there again; the express just runs */
+  timetable() {
+    if (!this.stops.length) { this.period = this.R.length / this.vmax; return this.period; }
+    this.s = this.stops[0]; this.v = 0; this.next = 1 % this.stops.length; this.wait = 12;
+    const tab = [[this.s, 0]]; let n = 0;
+    for (;;) {
+      const w0 = this.wait; this.drive(0.05); n++;
+      if (w0 <= 0 && this.wait > 0 && this.next === 1 % this.stops.length) break;
+      if (n % 10 === 0) tab.push([this.s, this.v]);
+      if (n > 400000) break;
+    }
+    tab.push([this.s, 0]);
+    this.tab = tab; this.period = (tab.length - 1) * 0.5;
+    return this.period;
+  }
+  sync(t) {
+    if (!this.tab) { this.s = this.R.wrapS((t + this.phase) * this.vmax); this.v = this.vmax; return; }
+    Train.prototype.sync.call(this, t);
+  }
+  update(dt, t) {
+    const R = this.R;
+    if (this.w.metroLive || this.period === undefined) this.drive(dt); else this.sync(t);
     const a = {}, b = {};
     for (const c of this.cars) {
       const sc = this.s - c.off; R.posAt(sc + c.len * 0.36, a); R.posAt(sc - c.len * 0.36, b);

@@ -56,6 +56,7 @@ Object.assign(Game.prototype, {
     }
     const race = this.race = new Race(this.world, ev, cars, this.player);
     if (R.def.metro) this.world.resetMetro();
+    this.world.parkTrains(true);
     // grid: player starts mid-pack; in a session everyone takes the slot the host's order gives them
     const order = [...cars]; if (order.length > 1) { order.splice(0, 1); order.splice(Math.min(3, order.length), 0, this.player); }
     this.ai = [];
@@ -94,6 +95,7 @@ Object.assign(Game.prototype, {
     this.screen('results', false);
     if (this.ai) for (const a of this.ai) this.removeCar(a.car);
     this.ai = []; this.race = null;
+    this.world.parkTrains(false); this.world.metroLive = false;
     const G = this.gfx.gates; while (G.children.length) G.remove(G.children[0]);
     for (const s of this.eventSpots) { s.beacon.beam.visible = !s.hidden; s.beacon.ring.visible = !s.hidden; s.label.style.display = ''; }
     this.refreshStory();

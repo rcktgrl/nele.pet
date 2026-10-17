@@ -63,7 +63,7 @@ Object.assign(Gfx.prototype, {
     this.buildTunnel();
     this.buildRiver();
     this.buildMetro();
-    this.buildTunnelGate();
+    this.buildTunnelGate(); this.buildRailGates();
     this.buildRail();
     this.buildCrossings();
     this.buildTrain();
@@ -751,7 +751,36 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     this.scene.add(grp);
     grp.visible = false;
   },
-  setTunnelGate(closed) { if (this.tunnelGate) this.tunnelGate.visible = closed; },
+  setTunnelGate(closed) { if (this.tunnelGate) this.tunnelGate.visible = closed; if (this.railDoors) for (const d of this.railDoors) d.grp.visible = closed; },
+  /* steel doors across the rim rail tunnels: two leaves that roll aside into the rock for a train */
+  buildRailGates() {
+    const stripe = textTex(256, 256, (c, w, h) => {
+      c.fillStyle = '#6c7176'; c.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 16) { c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(0, y, w, 2); }
+      c.fillStyle = '#f2c230'; c.fillRect(0, h * 0.78, w, h * 0.22); c.fillStyle = '#120c09'; for (let x = -h; x < w; x += 48) { c.beginPath(); c.moveTo(x, h); c.lineTo(x + 24, h); c.lineTo(x + 24 + h * 0.22, h * 0.78); c.lineTo(x + h * 0.22, h * 0.78); c.fill(); }
+    }, { repeat: true, srgb: true });
+    const mat = new THREE.MeshStandardMaterial({ map: stripe, roughness: 0.55, metalness: 0.6 });
+    const sign = new THREE.MeshStandardMaterial({ map: signFace(['NO ENTRY', 'RAILWAY TUNNEL'], { bg: '#8c1a12' }), roughness: 0.6 });
+    this.railDoors = [];
+    for (const g of this.world.railGates()) {
+      const grp = new THREE.Group(), H = 6.6, leaves = [];
+      grp.position.set(g.x, g.y, g.z); grp.rotation.y = Math.atan2(g.dx, g.dz);
+      for (const k of [-1, 1]) {
+        const leaf = new THREE.Group(), w = g.half;
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, H, 0.35), mat); m.position.set(k * w / 2, H / 2, 0); m.castShadow = true; leaf.add(m);
+        if (k > 0) for (const z of [0.2, -0.2]) { const b = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.6), sign); b.position.set(w / 2 - 1.2, 3.4, z); if (z < 0) b.rotation.y = Math.PI; leaf.add(b); }
+        grp.add(leaf); leaves.push({ leaf, k, w });
+      }
+      this.scene.add(grp); grp.visible = false;
+      this.railDoors.push({ g, grp, leaves, open: 0 });
+    }
+  },
+  updateRailGates(dt) {
+    if (!this.railDoors) return;
+    for (const d of this.railDoors) {
+      d.open = clamp(d.open + (d.g.shut ? -dt / 4 : dt / 4), 0, 1);
+      for (const L of d.leaves) L.leaf.position.x = L.k * L.w * d.open * 0.98;
+    }
+  },
   updateTunnelGate(t) {
     if (!this.tunnelGate || !this.tunnelGate.visible) return;
     const on = Math.floor(t * 1.6) % 2; this.gateLampMat.emissive.setRGB(on ? 3.2 : 0.1, on ? 1.6 : 0.05, 0);
@@ -775,21 +804,36 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     for (let s = 0; s < R.length; s += 0.7) { const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s); sleepers.push({ x: p.x, y: p.y, z: p.z, yaw: Math.atan2(dx, dz) }); }
     const sg = new THREE.BoxGeometry(2.5, 0.16, 0.24); sg.translate(0, 0.14, 0);
     this.cellInstances(sg, new THREE.MeshStandardMaterial({ color: 0x4a3d33, roughness: 0.95 }), sleepers, (p, d) => { d.position.set(p.x, p.y, p.z); d.rotation.set(0, p.yaw, 0); }, { cast: false, dist: 320, cell: 300 });
-    // Port Calder station platform
-    const T = this.world.train, st = T.station;
-    const sp = R.posAt(st - 60, {}), [sdx, sdz] = R.dirAt(st - 60);
-    const plat = new THREE.Group();
+    // a platform at every station, on the side away from the roads; out on the desert viaduct it stands on columns
     const conc = new THREE.MeshStandardMaterial({ color: 0x9a948a, roughness: 0.9 });
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(5, 1.1, 130), conc); deck.position.set(4.6, 0.55, 0); plat.add(deck);
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 130), new THREE.MeshStandardMaterial({ color: 0xe8c22a, roughness: 0.6 })); edge.position.set(2.4, 1.12, 0); plat.add(edge);
+    const yellow = new THREE.MeshStandardMaterial({ color: 0xe8c22a, roughness: 0.6 });
     const roofMat = new THREE.MeshStandardMaterial({ color: 0x2f3a40, roughness: 0.5, metalness: 0.4 });
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(6, 0.25, 90), roofMat); roof.position.set(4.8, 5.2, 0); roof.rotation.z = 0.06; plat.add(roof);
-    for (let z = -42; z <= 42; z += 12) { const col = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 4.2, 8), roofMat); col.position.set(5.6, 3.1, z); plat.add(col); }
-    const name = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.4), new THREE.MeshStandardMaterial({ map: signFace(['PORT CALDER'], { bg: '#1b3550' }), roughness: 0.6 }));
-    name.position.set(5.5, 4.2, 0); name.rotation.y = -Math.PI / 2; plat.add(name);
-    plat.position.set(sp.x, sp.y, sp.z); plat.rotation.y = Math.atan2(sdx, sdz);
-    plat.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    this.scene.add(plat);
+    for (const st of this.world.stations) {
+      const sp = R.posAt(st.s - 60, {}), [sdx, sdz] = R.dirAt(st.s - 60), k = st.side;
+      const plat = new THREE.Group();
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(5, 1.1, 130), conc); deck.position.set(4.6 * k, 0.55, 0); plat.add(deck);
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 130), yellow); edge.position.set(2.4 * k, 1.12, 0); plat.add(edge);
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(6, 0.25, 90), roofMat); roof.position.set(4.8 * k, 5.2, 0); roof.rotation.z = 0.06 * k; plat.add(roof);
+      for (let z = -42; z <= 42; z += 12) { const col = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 4.2, 8), roofMat); col.position.set(5.6 * k, 3.1, z); plat.add(col); }
+      for (const z of [-30, 30]) {
+        const name = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.4), new THREE.MeshStandardMaterial({ map: signFace([st.name], { bg: '#1b3550' }), roughness: 0.6 }));
+        name.position.set(6.9 * k, 4.2, z); name.rotation.y = -Math.PI / 2 * k; plat.add(name);
+      }
+      // a back wall and benches
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.6, 128), conc); wall.position.set(7.0 * k, 2.4, 0); plat.add(wall);
+      for (let z = -36; z <= 36; z += 24) { const bench = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.45, 2.4), roofMat); bench.position.set(6.2 * k, 1.33, z); plat.add(bench); }
+      if (st.elevated) {
+        const T = this.world.terrain;
+        for (let z = -60; z <= 60; z += 15) {
+          const lx = 4.6 * k, wx = sp.x + sdz * lx + sdx * z, wz = sp.z - sdx * lx + sdz * z, gy = T.h[T.gi(wx, wz)], h = sp.y - gy + 1;
+          if (h < 1) continue;
+          const col = new THREE.Mesh(new THREE.BoxGeometry(1.0, h, 1.0), conc); col.position.set(lx, -h / 2 + 0.2, z); plat.add(col);
+        }
+      }
+      plat.position.set(sp.x, sp.y, sp.z); plat.rotation.y = Math.atan2(sdx, sdz);
+      plat.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      this.scene.add(plat);
+    }
   },
   /* ---------- level crossings ---------- */
   buildCrossings() {
@@ -832,13 +876,12 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     }
   },
   updateCrossings(dt, t) {
-    const T = this.world.train;
     const cp = this.camera.position;
     for (const fx of this.crossingFx) {
-      const c = fx.c, ahead = T.ahead(c.s), behind = T.R.length - ahead;
+      const c = fx.c;
       const near = Math.hypot(c.x - cp.x, c.z - cp.z) < 650;
       for (const g of fx.groups) g.visible = near;
-      const active = (ahead < 300 && T.v > 0.5) || behind < T.length + 25;
+      const active = this.world.trains.some((T) => { const ahead = T.ahead(c.s), behind = T.R.length - ahead; return (ahead < 300 && T.v > 0.5) || behind < T.length + 25; });
       c.active = active;
       fx.down = clamp(fx.down + (active ? dt / 3 : -dt / 4), 0, 1);
       const blink = Math.floor(t * 2.6) % 2;
@@ -848,8 +891,12 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
   },
   /* ---------- the Coastline Freight ---------- */
   buildTrain() {
-    const T = this.world.train;
     this.trainGroups = [];
+    const coachTex = textTex(1024, 128, (g, w, h) => {
+      g.fillStyle = '#efe4cc'; g.fillRect(0, 0, w, h); g.fillStyle = '#8c1a12'; g.fillRect(0, h * 0.78, w, h * 0.22); g.fillRect(0, 0, w, h * 0.08);
+      g.fillStyle = '#1b2228'; for (let i = 0; i < 11; i++) g.fillRect(40 + i * 88, h * 0.2, 64, h * 0.4);
+      g.fillStyle = '#5a5048'; for (const x of [6, w - 40]) g.fillRect(x, h * 0.14, 34, h * 0.62);
+    });
     const livery = textTex(1024, 128, (g, w, h) => { g.fillStyle = '#8c1a12'; g.fillRect(0, 0, w, h); g.fillStyle = '#efe4cc'; g.fillRect(0, h * 0.62, w, h * 0.16); g.fillStyle = '#efe4cc'; g.font = '400 64px "Saira Stencil One", Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('COASTLINE FREIGHT', w * 0.42, h * 0.34); g.font = '700 54px "Saira Condensed", sans-serif'; g.fillText('5150', w * 0.88, h * 0.34); });
     const box = textTex(512, 128, (g, w, h) => { g.fillStyle = '#6a3424'; g.fillRect(0, 0, w, h); for (let i = 0; i < 26; i++) { g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(i * w / 26, 0, 3, h); } g.fillStyle = '#e8dcc4'; g.font = '700 30px "Saira Condensed", sans-serif'; g.fillText('CFX 30' + Math.floor(Math.random() * 90 + 10), 24, 40); });
     const mats = {
@@ -865,7 +912,8 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
       head: new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 4.5, 3.5) }),
     };
     const ccol = [0xb5442a, 0x1f5f8b, 0x2f7a4a, 0xd6a02b];
-    for (const car of T.cars) {
+    mats.coach = new THREE.MeshStandardMaterial({ map: coachTex, roughness: 0.45, metalness: 0.2 });
+    for (const car of this.world.trains.flatMap((T) => T.cars)) {
       const g = new THREE.Group(), L = car.len;
       const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; g.add(o); return o; };
       for (const bz of [-L * 0.36, L * 0.36]) { add(new THREE.BoxGeometry(2.4, 0.8, 3.2), mats.dark, 0, 0.7, bz); for (const wz of [-0.9, 0.9]) for (const wx of [-0.75, 0.75]) { const w = add(new THREE.CylinderGeometry(0.46, 0.46, 0.18, 14), mats.dark, wx, 0.5, bz + wz); w.rotation.z = Math.PI / 2; } }
@@ -881,6 +929,10 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
         for (const sx of [-0.8, 0.8]) add(new THREE.CircleGeometry(0.14, 10), mats.head, sx, 1.9, L / 2 + 0.01);
         for (let k = 0; k < 3; k++) add(new THREE.CylinderGeometry(0.5, 0.5, 0.3, 12), mats.dark, 0, 4.6, -4 + k * 2.2);
         void body;
+      } else if (car.kind === 'coach') {
+        add(new THREE.BoxGeometry(2.9, 3.3, L - 0.6), mats.cream, 0, 3.1, 0);
+        for (const sx of [-1.46, 1.46]) { const side = add(new THREE.PlaneGeometry(L - 0.6, 3.3), mats.coach, sx, 3.1, 0); side.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2; }
+        const rf = add(new THREE.CylinderGeometry(1.5, 1.5, L - 0.6, 12, 1, false, Math.PI / 2, Math.PI), mats.dark, 0, 4.7, 0); rf.rotation.x = Math.PI / 2; rf.scale.set(1, 1, 0.25);
       } else if (car.kind === 'box') {
         const b = add(new THREE.BoxGeometry(2.9, 3.2, L - 0.6), mats.rust, 0, 3.05, 0);
         for (const sx of [-1.46, 1.46]) { const side = add(new THREE.PlaneGeometry(L - 0.6, 3.2), mats.box, sx, 3.05, 0); side.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2; }
@@ -903,9 +955,8 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     this.updateTrain();
   },
   updateTrain() {
-    const T = this.world.train;
     const cp = this.camera.position;
-    T.cars.forEach((c, i) => { const g = this.trainGroups[i], P = c.pose; g.position.set(P.x, P.y, P.z); g.rotation.y = P.yaw; g.rotation.x = -P.pitch; g.visible = Math.hypot(P.x - cp.x, P.z - cp.z) < 2200; });
+    this.world.trains.flatMap((T) => T.cars).forEach((c, i) => { const g = this.trainGroups[i], P = c.pose; g.position.set(P.x, P.y, P.z); g.rotation.y = P.yaw; g.rotation.x = -P.pitch; g.visible = Math.hypot(P.x - cp.x, P.z - cp.z) < 2200; });
   },
 });
 
