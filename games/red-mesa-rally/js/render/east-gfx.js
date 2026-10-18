@@ -261,9 +261,15 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     for (let z = -740; z < FLAT.z1; z += 24) boll.push({ x: FLAT.x1 - 0.8, z });
     this.cellInstances(new THREE.CylinderGeometry(0.28, 0.34, 0.8, 8).translate(0, 0.4, 0), new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.6, metalness: 0.4 }), boll, (b, d) => d.position.set(b.x, CITY.y, b.z), { cast: true, dist: 600 });
     // lake jetty
-    const L = BOAT_DOCKS[1], dx = L.water.x - L.land.x, dz = L.water.z - L.land.z, len = Math.hypot(dx, dz);
-    const jet = new THREE.Mesh(new THREE.BoxGeometry(3, 0.4, len * 0.75), wood);
-    jet.position.set(L.land.x + dx * 0.5, WATER_Y + 1.1, L.land.z + dz * 0.5); jet.rotation.y = Math.atan2(dx, dz); jet.castShadow = true; jet.receiveShadow = true; this.scene.add(jet);
+    { // from the bank out over the water on piles
+      const L = BOAT_DOCKS[1], len = Math.hypot(L.water.x - L.land.x, L.water.z - L.land.z), ux = (L.water.x - L.land.x) / len, uz = (L.water.z - L.land.z) / len;
+      let s0 = 0; while (s0 < len && T.rawH(L.land.x + ux * s0, L.land.z + uz * s0) > WATER_Y + 0.6) s0 += 1;
+      const a = s0 - 5, b = s0 + 30, y = WATER_Y + 1.1, parts = [new THREE.BoxGeometry(3, 0.3, b - a).translate(0, y, (a + b) / 2)];
+      for (let t = a + 1; t < b; t += 4) for (const sx of [-1.4, 1.4]) parts.push(new THREE.CylinderGeometry(0.16, 0.16, 4, 6).translate(sx, y - 2, t));
+      for (const sx of [-1.4, 1.4]) parts.push(new THREE.BoxGeometry(0.12, 0.12, b - a - 4).translate(sx, y + 0.9, (a + b) / 2 + 2), ...[0, 1, 2, 3, 4, 5, 6, 7].map((k) => new THREE.BoxGeometry(0.12, 0.9, 0.12).translate(sx, y + 0.45, a + 6 + k * (b - a - 6) / 7)));
+      const jet = new THREE.Mesh(mergeGeos(parts), wood);
+      jet.position.set(L.land.x, 0, L.land.z); jet.rotation.y = Math.atan2(ux, uz); jet.castShadow = jet.receiveShadow = true; this.scene.add(jet);
+    }
     // launch signs
     for (const D of BOAT_DOCKS) {
       const grp = new THREE.Group(), y = T.height(D.land.x, D.land.z);

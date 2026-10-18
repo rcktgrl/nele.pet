@@ -20,21 +20,54 @@ Object.assign(Gfx.prototype, {
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return tint(g, ...col);
     };
     const DARK = [0.12, 0.13, 0.15], WOOD = [0.36, 0.24, 0.16];
+    const cyl = (r0, r1, h, x, y, z, col, seg = 16) => { const g = new THREE.CylinderGeometry(r1, r0, h, seg); g.translate(x, y + h / 2, z); return tint(g, ...col); };
+    const STONE = [0.3, 0.28, 0.25], RED = [0.6, 0.1, 0.08], GLASS = [0.95, 0.85, 0.45];
+    const cellOf = (x, z) => { const key = Math.floor(x / 400) * 1000 + Math.floor(z / 400); let cell = geos.get(key); if (!cell) geos.set(key, cell = []); return cell; };
     for (const o of this.world.terrain.village) {
       const parts = [], H = o.y1 - o.y0 + o.h, base = o.y0;
-      parts.push(box(o.w, H, o.d, 0, base + H / 2, 0, o.wall));
-      parts.push(gable(o.w, o.d, o.kind === 'barn' ? o.w * 0.45 : o.w * 0.38, base + H, o.roof));
-      if (o.kind === 'barn') parts.push(box(o.w * 0.5, o.h * 0.75, 0.2, 0, o.y1 + o.h * 0.375, o.d / 2 + 0.05, [0.92, 0.9, 0.86]), box(o.w * 0.44, o.h * 0.68, 0.24, 0, o.y1 + o.h * 0.34, o.d / 2 + 0.06, o.wall));
-      else {
-        parts.push(box(1.1, 2.1, 0.2, 0, o.y1 + 1.05, o.d / 2 + 0.05, WOOD));
-        const nw = Math.max(1, Math.floor(o.d / 3.2));
-        for (const side of [-1, 1]) for (let k = 0; k < nw; k++) parts.push(box(0.2, 1.1, 1.1, side * (o.w / 2 + 0.05), o.y1 + 1.6, -o.d / 2 + (k + 0.5) * o.d / nw, DARK));
-        for (const sx of [-1, 1]) parts.push(box(1.1, 1.1, 0.2, sx * o.w * 0.28, o.y1 + 1.6, o.d / 2 + 0.05, DARK));
-        if (o.h > 4.6) parts.push(box(0.8, 2.2, 0.8, o.w * 0.25, base + H + o.w * 0.3, -o.d * 0.25, [0.55, 0.45, 0.4]));
+      if (o.kind === 'lookout') { this.lookoutParts(o, cellOf(o.x, o.z), box, cyl, STONE, WOOD, DARK); continue; }
+      if (o.kind === 'lighthouse') { // a tapered white tower with red bands, the gallery and the lantern on top, the keeper's door at its foot
+        const y = o.y1, h = o.h, r = (t) => 3.6 - 1.2 * t;
+        parts.push(cyl(4.4, 4.4, y - base + 0.8, 0, base, 0, STONE, 20), cyl(r(0), r(1), h, 0, y + 0.8, 0, o.wall, 20));
+        for (const t of [0.3, 0.62]) parts.push(cyl(r(t) + 0.05, r(t + 0.12) + 0.05, h * 0.12, 0, y + 0.8 + h * t, 0, RED, 20));
+        const yt = y + 0.8 + h;
+        parts.push(cyl(3.3, 3.3, 0.35, 0, yt, 0, DARK, 20), cyl(3.2, 3.2, 0.9, 0, yt + 0.35, 0, DARK, 20), cyl(1.7, 1.7, 2.4, 0, yt + 0.35, 0, GLASS, 12));
+        parts.push(cyl(2.2, 0.15, 1.9, 0, yt + 2.75, 0, RED, 12), box(1.3, 2.2, 0.4, 0, y + 0.8 + 1.1, r(0.04), WOOD));
+        for (const t of [0.2, 0.45, 0.75]) parts.push(box(0.7, 1.1, 0.3, 0, y + 0.8 + h * t, r(t) + 0.05, DARK));
+      } else if (o.kind === 'observatory') { // a white drum under a silver dome with its slit open to the sky, the visitor wing in front
+        const y = o.y1, zc = -2.5, R = 6.5;
+        parts.push(box(o.w - 2, y - base + 0.6, o.d - 2, 0, base + (y - base + 0.6) / 2, 0, STONE), cyl(R, R, o.h, 0, y + 0.6, zc, o.wall, 24));
+        const dome = new THREE.SphereGeometry(R + 0.2, 24, 10, 0, TAU, 0, Math.PI / 2); dome.translate(0, y + 0.6 + o.h, zc); parts.push(tint(dome, ...o.roof));
+        for (let p = 0.1; p < 1.45; p += 0.18) { const g = new THREE.BoxGeometry(1.5, 0.12, (R + 0.2) * 0.2); g.rotateX(p); g.translate(0, y + 0.6 + o.h + Math.cos(p) * (R + 0.22), zc + Math.sin(p) * (R + 0.22)); parts.push(tint(g, ...DARK)); }
+        parts.push(box(13, 4.2, 5.5, 0, y + 0.6 + 2.1, 4.8, o.wall), box(13.6, 0.4, 6.1, 0, y + 4.98, 4.8, STONE), box(1.6, 2.4, 0.2, 0, y + 1.8, 7.6, WOOD));
+        for (const sx of [-4.4, -2.4, 2.4, 4.4]) parts.push(box(1.3, 1.4, 0.2, sx, y + 2.6, 7.6, DARK));
+      } else {
+        const lodge = o.kind === 'lodge', mill = o.kind === 'mill';
+        if (lodge || mill) { // a stone base up to the floor, the walls on top of it
+          parts.push(box(o.w + 0.6, o.y1 - base + 0.6, o.d + 0.6, 0, base + (o.y1 - base + 0.6) / 2, 0, STONE), box(o.w, o.h, o.d, 0, o.y1 + o.h / 2, 0, o.wall));
+        } else parts.push(box(o.w, H, o.d, 0, base + H / 2, 0, o.wall));
+        if (lodge) { // ridge along its length, a log line every course, stone chimneys at both ends and a deep porch along the front
+          const g = gable(o.d, o.w, o.d * 0.5, base + H, o.roof); g.rotateY(Math.PI / 2); parts.push(g);
+          for (let yy = o.y1 + 0.7; yy < o.y1 + o.h; yy += 0.6) parts.push(box(o.w + 0.3, 0.14, o.d + 0.3, 0, yy, 0, [0.3, 0.17, 0.08]));
+          for (const sx of [-1, 1]) parts.push(box(1.8, o.h + o.d * 0.5 + 1.6, 1.8, sx * (o.w / 2 + 0.3), o.y1 + (o.h + o.d * 0.5 + 1.6) / 2, 0, STONE));
+          parts.push(box(o.w * 0.62, 0.3, 3.2, 0, o.y1 + 0.15, o.d / 2 + 1.6, WOOD), box(o.w * 0.66, 0.3, 3.8, 0, o.y1 + 3.2, o.d / 2 + 1.7, o.roof));
+          for (let k = 0; k < 5; k++) parts.push(box(0.3, 3, 0.3, (k / 4 - 0.5) * o.w * 0.6, o.y1 + 1.6, o.d / 2 + 3.1, WOOD));
+          parts.push(box(1.6, 2.4, 0.2, 0, o.y1 + 1.5, o.d / 2 + 0.06, DARK));
+          for (const sx of [-0.38, -0.22, 0.22, 0.38]) for (const sz of [-1, 1]) parts.push(box(1.4, 1.3, 0.2, sx * o.w, o.y1 + 2.4, sz * (o.d / 2 + 0.06), GLASS));
+        } else {
+          parts.push(gable(o.w, o.d, o.kind === 'barn' ? o.w * 0.45 : o.w * 0.38, base + H, o.roof));
+          if (o.kind === 'barn') parts.push(box(o.w * 0.5, o.h * 0.75, 0.2, 0, o.y1 + o.h * 0.375, o.d / 2 + 0.05, [0.92, 0.9, 0.86]), box(o.w * 0.44, o.h * 0.68, 0.24, 0, o.y1 + o.h * 0.34, o.d / 2 + 0.06, o.wall));
+          else {
+            parts.push(box(1.1, 2.1, 0.2, 0, o.y1 + 1.05, o.d / 2 + 0.05, WOOD));
+            const nw = Math.max(1, Math.floor(o.d / 3.2));
+            for (const side of [-1, 1]) for (let k = 0; k < nw; k++) parts.push(box(0.2, 1.1, 1.1, side * (o.w / 2 + 0.05), o.y1 + 1.6, -o.d / 2 + (k + 0.5) * o.d / nw, DARK));
+            for (const sx of [-1, 1]) parts.push(box(1.1, 1.1, 0.2, sx * o.w * 0.28, o.y1 + 1.6, o.d / 2 + 0.05, DARK));
+            if (o.h > 4.6) parts.push(box(0.8, 2.2, 0.8, o.w * 0.25, base + H + o.w * 0.3, -o.d * 0.25, [0.55, 0.45, 0.4]));
+          }
+        }
       }
-      if (o.kind === 'mill') parts.push(box(o.w + 0.6, 1.2, o.d + 0.6, 0, o.y0 + 0.6, 0, [0.5, 0.48, 0.45]));
       const m = new THREE.Matrix4().makeRotationY(o.yaw).setPosition(o.x, 0, o.z);
-      const key = Math.floor(o.x / 400) * 1000 + Math.floor(o.z / 400); let cell = geos.get(key); if (!cell) geos.set(key, cell = []);
+      const cell = cellOf(o.x, o.z);
       for (const g of parts) cell.push(g.applyMatrix4(m));
       if (o.wheel) { // the wheel stands on edge in the water, its axle across the bank
         const W = o.wheel, wy = WATER_Y + W.r * 0.55, rim = new THREE.TorusGeometry(W.r, 0.18, 6, 24), wg = [tint(rim.clone(), ...WOOD)];
@@ -44,12 +77,30 @@ Object.assign(Gfx.prototype, {
         const ax = new THREE.CylinderGeometry(0.25, 0.25, 4, 8); ax.rotateX(Math.PI / 2); ax.translate(0, 0, 0.6); wg.push(tint(ax, ...DARK));
         const g = mergeGeos(wg); g.translate(0, 0, -0.6);
         const wm = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
-        wm.position.set(W.x, wy, W.z); wm.rotation.order = 'YXZ'; wm.rotation.y = W.yaw + Math.PI / 2; wm.castShadow = true;
+        wm.position.set(W.x, wy, W.z); wm.rotation.order = 'YXZ'; wm.rotation.y = W.yaw; // axle into the mill wall, the wheel's face along the stream wm.castShadow = true;
         this.scene.add(wm); this.millWheel = wm;
       }
     }
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
     for (const cell of geos.values()) { const mesh = new THREE.Mesh(mergeGeos(cell), mat); mesh.castShadow = mesh.receiveShadow = true; this.scene.add(mesh); }
+  },
+  /* the summit lookout: a low stone wall round the turning space, coin binoculars at the edge, a bench and a flag */
+  lookoutParts(o, cell, box, cyl, STONE, WOOD, DARK) {
+    const T = this.world.terrain, gy = (x, z) => T.rawH(x, z), ux = Math.sin(o.yaw), uz = Math.cos(o.yaw);
+    const put = (g, x, z, yaw, y = gy(x, z)) => { g.rotateY(yaw); g.translate(x, y, z); cell.push(g); };
+    for (const [ax, az, bx, bz] of lookoutWall(o)) {
+      const L = Math.hypot(bx - ax, bz - az), ya = gy(ax, az), yb = gy(bx, bz), g = box(L + 0.5, 1.6, 0.7, 0, 0, 0, STONE);
+      g.rotateZ(Math.atan2(yb - ya, L)); put(g, (ax + bx) / 2, (az + bz) / 2, -Math.atan2(bz - az, bx - ax), (ya + yb) / 2 + 0.1);
+    }
+    const at = (a, r) => [o.x + (ux * Math.cos(a) - uz * Math.sin(a)) * r, o.z + (uz * Math.cos(a) + ux * Math.sin(a)) * r];
+    for (const a of [-0.35, 0.3]) {
+      const [x, z] = at(a, 9.6), scope = [cyl(0.08, 0.08, 1.1, 0, 0, 0, DARK, 6), box(0.5, 0.35, 0.7, 0, 1.25, 0, [0.15, 0.35, 0.2])];
+      put(mergeGeos(scope), x, z, o.yaw + a);
+    }
+    { const [x, z] = at(0.95, 8.4), b = [box(2.2, 0.12, 0.5, 0, 0.5, 0, WOOD), box(2.2, 0.5, 0.1, 0, 0.85, -0.25, WOOD), box(0.12, 0.5, 0.4, -0.9, 0.25, 0, DARK), box(0.12, 0.5, 0.4, 0.9, 0.25, 0, DARK)];
+      put(mergeGeos(b), x, z, o.yaw + 0.95 + Math.PI); }
+    { const [x, z] = at(-1.0, 8), f = [cyl(0.07, 0.05, 8, 0, 0, 0, [0.8, 0.8, 0.8], 6), box(0.05, 1, 1.6, 0, 7.4, 0.8, [0.7, 0.12, 0.1])];
+      put(mergeGeos(f), x, z, o.yaw); }
   },
   /* through the docks the river runs between straight concrete walls */
   buildChannelWalls() {

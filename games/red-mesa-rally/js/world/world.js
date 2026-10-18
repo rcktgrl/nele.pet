@@ -191,6 +191,7 @@ class World {
   addVillage() {
     const S = this.scatter;
     for (const o of this.terrain.village) {
+      if (o.kind === 'lookout') { for (const [ax, az, bx, bz] of lookoutWall(o)) { const T = this.terrain; S.addSegment(ax, az, bx, bz, Math.max(T.rawH(ax, az), T.rawH(bx, bz)) + 0.9, 'rail').r = 0.35; } continue; }
       const c = Math.cos(o.yaw), s = Math.sin(o.yaw), P = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [o.x + a * o.w / 2 * c + b * o.d / 2 * s, o.z - a * o.w / 2 * s + b * o.d / 2 * c]);
       for (let k = 0; k < 4; k++) { const [ax, az] = P[k], [bx, bz] = P[(k + 1) % 4]; S.addSegment(ax, az, bx, bz, o.y1 + o.h, 'barrier').r = 0.3; }
       if (o.wheel) S.addObstacle(o.wheel.x, o.wheel.z, 1.4, WATER_Y + o.wheel.r * 1.6, 'barrier');

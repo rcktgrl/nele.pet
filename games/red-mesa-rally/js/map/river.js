@@ -140,7 +140,7 @@ function carveRiver(T) {
 function findBridges(T) {
   const out = [], Rs = T.routes.filter((R) => !R.def.noCarve && !R.def.trafficOnly);
   const deck = (R, a, b, wet) => {
-    const span = { route: R.id, i0: a, i1: b, width: R.width, rail: R.surface === 'rail', pieces: [], piers: [] };
+    const span = { route: R.id, i0: a, i1: b, wet, width: R.width, rail: R.surface === 'rail', pieces: [], piers: [] };
     for (let k = a; k < b; k += 2) {
       const e = Math.min(b, k + 2), dx = R.x[e] - R.x[k], dz = R.z[e] - R.z[k], L = Math.hypot(dx, dz) || 1;
       const y0 = R.y[k], y1 = R.y[e];
@@ -170,8 +170,13 @@ function findBridges(T) {
       let wet = false; for (let k = i; k <= j; k++) if (T.river[T.gi(R.x[k], R.z[k])]) wet = true;
       // first the spans over water; then dry dips in a road that runs onto one of those decks (a junction at the bridgehead)
       let up = false; if (R.elev) for (let k = i; k <= j; k++) if (R.elev[k]) up = true;
-      if (pass === 0 ? wet || up : !wet && j - i < 40 && (onDeck(R.x[Math.max(0, i - 2)], R.z[Math.max(0, i - 2)], R.y[i]) || onDeck(R.x[Math.min(N, j + 2)], R.z[Math.min(N, j + 2)], R.y[j])))
-        deck(R, Math.max(0, i - 3), Math.min(N, j + 3), wet);
+      if (pass === 0 ? wet || up : !wet && !up && j - i < 40 && (onDeck(R.x[Math.max(0, i - 2)], R.z[Math.max(0, i - 2)], R.y[i]) || onDeck(R.x[Math.min(N, j + 2)], R.z[Math.min(N, j + 2)], R.y[j]))) {
+        let a = Math.max(0, i - 3), b = Math.min(N, j + 3), w = wet;
+        // a dip at the end of this route's own deck lengthens that deck instead of standing beside it as a stub
+        const own = pass && out.findIndex((B) => B.route === R.id && B.i0 <= b + 8 && B.i1 >= a - 8);
+        if (pass && own >= 0) { const B = out.splice(own, 1)[0]; a = Math.min(a, B.i0); b = Math.max(b, B.i1); w = B.wet; }
+        deck(R, a, b, w);
+      }
       i = j + 1;
     }
   }
