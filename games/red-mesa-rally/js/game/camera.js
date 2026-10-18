@@ -7,8 +7,17 @@ class CameraRig {
   snap() { this.init = false; }
   update(dt, car, opts) {
     this.follow(dt, car, opts);
+    const T = this.T;
+    // a boat in the boat tunnel: keep the camera under the roof and inside the bore
+    if (car.spec.boat && car.pos.y < RIVER.tunnel.under && T.inRiverTunnel(car.pos.x, car.pos.z)) {
+      const p = this.cam.position, c = car.pos, dir = this.cam.getWorldDirection(this._v);
+      if (!T.inRiverTunnel(p.x, p.z)) for (let k = 1; k <= 10; k++) { const t = k / 10, x = lerp(p.x, c.x, t), z = lerp(p.z, c.z, t); if (T.inRiverTunnel(x, z)) { p.x = x; p.z = z; break; } }
+      p.y = Math.min(p.y, RIVER.tunnel.ceil - 0.5);
+      this.cam.lookAt(p.x + dir.x * 10, p.y + dir.y * 10, p.z + dir.z * 10);
+      return;
+    }
     // down in the metro: keep the camera under the ceiling and inside the tube
-    const T = this.T; if (!car.under || !T.metro) return;
+    if (!car.under || !T.metro) return;
     const p = this.cam.position, c = car.pos, dir = this.cam.getWorldDirection(this._v);
     let ce = T.subCeil(p.x, p.z);
     if (ce === null) for (let k = 1; k <= 10; k++) { const t = k / 10, x = lerp(p.x, c.x, t), z = lerp(p.z, c.z, t), q = T.subCeil(x, z); if (q !== null) { p.x = x; p.z = z; ce = q; break; } }

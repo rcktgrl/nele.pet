@@ -13,21 +13,57 @@ class World {
     this.terrain = new Terrain();
     yield* this.terrain.build();
     this.city = new City(this.terrain);
-    this.terrain.setOverlays([...this.city.ramps, ...this.city.decks]);
+    this.terrain.setOverlays([...this.city.ramps, ...this.city.decks, ...this.terrain.bridges.flatMap((b) => b.pieces)]);
     this.scatter = new Scatter(this.terrain, this.city);
     yield* this.scatter.build();
     this.props = new Props(this.terrain);
-    this.train = new Train(this, this.route('rail'));
+    this.addTrains();
     this.crossings = this.findCrossings();
     this.addTunnelWalls();
-    this.addQuays();
+    this.addQuays(); this.addStadium();
+    this.addBridgeWalls(); this.addVillage();
     this.addMetroWalls();
+    // two trains each way on the metro: stoppers with the loop, expresses against it, each pair half a round apart
     this.metroTrains = this.terrain.metro ? [
-      new MetroTrain(this, { lat: METRO.tracks[1], vmax: 19 }),
-      new MetroTrain(this, { lat: METRO.tracks[0], reverse: true, express: true, vmax: 23, at: 1700 }),
+      new MetroTrain(this, { lat: METRO.tracks[1], vmax: 19 }), new MetroTrain(this, { lat: METRO.tracks[1], vmax: 19 }),
+      new MetroTrain(this, { lat: METRO.tracks[0], reverse: true, express: true, vmax: 23 }), new MetroTrain(this, { lat: METRO.tracks[0], reverse: true, express: true, vmax: 23 }),
     ] : [];
+    for (let k = 0; k < this.metroTrains.length; k += 2) { const a = this.metroTrains[k], b = this.metroTrains[k + 1], P = a.timetable(); b.timetable(); b.phase = P / 2; }
     yield 'World ready';
   }
+  /* the mainline: stations where the line passes them, the freight and the passenger train on one shared period */
+  addTrains() {
+    const R = this.route('rail');
+    this.stations = STATIONS.map((st) => {
+      const pr = R.project(st.at[0], st.at[1], 0, -1), s = pr.s, p = R.posAt(s - 60, {}), [dx, dz] = R.dirAt(s - 60), T = this.terrain;
+      // the platform goes on whichever side has more room from the roads
+      const side = [1, -1].map((k) => { let m = 1e9; for (let a = -60; a <= 60; a += 20) { const q = R.posAt(s - 60 + a, {}); m = Math.min(m, T.rdist[T.gi(q.x + dz * k * 8, q.z - dx * k * 8)]); } return m; });
+      return { ...st, s, side: side[0] >= side[1] ? 1 : -1, elevated: p.y - T.h[T.gi(p.x, p.z)] > 3 };
+    });
+    this.train = new Train(this, R);
+    this.passenger = new Train(this, R, { name: 'Calder Valley Line', consist: ['loco', 'coach', 'coach', 'coach', 'coach'], stops: ['millbrook', 'redmesa', 'port', 'union'], vmax: 31, dwell: 20 });
+    this.trains = [this.train, this.passenger];
+    // one single track, so both trains keep the same period: the quicker one runs slower to match, and makes up the last
+    // few seconds at its first stop; then the passenger's phase is set where the two stay furthest apart all round
+    const P = Math.max(...this.trains.map((t) => t.timetable()));
+    for (const t of this.trains) if (t.period < P) {
+      let lo = 6, hi = t.vmax;
+      for (let k = 0; k < 18; k++) { t.vmax = (lo + hi) / 2; if (t.timetable() > P) lo = t.vmax; else hi = t.vmax; }
+      t.vmax = hi; t.timetable(); t.timetable(P - t.period);
+    }
+    const [A, B] = this.trains, L = R.length, gapAt = (t) => {
+      A.sync(t); B.sync(t); const d = (((B.s - A.s) % L) + L) % L; return Math.min(d - B.length, L - d - A.length);
+    };
+    let best = -1e9;
+    for (let ph = 0; ph < P; ph += 5) {
+      B.phase = ph; let m = 1e9; for (let t = 0; t < P && m > best; t += 2) m = Math.min(m, gapAt(t));
+      if (m > best) { best = m; this.trainPhase = ph; }
+    }
+    B.phase = this.trainPhase; this.trainGap = best;
+    this.clock = Date.now() / 1000;
+  }
+  /* trains go home to their platforms while a race is on, and back to the timetable after */
+  parkTrains(on) { this.trainsParked = on; }
   buildSync() { for (const _ of this.build()); return this; }
   /* the metro track at (x, z) with the most room before a train gets there: where to put a car back down */
   metroLane(x, z) {
@@ -43,17 +79,32 @@ class World {
   resetMetro() {
     const M = this.terrain.metro; if (!M) return;
     const p = M.R.posAt(M.R.length * 0.5, {});
+    this.metroLive = true;
     for (const mt of this.metroTrains) mt.placeNear(p.x, p.z);
   }
   route(id) { return this.terrain.routes.find((r) => r.id === id); }
   /* Calder Tunnel: the lined bore and its portal headwalls, shared by the meshes and the colliders */
-  tunnelSpan() {
-    if (this._tun !== undefined) return this._tun;
-    const R = this.route('tunnel'), T = this.terrain;
-    let i0 = -1, i1 = -1;
-    if (R.covered) for (let i = 0; i <= R.count; i++) if (R.covered[i]) { if (i0 < 0) i0 = i; i1 = i; }
-    if (i0 < 0) return (this._tun = null);
+  tunnelSpan() { return this.tunnelSpans().find((t) => t.R.id === 'tunnel') || null; }
+  /* every bore: the Calder Tunnel, and the railway's tunnels through the rim and the mesas */
+  tunnelSpans() {
+    if (this._tuns) return this._tuns;
+    this._tuns = [];
+    for (const R of this.terrain.routes) {
+      if (!R.covered) continue;
+      for (let i = 0; i <= R.count; i++) {
+        if (!R.covered[i]) continue;
+        let j = i; while (j < R.count && R.covered[j + 1]) j++;
+        if (j - i > 8) this._tuns.push(this.makeTunnelSpan(R, i, j));
+        i = j;
+      }
+    }
+    return this._tuns;
+  }
+  makeTunnelSpan(R, i0, i1) {
+    const T = this.terrain;
     i0 = Math.max(0, i0 - 2); i1 = Math.min(R.count, i1 + 2);
+    const bore = (R.def.bores || []).find(([a, b]) => { const s = (i0 + i1) / 2 * R.step, p = R.posAt(s, {}); return Math.hypot(p.x - (a[0] + b[0]) / 2, p.z - (a[1] + b[1]) / 2) < 400; });
+    const name = R.id === 'tunnel' ? 'CALDER TUNNEL' : bore ? bore[2] : 'RAIL TUNNEL';
     const hw = R.width / 2 + 1.2, reach = R.width / 2 + 20, N = 16, portals = [];
     for (const [iP, facing] of [[i0, 1], [i1, -1]]) {
       const s = iP * R.step, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), rx = dz, rz = -dx;
@@ -66,10 +117,10 @@ class World {
       }
       portals.push({ s, p, dx, dz, facing, top, line });
     }
-    return (this._tun = { R, i0, i1, hw, reach, portals });
+    return { R, i0, i1, hw, reach, portals, name };
   }
-  addTunnelWalls() {
-    const tun = this.tunnelSpan(); if (!tun) return;
+  addTunnelWalls() { for (const tun of this.tunnelSpans()) this.addTunnelWallsFor(tun); }
+  addTunnelWallsFor(tun) {
     const { R, i0, i1, hw, reach } = tun, S = this.scatter, r = 0.35, off = hw + r;
     // bore walls: solid up to the crown
     for (let i = i0; i < i1; i += 2) {
@@ -105,8 +156,9 @@ class World {
     };
     // outer wall in runs between the ramp mouths
     const gaps = M.spurs.map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]).sort((a, b) => a[0] - b[0]);
-    let s = gaps[gaps.length - 1][1] - R.length;
+    let s = gaps.length ? gaps[gaps.length - 1][1] - R.length : 0;
     for (const [g0, g1] of gaps) { line(s, g0, METRO.wallL - 0.3, top, 0.3); s = g1; }
+    if (!gaps.length) line(0, R.length, METRO.wallL - 0.3, top, 0.3);
     line(0, R.length, METRO.wallR, top, 0.3);
     for (const sp of M.spurs) for (const sd of [-1, 1]) {
       const l = sd * (METRO.rampHw + 0.3), aEnd = sp.L + METRO.wallL + 2 - 0.3;
@@ -115,8 +167,49 @@ class World {
         seg(sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l, sp.x + sp.dx * b - sp.dz * l, sp.z + sp.dz * b + sp.dx * l, metroSpurY(a) + 3.6, 0.3);
       }
     }
+    // up on the street: a parapet down both sides of each open cut and across its far end
+    for (const sp of M.spurs) {
+      const g = METRO.rampHw + 0.6, P = (a, l) => [sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l], top = CITY.y + 1.0, a0 = 9;
+      const par = (p, q) => { const o = S.addSegment(...p, ...q, top, 'barrier'); o.r = 0.35; o.bot = CITY.y - 0.8; };
+      for (const sd of [-1, 1]) for (let a = a0; a < sp.cover; a += 8) par(P(a, sd * g), P(Math.min(sp.cover, a + 8), sd * g));
+      par(P(sp.cover, -g), P(sp.cover, g));
+    }
+  }
+  /* river bridges: parapets along both edges (boats pass under them) and the piers in the water */
+  addBridgeWalls() {
+    const S = this.scatter;
+    for (const B of this.terrain.bridges) {
+      for (const p of B.pieces) for (const side of [-1, 1]) {
+        if (p.gap[side < 0 ? 0 : 1]) continue; // a road joins the deck here
+        const l = side * (p.hw - 0.3), ax = p.x - p.dz * l, az = p.z + p.dx * l, bx = ax + p.dx * p.Lt, bz = az + p.dz * p.Lt;
+        const o = S.addSegment(ax, az, bx, bz, Math.max(p.y0, p.y1) + 1.0, 'rail'); o.r = 0.3; o.bot = Math.min(p.y0, p.y1) - 1.2;
+      }
+      for (const q of B.piers) { const o = S.addObstacle(q.x, q.z, B.rail ? 1.6 : 1.1, q.top, 'barrier'); o.bot = q.bot; }
+    }
+  }
+  /* Millbrook: every house a solid box */
+  addVillage() {
+    const S = this.scatter;
+    for (const o of this.terrain.village) {
+      const c = Math.cos(o.yaw), s = Math.sin(o.yaw), P = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [o.x + a * o.w / 2 * c + b * o.d / 2 * s, o.z - a * o.w / 2 * s + b * o.d / 2 * c]);
+      for (let k = 0; k < 4; k++) { const [ax, az] = P[k], [bx, bz] = P[(k + 1) % 4]; S.addSegment(ax, az, bx, bz, o.y1 + o.h, 'barrier').r = 0.3; }
+      if (o.wheel) S.addObstacle(o.wheel.x, o.wheel.z, 1.4, WATER_Y + o.wheel.r * 1.6, 'barrier');
+    }
   }
   /* harbour quay faces: low walls that stop boats but sit under the wheels of anything on the quay */
+  /* Calder Stadium: the stands are solid all round, open at the way in */
+  addStadium() {
+    const St = this.city.stadium, S = this.scatter; if (!St) return;
+    for (let k = 0; k < St.seg; k++) {
+      const t0 = k * TAU / St.seg, t1 = (k + 1) * TAU / St.seg, tm = (t0 + t1) / 2;
+      if (Math.abs(Math.atan2(Math.sin(tm - Math.PI), Math.cos(tm - Math.PI))) < St.gap) continue;
+      for (const r of [0, St.depth]) S.addSegment(St.x + (St.rx - r) * Math.cos(t0), St.z + (St.rz - r) * Math.sin(t0), St.x + (St.rx - r) * Math.cos(t1), St.z + (St.rz - r) * Math.sin(t1), St.y + St.h(tm), 'building').r = 0.4;
+    }
+    const at = (t, r) => [St.x + (St.rx - r) * Math.cos(t), St.z + (St.rz - r) * Math.sin(t)]; // floodlights and the crane
+    for (const t of [Math.PI * 0.72, Math.PI * 1.28]) S.addObstacle(...at(t, -4), 0.8, St.y + 40, 'pole');
+    S.addObstacle(...at(0.15, St.depth + 12), 1.6, St.y + 46, 'crane');
+    for (const sd of [-1, 1]) { const t = Math.PI + sd * St.gap; S.addSegment(St.x + St.rx * Math.cos(t), St.z + St.rz * Math.sin(t), St.x + (St.rx - St.depth) * Math.cos(t), St.z + (St.rz - St.depth) * Math.sin(t), St.y + 16, 'building').r = 0.4; }
+  }
   addQuays() {
     const S = this.scatter, top = CITY.y - 1.2, zq = FLAT.z1 + 1.2, xq = FLAT.x1 + 1.2;
     const south = [[4150, SLIP.x - SLIP.hw - 0.6], [SLIP.x + SLIP.hw + 0.6, xq]];
@@ -137,6 +230,12 @@ class World {
     const ra = SHIP.rampZ - SHIP.rampHw - 0.5, rb = SHIP.rampZ + SHIP.rampHw + 0.5;
     bw(SHIP.x0 + 0.4, SHIP.z0 + 26, SHIP.x0 + 0.4, ra); bw(SHIP.x0 + 0.4, rb, SHIP.x0 + 0.4, SHIP.z1 - 14.4);
     bw(SHIP.x1 - 0.4, SHIP.z0 + 26, SHIP.x1 - 0.4, SHIP.z1 - 14.4); bw(SHIP.x0 + 0.4, SHIP.z1 - 14.4, SHIP.x1 - 0.4, SHIP.z1 - 14.4);
+    // the ramp up from the quay: railings both sides, rising with it
+    const sr = this.city.decks.find((d) => d.ship);
+    if (sr) for (const side of [-1, 1]) for (let a = 0; a < sr.Lt; a += 6) {
+      const b = Math.min(sr.Lt, a + 6), zo = sr.z + side * (sr.hw + 0.3), o = S.addSegment(sr.x + a, zo, sr.x + b, zo, overlayLift(sr, sr.x + b, sr.z) + 1.0, 'rail');
+      o.r = 0.3; o.bot = overlayLift(sr, sr.x + a, sr.z) - 2.5;
+    }
   }
   /* nearest open water deep enough to float a boat */
   findWetSpot(x, z) {
@@ -171,6 +270,28 @@ class World {
     }
     for (const o of this._gate) o.off = !closed;
     this.tunnelGateClosed = closed;
+    for (const g of this.railGates()) if (!g.walls) {
+      const nx = -g.dz, nz = g.dx; g.walls = [];
+      for (let k = 0; k < 2; k++) { const a = -g.half + g.half * k, b = a + g.half; const o = this.scatter.addSegment(g.x + nx * a, g.z + nz * a, g.x + nx * b, g.z + nz * b, g.y + 7, 'barrier'); o.r = 0.5; g.walls.push(o); }
+    }
+    this.updateRailGates();
+  }
+  /* the railway's two tunnels through the rim get steel doors at their valley mouths while the road tunnel is shut:
+     they roll aside for a train and close behind it */
+  railGates() {
+    if (this._railGates) return this._railGates;
+    const R = this.route('rail');
+    return (this._railGates = this.tunnelSpans().filter((t) => t.R === R && t.name.startsWith('RIM')).map((t) => {
+      const P = t.portals.reduce((a, b) => (b.p.x > a.p.x ? b : a)), s = R.wrapS(P.s + P.facing * 6), p = R.posAt(s, {}), [dx, dz] = R.dirAt(s);
+      return { s, x: p.x, y: p.y, z: p.z, dx, dz, half: t.hw, name: t.name, open: 0 };
+    }));
+  }
+  updateRailGates() {
+    for (const g of this.railGates()) {
+      const train = this.trains.some((T) => { const ahead = T.ahead(g.s); return ahead < 260 || T.R.length - ahead < T.length + 20; });
+      g.shut = this.tunnelGateClosed && !train;
+      if (g.walls) for (const o of g.walls) o.off = !g.shut;
+    }
   }
   findCrossings() {
     const T = this.terrain, rail = this.route('rail'), out = [];
@@ -245,8 +366,10 @@ class World {
   }
   step(dt) {
     this.time += dt;
-    if (this.train) this.train.update(dt);
-    for (const mt of this.metroTrains) mt.update(dt);
+    // one clock for every train; in a session it is the wall clock, so the timetables agree everywhere
+    this.clock = this.wallClock ? Date.now() / 1000 : (this.clock || 0) + dt;
+    if (this.trains) { for (const t of this.trains) t.update(dt, this.clock); this.updateRailGates(); }
+    for (const mt of this.metroTrains) mt.update(dt, this.clock);
     const T = this.terrain;
     for (const c of this.cars) {
       if (c.asleep) continue;
@@ -276,7 +399,7 @@ class World {
       for (const s of sph) {
         const list = S.near(s.p.x, s.p.z);
         if (list) for (const o of list) {
-          if (o.off || s.p.y - s.r > o.top || !o.sub !== !c.under) continue;
+          if (o.off || s.p.y - s.r > o.top || (o.bot !== undefined && s.p.y + s.r < o.bot) || !o.sub !== !c.under) continue;
           let nx, nz, pen, cx, cz;
           if (o.type === 1) {
             cx = clamp(s.p.x, o.x0, o.x1); cz = clamp(s.p.z, o.z0, o.z1);
@@ -315,7 +438,7 @@ class World {
           }
         }
       }
-      if (this.train) this.train.collide(c, sph);
+      if (this.trains) for (const t of this.trains) t.collide(c, sph);
       if (c.under) for (const mt of this.metroTrains) mt.collide(c, sph);
       for (const p of P.list) {
         const dx = p.x - c.pos.x, dz = p.z - c.pos.z;

@@ -26,12 +26,12 @@ Object.assign(Game.prototype, {
     if (this.mp || this.mpBusy || !this.profile) return;
     this.mpBusy = true; this.renderMp('');
     const M = new Session(this);
-    try { this.mp = M; await M.open(code, this.profile); this.mpBusy = false; this.renderMp(''); }
+    try { this.mp = M; this.world.wallClock = true; await M.open(code, this.profile); this.mpBusy = false; this.renderMp(''); }
     catch (e) { console.warn('multiplayer', e); this.mp = null; M.leave(); this.mpBusy = false; this.renderMp(e.message || 'Could not open the session.'); }
   },
   leaveMp(why) {
     const M = this.mp; if (!M) return;
-    this.mp = null; M.leave();
+    this.mp = null; this.world.wallClock = false; M.leave();
     this.refreshStory(); this.refreshPauseButtons();
     if (this.state === 'event') this.refreshEventStart();
     if (this.mpOpen) this.renderMp(why || '');

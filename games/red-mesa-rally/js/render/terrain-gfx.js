@@ -24,8 +24,8 @@ Object.assign(Gfx.prototype, {
       for (let j = Math.max(0, Math.floor((z0 - T.z0) / sc)); j <= Math.min(sz - 1, Math.ceil((z1 - T.z0) / sc)); j++)
         for (let i = Math.max(0, Math.floor((x0 - T.x0) / sc)); i <= Math.min(sx - 1, Math.ceil((x1 - T.x0) / sc)); i++) occ[j * sx + i] = Math.max(occ[j * sx + i], top);
     };
-    for (const b of this.world.city.buildings) raster(b.x0, b.z0, b.x1, b.z1, CITY.y + b.h);
-    for (const k of this.world.city.containers) raster(k.x0, k.z0, k.x1, k.z1, CITY.y + k.h);
+    for (const b of this.world.city.buildings) footprint(b.x, b.z, b.yaw, b.w, b.d, 0, (x, z) => raster(x, z, x, z, b.base + b.h));
+    for (const k of this.world.city.containers) raster(k.x0, k.z0, k.x1, k.z1, (k.y ?? CITY.y) + k.h);
     const occAt = (x, z) => {
       const fx = clamp((x - T.x0) / sc, 0, sx - 1.001), fz = clamp((z - T.z0) / sc, 0, sz - 1.001);
       const ix = Math.floor(fx), iz = Math.floor(fz), tx = fx - ix, tz = fz - iz, k = iz * sx + ix;
@@ -65,11 +65,18 @@ Object.assign(Gfx.prototype, {
     const ix = Math.floor(fx), iz = Math.floor(fz), tx = fx - ix, tz = fz - iz, k = iz * G.sx + ix, d = G.data;
     return lerp(lerp(d[k], d[k + 1], tx), lerp(d[k + G.sx], d[k + G.sx + 1], tx), tz);
   },
+  kerbTexture() {
+    if (this.kerbTex) return this.kerbTex;
+    const S = this.world.city.streets, t = new THREE.DataTexture(S.kerbRG, S.NX, S.NZ, THREE.RGFormat, THREE.UnsignedByteType);
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true;
+    return (this.kerbTex = t);
+  },
   /* ---------- terrain material ---------- */
   terrainMaterial() {
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, envMapIntensity: 0.35 });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this.time;
+      sh.uniforms.uKerb = { value: this.kerbTexture() };
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\n' + TERRAIN_GLSL_PARS)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -77,14 +84,15 @@ vWPos = (modelMatrix * vec4(position,1.0)).xyz; vWNrm = normal; vA = aA; vB = aB
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
 varying vec4 vA; varying vec4 vB; varying vec4 vC; varying vec3 vD; varying vec3 vWPos; varying vec3 vWNrm;
+uniform sampler2D uKerb;
 ${NOISE_GLSL}
 float gWet; float gBump; float gGloss; vec3 gEmis;
 float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smoothstep(w - f, w + f, abs(d)); }`)
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
   vec3 P = vWPos; vec3 Nw = normalize(vWNrm); float slope = 1.0 - Nw.y;
-  ${metroSpurs().map((sp) => { const g = METRO.rampHw + 0.3, xs = [sp.x - sp.dz * g, sp.x + sp.dx * sp.cover + sp.dz * g], zs = [sp.z + sp.dx * g, sp.z + sp.dz * sp.cover - sp.dx * g]; return `if (P.x > ${Math.min(...xs).toFixed(1)} && P.x < ${Math.max(...xs).toFixed(1)} && P.z > ${Math.min(...zs).toFixed(1)} && P.z < ${Math.max(...zs).toFixed(1)}) discard; // metro ramp`; }).join('\n  ')}
-  float vRoad = vA.x, vMud = vA.y, lat = vB.x, hw = vB.y, asph = vB.z, rail = vB.w;
+  ${metroSpurs().map((sp) => `{ vec2 q = P.xz - vec2(${sp.x.toFixed(2)}, ${sp.z.toFixed(2)}); float a = dot(q, vec2(${sp.dx}, ${sp.dz})), l = abs(dot(q, vec2(${-sp.dz}, ${sp.dx}))); if (a > -0.5 && a < ${sp.cover.toFixed(1)} && l < ${(METRO.rampHw + 0.3).toFixed(2)}) discard; } // metro cut`).join('\n  ')}
+  float vRoad = vA.x, vMud = vA.y, lat = vB.x, hw = vB.y, asph = vB.z, rail = vB.w, jbox = 0.0;
   float green = vC.x, beach = vC.y, city = vC.z, tun = vC.w, rs = vD.x, lanes = vD.y, jfade = 1.0 - vD.z;
   float dist = length(vViewPosition);
   float n1 = fbm2(P.xz * 0.012), n2 = fbm2(P.xz * 0.11), n3 = vnoise(P.xz * 0.8), n4 = vnoise(P.xz * 3.1);
@@ -128,7 +136,29 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
   // rail ballast
   vec3 ballast = vec3(0.33, 0.31, 0.29) * (0.65 + 0.6 * vnoise(P.xz * 7.0));
   col = mix(col, ballast, rail);
-  // asphalt with markings
+  // Port Calder: paved lots, lawns and parks, and a kerbed sidewalk along every street
+  if (city > 0.01) {
+    vec3 lot = vec3(0.31, 0.30, 0.28) * (0.8 + 0.2 * n3);
+    vec2 slab = fract(P.xz / 6.0); lot *= 0.92 + 0.08 * step(0.03, min(slab.x, slab.y));
+    vec3 cg = mix(lot, grassLush * 1.1, smoothstep(0.92, 0.7, city) * step(0.3, city));
+    vec3 walk = vec3(0.46, 0.44, 0.41) * (0.85 + 0.15 * n3);
+    vec2 sl = fract(P.xz / 2.0); walk *= 0.92 + 0.08 * step(0.06, min(sl.x, sl.y));
+    // midway between two streets the lateral offset flips sign from one grid vertex to the next: no sidewalk there
+    float latGrad = length(vec2(dFdx(lat), dFdy(lat))) / max(length(vec2(dFdx(P.x), dFdy(P.x))) + length(vec2(dFdx(P.z), dFdy(P.z))), 1e-3);
+    float real = 1.0 - smoothstep(1.6, 2.6, latGrad);
+    // the street plan: a fine kerb map with every corner rounded, where there is one; the coarse road grid elsewhere
+    vec2 kuv = (P.xz - vec2(${STREETMAP.x0.toFixed(1)}, ${STREETMAP.z0.toFixed(1)}) + ${(STREETMAP.res / 2).toFixed(3)}) / vec2(${(STREETMAP.x1 - STREETMAP.x0).toFixed(1)}, ${(STREETMAP.z1 - STREETMAP.z0).toFixed(1)});
+    float ke = 16.0;
+    if (kuv.x > 0.0 && kuv.y > 0.0 && kuv.x < 1.0 && kuv.y < 1.0) { vec2 kt = texture2D(uKerb, kuv).rg; ke = kt.r * 31.875 - 16.0; jbox = kt.g; }
+    float kn = step(ke, 14.0), kw = fwidth(ke) + 0.02;
+    cg = mix(cg, walk, mix((1.0 - smoothstep(hw + 4.0, hw + 4.6, al)) * real, 1.0 - smoothstep(4.2, 4.2 + kw, ke), kn));
+    cg = mix(cg, vec3(0.62, 0.6, 0.56), mix(lineAA(al - hw - 0.15, 0.14) * real, lineAA(ke - 0.15, 0.14), kn));
+    col = mix(col, cg, smoothstep(0.02, 0.25, city) * (1.0 - cliff));
+    asph = mix(asph, 1.0 - smoothstep(-kw, kw, ke), kn * step(0.25, city));
+    gGloss = max(gGloss, step(0.8, city) * 0.2);
+  }
+  // asphalt with markings (none through the junction boxes)
+  jfade *= 1.0 - smoothstep(0.3, 0.7, jbox);
   {
     vec3 tar = vec3(0.085, 0.087, 0.092) * (0.82 + 0.3 * n3 + 0.12 * n4);
     float wear = lanes > 2.5 ? exp(-pow((al - hw * 0.25) / 1.1, 2.0)) + exp(-pow((al - hw * 0.75) / 1.1, 2.0)) : exp(-pow((al - hw * 0.5) / 1.0, 2.0));
@@ -152,40 +182,6 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
     tar = mix(tar, mc, m * 0.85);
     col = mix(col, tar, asph);
     gGloss = max(gGloss, asph * 0.35);
-  }
-  // Port Calder streets, sidewalks, parks and docks
-  if (city > 0.01) {
-    vec2 q = P.xz - vec2(${CITY.x0.toFixed(1)}, ${CITY.z0.toFixed(1)});
-    float pitch = ${CITY.pitch.toFixed(1)}, shw = ${CITY.hw.toFixed(1)};
-    vec2 g = q - pitch * floor(q / pitch + 0.5);
-    float du = abs(g.x), dv = abs(g.y);
-    float inGrid = step(q.x, ${((CITY.nx - 1) * CITY.pitch + CITY.hw).toFixed(1)}) * step(q.y, ${((CITY.nz - 1) * CITY.pitch + CITY.hw).toFixed(1)});
-    float street = min(du, dv);
-    vec3 cg;
-    vec3 tar = vec3(0.075, 0.077, 0.082) * (0.82 + 0.3 * n3 + 0.12 * n4);
-    vec3 walk = vec3(0.46, 0.44, 0.41) * (0.85 + 0.15 * n3);
-    vec2 slab = fract(P.xz / 2.0); walk *= 0.92 + 0.08 * step(0.06, min(slab.x, slab.y));
-    vec3 lot = vec3(0.30, 0.29, 0.27) * (0.8 + 0.2 * n3);
-    if (inGrid > 0.5) {
-      cg = street < shw ? tar : street < shw + 4.0 ? walk : lot;
-      // curb line
-      cg = mix(cg, vec3(0.62, 0.6, 0.56), lineAA(street - shw, 0.12));
-      // markings: centre dashes along each street, crosswalks at intersections
-      float onX = step(du, shw) * step(shw + 1.0, dv), onZ = step(dv, shw) * step(shw + 1.0, du);
-      float along = onX > 0.5 ? P.z : P.x;
-      float cl = (onX > 0.5 ? lineAA(g.x, 0.09) : lineAA(g.y, 0.09)) * step(0.5, fract(along / 9.0));
-      float cross = max(du, dv);
-      float zebra = step(shw + 1.0, cross) * step(cross, shw + 4.5) * step(street, shw - 0.8) * step(0.5, fract((onX > 0.5 || du < shw ? P.x : P.z) / 1.2));
-      cg = mix(cg, vec3(0.82, 0.8, 0.74), max(cl * (onX + onZ), zebra) * 0.85 * smoothstep(900.0, 200.0, dist));
-    } else {
-      cg = vec3(0.34, 0.33, 0.31) * (0.85 + 0.2 * n3);
-      vec2 dk = fract(P.xz / 6.0); cg *= 0.9 + 0.1 * step(0.03, min(dk.x, dk.y));
-      cg = mix(cg, vec3(0.8, 0.62, 0.1), lineAA((fract(P.x / 28.0) - 0.5) * 28.0, 0.1) * 0.6 * smoothstep(700.0, 150.0, dist));
-    }
-    float park = smoothstep(0.92, 0.7, city) * step(0.3, city);
-    cg = mix(cg, grassLush * 1.1, park);
-    col = mix(col, cg, smoothstep(0.02, 0.25, city));
-    gGloss = max(gGloss, (1.0 - park) * 0.25);
   }
   // mud
   vec3 mudC = vec3(0.075, 0.045, 0.028) * (0.75 + 0.5 * n2);
@@ -472,7 +468,7 @@ vRW = (modelMatrix * vec4(position,1.0)).xyz;
     this.cellInstances(oakGeo, leafMat, S.oaks, placeO, { cast: true, dist: 1100, lodMax: 420 });
     const oFar = mergeGeos([tint(new THREE.CylinderGeometry(0.25, 0.34, 2.6, 4, 1, true).translate(0, 1.3, 0), 0.24, 0.17, 0.11), tint(new THREE.IcosahedronGeometry(2.6, 0).scale(1.2, 0.85, 1.2).translate(0, 4.4, 0), 0.15, 0.22, 0.075)]);
     this.cellInstances(oFar, leafMat, S.oaks, placeO, { cast: false, dist: 1300, lodMin: 420 });
-    this.cellInstances(oakGeo, leafMat, this.world.city.parkTrees, (t, d, col) => { d.position.set(t.x, CITY.y - 0.1, t.z); d.rotation.set(0, t.rot, 0); d.scale.setScalar(t.s * 0.85); const v = vis(t.x, t.z); col.setRGB(v, v, v); }, { cast: true, dist: 900 });
+    this.cellInstances(oakGeo, leafMat, this.world.city.parkTrees, (t, d, col) => { d.position.set(t.x, t.y - 0.1, t.z); d.rotation.set(0, t.rot, 0); d.scale.setScalar(t.s * 0.85); const v = vis(t.x, t.z); col.setRGB(v, v, v); }, { cast: true, dist: 900 });
     // palms
     const palm = [];
     let px = 0, py = 0;

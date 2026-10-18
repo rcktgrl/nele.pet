@@ -20,17 +20,22 @@ function buildMapImage(world, gfx) {
     const mud = T.mud[gi]; r = lerp(r, 70, mud * 0.8); gg = lerp(gg, 45, mud * 0.8); b = lerp(b, 30, mud * 0.8);
     if (city > 0.8) { r = 92; gg = 90; b = 88; } else if (city > 0.3) { r = 74; gg = 104; b = 52; }
     let R = r * shade, G = gg * shade, B = b * shade;
-    if (h < WATER_Y) { const d = clamp((WATER_Y - h) / 14, 0, 1); R = lerp(52, 22, d); G = lerp(92, 50, d); B = lerp(102, 72, d); }
+    if (h < WATER_Y && !T.inRiverTunnel(x, z)) { const d = clamp((WATER_Y - h) / 14, 0, 1); R = lerp(52, 22, d); G = lerp(92, 50, d); B = lerp(102, 72, d); }
     const i = (py * MAP_W + px) * 4; img.data[i] = R; img.data[i + 1] = G; img.data[i + 2] = B; img.data[i + 3] = 255;
   }
   g.putImageData(img, 0, 0);
+  // the mountain stream above Millbrook, and the boat tunnel under the docks
+  g.strokeStyle = 'rgba(60,104,116,.95)'; g.lineCap = 'round';
+  const up = RIVER.reaches.find((r) => r.id === 'upper').pts;
+  for (let i = 1; i < up.length; i++) { const q = up[i]; if (q.wl <= WATER_Y + 1.1) break; g.lineWidth = clamp(q.hw / 4, 1.2, 3); g.beginPath(); g.moveTo(mapX(up[i - 1].x), mapZ(up[i - 1].z)); g.lineTo(mapX(q.x), mapZ(q.z)); g.stroke(); }
+  g.save(); g.setLineDash([4, 3]); g.lineWidth = 2.2; g.beginPath();
+  RIVER.tunnel.pts.forEach((q, i) => { const X = mapX(q.x ?? q[0]), Y = mapZ(q.z ?? q[1]); if (i) g.lineTo(X, Y); else g.moveTo(X, Y); });
+  g.stroke(); g.restore(); g.lineCap = 'butt';
   // buildings
+  g.fillStyle = 'rgba(214,200,180,.95)';
+  for (const o of T.village) { g.save(); g.translate(mapX(o.x), mapZ(o.z)); g.rotate(-o.yaw); g.fillRect(-o.w / 2 * MAP_W / WORLD.Sx, -o.d / 2 * MAP_H / WORLD.Sz, Math.max(1.5, o.w * MAP_W / WORLD.Sx), Math.max(1.5, o.d * MAP_H / WORLD.Sz)); g.restore(); }
   g.fillStyle = 'rgba(200,196,188,.85)';
-  for (const bd of world.city.buildings) g.fillRect(mapX(bd.x0), mapZ(bd.z0), Math.max(1, mapX(bd.x1) - mapX(bd.x0)), Math.max(1, mapZ(bd.z1) - mapZ(bd.z0)));
-  // city streets
-  g.strokeStyle = 'rgba(40,40,44,.9)'; g.lineWidth = 2.2;
-  for (let i = 0; i < CITY.nx; i++) { const x = mapX(CITY.x0 + i * CITY.pitch); g.beginPath(); g.moveTo(x, mapZ(CITY.z0)); g.lineTo(x, mapZ(CITY.z1)); g.stroke(); }
-  for (let j = 0; j < CITY.nz; j++) { const z = mapZ(CITY.z0 + j * CITY.pitch); g.beginPath(); g.moveTo(mapX(CITY.x0), z); g.lineTo(mapX(CITY.x1), z); g.stroke(); }
+  for (const bd of world.city.buildings) { g.beginPath(); boxCorners(bd).forEach(([x, z], k) => (k ? g.lineTo(mapX(x), mapZ(z)) : g.moveTo(mapX(x), mapZ(z)))); g.fill(); }
   for (const R of T.routes) {
     if (R.def.noCarve) continue;
     g.beginPath();

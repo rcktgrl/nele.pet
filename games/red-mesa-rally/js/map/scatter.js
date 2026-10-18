@@ -15,7 +15,7 @@ class Scatter {
     const slopeAt = (x, z) => { T.normal(x, z, nrm); return nrm.y; };
     const okDesert = (x, z, clear) => {
       if (Math.hypot(x, z) > 940) return false;
-      if (T.rdist[T.gi(x, z)] < clear) return false;
+      if (T.rdist[T.gi(x, z)] < clear || T.river[T.gi(x, z)]) return false;
       if (T.height(x, z) < WATER_Y + 0.6) return false;
       if (Math.hypot(x - HUB.x, z - HUB.z) < HUB.r + 20) return false;
       return true;
@@ -64,7 +64,7 @@ class Scatter {
     const okEast = (x, z, clear) => {
       if (x < 1250) return false;
       const gi = T.gi(x, z);
-      if (T.rdist[gi] < clear || T.rail[gi] > 0 || T.city[gi] || T.tun[gi]) return false;
+      if (T.rdist[gi] < clear || T.rail[gi] > 0 || T.city[gi] || T.tun[gi] || T.river[gi] || T.lot[gi]) return false;
       const y = T.h[gi]; if (y < WATER_Y + 1.5) return false;
       if (eastSDF(x, z).d > -10) return false;
       return true;
@@ -87,6 +87,15 @@ class Scatter {
       const s = 0.9 + rng() * 0.8, y = T.h[gi];
       this.oaks.push({ x, z, y, s, rot: rng() * TAU, seed: rng() });
       this.addObstacle(x, z, 0.5 * s, y + 6 * s, 'tree');
+    }
+    // willows and scrub on the river island
+    const [ix0, iz0, ix1, iz1] = RIVER.island.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [1e9, 1e9, -1e9, -1e9]);
+    for (let i = 0, k = 0; i < 4000 && k < 140; i++) {
+      const x = ix0 + rng() * (ix1 - ix0), z = iz0 + rng() * (iz1 - iz0), gi = T.gi(x, z);
+      if (!inPoly(x, z, RIVER.island) || T.river[gi] || T.rdist[gi] < 12 || T.rail[gi] > 0 || T.h[gi] < WATER_Y + 0.8 || slopeAt(x, z) < 0.8) continue;
+      const s = 0.8 + rng() * 0.7, y = T.h[gi]; k++;
+      if (rng() < 0.6) { this.oaks.push({ x, z, y, s, rot: rng() * TAU, seed: rng() }); this.addObstacle(x, z, 0.5 * s, y + 6 * s, 'tree'); }
+      else this.grassBush.push({ x, z, y, s: 0.6 + rng() * 0.9, rot: rng() * TAU, seed: rng(), g: 0.8 });
     }
     for (let i = 0; i < 40000 && this.grassBush.length < 9000; i++) {
       const x = 1200 + rng() * 4000, z = -2800 + rng() * 4000;
@@ -114,10 +123,14 @@ class Scatter {
     yield 'Raising the skyline';
     // city obstacles
     const C = this.city;
-    for (const b of C.buildings) if (!b.crown && !b.bridge) this.addBox(b.x0, b.z0, b.x1, b.z1, CITY.y + b.h - (b.deck ? 1.2 : 0), 'building'); // roof decks sit under the wheels
+    for (const b of C.buildings) if (!b.crown) { const P = boxCorners(b); for (let k = 0; k < 4; k++) this.addSegment(...P[k], ...P[(k + 1) % 4], b.base + b.h, 'building').r = 0.3; }
     for (const k of C.containers) this.addBox(k.x0, k.z0, k.x1, k.z1, (k.y ?? CITY.y) + k.h, 'container');
-    for (const l of C.lamps) this.addObstacle(l.x, l.z, 0.22, CITY.y + 8, 'pole');
-    for (const t of C.parkTrees) this.addObstacle(t.x, t.z, 0.45 * t.s, CITY.y + 6, 'tree');
+    for (const l of C.lamps) this.addObstacle(l.x, l.z, 0.22, l.y + 8, 'pole');
+    // the junctions' signals and signs, the parked cars, the fences and hedges
+    for (const l of [...C.streets.signals, ...C.streets.stops]) this.addObstacle(l.x, l.z, 0.2, l.y + 5, 'pole');
+    for (const p of C.parked) { const P = boxCorners({ x: p.x, z: p.z, yaw: p.yaw, w: 1.9, d: p.van ? 5.2 : 4.5 }); for (let k = 0; k < 4; k++) this.addSegment(...P[k], ...P[(k + 1) % 4], p.y + (p.van ? 2.2 : 1.4), 'barrier').r = 0.15; }
+    for (const f of C.fences) this.addSegment(f.ax, f.az, f.bx, f.bz, f.y + (f.kind === 'chain' ? 2 : 1.1), 'rail').r = f.kind === 'hedge' ? 0.45 : 0.12;
+    for (const t of C.parkTrees) this.addObstacle(t.x, t.z, 0.45 * t.s, t.y + 6, 'tree');
     for (const c of C.cranes) {
       const ca = Math.cos(c.yaw), sa = Math.sin(c.yaw);
       for (const [lx, lz] of [[-9, -6], [9, -6], [-9, 6], [9, 6]]) this.addObstacle(c.x + lx * ca - lz * sa, c.z + lx * sa + lz * ca, 0.8, CITY.y + 40, 'crane');
@@ -141,6 +154,7 @@ class Scatter {
           const ax = p.x - dz * side * off, az = p.z + dx * side * off, bx = q.x - ez * side * off, bz = q.z + ex * side * off;
           const drop = p.y - T.height(p.x - dz * side * (off + 6), p.z + dx * side * (off + 6));
           if (R.id !== 'hwy' && drop < 2.5 && Math.abs(drop) < 3) continue;
+          if (T.river && T.bridges.some((B) => B.route === R.id && s >= B.i0 * R.step - 4 && s <= B.i1 * R.step + 4)) continue; // the bridge has its own parapets
           this.railSegs.push({ ax, az, ay: p.y, bx, bz, by: q.y });
           this.addSegment(ax, az, bx, bz, Math.max(p.y, q.y) + 0.9, 'rail');
         }
@@ -166,7 +180,7 @@ class Props {
     this.T = T; this.list = [];
     const rng = mulberry32(99);
     for (const R of T.routes) {
-      if (R.def.trail || R.def.country || R.def.noCarve || R.surface === 'rail' || (R.surface === 'asphalt' && !R.def.street)) continue;
+      if (R.def.trail || R.def.country || R.def.noCarve || R.def.dist || R.id.startsWith('cul-') || R.surface === 'rail' || (R.surface === 'asphalt' && !R.def.street)) continue;
       for (let i = 0; i < R.count; i += 6) {
         const k = R.curv[i];
         if (Math.abs(k) < 0.012 || rng() < 0.45) continue;

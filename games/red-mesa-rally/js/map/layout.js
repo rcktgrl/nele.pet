@@ -29,41 +29,23 @@ const HARBOUR = [{ x0: 4250, x1: 5700, z0: FLAT.z1, z1: 1600 }, { x0: FLAT.x1, x
 const SLIP = { x: 4650, z0: FLAT.z1 - 6, z1: FLAT.z1 + 62, hw: 8, y1: -4.6 };
 /* a ro-ro container ship tied up at the east quay: a ramp from the quay onto its deck */
 const SHIP = { x0: 5153, x1: 5191, z0: -650, z1: -390, y: 12.5, rampZ: -555, rampHw: 6, rampX0: 5106 };
-/* rooftop car parks: a ramp up the side of each block, a kicker on the high roof aimed at the low one */
-const ROOFTOPS = [{ bi: 10, bj: 1, h: 15, side: -1 }, { bi: 11, bj: 1, h: 11, side: 1 }];
-/* Calder Metro: a loop of twin-track tube under downtown, no road and no barrier. Cars drive on the rails: the inner track
+/* Calder Metro: a loop of twin-track tube under Port Calder, no road and no barrier. Cars drive on the rails: the inner track
    carries the stopping service (it runs with the race and waits at the platforms), the outer track the express, which runs
-   the other way and never stops. Four portal buildings each have a ramp driven straight through their ground floor down to it.
+   the other way and never stops. Four portals each have a ramp down an open cut beside a street and on under it to the loop.
    Lateral offsets are measured to the right of the loop's direction of travel, which is the inside of the loop. */
-const METRO = { y: 0.5, ceil: 4.8, under: CITY.y - 1.5, wallL: -5.2, tracks: [-2.3, 2.3], wallR: 5, plat: 11.4, rampLen: 58, rampHw: 5.5,
-  corners: [[2, 2], [10, 2], [10, 8], [2, 8]],
-  portals: [{ bi: 4, bj: 1, dir: 's', name: 'Kingsway' }, { bi: 1, bj: 4, dir: 'e', name: 'Westgate' }, { bi: 6, bj: 8, dir: 'n', name: 'Dock Road' }, { bi: 10, bj: 5, dir: 'w', name: 'Eastside' }],
-  stations: [{ name: 'CALDER CENTRAL', at: [6, 2] }, { name: 'HARBOUR STREET', at: [10, 5] }, { name: 'MARKET SQUARE', at: [6, 8] }, { name: 'WESTGATE', at: [2, 5] }],
+const METRO = { y: 0.5, ceil: 4.8, under: CITY.y - 1.5, wallL: -5.2, tracks: [-2.3, 2.3], wallR: 5, plat: 11.4, rampLen: 58, rampHw: 5.5, cut: 50,
+  box: { x0: 3480, z0: -1080, x1: 5080, z1: 620 },
+  loop: [[3650, -450], [3950, -470], [4250, -446], [4370, -452], [4418, -510], [4424, -600], [4470, -690], [4600, -750], [4700, -880], [4850, -990],
+    [5000, -800], [4960, -400], [4820, -50], [4560, 175], [4430, 470], [4150, 520], [3900, 450], [3640, 330], [3560, -100]],
+  portals: [{ name: 'Kingsway', x: 4299, z: -555.9, dx: 0.9994, dz: -0.0337, L: 122 }, { name: 'Westgate', x: 3996.4, z: -534.4, dx: -0.0346, dz: 0.9994, L: 66 },
+    { name: 'Mesa View', x: 3467.9, z: -256.7, dx: 0.9848, dz: 0.1739, L: 104 }, { name: 'Harbour Dr', x: 5112.1, z: -483.7, dx: -0.9834, dz: -0.1813, L: 132 }],
+  stations: [{ name: 'DOWNTOWN', at: [4422, -560] }, { name: 'UNION', at: [4640, -800] }, { name: 'KESTREL HEIGHTS', at: [4900, -930] }, { name: 'SALTWORKS', at: [4965, -450] },
+    { name: 'STADIUM', at: [4600, 150] }, { name: 'PORT', at: [4290, 500] }, { name: 'SUNSET MARINA', at: [3770, 390] }, { name: 'MESA VIEW', at: [3575, -250] }],
   stationLen: 76 };
-/* the portal ramps: mouth at the building face, straight down through the block to the loop's road */
-function metroSpurs() {
-  const C = CITY, size = C.pitch - 2 * (C.hw + 4), D = { s: [0, 1], n: [0, -1], e: [1, 0], w: [-1, 0] };
-  return METRO.portals.map((p, k) => {
-    const bx0 = C.x0 + p.bi * C.pitch + C.hw + 4, bz0 = C.z0 + p.bj * C.pitch + C.hw + 4, [dx, dz] = D[p.dir];
-    const x = dx ? (dx > 0 ? bx0 : bx0 + size) : bx0 + size / 2, z = dz ? (dz > 0 ? bz0 : bz0 + size) : bz0 + size / 2;
-    return { k, ...p, x, z, dx, dz, L: C.pitch - (C.hw + 4) - 2, cover: size, bx0, bz0, size };
-  });
-}
-/* a closed loop through grid corners with true arcs at the corners (the tube is wide, so its inner wall needs room) */
-function arcLoop(corners, r) {
-  const out = [], n = corners.length;
-  for (let k = 0; k < n; k++) {
-    const p = corners[(k - 1 + n) % n], c = corners[k], q = corners[(k + 1) % n];
-    const lu = Math.hypot(c[0] - p[0], c[1] - p[1]), lv = Math.hypot(q[0] - c[0], q[1] - c[1]);
-    const u = [(c[0] - p[0]) / lu, (c[1] - p[1]) / lu], v = [(q[0] - c[0]) / lv, (q[1] - c[1]) / lv];
-    const a = [c[0] - u[0] * r, c[1] - u[1] * r], b = [c[0] + v[0] * r, c[1] + v[1] * r];
-    for (let t = 0; t <= 1.001; t += 1 / 10) { const w = 1 - t; out.push([w * w * a[0] + 2 * w * t * c[0] + t * t * b[0], w * w * a[1] + 2 * w * t * c[1] + t * t * b[1]]); }
-    for (let d = 40; d < lv - 2 * r; d += 40) out.push([b[0] + v[0] * d, b[1] + v[1] * d]);
-  }
-  return out;
-}
+/* the portal ramps: mouth on the street, an open cut METRO.cut long, then a covered ramp on down to the loop */
+function metroSpurs() { return METRO.portals.map((p, k) => ({ k, ...p, cover: METRO.cut })); }
 const metroSpurY = (a) => lerp(CITY.y, METRO.y, smooth(0, METRO.rampLen, a));
-const metroSpurCeil = (a) => metroSpurY(a) + 4.3;
+const metroSpurCeil = (a) => (a >= METRO.cut ? Math.min(metroSpurY(a) + 4.3, METRO.ceil) : metroSpurY(a) + 4.3); // open sky over the cut
 /* where boats go in: a parking spot on land and a mooring on the water, facing out */
 const BOAT_DOCKS = [
   { id: 'harbour', name: 'Port Calder slipway', land: { x: SLIP.x + 14, z: FLAT.z1 - 22, yaw: Math.PI }, water: { x: SLIP.x, z: FLAT.z1 + 110, yaw: Math.PI } },
@@ -132,6 +114,13 @@ function desertHeight(x, z) {
 }
 /* north hills (Kestrel Pines) rise beyond z = -1500 */
 const hillMask = (z) => smooth(-1500, -2150, z);
+/* Kestrel Heights: a ridge north of downtown with the suburbs on its south slope, the observatory and the lighthouse on its crest */
+const HEIGHTS = { x0: 4120, z: -1240, top: 34, south: -880, north: -1580 };
+function heightsLift(x, z, sd) {
+  const H = HEIGHTS, crest = H.z + 35 * Math.sin(x / 260 + 1.3);
+  const prof = z > crest ? smooth(H.south, crest, z) : smooth(H.north, crest, z);
+  return prof * smooth(H.x0 - 110, H.x0 + 110, x) * (1 - smooth(-170, -50, sd)) * H.top * (0.85 + 0.3 * Noise.fbm(x / 240 + 4, z / 240, 2));
+}
 function eastLand(x, z) {
   let h = 10 + 14 * Noise.fbm(x / 650 + 7, z / 650 - 3, 4) + 3.5 * Noise.fbm(x / 160 + 2, z / 160, 3);
   const hm = hillMask(z);
@@ -155,6 +144,7 @@ function eastHeight(x, z) {
   // the port: dead flat, quay drops straight into the harbour
   const f = boxMask(x, z, FLAT, 90);
   if (f > 0) h = lerp(h, CITY.y, f);
+  if (z < HEIGHTS.south) h += heightsLift(x, z, sdf.d);
   if (f < 1) for (const b of HARBOUR) { // deep water right up to the quay walls
     const dd = Math.hypot(Math.max(b.x0 - x, x - b.x1, 0), Math.max(b.z0 - z, z - b.z1, 0));
     if (dd < 140) h = Math.min(h, lerp(-13 - 3 * Noise.fbm(x / 150, z / 150, 2), h, smooth(0, 140, dd)));
@@ -185,18 +175,4 @@ function biomeAt(x, z, h) {
   green *= smooth(0.3, 1, w) * (1 - smooth(-120, 0, sdf.d) * 0.3);
   const beach = h < 4.5 ? (1 - smooth(0, 4.5, h)) * sdf.sea * smooth(-260, -20, sdf.d) * (1 - boxMask(x, z, FLAT, 1)) : 0;
   return { green, beach: clamp(beach * 1.5, 0, 1), city: 0, forest: hm };
-}
-function cityCell(x, z) { // 0 outside, 1 paved, 0.6 park
-  if (x >= DOCKS.x0 - CITY.hw && x <= DOCKS.x1 && z > CITY.z1 && z <= DOCKS.z1) return 1;
-  if (x < CITY.x0 - CITY.hw || x > CITY.x1 + CITY.hw || z < CITY.z0 - CITY.hw || z > CITY.z1 + CITY.hw) return 0;
-  const bi = Math.floor((x - CITY.x0) / CITY.pitch), bj = Math.floor((z - CITY.z0) / CITY.pitch);
-  if (bi < 0 || bj < 0 || bi >= CITY.nx - 1 || bj >= CITY.nz - 1) return 1;
-  const u = x - CITY.x0 - bi * CITY.pitch, v = z - CITY.z0 - bj * CITY.pitch;
-  const inner = Math.min(u, CITY.pitch - u, v, CITY.pitch - v) > CITY.hw + 4;
-  return inner && cityBlockKind(bi, bj) === 'park' ? 0.6 : 1;
-}
-function cityBlockKind(bi, bj) {
-  const r = hash2(bi + 31, bj + 17);
-  if ((bi === 5 && bj === 4) || (bi === 9 && bj === 8) || (bi === 2 && bj === 7) || r < 0.04) return 'park';
-  return 'build';
 }
