@@ -153,7 +153,8 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
     float kn = step(ke, 14.0), kw = fwidth(ke) + 0.02;
     cg = mix(cg, walk, mix((1.0 - smoothstep(hw + 4.0, hw + 4.6, al)) * real, 1.0 - smoothstep(4.2, 4.2 + kw, ke), kn));
     cg = mix(cg, vec3(0.62, 0.6, 0.56), mix(lineAA(al - hw - 0.15, 0.14) * real, lineAA(ke - 0.15, 0.14), kn));
-    col = mix(col, cg, smoothstep(0.02, 0.25, city) * (1.0 - cliff));
+    float vergeCut = mix(1.0, 1.0 - smoothstep(6.6, 7.0 + kw, ke), kn * step(0.00015, beach) * step(beach, 0.02));
+    col = mix(col, cg, smoothstep(0.02, 0.25, city) * vergeCut * (1.0 - cliff));
     asph = mix(asph, 1.0 - smoothstep(-kw, kw, ke), kn * step(0.25, city));
     gGloss = max(gGloss, step(0.8, city) * 0.2);
   }

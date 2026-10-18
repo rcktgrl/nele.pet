@@ -34,7 +34,11 @@ class Terrain {
       const b = biomeAt(x, z, this.h[i]);
       this.green[i] = b.green * 255; this.beach[i] = b.beach * 255; this.forest[i] = b.forest * 255;
       this.city[i] = DISTRICT.cell(x, z) * 255;
-      if (this.city[i]) { this.green[i] = this.city[i] < 200 ? 230 : 40; this.beach[i] = 0; }
+      // the town's own streets keep a sidewalk and a grass verge on their outer side too, where the district ends at the kerb
+      // (tagged with a trace of beach so the shader can trim the verge to a clean line along the kerb)
+      let verge = false;
+      if (!this.city[i] && this.rown[i] && this.rdist[i] < this.rhw[i] + 12) { const O = this.routes[this.rown[i] - 1]; if (O.def.dist || /^(st|ring|cul)-/.test(O.id)) { this.city[i] = 150; verge = true; } }
+      if (this.city[i]) { if (!verge) this.green[i] = this.city[i] < 200 ? 230 : 40; this.beach[i] = verge ? 1 : 0; }
     }
     // the finale reuses existing roads end to end
     const R = (id) => this.routes.find((r) => r.id === id);
