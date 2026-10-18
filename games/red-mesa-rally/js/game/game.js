@@ -518,7 +518,7 @@ class Game {
     else if (P.wrecked && P.wreckT < 2.8) this.rig.update(dt, P, { orbit: true, orbitSpeed: 0.5, radius: 10, height: 4 });
     else this.rig.update(dt, P, this.race && this.race.route.def.street ? { far: 1.2 } : undefined);
     g.updateTrain(); g.updateMetroTrain();
-    if (sdt > 0) { g.updateCrossings(sdt, g.time.value); g.updateTunnelGate(g.time.value); g.updateRailGates(sdt); }
+    if (sdt > 0) { g.updateCrossings(sdt, g.time.value); g.updateSignals(g.time.value); g.updateTunnelGate(g.time.value); g.updateRailGates(sdt); }
     this.trainAudio(dt);
     g.updateSun(this.sintro ? this.sintro.focus : P.pos);
     g.updateCulling(g.camera.position);

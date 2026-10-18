@@ -60,6 +60,7 @@ Object.assign(Gfx.prototype, {
     this.buildDecks();
     this.buildShip();
     this.buildStadium();
+    this.buildStreets();
     this.buildRoadside();
     this.buildTunnel();
     this.buildRiver();
@@ -301,6 +302,91 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
   },
   /* ---------- the container ship at the east quay ---------- */
   /* ---------- Calder Stadium: a bowl of stands round the pitch, the east side still a building site ---------- */
+  /* ---------- the street plan: paint at the junctions and in the car parks, signals, stop signs, parked cars, fences ---------- */
+  buildStreets() {
+    const C = this.world.city, S = C.streets, T = this.world.terrain;
+    // paint: flat quads a hair above the ground, bucketed so far-off ones drop out
+    const cells = new Map(), quad = (o) => {
+      const k = cellKey(o.x, o.z, 400); let a = cells.get(k); if (!a) cells.set(k, a = []);
+      const px = -o.uz, pz = o.ux;
+      for (const [u, l] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const x = o.x + o.ux * u * o.hl + px * l * o.hw, z = o.z + o.uz * u * o.hl + pz * l * o.hw; a.push(x, T.rawH(x, z) + 0.035, z); }
+    };
+    for (const o of S.paint) quad(o);
+    const paintMat = new THREE.MeshStandardMaterial({ color: 0xd8d4ca, roughness: 0.75, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, side: THREE.DoubleSide });
+    for (const pos of cells.values()) {
+      const n = pos.length / 3, idx = []; for (let v = 0; v < n; v += 4) idx.push(v, v + 2, v + 1, v, v + 3, v + 2);
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx);
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(n * 3).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
+      geo.computeBoundingSphere();
+      const m = new THREE.Mesh(geo, paintMat); m.receiveShadow = true; m.boundingSphere = geo.boundingSphere; m.userData.drawDist = 700; this.scene.add(m); this.cullList.push(m);
+    }
+    // traffic signals: a pole on the corner, a mast arm over the lane, a head on each; the two axes take turns
+    const dark = [0.16, 0.17, 0.16];
+    const darkMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.4 });
+    // the arm is stretched to its reach, so build pole and arm-end head separately
+    const pole = mergeGeos([tint(new THREE.CylinderGeometry(0.11, 0.14, 5.8, 8).translate(0, 2.9, 0), ...dark), tint(new THREE.BoxGeometry(0.36, 1.05, 0.3).translate(0, 3.0, 0.22), 0.12, 0.12, 0.1)]);
+    const arm = tint(new THREE.BoxGeometry(1, 0.14, 0.14).translate(-0.5, 5.55, 0), ...dark), head = tint(new THREE.BoxGeometry(0.36, 1.05, 0.3).translate(0, 4.95, 0), 0.12, 0.12, 0.1);
+    const place = (l, d) => { d.position.set(l.x, l.y, l.z); d.rotation.set(0, l.yaw, 0); };
+    this.cellInstances(pole, darkMat, S.signals, place, { cast: true, dist: 700, cell: 400 });
+    this.cellInstances(arm, darkMat, S.signals, (l, d) => { place(l, d); d.scale.set(l.reach, 1, 1); }, { cast: true, dist: 700, cell: 400 });
+    this.cellInstances(head, darkMat, S.signals, (l, d) => { place(l, d); d.translateX(-l.reach + 0.3); }, { cast: true, dist: 700, cell: 400 });
+    this.signalMats = [];
+    const lens = new THREE.CircleGeometry(0.12, 10);
+    for (const ph of [0, 1]) for (const [k, dy] of [[0, 0.32], [1, 0], [2, -0.32]]) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0x111111 }); this.signalMats.push({ mat, ph, k });
+      const list = S.signals.filter((l) => l.phase === ph);
+      this.cellInstances(lens, mat, list.flatMap((l) => [{ ...l, at: 0 }, { ...l, at: 1 }]), (l, d) => {
+        place(l, d); if (l.at) d.translateX(-l.reach + 0.3); d.translateY(l.at ? 4.95 + dy : 3.0 + dy); d.translateZ(l.at ? 0.16 : 0.38);
+      }, { cast: false, dist: 900, cell: 400 });
+    }
+    // stop signs
+    const stopTex = textTex(256, 256, (g, w, h) => {
+      g.fillStyle = '#b3121a'; g.fillRect(0, 0, w, h); g.strokeStyle = '#f4f1e8'; g.lineWidth = 12;
+      g.beginPath(); for (let i = 0; i < 8; i++) { const a = Math.PI / 8 + i * Math.PI / 4; g.lineTo(w / 2 + Math.cos(a) * 112, h / 2 + Math.sin(a) * 112); } g.closePath(); g.stroke();
+      g.fillStyle = '#f4f1e8'; g.font = '700 84px "Saira Condensed", "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('STOP', w / 2, h / 2 + 4);
+    });
+    const oct = new THREE.CircleGeometry(0.42, 8, Math.PI / 8); oct.translate(0, 2.35, 0.06);
+    this.cellInstances(new THREE.CylinderGeometry(0.04, 0.04, 2.4, 6).translate(0, 1.2, 0), new THREE.MeshStandardMaterial({ color: 0x8a8d90, roughness: 0.5, metalness: 0.6 }), S.stops, place, { cast: true, dist: 600, cell: 400 });
+    this.cellInstances(oct, new THREE.MeshStandardMaterial({ map: stopTex, roughness: 0.6, side: THREE.DoubleSide }), S.stops, place, { cast: false, dist: 600, cell: 400 });
+    // parked cars: a body in the owner's colour, dark glass, black tyres
+    const wheels = (L) => [[-0.82, -L], [0.82, -L], [-0.82, L], [0.82, L]].map(([x, z]) => tint(new THREE.CylinderGeometry(0.34, 0.34, 0.24, 10).rotateZ(Math.PI / 2).translate(x, 0.34, z), 0.06, 0.06, 0.06));
+    const sedan = mergeGeos([tint(new THREE.BoxGeometry(1.82, 0.62, 4.4).translate(0, 0.66, 0), 1, 1, 1), tint(new THREE.BoxGeometry(1.6, 0.52, 2.2).translate(0, 1.22, -0.2), 0.08, 0.1, 0.12), ...wheels(1.36)]);
+    const van = mergeGeos([tint(new THREE.BoxGeometry(1.9, 1.5, 5.1).translate(0, 1.1, 0), 1, 1, 1), tint(new THREE.BoxGeometry(1.86, 0.5, 0.06).translate(0, 1.45, 2.56), 0.08, 0.1, 0.12), ...wheels(1.7)]);
+    const carMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.5 });
+    for (const [geo, list] of [[sedan, C.parked.filter((p) => !p.van)], [van, C.parked.filter((p) => p.van)]])
+      this.cellInstances(geo, carMat, list, (p, d, col) => { d.position.set(p.x, p.y, p.z); d.rotation.set(0, p.yaw, 0); col.setRGB(...(p.van ? [0.85, 0.85, 0.82] : p.col)); }, { cast: true, dist: 800, cell: 400 });
+    // fences: picket and chain-link as cut-out panels that repeat along their length; hedges as boxes
+    const picket = textTex(128, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#efe9dc'; for (let i = 0; i < 4; i++) { const x = i * 32 + 6; g.beginPath(); g.moveTo(x, h); g.lineTo(x, 18); g.lineTo(x + 10, 4); g.lineTo(x + 20, 18); g.lineTo(x + 20, h); g.fill(); } g.fillRect(0, 34, w, 10); g.fillRect(0, 96, w, 10); });
+    const chain = textTex(128, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.strokeStyle = '#a7aaa8'; g.lineWidth = 2; for (let i = -8; i < 16; i++) { g.beginPath(); g.moveTo(i * 16, 0); g.lineTo(i * 16 + h, h); g.stroke(); g.beginPath(); g.moveTo(i * 16 + h, 0); g.lineTo(i * 16, h); g.stroke(); } g.fillStyle = '#7d807e'; g.fillRect(0, 0, w, 5); g.fillRect(0, 0, 6, h); });
+    for (const t of [picket, chain]) { t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4; }
+    const kinds = { picket: { tex: picket, h: 1.1, rep: 1.2 }, chain: { tex: chain, h: 2.0, rep: 2.0 } };
+    for (const kind of ['picket', 'chain']) {
+      const K = kinds[kind], byCell = new Map();
+      for (const f of C.fences) if (f.kind === kind) {
+        const k = cellKey(f.ax, f.az, 400); let a = byCell.get(k); if (!a) byCell.set(k, a = { pos: [], uv: [] });
+        const L = Math.hypot(f.bx - f.ax, f.bz - f.az), ya = T.rawH(f.ax, f.az), yb = T.rawH(f.bx, f.bz);
+        a.pos.push(f.ax, ya, f.az, f.bx, yb, f.bz, f.bx, yb + K.h, f.bz, f.ax, ya + K.h, f.az); a.uv.push(0, 0, L / K.rep, 0, L / K.rep, 1, 0, 1);
+      }
+      const mat = new THREE.MeshStandardMaterial({ map: K.tex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, metalness: kind === 'chain' ? 0.4 : 0 });
+      for (const a of byCell.values()) {
+        const n = a.pos.length / 3, idx = []; for (let v = 0; v < n; v += 4) idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+        const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(a.pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(a.uv, 2)); geo.setIndex(idx); geo.computeVertexNormals(); geo.computeBoundingSphere();
+        const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; m.boundingSphere = geo.boundingSphere; m.userData.drawDist = 650; this.scene.add(m); this.cullList.push(m);
+      }
+    }
+    const hedges = C.fences.filter((f) => f.kind === 'hedge').map((f) => ({ x: (f.ax + f.bx) / 2, z: (f.az + f.bz) / 2, y: Math.min(T.rawH(f.ax, f.az), T.rawH(f.bx, f.bz)), L: Math.hypot(f.bx - f.ax, f.bz - f.az), yaw: Math.atan2(f.bz - f.az, f.bx - f.ax) }));
+    this.cellInstances(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0x2f4a1e, roughness: 1 }), hedges, (h, d) => { d.position.set(h.x, h.y - 0.1, h.z); d.rotation.set(0, -h.yaw, 0); d.scale.set(h.L + 0.6, 1.25, 0.9); }, { cast: true, dist: 650, cell: 400 });
+  },
+  updateSignals(t) {
+    if (!this.signalMats) return;
+    // 24 s cycle: one axis green 10 s, amber 2 s, then all red 0 s and the other axis gets its turn
+    const c = t % 24;
+    for (const { mat, ph, k } of this.signalMats) {
+      const u = ph ? (c + 12) % 24 : c, state = u < 10 ? 2 : u < 12 ? 1 : 0;
+      const on = state === k ? [[3, 0.25, 0.15], [3, 1.6, 0.2], [0.3, 2.6, 0.6]][k] : [[0.12, 0.03, 0.03], [0.12, 0.09, 0.02], [0.03, 0.1, 0.05]][k];
+      mat.color.setRGB(...on);
+    }
+  },
   buildStadium() {
     const St = this.world.city.stadium; if (!St) return;
     const pos = [], col = [], idx = [], quad = (a, b, c, d, cc) => { const v = pos.length / 3; pos.push(...a, ...b, ...c, ...d); for (let i = 0; i < 4; i++) col.push(...cc); idx.push(v, v + 2, v + 1, v + 1, v + 2, v + 3); };

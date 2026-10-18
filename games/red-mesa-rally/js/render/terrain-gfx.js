@@ -65,11 +65,18 @@ Object.assign(Gfx.prototype, {
     const ix = Math.floor(fx), iz = Math.floor(fz), tx = fx - ix, tz = fz - iz, k = iz * G.sx + ix, d = G.data;
     return lerp(lerp(d[k], d[k + 1], tx), lerp(d[k + G.sx], d[k + G.sx + 1], tx), tz);
   },
+  kerbTexture() {
+    if (this.kerbTex) return this.kerbTex;
+    const S = this.world.city.streets, t = new THREE.DataTexture(S.kerb, S.NX, S.NZ, THREE.RedFormat, THREE.UnsignedByteType);
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true;
+    return (this.kerbTex = t);
+  },
   /* ---------- terrain material ---------- */
   terrainMaterial() {
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, envMapIntensity: 0.35 });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this.time;
+      sh.uniforms.uKerb = { value: this.kerbTexture() };
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\n' + TERRAIN_GLSL_PARS)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -77,6 +84,7 @@ vWPos = (modelMatrix * vec4(position,1.0)).xyz; vWNrm = normal; vA = aA; vB = aB
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
 varying vec4 vA; varying vec4 vB; varying vec4 vC; varying vec3 vD; varying vec3 vWPos; varying vec3 vWNrm;
+uniform sampler2D uKerb;
 ${NOISE_GLSL}
 float gWet; float gBump; float gGloss; vec3 gEmis;
 float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smoothstep(w - f, w + f, abs(d)); }`)
@@ -138,9 +146,15 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
     // midway between two streets the lateral offset flips sign from one grid vertex to the next: no sidewalk there
     float latGrad = length(vec2(dFdx(lat), dFdy(lat))) / max(length(vec2(dFdx(P.x), dFdy(P.x))) + length(vec2(dFdx(P.z), dFdy(P.z))), 1e-3);
     float real = 1.0 - smoothstep(1.6, 2.6, latGrad);
-    cg = mix(cg, walk, (1.0 - smoothstep(hw + 4.0, hw + 4.6, al)) * real);
-    cg = mix(cg, vec3(0.62, 0.6, 0.56), lineAA(al - hw - 0.15, 0.14) * real);
+    // the street plan: a fine kerb map with every corner rounded, where there is one; the coarse road grid elsewhere
+    vec2 kuv = (P.xz - vec2(${STREETMAP.x0.toFixed(1)}, ${STREETMAP.z0.toFixed(1)}) + ${(STREETMAP.res / 2).toFixed(3)}) / vec2(${(STREETMAP.x1 - STREETMAP.x0).toFixed(1)}, ${(STREETMAP.z1 - STREETMAP.z0).toFixed(1)});
+    float ke = 16.0;
+    if (kuv.x > 0.0 && kuv.y > 0.0 && kuv.x < 1.0 && kuv.y < 1.0) ke = texture2D(uKerb, kuv).r * 31.875 - 16.0;
+    float kn = step(ke, 14.0), kw = fwidth(ke) + 0.02;
+    cg = mix(cg, walk, mix((1.0 - smoothstep(hw + 4.0, hw + 4.6, al)) * real, 1.0 - smoothstep(4.2, 4.2 + kw, ke), kn));
+    cg = mix(cg, vec3(0.62, 0.6, 0.56), mix(lineAA(al - hw - 0.15, 0.14) * real, lineAA(ke - 0.15, 0.14), kn));
     col = mix(col, cg, smoothstep(0.02, 0.25, city) * (1.0 - cliff));
+    asph = mix(asph, 1.0 - smoothstep(-kw, kw, ke), kn * step(0.25, city));
     gGloss = max(gGloss, step(0.8, city) * 0.2);
   }
   // asphalt with markings
