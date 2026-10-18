@@ -67,7 +67,7 @@ Object.assign(Gfx.prototype, {
   },
   kerbTexture() {
     if (this.kerbTex) return this.kerbTex;
-    const S = this.world.city.streets, t = new THREE.DataTexture(S.kerb, S.NX, S.NZ, THREE.RedFormat, THREE.UnsignedByteType);
+    const S = this.world.city.streets, t = new THREE.DataTexture(S.kerbRG, S.NX, S.NZ, THREE.RGFormat, THREE.UnsignedByteType);
     t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true;
     return (this.kerbTex = t);
   },
@@ -92,7 +92,7 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
 {
   vec3 P = vWPos; vec3 Nw = normalize(vWNrm); float slope = 1.0 - Nw.y;
   ${metroSpurs().map((sp) => `{ vec2 q = P.xz - vec2(${sp.x.toFixed(2)}, ${sp.z.toFixed(2)}); float a = dot(q, vec2(${sp.dx}, ${sp.dz})), l = abs(dot(q, vec2(${-sp.dz}, ${sp.dx}))); if (a > -0.5 && a < ${sp.cover.toFixed(1)} && l < ${(METRO.rampHw + 0.3).toFixed(2)}) discard; } // metro cut`).join('\n  ')}
-  float vRoad = vA.x, vMud = vA.y, lat = vB.x, hw = vB.y, asph = vB.z, rail = vB.w;
+  float vRoad = vA.x, vMud = vA.y, lat = vB.x, hw = vB.y, asph = vB.z, rail = vB.w, jbox = 0.0;
   float green = vC.x, beach = vC.y, city = vC.z, tun = vC.w, rs = vD.x, lanes = vD.y, jfade = 1.0 - vD.z;
   float dist = length(vViewPosition);
   float n1 = fbm2(P.xz * 0.012), n2 = fbm2(P.xz * 0.11), n3 = vnoise(P.xz * 0.8), n4 = vnoise(P.xz * 3.1);
@@ -149,7 +149,7 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
     // the street plan: a fine kerb map with every corner rounded, where there is one; the coarse road grid elsewhere
     vec2 kuv = (P.xz - vec2(${STREETMAP.x0.toFixed(1)}, ${STREETMAP.z0.toFixed(1)}) + ${(STREETMAP.res / 2).toFixed(3)}) / vec2(${(STREETMAP.x1 - STREETMAP.x0).toFixed(1)}, ${(STREETMAP.z1 - STREETMAP.z0).toFixed(1)});
     float ke = 16.0;
-    if (kuv.x > 0.0 && kuv.y > 0.0 && kuv.x < 1.0 && kuv.y < 1.0) ke = texture2D(uKerb, kuv).r * 31.875 - 16.0;
+    if (kuv.x > 0.0 && kuv.y > 0.0 && kuv.x < 1.0 && kuv.y < 1.0) { vec2 kt = texture2D(uKerb, kuv).rg; ke = kt.r * 31.875 - 16.0; jbox = kt.g; }
     float kn = step(ke, 14.0), kw = fwidth(ke) + 0.02;
     cg = mix(cg, walk, mix((1.0 - smoothstep(hw + 4.0, hw + 4.6, al)) * real, 1.0 - smoothstep(4.2, 4.2 + kw, ke), kn));
     cg = mix(cg, vec3(0.62, 0.6, 0.56), mix(lineAA(al - hw - 0.15, 0.14) * real, lineAA(ke - 0.15, 0.14), kn));
@@ -157,7 +157,8 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
     asph = mix(asph, 1.0 - smoothstep(-kw, kw, ke), kn * step(0.25, city));
     gGloss = max(gGloss, step(0.8, city) * 0.2);
   }
-  // asphalt with markings
+  // asphalt with markings (none through the junction boxes)
+  jfade *= 1.0 - smoothstep(0.3, 0.7, jbox);
   {
     vec3 tar = vec3(0.085, 0.087, 0.092) * (0.82 + 0.3 * n3 + 0.12 * n4);
     float wear = lanes > 2.5 ? exp(-pow((al - hw * 0.25) / 1.1, 2.0)) + exp(-pow((al - hw * 0.75) / 1.1, 2.0)) : exp(-pow((al - hw * 0.5) / 1.0, 2.0));

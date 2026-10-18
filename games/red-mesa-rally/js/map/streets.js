@@ -11,6 +11,7 @@ class Streets {
     this.findJunctions(T);
     this.paint = []; this.signals = []; this.stops = [];
     for (const J of this.junctions) this.dress(J, T);
+    this.junctionMask();
     for (const P of city.lots || []) this.bays(P);
   }
   inBox(R) { const M = STREETMAP; for (let i = 0; i <= R.count; i += 4) if (R.x[i] > M.x0 && R.x[i] < M.x1 && R.z[i] > M.z0 && R.z[i] < M.z1) return true; return false; }
@@ -59,6 +60,26 @@ class Streets {
         out[(oz + j) * NX + ox + i] = enc(Math.min(a, b) - h * h * k * 0.25);
       }
     }
+  }
+  /* the junction boxes, where the through-lane paint stops: the middle and each arm out to its crossing */
+  junctionMask() {
+    const M = STREETMAP, NX = this.NX, NZ = this.NZ, jm = this.jmask = new Uint8Array(NX * NZ);
+    const fill = (x0, z0, x1, z1, inside) => {
+      for (let j = Math.max(0, Math.floor((z0 - M.z0) / M.res)); j <= Math.min(NZ - 1, Math.ceil((z1 - M.z0) / M.res)); j++)
+        for (let i = Math.max(0, Math.floor((x0 - M.x0) / M.res)); i <= Math.min(NX - 1, Math.ceil((x1 - M.x0) / M.res)); i++) if (inside(M.x0 + i * M.res, M.z0 + j * M.res)) jm[j * NX + i] = 255;
+    };
+    for (const J of this.junctions) {
+      const arms = J.arms.filter((A) => A.a0 > 0); if (!arms.length) continue;
+      const r = Math.min(...arms.map((A) => A.a0));
+      fill(J.x - r, J.z - r, J.x + r, J.z + r, (x, z) => Math.hypot(x - J.x, z - J.z) < r);
+      for (const A of arms) {
+        const w = A.hw + 3, L = A.a0 + 0.2, ex = J.x + A.ux * L, ez = J.z + A.uz * L;
+        fill(Math.min(J.x, ex) - w, Math.min(J.z, ez) - w, Math.max(J.x, ex) + w, Math.max(J.z, ez) + w, (x, z) => { const a = (x - J.x) * A.ux + (z - J.z) * A.uz, l = Math.abs((x - J.x) * -A.uz + (z - J.z) * A.ux); return a > 0 && a < L && l < w; });
+      }
+    }
+    // interleave with the kerb distance: red = kerb, green = junction box
+    const rg = this.kerbRG = new Uint8Array(NX * NZ * 2);
+    for (let k = 0; k < NX * NZ; k++) { rg[k * 2] = this.kerb[k]; rg[k * 2 + 1] = jm[k]; }
   }
   kerbAt(x, z) {
     const M = STREETMAP, i = Math.round((x - M.x0) / M.res), j = Math.round((z - M.z0) / M.res);
@@ -130,6 +151,7 @@ class Streets {
         if (ok) { a0 = a; break; }
       }
       if (a0 < 0) continue;
+      A.a0 = a0;
       const at = (a) => { const s = R.closed ? (A.s + A.dir * a + R.length) % R.length : A.s + A.dir * a; if (s < 0 || s > R.length) return null; const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s); return { x: p.x, z: p.z, ux: dx * A.dir, uz: dz * A.dir }; };
       const c = at(a0 + 1.6), sl = at(a0 + 4); if (!c || !sl) continue;
       // zebra: bars across the street, running with the traffic
