@@ -291,6 +291,7 @@ const DISTRICT = (() => {
   };
   for (const d of D) fill(d.outline, d.paved === 1 ? 2 : 1);
   fill(STADIUM.lot, 2); fill(DOCKS.poly, 2);
+  fill([[5070, -1000], [5170, -1000], [5170, 800], [4880, 800], [4990, 560], [5070, 300]], 2); // the east quay along Harbour Dr
   { const e = []; for (let a = 0; a < 48; a++) e.push([STADIUM.x + (STADIUM.rx - 18) * Math.cos(a * TAU / 48), STADIUM.z + (STADIUM.rz - 18) * Math.sin(a * TAU / 48)]); fill(e, 1); } // the pitch
   for (const p of PARKS) fill(p.poly, 1);
   const cell = (x, z) => {

@@ -176,7 +176,7 @@ class Props {
     this.T = T; this.list = [];
     const rng = mulberry32(99);
     for (const R of T.routes) {
-      if (R.def.trail || R.def.country || R.def.noCarve || R.surface === 'rail' || (R.surface === 'asphalt' && !R.def.street)) continue;
+      if (R.def.trail || R.def.country || R.def.noCarve || R.def.dist || R.id.startsWith('cul-') || R.surface === 'rail' || (R.surface === 'asphalt' && !R.def.street)) continue;
       for (let i = 0; i < R.count; i += 6) {
         const k = R.curv[i];
         if (Math.abs(k) < 0.012 || rng() < 0.45) continue;

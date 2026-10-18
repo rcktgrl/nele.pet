@@ -205,6 +205,9 @@ class World {
       if (Math.abs(Math.atan2(Math.sin(tm - Math.PI), Math.cos(tm - Math.PI))) < St.gap) continue;
       for (const r of [0, St.depth]) S.addSegment(St.x + (St.rx - r) * Math.cos(t0), St.z + (St.rz - r) * Math.sin(t0), St.x + (St.rx - r) * Math.cos(t1), St.z + (St.rz - r) * Math.sin(t1), St.y + St.h(tm), 'building').r = 0.4;
     }
+    const at = (t, r) => [St.x + (St.rx - r) * Math.cos(t), St.z + (St.rz - r) * Math.sin(t)]; // floodlights and the crane
+    for (const t of [Math.PI * 0.72, Math.PI * 1.28]) S.addObstacle(...at(t, -4), 0.8, St.y + 40, 'pole');
+    S.addObstacle(...at(0.15, St.depth + 12), 1.6, St.y + 46, 'crane');
     for (const sd of [-1, 1]) { const t = Math.PI + sd * St.gap; S.addSegment(St.x + St.rx * Math.cos(t), St.z + St.rz * Math.sin(t), St.x + (St.rx - St.depth) * Math.cos(t), St.z + (St.rz - St.depth) * Math.sin(t), St.y + 16, 'building').r = 0.4; }
   }
   addQuays() {

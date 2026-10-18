@@ -118,6 +118,18 @@ class City {
       }
     };
     for (const row of [0, 1]) for (const R of streets) for (const side of [-1, 1]) front(R, side, row);
+    // then fill the middles of the town blocks: lower buildings, square to the district grid
+    for (const dist of D.districts.filter((d) => d.id === 'dt' || d.id === 'sw')) {
+      const xs = dist.outline.map((q) => q[0]), zs = dist.outline.map((q) => q[1]), yaw = -dist.ang * Math.PI / 180;
+      for (let z = Math.min(...zs); z < Math.max(...zs); z += 10) for (let x = Math.min(...xs); x < Math.max(...xs); x += 10) {
+        if (!D.pip(x, z, dist.outline)) continue;
+        const w = 14 + rng() * 14, d = 14 + rng() * 12, f = fits(x, z, yaw, w, d, 5, 1);
+        if (!f) continue;
+        claim(x, z, yaw, w, d, 1.5);
+        const sw = dist.id === 'sw', style = sw ? (rng() < 0.6 ? 'warehouse' : 'brick') : (rng() < 0.6 ? 'brick' : 'office'), h = sw ? 8 + rng() * 8 : 12 + rng() * 22;
+        this.buildings.push(aabb({ x, z, yaw, w, d, h: Math.round(h / 3.5) * 3.5 + 1, base: f[1], y0: f[0] - 0.6, style, tone: rng(), seed: rng() }));
+      }
+    }
     // street lights down both sides, staggered, kept clear of the junctions
     for (const R of streets) for (const side of [-1, 1]) for (let s = 12 + (side > 0 ? 21 : 0); s < R.length - 8; s += 42) {
       const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), nx = -dz * side, nz = dx * side, off = R.width / 2 + 1.6, x = p.x + nx * off, z = p.z + nz * off;

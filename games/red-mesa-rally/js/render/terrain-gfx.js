@@ -135,8 +135,11 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
     vec3 cg = mix(lot, grassLush * 1.1, smoothstep(0.92, 0.7, city) * step(0.3, city));
     vec3 walk = vec3(0.46, 0.44, 0.41) * (0.85 + 0.15 * n3);
     vec2 sl = fract(P.xz / 2.0); walk *= 0.92 + 0.08 * step(0.06, min(sl.x, sl.y));
-    cg = mix(cg, walk, 1.0 - smoothstep(hw + 4.0, hw + 4.6, al));
-    cg = mix(cg, vec3(0.62, 0.6, 0.56), lineAA(al - hw - 0.15, 0.14));
+    // midway between two streets the lateral offset flips sign from one grid vertex to the next: no sidewalk there
+    float latGrad = length(vec2(dFdx(lat), dFdy(lat))) / max(length(vec2(dFdx(P.x), dFdy(P.x))) + length(vec2(dFdx(P.z), dFdy(P.z))), 1e-3);
+    float real = 1.0 - smoothstep(1.6, 2.6, latGrad);
+    cg = mix(cg, walk, (1.0 - smoothstep(hw + 4.0, hw + 4.6, al)) * real);
+    cg = mix(cg, vec3(0.62, 0.6, 0.56), lineAA(al - hw - 0.15, 0.14) * real);
     col = mix(col, cg, smoothstep(0.02, 0.25, city) * (1.0 - cliff));
     gGloss = max(gGloss, step(0.8, city) * 0.2);
   }
