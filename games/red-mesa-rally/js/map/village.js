@@ -12,6 +12,16 @@ function inPoly(x, z, poly) {
   return inside;
 }
 
+/* the summit lookout's low stone wall: a half ring round the far side of the turning space, as [ax, az, bx, bz] pieces */
+function lookoutWall(o) {
+  const out = [], R = 11, ux = Math.sin(o.yaw), uz = Math.cos(o.yaw), N = 9;
+  for (let k = 0; k < N; k++) {
+    const a0 = -1.45 + 2.9 * k / N, a1 = -1.45 + 2.9 * (k + 1) / N, p = (a) => [o.x + (ux * Math.cos(a) - uz * Math.sin(a)) * R, o.z + (uz * Math.cos(a) + ux * Math.sin(a)) * R];
+    out.push([...p(a0), ...p(a1)]);
+  }
+  return out;
+}
+
 /* lots: {x, z, yaw, w, d, h, y0, y1, kind, wall, roof}; marks T.lot so nothing gets planted inside them */
 function planVillage(T) {
   const rng = mulberry32(31), lots = [], lot = T.lot = new Uint8Array(T.h.length);
@@ -42,14 +52,13 @@ function planVillage(T) {
     const { q } = best, i = up.indexOf(q), q2 = up[Math.min(up.length - 1, i + 1)], q1 = up[Math.max(0, i - 1)];
     let tx = q2.x - q1.x, tz = q2.z - q1.z; const L = Math.hypot(tx, tz) || 1; tx /= L; tz /= L;
     let nx = -tz, nz = tx; if (nx * (MILLBROOK.x - q.x) + nz * (MILLBROOK.z - q.z) < 0) { nx = -nx; nz = -nz; }
-    // walk out from the water's edge until the ground is high and level enough for the mill
-    for (let off = q.hw + 4; off < q.hw + 60; off += 2) {
-      const x = q.x + nx * off, z = q.z + nz * off, yaw = Math.atan2(nx, nz), f = fits(x, z, yaw, 12, 10, 8);
-      if (!f) continue;
-      const wx = q.x + nx * (q.hw - 1), wz = q.z + nz * (q.hw - 1);
-      add({ x, z, yaw, w: 12, d: 10, h: 7, y0: f[0] - 1.5, y1: f[1], kind: 'mill', wall: [0.62, 0.42, 0.32], roof: ROOFS[0], wheel: { x: (x + wx) / 2, z: (z + wz) / 2, r: Math.min(5, off - q.hw + 1), yaw } });
-      break;
-    }
+    // it stands right at the water's edge on a stone undercroft built up the bank, the wheel turning against its river wall
+    let e = 0; while (e < q.hw + 40 && T.h[T.gi(q.x + nx * e, q.z + nz * e)] < WATER_Y + 0.4) e += 0.5;
+    const w = 12, d = 10, off = e - 0.5 + d / 2, x = q.x + nx * off, z = q.z + nz * off, yaw = Math.atan2(nx, nz);
+    let top = -1e9;
+    for (let a = -w / 2; a <= w / 2; a += 2) for (let b = -d / 2; b <= d / 2; b += 2) top = Math.max(top, T.h[T.gi(x + a * tx + b * nx, z + a * tz + b * nz)]);
+    const wo = e - 1.6, r = clamp((top - WATER_Y) * 0.5, 3.5, 5);
+    add({ x, z, yaw, w, d, h: 7, y0: WATER_Y - 1, y1: top, kind: 'mill', wall: [0.62, 0.42, 0.32], roof: ROOFS[0], wheel: { x: q.x + nx * wo + tx * w * 0.18, z: q.z + nz * wo + tz * w * 0.18, r, yaw } });
   }
   for (let tries = 0; tries < 1500 && lots.length < 18; tries++) {
     const a = rng() * TAU, r = Math.sqrt(rng()) * MILLBROOK.r, x = MILLBROOK.x + Math.cos(a) * r, z = MILLBROOK.z + Math.sin(a) * r;
@@ -67,8 +76,32 @@ function planVillage(T) {
     const a = rng() * TAU, r = tries * 0.4, x = 4000 + Math.cos(a) * r, z = -1810 + Math.sin(a) * r;
     const gx = rd(x + 4, z) - rd(x - 4, z), gz = rd(x, z + 4) - rd(x, z - 4), yaw = Math.atan2(-gx, -gz);
     const f = fits(x, z, yaw, 24, 12, 8); if (!f) continue;
-    add({ x, z, yaw, w: 24, d: 12, h: 6, y0: f[0] - 1.5, y1: f[1], kind: 'lodge', wall: [0.48, 0.32, 0.2], roof: [0.24, 0.3, 0.26] });
+    add({ x, z, yaw, w: 24, d: 12, h: 6, y0: f[0] - 1.5, y1: f[1], kind: 'lodge', wall: [0.2, 0.11, 0.05], roof: [0.06, 0.12, 0.08] });
     break;
   }
+  // the destinations at the ends of the scenic roads: the observatory on the Heights, the lighthouse over the sea, the summit lookout
+  const end = (id) => { const R = T.routes.find((r) => r.id === id), n = R.count; return { x: R.x[n], z: R.z[n], dx: R.x[n] - R.x[n - 4], dz: R.z[n] - R.z[n - 4] }; };
+  const site = (cx, cz, w, d, clear, rMax, score) => { // the best-scoring footprint that fits within rMax of (cx, cz), facing the nearest road
+    let b = null;
+    for (let r = 0; r <= rMax; r += 4) for (let a = 0; a < TAU; a += 4 / Math.max(r, 4)) {
+      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+      if (!clearOf(x, z, Math.hypot(w, d) / 2)) continue;
+      const gx = rd(x + 4, z) - rd(x - 4, z), gz = rd(x, z + 4) - rd(x, z - 4), yaw = Math.atan2(-gx, -gz), f = fits(x, z, yaw, w, d, clear);
+      if (!f) continue;
+      const sc = score(x, z, f, r); if (!b || sc > b.sc) b = { x, z, yaw, f, sc };
+    }
+    return b;
+  };
+  { const J = end('hill-rd'), o = site(J.x, J.z, 18, 18, 10, 90, (x, z, f, r) => f[0] - r * 0.08);
+    if (o) add({ x: o.x, z: o.z, yaw: o.yaw, w: 18, d: 18, h: 7, y0: o.f[0] - 1, y1: o.f[1], kind: 'observatory', wall: [0.82, 0.82, 0.8], roof: [0.7, 0.72, 0.74] }); }
+  { const J = end('lighthouse-ln'), L = Math.hypot(J.dx, J.dz), sx = J.dx / L, sz = J.dz / L; // on the point, as far out toward the sea as it fits
+    const o = site(J.x, J.z, 9, 9, 7, 50, (x, z) => (x - J.x) * sx + (z - J.z) * sz);
+    if (o) {
+      add({ x: o.x, z: o.z, yaw: o.yaw, w: 9, d: 9, h: 26, y0: o.f[0] - 1, y1: o.f[1], kind: 'lighthouse', wall: [0.9, 0.9, 0.88], roof: [0.6, 0.12, 0.1] });
+      const k = site(o.x, o.z, 7, 9, 7, 40, (x, z, f, r) => -r);
+      if (k) add({ x: k.x, z: k.z, yaw: k.yaw, w: 7, d: 9, h: 3.4, y0: k.f[0] - 1, y1: k.f[1], kind: 'cottage', wall: [0.9, 0.9, 0.88], roof: [0.5, 0.26, 0.2] });
+    } }
+  { const E = end('summit'), L = Math.hypot(E.dx, E.dz), ux = E.dx / L, uz = E.dz / L, x = E.x + ux * 9, z = E.z + uz * 9;
+    lots.push({ x, z, yaw: Math.atan2(ux, uz), w: 18, d: 12, h: 0, y0: T.h[T.gi(x, z)], y1: T.h[T.gi(x, z)], kind: 'lookout' }); }
   return lots;
 }
