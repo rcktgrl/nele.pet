@@ -123,10 +123,10 @@ class Scatter {
     yield 'Raising the skyline';
     // city obstacles
     const C = this.city;
-    for (const b of C.buildings) if (!b.crown && !b.bridge) this.addBox(b.x0, b.z0, b.x1, b.z1, CITY.y + b.h - (b.deck ? 1.2 : 0), 'building'); // roof decks sit under the wheels
+    for (const b of C.buildings) if (!b.crown) { const P = boxCorners(b); for (let k = 0; k < 4; k++) this.addSegment(...P[k], ...P[(k + 1) % 4], b.base + b.h, 'building').r = 0.3; }
     for (const k of C.containers) this.addBox(k.x0, k.z0, k.x1, k.z1, (k.y ?? CITY.y) + k.h, 'container');
-    for (const l of C.lamps) this.addObstacle(l.x, l.z, 0.22, CITY.y + 8, 'pole');
-    for (const t of C.parkTrees) this.addObstacle(t.x, t.z, 0.45 * t.s, CITY.y + 6, 'tree');
+    for (const l of C.lamps) this.addObstacle(l.x, l.z, 0.22, l.y + 8, 'pole');
+    for (const t of C.parkTrees) this.addObstacle(t.x, t.z, 0.45 * t.s, t.y + 6, 'tree');
     for (const c of C.cranes) {
       const ca = Math.cos(c.yaw), sa = Math.sin(c.yaw);
       for (const [lx, lz] of [[-9, -6], [9, -6], [-9, 6], [9, 6]]) this.addObstacle(c.x + lx * ca - lz * sa, c.z + lx * sa + lz * ca, 0.8, CITY.y + 40, 'crane');

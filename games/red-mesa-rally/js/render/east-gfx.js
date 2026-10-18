@@ -59,6 +59,7 @@ Object.assign(Gfx.prototype, {
     this.buildRamps();
     this.buildDecks();
     this.buildShip();
+    this.buildStadium();
     this.buildRoadside();
     this.buildTunnel();
     this.buildRiver();
@@ -86,7 +87,7 @@ ${NOISE_GLSL}`).replace('#include <color_fragment>', `#include <color_fragment>
 {
   vec3 N = normalize(vBN), P = vBW;
   float roof = step(0.5, N.y), bottom = step(N.y, -0.5);
-  float u = abs(N.x) > 0.5 ? P.z : P.x;
+  float u = dot(P.xz, vec2(-N.z, N.x));
   float v = P.y - ${CITY.y.toFixed(1)};
   vec2 cell = vec2(u / ${P.ws.toFixed(2)}, v / 3.5); vec2 f = fract(cell); vec2 id = floor(cell);
   // window grid prefiltered per axis: columns blur out before floors do
@@ -128,19 +129,18 @@ ${NOISE_GLSL}`).replace('#include <color_fragment>', `#include <color_fragment>
     for (const style of ['glass', 'office', 'brick', 'warehouse']) {
       const list = C.buildings.filter((b) => b.style === style);
       this.cellInstances(box, this.buildingMaterial(style), list, (b, d, col) => {
-        const y0 = b.y0 ?? CITY.y - 0.6;
-        d.position.set((b.x0 + b.x1) / 2, y0, (b.z0 + b.z1) / 2); d.scale.set(b.x1 - b.x0, CITY.y + b.h - y0, b.z1 - b.z0);
+        d.position.set(b.x, b.y0, b.z); d.rotation.set(0, b.yaw, 0); d.scale.set(b.w, b.base + b.h - b.y0, b.d);
         const c = pal[style][Math.floor(b.tone * pal[style].length)]; col.setRGB(c[0], c[1], c[2]);
       }, { cast: true, dist: 4000, cell: 500 });
     }
     // rooftop clutter: AC units, water tanks, antennas
     const ac = [], tanks = [], masts = [];
     for (const b of C.buildings) {
-      const top = CITY.y + b.h, w = b.x1 - b.x0, dd = b.z1 - b.z0;
-      if (b.h > 70 && b.crown) masts.push({ x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, y: top, h: 8 + rng() * 14 });
-      if (b.crown || b.deck) continue;
-      for (let k = 0; k < 1 + Math.floor(rng() * 3); k++) ac.push({ x: b.x0 + 3 + rng() * (w - 6), z: b.z0 + 3 + rng() * (dd - 6), y: top, s: 1.5 + rng() * 2.5, rot: Math.floor(rng() * 4) * Math.PI / 2 });
-      if (b.style === 'brick' && rng() < 0.45) tanks.push({ x: b.x0 + 4 + rng() * (w - 8), z: b.z0 + 4 + rng() * (dd - 8), y: top });
+      const top = b.base + b.h, c = Math.cos(b.yaw), s = Math.sin(b.yaw), at = (m) => { const a = (rng() - 0.5) * (b.w - m), e = (rng() - 0.5) * (b.d - m); return { x: b.x + a * c + e * s, z: b.z - a * s + e * c }; };
+      if (b.h > 70 && b.crown) masts.push({ x: b.x, z: b.z, y: top, h: 8 + rng() * 14 });
+      if (b.crown) continue;
+      for (let k = 0; k < 1 + Math.floor(rng() * 3); k++) ac.push({ ...at(6), y: top, s: 1.5 + rng() * 2.5, rot: b.yaw + Math.floor(rng() * 4) * Math.PI / 2 });
+      if (b.style === 'brick' && rng() < 0.45) tanks.push({ ...at(8), y: top });
     }
     const metal = new THREE.MeshStandardMaterial({ color: 0x8a8d90, roughness: 0.5, metalness: 0.6 });
     this.cellInstances(box, metal, ac, (a, d) => { d.position.set(a.x, a.y, a.z); d.scale.set(a.s, a.s * 0.6, a.s * 1.4); d.rotation.set(0, a.rot, 0); }, { cast: true, dist: 1200, cell: 400 });
@@ -153,8 +153,8 @@ ${NOISE_GLSL}`).replace('#include <color_fragment>', `#include <color_fragment>
     // street lights
     const pole = mergeGeos([tint(new THREE.CylinderGeometry(0.09, 0.14, 8, 6).translate(0, 4, 0), 0.22, 0.23, 0.25), tint(new THREE.BoxGeometry(2.4, 0.12, 0.14).translate(1.2, 7.9, 0), 0.22, 0.23, 0.25), tint(new THREE.CylinderGeometry(0.22, 0.26, 0.6, 8).translate(0, 0.3, 0), 0.18, 0.18, 0.2)]);
     const head = new THREE.BoxGeometry(0.7, 0.16, 0.38); head.translate(2.3, 7.78, 0);
-    this.cellInstances(pole, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.6 }), C.lamps, (l, d) => { d.position.set(l.x, CITY.y, l.z); d.rotation.set(0, -l.yaw, 0); }, { cast: true, dist: 900, cell: 400 });
-    this.cellInstances(head, new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.2, 1.2) }), C.lamps, (l, d) => { d.position.set(l.x, CITY.y, l.z); d.rotation.set(0, -l.yaw, 0); }, { cast: false, dist: 1600, cell: 500 });
+    this.cellInstances(pole, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.6 }), C.lamps, (l, d) => { d.position.set(l.x, l.y, l.z); d.rotation.set(0, -l.yaw, 0); }, { cast: true, dist: 900, cell: 400 });
+    this.cellInstances(head, new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.2, 1.2) }), C.lamps, (l, d) => { d.position.set(l.x, l.y, l.z); d.rotation.set(0, -l.yaw, 0); }, { cast: false, dist: 1600, cell: 500 });
     // rooftop billboards: the story is written on the skyline
     const ads = [
       ['CALDER STADIUM', 'COMING SOON · A VIC CALDER DEVELOPMENT', '#141414', '#f2c230'],
@@ -164,19 +164,19 @@ ${NOISE_GLSL}`).replace('#include <color_fragment>', `#include <color_fragment>
       ['COASTLINE FREIGHT', 'WE DO NOT STOP · DO NOT RACE THE TRAIN', '#2b2f36', '#f2c230'],
     ];
     const route = this.world.route('harbour');
-    const cands = C.buildings.filter((b) => !b.crown && !b.deck && b.h > 14 && b.h < 45 && route.project((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2, 0, -1).dist < 80);
+    const cands = C.buildings.filter((b) => !b.crown && b.h > 14 && b.h < 45 && route.project(b.x, b.z, 0, -1).dist < 80);
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6, metalness: 0.5 });
     for (let k = 0; k < Math.min(cands.length, 10); k++) {
       const b = cands[Math.floor(k * cands.length / 10)], ad = ads[k % ads.length];
       const tex = textTex(1024, 384, (g, w, h) => { g.fillStyle = ad[2]; g.fillRect(0, 0, w, h); g.fillStyle = ad[3]; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '400 150px "Saira Stencil One", Impact, sans-serif'; g.fillText(ad[0], w / 2, h * 0.42); g.font = '700 46px "Saira Condensed", sans-serif'; g.fillText(ad[1], w / 2, h * 0.8); });
-      const w = Math.min(b.x1 - b.x0, 22), grp = new THREE.Group();
+      const w = Math.min(b.w, b.d, 22), grp = new THREE.Group();
       const panel = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 0.375), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.35 }));
       panel.position.y = 4 + w * 0.19; grp.add(panel);
       const back = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, w * 0.375 + 0.4, 0.3), frameMat); back.position.set(0, panel.position.y, -0.2); grp.add(back);
       for (const sx of [-w / 3, w / 3]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4, 0.3), frameMat); leg.position.set(sx, 2, -0.2); grp.add(leg); }
-      const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, pr = route.project(cx, cz, 0, -1), rp = route.posAt(pr.s, {});
-      grp.position.set(cx, CITY.y + b.h, cz); grp.rotation.y = Math.atan2(rp.x - cx, rp.z - cz);
-      if (k === 0) this.stadiumAd = { x: cx, y: CITY.y + b.h + panel.position.y, z: cz, nx: Math.sin(grp.rotation.y), nz: Math.cos(grp.rotation.y), w };
+      const cx = b.x, cz = b.z, pr = route.project(cx, cz, 0, -1), rp = route.posAt(pr.s, {});
+      grp.position.set(cx, b.base + b.h, cz); grp.rotation.y = Math.atan2(rp.x - cx, rp.z - cz);
+      if (k === 0) this.stadiumAd = { x: cx, y: b.base + b.h + panel.position.y, z: cz, nx: Math.sin(grp.rotation.y), nz: Math.cos(grp.rotation.y), w };
       grp.traverse((o) => { if (o.isMesh) o.castShadow = true; });
       this.scene.add(grp);
     }
@@ -219,7 +219,7 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     const wall = new THREE.MeshStandardMaterial({ color: 0x6f6a63, roughness: 0.95 });
     const qa = SLIP.x - SLIP.hw - 1, qb = SLIP.x + SLIP.hw + 1, QH = 20;
     const q1 = new THREE.Mesh(new THREE.BoxGeometry(3, QH, FLAT.z1 - FLAT.z0 + 3), wall); q1.position.set(FLAT.x1 + 1.5, CITY.y - QH / 2, (FLAT.z0 + FLAT.z1 + 3) / 2);
-    const q2 = new THREE.Mesh(new THREE.BoxGeometry(qa - 3600, QH, 3), wall); q2.position.set((3600 + qa) / 2, CITY.y - QH / 2, FLAT.z1 + 1.5);
+    const q2 = new THREE.Mesh(new THREE.BoxGeometry(qa - 4250, QH, 3), wall); q2.position.set((4250 + qa) / 2, CITY.y - QH / 2, FLAT.z1 + 1.5);
     const q3 = new THREE.Mesh(new THREE.BoxGeometry(FLAT.x1 - qb, QH, 3), wall); q3.position.set((qb + FLAT.x1) / 2, CITY.y - QH / 2, FLAT.z1 + 1.5);
     for (const q of [q1, q2, q3]) { q.receiveShadow = true; this.scene.add(q); }
     this.buildHarbour(wall);
@@ -300,6 +300,29 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     }
   },
   /* ---------- the container ship at the east quay ---------- */
+  /* ---------- Calder Stadium: a bowl of stands round the pitch, the east side still a building site ---------- */
+  buildStadium() {
+    const St = this.world.city.stadium; if (!St) return;
+    const pos = [], col = [], idx = [], quad = (a, b, c, d, cc) => { const v = pos.length / 3; pos.push(...a, ...b, ...c, ...d); for (let i = 0; i < 4; i++) col.push(...cc); idx.push(v, v + 2, v + 1, v + 1, v + 2, v + 3); };
+    const P = (t, r, y) => [St.x + (St.rx - r) * Math.cos(t), St.y + y, St.z + (St.rz - r) * Math.sin(t)];
+    const CON = [0.62, 0.6, 0.56], SEAT = [[0.75, 0.16, 0.12], [0.85, 0.65, 0.12], [0.75, 0.16, 0.12]], BARE = [0.5, 0.48, 0.45];
+    for (let k = 0; k < St.seg; k++) {
+      const t0 = k * TAU / St.seg, t1 = (k + 1) * TAU / St.seg, tm = (t0 + t1) / 2, h = St.h(tm), done = Math.cos(tm) < 0.25;
+      if (Math.abs(Math.atan2(Math.sin(tm - Math.PI), Math.cos(tm - Math.PI))) < St.gap) continue;
+      quad(P(t0, 0, -0.5), P(t1, 0, -0.5), P(t0, 0, h), P(t1, 0, h), CON); // outer wall
+      quad(P(t1, St.depth, -0.5), P(t0, St.depth, -0.5), P(t1, St.depth, 2.4), P(t0, St.depth, 2.4), CON); // pitch wall
+      quad(P(t1, St.depth, 2.4), P(t0, St.depth, 2.4), P(t1, 1, h), P(t0, 1, h), done ? SEAT[k % 3] : BARE); // the seating
+      quad(P(t0, 1, h), P(t1, 1, h), P(t0, 0, h), P(t1, 0, h), CON);
+    }
+    for (const sd of [-1, 1]) { const t = Math.PI + sd * St.gap, a = sd > 0 ? 1 : 0; const q = [P(t, 0, -0.5), P(t, St.depth, -0.5), P(t, 0, 16), P(t, St.depth, 2.4)]; quad(...(a ? q : [q[1], q[0], q[3], q[2]]), CON); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide })); m.castShadow = m.receiveShadow = true; this.scene.add(m);
+    // floodlight masts on the finished side, a tower crane over the unfinished one
+    const parts = [], steel = [0.55, 0.57, 0.6];
+    for (const t of [Math.PI * 0.72, Math.PI * 1.28]) { const [x, , z] = P(t, -4, 0); parts.push(tint(new THREE.CylinderGeometry(0.5, 0.8, 40, 8).translate(x, St.y + 20, z), ...steel), tint(new THREE.BoxGeometry(7, 4, 1).translate(x, St.y + 41, z), 0.9, 0.9, 0.85)); }
+    { const [x, , z] = P(0.15, St.depth + 12, 0); parts.push(tint(new THREE.BoxGeometry(2.2, 46, 2.2).translate(x, St.y + 23, z), 0.92, 0.7, 0.1), tint(new THREE.BoxGeometry(56, 1.8, 1.8).translate(x - 14, St.y + 46, z), 0.92, 0.7, 0.1), tint(new THREE.BoxGeometry(4, 3, 3).translate(x + 12, St.y + 44.5, z), 0.35, 0.35, 0.35)); }
+    const cm = new THREE.Mesh(mergeGeos(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.4 })); cm.castShadow = true; this.scene.add(cm);
+  },
   buildShip() {
     const S = SHIP, L = S.z1 - S.z0, B = S.x1 - S.x0, cx = (S.x0 + S.x1) / 2, g = new THREE.Group();
     const hullMat = new THREE.MeshStandardMaterial({ color: 0x1d3a5c, roughness: 0.6, metalness: 0.3 }), red = new THREE.MeshStandardMaterial({ color: 0x8c2a1e, roughness: 0.7 });
@@ -521,7 +544,7 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     const latN = (s, sg) => { const [dx, dz] = R.dirAt(s); return [-dz * sg, 0, dx * sg]; };
     // walk [s0, s1] in ~2 m steps
     const strip = (s0, s1, fn) => { const n = Math.max(1, Math.ceil((s1 - s0) / 2)); for (let k = 0; k < n; k++) fn(s0 + (s1 - s0) * k / n, s0 + (s1 - s0) * (k + 1) / n); };
-    const stations = METRO.stations.map((st) => ({ ...st, s: R.project(CX(st.at[0]), CZ(st.at[1]), 0, -1).s }));
+    const stations = METRO.stations.map((st) => ({ ...st, s: R.project(st.at[0], st.at[1], 0, -1).s }));
     const half = METRO.stationLen / 2;
     // station runs and plain runs along the loop
     const cuts = []; for (const st of stations) cuts.push([st.s - half, st.s + half, st]);
@@ -567,9 +590,10 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
         const b = Math.min(aEnd, a + 2), ya = metroSpurY(a), yb = metroSpurY(b), ca = metroSpurCeil(a), cb = metroSpurCeil(b);
         const nUp = [0, 1, 0];
         quad('road', Q(a, -g, ya), Q(b, -g, yb), Q(a, g, ya), Q(b, g, yb), nUp, [0, a / 10, 0, b / 10, 1, a / 10, 1, b / 10]);
-        quad('ceil', Q(a, -g, ca), Q(b, -g, cb), Q(a, g, ca), Q(b, g, cb), [0, -1, 0], [0, a / 6, 0, b / 6, 1, a / 6, 1, b / 6]);
-        for (const sd of [-1, 1]) quad(a < sp.cover - 4 ? 'rwall' : 'wall', Q(a, sd * g, ya), Q(b, sd * g, yb), Q(a, sd * g, ca), Q(b, sd * g, cb), [-rx * sd, 0, -rz * sd], [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
-        if (Math.floor(a / 9) !== Math.floor(b / 9) || a === 0) quad('lamp', Q(a, -0.35, Math.min(ca, cb) - 0.03), Q(a + 3, -0.35, Math.min(ca, cb) - 0.03), Q(a, 0.35, Math.min(ca, cb) - 0.03), Q(a + 3, 0.35, Math.min(ca, cb) - 0.03), [0, -1, 0], [0, 0, 0, 1, 1, 0, 1, 1]);
+        const open = a < sp.cover, ta = open ? CITY.y + 0.9 : ca, tb = open ? ta : cb; // the cut is open to the sky, its walls up to a parapet
+        if (!open) quad('ceil', Q(a, -g, ca), Q(b, -g, cb), Q(a, g, ca), Q(b, g, cb), [0, -1, 0], [0, a / 6, 0, b / 6, 1, a / 6, 1, b / 6]);
+        for (const sd of [-1, 1]) quad(open ? 'rwall' : 'wall', Q(a, sd * g, ya), Q(b, sd * g, yb), Q(a, sd * g, Math.max(ta, ya + 0.9)), Q(b, sd * g, Math.max(tb, yb + 0.9)), [-rx * sd, 0, -rz * sd], [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
+        if (!open && (Math.floor(a / 9) !== Math.floor(b / 9))) quad('lamp', Q(a, -0.35, Math.min(ca, cb) - 0.03), Q(a + 3, -0.35, Math.min(ca, cb) - 0.03), Q(a, 0.35, Math.min(ca, cb) - 0.03), Q(a + 3, 0.35, Math.min(ca, cb) - 0.03), [0, -1, 0], [0, 0, 0, 1, 1, 0, 1, 1]);
       }
     }
     // textures
@@ -642,22 +666,22 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
         sg.rotation.y = Math.atan2(-dz, dx); grp.add(sg);
       }
     }
-    // portals: a concrete frame on the face of each building and the METRO sign over it
+    // portals: a concrete headwall where the cut goes under, a frame round the mouth and the METRO sign over it
     const frame = new THREE.MeshStandardMaterial({ color: 0x5f5a54, roughness: 0.85 }), teal = new THREE.MeshStandardMaterial({ color: 0x1f7a8c, roughness: 0.5 });
     for (const sp of M.spurs) {
-      const g = METRO.rampHw + 0.3, top = metroSpurCeil(0), yaw = Math.atan2(sp.dx, sp.dz);
-      const fg = new THREE.Group(); fg.position.set(sp.x, CITY.y, sp.z); fg.rotation.y = yaw;
+      const g = METRO.rampHw + 0.3, base = metroSpurY(sp.cover), so = metroSpurCeil(sp.cover) - base, top = CITY.y + 2.4, yaw = Math.atan2(sp.dx, sp.dz);
+      const fg = new THREE.Group(); fg.position.set(sp.x + sp.dx * sp.cover, base, sp.z + sp.dz * sp.cover); fg.rotation.y = yaw;
       const box = (w, h, d, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.castShadow = true; b.receiveShadow = true; fg.add(b); };
-      for (const sd of [-1, 1]) box(1.6, top - CITY.y + 1.6, 1.0, sd * (g + 0.8), (top - CITY.y + 1.6) / 2, -0.3, frame);
-      box(2 * g + 2.8, 1.6, 1.0, 0, top - CITY.y + 0.8, -0.3, frame);
-      box(2 * g + 2.8, 0.25, 1.1, 0, top - CITY.y + 0.05, -0.3, teal);
+      for (const sd of [-1, 1]) box(1.6, top - base, 1.0, sd * (g + 0.8), (top - base) / 2, -0.3, frame);
+      box(2 * g + 2.8, top - base - so, 1.0, 0, (so + top - base) / 2, -0.3, frame);
+      box(2 * g + 2.8, 0.25, 1.1, 0, so + 0.05, -0.3, teal);
       const tex = textTex(1024, 192, (x, w, h) => {
         x.fillStyle = '#16100c'; x.fillRect(0, 0, w, h);
         x.fillStyle = '#c4161c'; x.beginPath(); x.arc(100, h / 2, 64, 0, TAU); x.fill(); x.fillStyle = '#f4f1e8'; x.font = '400 90px "Saira Stencil One", Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('M', 100, h / 2 + 4);
         x.textAlign = 'left'; x.font = '700 78px "Saira Condensed", sans-serif'; x.fillText('CALDER METRO', 190, h * 0.36); x.fillStyle = '#7fd0de'; x.font = '700 56px "Saira Condensed", sans-serif'; x.fillText(sp.name.toUpperCase() + ' RAMP  ·  DRIVE IN', 190, h * 0.74);
       });
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(2 * g + 2, (2 * g + 2) * 0.1875), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.6, roughness: 0.5 }));
-      sign.position.set(0, top - CITY.y + 0.8, -0.82); sign.rotation.y = Math.PI; fg.add(sign);
+      sign.position.set(0, (so + top - base) / 2, -0.82); sign.rotation.y = Math.PI; fg.add(sign);
       this.scene.add(fg);
     }
     // the trains: the stopper in teal, the express in red, both lit up front so you can see them coming down the tube

@@ -2,19 +2,6 @@
 /* Red Mesa Rally · Roads: street paths, every route definition and the Route spline */
 
 /* ---------- Routes ---------- */
-/* Turn grid corners into a street path that stays on the asphalt through right-angle turns. */
-function streetPath(corners, closed) {
-  const out = [], n = corners.length, R = 24;
-  for (let k = 0; k < n; k++) {
-    const p = corners[(k - 1 + n) % n], c = corners[k], q = corners[(k + 1) % n];
-    const u = [c[0] - p[0], c[1] - p[1]], v = [q[0] - c[0], q[1] - c[1]];
-    const lu = Math.hypot(u[0], u[1]), lv = Math.hypot(v[0], v[1]);
-    out.push([c[0] - u[0] / lu * R, c[1] - u[1] / lu * R], [c[0] + v[0] / lv * R, c[1] + v[1] / lv * R]);
-    out.push([c[0] + v[0] * 0.35, c[1] + v[1] * 0.35], [c[0] + v[0] * 0.65, c[1] + v[1] * 0.65]);
-  }
-  return out;
-}
-const CX = (i) => CITY.x0 + i * CITY.pitch, CZ = (j) => CITY.z0 + j * CITY.pitch;
 const ROUTE_DEFS = [
   { id: 'canyon', closed: true, width: 17, jumps: 4, mud: 1, whoops: 1,
     pts: [[-60, 30], [80, -40], [215, -140], [268, -265], [235, -420], [255, -600], [170, -720], [10, -760], [-150, -700], [-240, -580], [-215, -430], [-195, -290], [-150, -190], [-130, -50]] },
@@ -90,7 +77,7 @@ const ROUTE_DEFS = [
   { id: 'ramp-central-e', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
     pts: [[3912, -85], [3905, -125], [3912, -170], [3928, -220], [3930, -280], [3942, -318], [3950, -342]] },
   { id: 'ramp-port', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
-    pts: [[3840, 566], [3795, 562], [3752, 548], [3724, 520], [3713, 482], [CX(2), CZ(11)]] },
+    pts: [[3840, 566], [3795, 562], [3752, 548], [3724, 520], [3713, 482], [3710, 435]] }, // the end is set by district.js
   // the freight loop: round the valley and the coast, and out west through the rim mountains to circle the desert on a viaduct
   // (tunnels through the rim and the mesas, never at ground level out there)
   { id: 'rail', closed: true, width: 8, surface: 'rail', smoothWin: 70, passes: 6, grade: 0.03, noFeatures: true, sub: 6, lowland: 840,

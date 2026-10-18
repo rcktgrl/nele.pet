@@ -57,7 +57,9 @@ Object.assign(Game.prototype, {
     const label = (t, x, z, col) => { ctx.fillStyle = col || '#f2e6d3'; ctx.strokeText(t, mapX(x), mapZ(z)); ctx.fillText(t, mapX(x), mapZ(z)); };
     for (const r of REGIONS) label(r.name.toUpperCase(), r.lx ?? r.x, r.lz ?? r.z - 160, '#f2e6d3');
     label('FESTIVAL PADDOCK', HUB.x, HUB.z - 70, '#ffb36b');
-    label('CALDER METRO', CX(6), CZ(5) + 20, '#7fd0de');
+    ctx.save(); ctx.font = '700 15px "Saira Condensed", sans-serif';
+    for (const d of DISTRICT.districts) { const [x, z, ang] = d.label; ctx.save(); ctx.translate(mapX(x), mapZ(z)); ctx.rotate(ang * Math.PI / 180); ctx.fillStyle = '#f2e6d3'; ctx.strokeText(d.name, 0, 0); ctx.fillText(d.name, 0, 0); ctx.restore(); }
+    ctx.restore();
     label('EXIT 5', 3330, -300, '#f2c230');
     const tun = this.world.route('tunnel'), tm = tun.posAt(tun.length * 0.62, {}); label(this.world.tunnelGateClosed ? 'CALDER TUNNEL · CLOSED' : 'CALDER TUNNEL', tm.x, tm.z - 50, this.world.tunnelGateClosed ? '#ff5a3a' : '#ffd23f');
     if (this.world.tunnelGateClosed) { const gp = this.world.tunnelGatePose(), x = mapX(gp.x), y = mapZ(gp.z); ctx.save(); ctx.strokeStyle = '#ff3a2a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x - 7, y - 7); ctx.lineTo(x + 7, y + 7); ctx.moveTo(x + 7, y - 7); ctx.lineTo(x - 7, y + 7); ctx.stroke(); ctx.restore(); }

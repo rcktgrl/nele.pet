@@ -39,7 +39,15 @@ class Terrain {
     // the finale reuses existing roads end to end
     const R = (id) => this.routes.find((r) => r.id === id);
     // heights along a composed route: the deck where it runs on a bridge or the viaduct, the ground elsewhere
-    const heights = (C, ids) => { for (let i = 0; i <= C.count; i++) { let y = this.height(C.x[i], C.z[i]); for (const id of ids) { const O = R(id), pr = O.project(C.x[i], C.z[i], 0, -1); if (pr.dist < O.width / 2) y = Math.max(y, O.sample(O.y, pr.s)); } C.y[i] = y; } };
+    // (where one passes over another, it stays on whichever level it was already on)
+    const heights = (C, ids) => {
+      let prev = null;
+      for (let i = 0; i <= C.count; i++) {
+        const ys = [this.height(C.x[i], C.z[i])];
+        for (const id of ids) { const O = R(id), pr = O.project(C.x[i], C.z[i], 0, -1); if (pr.dist < O.width / 2) ys.push(O.sample(O.y, pr.s)); }
+        C.y[i] = prev === null ? Math.max(...ys) : ys.reduce((a, b) => (Math.abs(b - prev) < Math.abs(a - prev) ? b : a)); prev = C.y[i];
+      }
+    };
     const fin = Route.compose({ id: 'finale', closed: false, width: 14, surface: 'asphalt', noCarve: true }, [
       { route: R('coast'), from: [4600, 770], to: [2350, 210], dir: -1 },
       { route: R('valley-rd'), from: [2350, 210], to: [2200, 320], dir: -1 },
@@ -67,7 +75,7 @@ class Terrain {
     heights(harbour, ['kingsway', 'gate-rd', 'harbour-dr', 'mesa-blvd']);
     this.routes.push(harbour);
     // the Calder Metro loop (its road centreline) and the floor grid that stands in for the ground underneath downtown
-    const metro = new Route({ id: 'metro', closed: true, width: 12, surface: 'asphalt', noCarve: true, metro: true, lanes: 2, sub: 6, pts: arcLoop(METRO.corners.map(([i, j]) => [CX(i), CZ(j)]), 52) });
+    const metro = new Route({ id: 'metro', closed: true, width: 12, surface: 'asphalt', noCarve: true, metro: true, lanes: 2, sub: 6, pts: METRO.loop });
     metro.y.fill(METRO.y); this.routes.push(metro);
     this.buildMetro(metro);
     // the river race line: never carved, it just rides the water
@@ -113,7 +121,7 @@ class Terrain {
   }
   /* metro mask on a 2 m grid: 0 solid ground, 1 the loop, 2 + k portal ramp k */
   buildMetro(R) {
-    const G = 2, x0 = CITY.x0 - 40, z0 = CITY.z0 - 40, nx = Math.ceil((CITY.x1 - CITY.x0 + 80) / G) + 1, nz = Math.ceil((CITY.z1 - CITY.z0 + 80) / G) + 1;
+    const B = METRO.box, G = 2, x0 = B.x0, z0 = B.z0, nx = Math.ceil((B.x1 - B.x0) / G) + 1, nz = Math.ceil((B.z1 - B.z0) / G) + 1;
     const M = this.metro = { G, x0, z0, nx, nz, mask: new Uint8Array(nx * nz), R, spurs: metroSpurs() };
     const stamp = (x, z, v) => { const i = Math.round((x - x0) / G), j = Math.round((z - z0) / G); if (i >= 0 && j >= 0 && i < nx && j < nz) M.mask[j * nx + i] = v; };
     for (const sp of M.spurs) {
@@ -274,6 +282,12 @@ class Terrain {
             if (best !== null) lift(i, Math.max(best, WATER_Y + 0.9) + 7.8);
           }
         }
+      }
+      // the lifts are only minimums: raise the lower of two neighbouring pins so the deck never has to step between them
+      if (def.viaduct && def.grade) for (let it = 0; it < 2; it++) {
+        const g = def.grade * R.step;
+        for (let i = 1; i <= nS; i++) if (!isNaN(pin[i]) && !isNaN(pin[i - 1])) pin[i] = Math.max(pin[i], pin[i - 1] - g);
+        for (let i = nS - 1; i >= 0; i--) if (!isNaN(pin[i]) && !isNaN(pin[i + 1])) pin[i] = Math.max(pin[i], pin[i + 1] - g);
       }
       // level crossings: engineered roads pin the rail height into the grade limiter below
       const hits = [];

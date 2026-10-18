@@ -20,7 +20,7 @@ class World {
     this.addTrains();
     this.crossings = this.findCrossings();
     this.addTunnelWalls();
-    this.addQuays();
+    this.addQuays(); this.addStadium();
     this.addBridgeWalls(); this.addVillage();
     this.addMetroWalls();
     // two trains each way on the metro: stoppers with the loop, expresses against it, each pair half a round apart
@@ -41,7 +41,7 @@ class World {
       return { ...st, s, side: side[0] >= side[1] ? 1 : -1, elevated: p.y - T.h[T.gi(p.x, p.z)] > 3 };
     });
     this.train = new Train(this, R);
-    this.passenger = new Train(this, R, { name: 'Calder Valley Line', consist: ['loco', 'coach', 'coach', 'coach', 'coach'], stops: ['millbrook', 'redmesa', 'port'], vmax: 31, dwell: 20 });
+    this.passenger = new Train(this, R, { name: 'Calder Valley Line', consist: ['loco', 'coach', 'coach', 'coach', 'coach'], stops: ['millbrook', 'redmesa', 'port', 'union'], vmax: 31, dwell: 20 });
     this.trains = [this.train, this.passenger];
     // one single track, so both trains keep the same period: the quicker one runs slower to match, and makes up the last
     // few seconds at its first stop; then the passenger's phase is set where the two stay furthest apart all round
@@ -156,8 +156,9 @@ class World {
     };
     // outer wall in runs between the ramp mouths
     const gaps = M.spurs.map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]).sort((a, b) => a[0] - b[0]);
-    let s = gaps[gaps.length - 1][1] - R.length;
+    let s = gaps.length ? gaps[gaps.length - 1][1] - R.length : 0;
     for (const [g0, g1] of gaps) { line(s, g0, METRO.wallL - 0.3, top, 0.3); s = g1; }
+    if (!gaps.length) line(0, R.length, METRO.wallL - 0.3, top, 0.3);
     line(0, R.length, METRO.wallR, top, 0.3);
     for (const sp of M.spurs) for (const sd of [-1, 1]) {
       const l = sd * (METRO.rampHw + 0.3), aEnd = sp.L + METRO.wallL + 2 - 0.3;
@@ -165,6 +166,13 @@ class World {
         const b = Math.min(aEnd, a + 6);
         seg(sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l, sp.x + sp.dx * b - sp.dz * l, sp.z + sp.dz * b + sp.dx * l, metroSpurY(a) + 3.6, 0.3);
       }
+    }
+    // up on the street: a parapet down both sides of each open cut and across its far end
+    for (const sp of M.spurs) {
+      const g = METRO.rampHw + 0.6, P = (a, l) => [sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l], top = CITY.y + 1.0, a0 = 9;
+      const par = (p, q) => { const o = S.addSegment(...p, ...q, top, 'barrier'); o.r = 0.35; o.bot = CITY.y - 0.8; };
+      for (const sd of [-1, 1]) for (let a = a0; a < sp.cover; a += 8) par(P(a, sd * g), P(Math.min(sp.cover, a + 8), sd * g));
+      par(P(sp.cover, -g), P(sp.cover, g));
     }
   }
   /* river bridges: parapets along both edges (boats pass under them) and the piers in the water */
@@ -189,6 +197,16 @@ class World {
     }
   }
   /* harbour quay faces: low walls that stop boats but sit under the wheels of anything on the quay */
+  /* Calder Stadium: the stands are solid all round, open at the way in */
+  addStadium() {
+    const St = this.city.stadium, S = this.scatter; if (!St) return;
+    for (let k = 0; k < St.seg; k++) {
+      const t0 = k * TAU / St.seg, t1 = (k + 1) * TAU / St.seg, tm = (t0 + t1) / 2;
+      if (Math.abs(Math.atan2(Math.sin(tm - Math.PI), Math.cos(tm - Math.PI))) < St.gap) continue;
+      for (const r of [0, St.depth]) S.addSegment(St.x + (St.rx - r) * Math.cos(t0), St.z + (St.rz - r) * Math.sin(t0), St.x + (St.rx - r) * Math.cos(t1), St.z + (St.rz - r) * Math.sin(t1), St.y + St.h(tm), 'building').r = 0.4;
+    }
+    for (const sd of [-1, 1]) { const t = Math.PI + sd * St.gap; S.addSegment(St.x + St.rx * Math.cos(t), St.z + St.rz * Math.sin(t), St.x + (St.rx - St.depth) * Math.cos(t), St.z + (St.rz - St.depth) * Math.sin(t), St.y + 16, 'building').r = 0.4; }
+  }
   addQuays() {
     const S = this.scatter, top = CITY.y - 1.2, zq = FLAT.z1 + 1.2, xq = FLAT.x1 + 1.2;
     const south = [[4150, SLIP.x - SLIP.hw - 0.6], [SLIP.x + SLIP.hw + 0.6, xq]];

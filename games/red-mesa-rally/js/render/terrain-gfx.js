@@ -24,8 +24,8 @@ Object.assign(Gfx.prototype, {
       for (let j = Math.max(0, Math.floor((z0 - T.z0) / sc)); j <= Math.min(sz - 1, Math.ceil((z1 - T.z0) / sc)); j++)
         for (let i = Math.max(0, Math.floor((x0 - T.x0) / sc)); i <= Math.min(sx - 1, Math.ceil((x1 - T.x0) / sc)); i++) occ[j * sx + i] = Math.max(occ[j * sx + i], top);
     };
-    for (const b of this.world.city.buildings) raster(b.x0, b.z0, b.x1, b.z1, CITY.y + b.h);
-    for (const k of this.world.city.containers) raster(k.x0, k.z0, k.x1, k.z1, CITY.y + k.h);
+    for (const b of this.world.city.buildings) footprint(b.x, b.z, b.yaw, b.w, b.d, 0, (x, z) => raster(x, z, x, z, b.base + b.h));
+    for (const k of this.world.city.containers) raster(k.x0, k.z0, k.x1, k.z1, (k.y ?? CITY.y) + k.h);
     const occAt = (x, z) => {
       const fx = clamp((x - T.x0) / sc, 0, sx - 1.001), fz = clamp((z - T.z0) / sc, 0, sz - 1.001);
       const ix = Math.floor(fx), iz = Math.floor(fz), tx = fx - ix, tz = fz - iz, k = iz * sx + ix;
@@ -83,7 +83,7 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
   vec3 P = vWPos; vec3 Nw = normalize(vWNrm); float slope = 1.0 - Nw.y;
-  ${metroSpurs().map((sp) => { const g = METRO.rampHw + 0.3, xs = [sp.x - sp.dz * g, sp.x + sp.dx * sp.cover + sp.dz * g], zs = [sp.z + sp.dx * g, sp.z + sp.dz * sp.cover - sp.dx * g]; return `if (P.x > ${Math.min(...xs).toFixed(1)} && P.x < ${Math.max(...xs).toFixed(1)} && P.z > ${Math.min(...zs).toFixed(1)} && P.z < ${Math.max(...zs).toFixed(1)}) discard; // metro ramp`; }).join('\n  ')}
+  ${metroSpurs().map((sp) => `{ vec2 q = P.xz - vec2(${sp.x.toFixed(2)}, ${sp.z.toFixed(2)}); float a = dot(q, vec2(${sp.dx}, ${sp.dz})), l = abs(dot(q, vec2(${-sp.dz}, ${sp.dx}))); if (a > -0.5 && a < ${sp.cover.toFixed(1)} && l < ${(METRO.rampHw + 0.3).toFixed(2)}) discard; } // metro cut`).join('\n  ')}
   float vRoad = vA.x, vMud = vA.y, lat = vB.x, hw = vB.y, asph = vB.z, rail = vB.w;
   float green = vC.x, beach = vC.y, city = vC.z, tun = vC.w, rs = vD.x, lanes = vD.y, jfade = 1.0 - vD.z;
   float dist = length(vViewPosition);
@@ -450,7 +450,7 @@ vRW = (modelMatrix * vec4(position,1.0)).xyz;
     this.cellInstances(oakGeo, leafMat, S.oaks, placeO, { cast: true, dist: 1100, lodMax: 420 });
     const oFar = mergeGeos([tint(new THREE.CylinderGeometry(0.25, 0.34, 2.6, 4, 1, true).translate(0, 1.3, 0), 0.24, 0.17, 0.11), tint(new THREE.IcosahedronGeometry(2.6, 0).scale(1.2, 0.85, 1.2).translate(0, 4.4, 0), 0.15, 0.22, 0.075)]);
     this.cellInstances(oFar, leafMat, S.oaks, placeO, { cast: false, dist: 1300, lodMin: 420 });
-    this.cellInstances(oakGeo, leafMat, this.world.city.parkTrees, (t, d, col) => { d.position.set(t.x, CITY.y - 0.1, t.z); d.rotation.set(0, t.rot, 0); d.scale.setScalar(t.s * 0.85); const v = vis(t.x, t.z); col.setRGB(v, v, v); }, { cast: true, dist: 900 });
+    this.cellInstances(oakGeo, leafMat, this.world.city.parkTrees, (t, d, col) => { d.position.set(t.x, t.y - 0.1, t.z); d.rotation.set(0, t.rot, 0); d.scale.setScalar(t.s * 0.85); const v = vis(t.x, t.z); col.setRGB(v, v, v); }, { cast: true, dist: 900 });
     // palms
     const palm = [];
     let px = 0, py = 0;

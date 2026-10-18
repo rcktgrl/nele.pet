@@ -291,6 +291,7 @@ const DISTRICT = (() => {
   };
   for (const d of D) fill(d.outline, d.paved === 1 ? 2 : 1);
   fill(STADIUM.lot, 2); fill(DOCKS.poly, 2);
+  { const e = []; for (let a = 0; a < 48; a++) e.push([STADIUM.x + (STADIUM.rx - 18) * Math.cos(a * TAU / 48), STADIUM.z + (STADIUM.rz - 18) * Math.sin(a * TAU / 48)]); fill(e, 1); } // the pitch
   for (const p of PARKS) fill(p.poly, 1);
   const cell = (x, z) => {
     const i = Math.round((x - RX0) / RC), j = Math.round((z - RZ0) / RC);

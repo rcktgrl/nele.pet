@@ -11,7 +11,7 @@ Object.assign(Gfx.prototype, {
   },
   /* Millbrook: whitewashed houses with gable roofs, red barns, the stone mill and its wheel */
   buildVillage() {
-    const geos = [];
+    const geos = new Map();
     const box = (w, h, d, x, y, z, col) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return tint(g, ...col); };
     const gable = (w, d, rise, y, col) => { // ridge along the length (z)
       const hw = w / 2 + 0.5, hd = d / 2 + 0.5, P = [-hw, y, -hd, hw, y, -hd, 0, y + rise, -hd, -hw, y, hd, 0, y + rise, hd, hw, y, hd];
@@ -34,7 +34,8 @@ Object.assign(Gfx.prototype, {
       }
       if (o.kind === 'mill') parts.push(box(o.w + 0.6, 1.2, o.d + 0.6, 0, o.y0 + 0.6, 0, [0.5, 0.48, 0.45]));
       const m = new THREE.Matrix4().makeRotationY(o.yaw).setPosition(o.x, 0, o.z);
-      for (const g of parts) geos.push(g.applyMatrix4(m));
+      const key = Math.floor(o.x / 400) * 1000 + Math.floor(o.z / 400); let cell = geos.get(key); if (!cell) geos.set(key, cell = []);
+      for (const g of parts) cell.push(g.applyMatrix4(m));
       if (o.wheel) { // the wheel stands on edge in the water, its axle across the bank
         const W = o.wheel, wy = WATER_Y + W.r * 0.55, rim = new THREE.TorusGeometry(W.r, 0.18, 6, 24), wg = [tint(rim.clone(), ...WOOD)];
         const rim2 = rim.clone(); rim2.translate(0, 0, 1.2); wg.push(tint(rim2, ...WOOD));
@@ -47,9 +48,8 @@ Object.assign(Gfx.prototype, {
         this.scene.add(wm); this.millWheel = wm;
       }
     }
-    if (!geos.length) return;
-    const mesh = new THREE.Mesh(mergeGeos(geos), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }));
-    mesh.castShadow = mesh.receiveShadow = true; this.scene.add(mesh);
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+    for (const cell of geos.values()) { const mesh = new THREE.Mesh(mergeGeos(cell), mat); mesh.castShadow = mesh.receiveShadow = true; this.scene.add(mesh); }
   },
   /* through the docks the river runs between straight concrete walls */
   buildChannelWalls() {

@@ -6,7 +6,8 @@
 const CONSIST = ['loco', 'loco', 'box', 'tank', 'flat', 'box', 'hopper', 'flat', 'box', 'tank', 'box', 'flat'];
 const STATIONS = [
   { id: 'redmesa', name: 'RED MESA', at: [150, 458] },
-  { id: 'port', name: 'PORT CALDER', at: [4420, 600] },
+  { id: 'port', name: 'SUNSET MARINA', at: [3995, 625] },
+  { id: 'union', name: 'CALDER UNION', at: [4650, -780] },
   { id: 'millbrook', name: 'MILLBROOK', at: [1835, -618] },
 ];
 class Train {
@@ -112,7 +113,7 @@ class MetroTrain {
     R.y.fill(METRO.y);
     this.cars = [0, 1, 2, 3].map((k) => ({ k, len: 18, off: 9 + k * 18.6, pose: { x: 0, y: 0, z: 0, yaw: 0, dx: 0, dz: 1 } }));
     this.length = 4 * 18.6;
-    this.stops = this.express ? [] : METRO.stations.map((st) => R.wrapS(R.project(CX(st.at[0]), CZ(st.at[1]), 0, -1).s + this.length / 2));
+    this.stops = this.express ? [] : METRO.stations.map((st) => R.wrapS(R.project(st.at[0], st.at[1], 0, -1).s + this.length / 2));
     this.vmax = o.vmax;
     this.place(o.at || 0);
   }
