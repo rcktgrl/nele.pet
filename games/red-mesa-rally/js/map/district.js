@@ -149,6 +149,8 @@ const DISTRICT = (() => {
       }
       if (wet(x, z) || inPark(x, z)) return false;
     }
+    // and it never ends underneath the interstate, where its last metres would have to climb onto the viaduct
+    for (const [x, z] of [pl[0], pl[pl.length - 1]]) { const n = obs.nearest(x, z, w / 2 + 20); if (n && n.tag === 'hwy') return false; }
     return true;
   };
 

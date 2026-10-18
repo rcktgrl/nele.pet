@@ -43,8 +43,10 @@ class Terrain {
     const heights = (C, ids) => {
       let prev = null;
       for (let i = 0; i <= C.count; i++) {
-        const ys = [this.height(C.x[i], C.z[i])];
-        for (const id of ids) { const O = R(id), pr = O.project(C.x[i], C.z[i], 0, -1); if (pr.dist < O.width / 2) ys.push(O.sample(O.y, pr.s)); }
+        // on one of its own roads (centreline within 1.5 m) the bare ground is not a choice: a deck that climbs away gently would lose to it
+        const ys = [], on = [];
+        for (const id of ids) { const O = R(id), pr = O.project(C.x[i], C.z[i], 0, -1); if (pr.dist < O.width / 2) { ys.push(O.sample(O.y, pr.s)); if (pr.dist < 1.5) on.push(ys[ys.length - 1]); } }
+        if (on.length) ys.splice(0, ys.length, ...on); else ys.push(this.height(C.x[i], C.z[i]));
         C.y[i] = prev === null ? Math.max(...ys) : ys.reduce((a, b) => (Math.abs(b - prev) < Math.abs(a - prev) ? b : a)); prev = C.y[i];
       }
     };
@@ -204,7 +206,18 @@ class Terrain {
     const rng = mulberry32(42);
     // rail first (roads meet it at level crossings), then the closed highway loop, then everything that joins it
     const rank = (r) => r.surface === 'rail' ? 0 : r.closed && r.surface === 'asphalt' && !r.def.street ? 1 : 2;
-    const order = [...this.routes].sort((a, b) => rank(a) - rank(b));
+    // and a road that ends on another always comes after it, so it can take that road's height where they meet
+    const ranked = [...this.routes].sort((a, b) => rank(a) - rank(b)), deps = new Map(), order = [], state = new Map();
+    for (const R of ranked) {
+      const d = [];
+      if (!R.closed && R.surface !== 'rail' && !R.def.noCarve) for (const e of [0, R.count]) for (const O of ranked) {
+        if (O === R || O.def.noCarve || O.surface === 'rail' || rank(O) < rank(R)) continue;
+        if (O.project(R.x[e], R.z[e], 0, -1).dist <= O.width / 2 + 3) d.push(O);
+      }
+      deps.set(R, d);
+    }
+    const visit = (R) => { if (state.get(R)) return; state.set(R, 1); for (const O of deps.get(R)) visit(O); order.push(R); };
+    for (const R of ranked) visit(R);
     const done = [];
     // junction bookkeeping: which road owns each cell's markings, and how close the widest road nearby is
     const ownD = new Float32Array(n).fill(1e9), ownP = new Uint8Array(n), zid = new Uint16Array(n), multi = new Uint8Array(n);
@@ -286,8 +299,11 @@ class Terrain {
       // the lifts are only minimums: raise the lower of two neighbouring pins so the deck never has to step between them
       if (def.viaduct && def.grade) for (let it = 0; it < 2; it++) {
         const g = def.grade * R.step;
-        for (let i = 1; i <= nS; i++) if (!isNaN(pin[i]) && !isNaN(pin[i - 1])) pin[i] = Math.max(pin[i], pin[i - 1] - g);
-        for (let i = nS - 1; i >= 0; i--) if (!isNaN(pin[i]) && !isNaN(pin[i + 1])) pin[i] = Math.max(pin[i], pin[i + 1] - g);
+        // a closed loop sweeps on round its seam (index nS is index 0 again)
+        const n = R.closed ? 2 * nS : nS, w = (i) => (R.closed ? ((i % nS) + nS) % nS : i);
+        for (let i = 1; i <= n; i++) if (!isNaN(pin[w(i)]) && !isNaN(pin[w(i - 1)])) pin[w(i)] = Math.max(pin[w(i)], pin[w(i - 1)] - g);
+        for (let i = n - 1; i >= (R.closed ? -nS : 0); i--) if (!isNaN(pin[w(i)]) && !isNaN(pin[w(i + 1)])) pin[w(i)] = Math.max(pin[w(i)], pin[w(i + 1)] - g);
+        if (R.closed) pin[nS] = pin[0];
       }
       // level crossings: engineered roads pin the rail height into the grade limiter below
       const hits = [];
@@ -299,9 +315,11 @@ class Terrain {
       if (def.grade) { // engineered roads: limit the gradient with alternating sweeps, then soften the kinks
         const g = def.grade * R.step;
         for (let i = 0; i <= nS; i++) if (!isNaN(pin[i])) prof[i] = pin[i];
+        const n = R.closed ? 2 * nS : nS, w = (i) => (R.closed ? ((i % nS) + nS) % nS : i);
         for (let it = 0; it < 4; it++) {
-          for (let i = 1; i <= nS; i++) { const a = prof[R.idx(i - 1)]; prof[i] = isNaN(pin[i]) ? clamp(prof[i], a - g, a + g) : pin[i]; }
-          for (let i = nS - 1; i >= 0; i--) { const a = prof[R.idx(i + 1)]; prof[i] = isNaN(pin[i]) ? clamp(prof[i], a - g, a + g) : pin[i]; }
+          for (let i = 1; i <= n; i++) { const k = w(i), a = prof[w(i - 1)]; prof[k] = isNaN(pin[k]) ? clamp(prof[k], a - g, a + g) : pin[k]; }
+          for (let i = n - 1; i >= (R.closed ? -nS : 0); i--) { const k = w(i), a = prof[w(i + 1)]; prof[k] = isNaN(pin[k]) ? clamp(prof[k], a - g, a + g) : pin[k]; }
+          if (R.closed) prof[nS] = prof[0];
         }
         const out = new Float32Array(nS + 1), W2 = 6;
         for (let i = 0; i <= nS; i++) { let a = 0, k = 0; for (let j = -W2; j <= W2; j++) { a += prof[R.idx(i + j)]; k++; } out[i] = a / k; }
