@@ -20,31 +20,35 @@ Object.assign(Gfx.prototype, {
       let m = -1e9; for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) { const ix = Math.min(Nx - 1, i * 2 + a), iz = Math.min(Nz - 1, j * 2 + b); m = Math.max(m, H[iz * Nx + ix]); }
       occ[j * sx + i] = m;
     }
+    const occT = occ.slice(); // terrain only: the 8 m grid turns building shadows into blotches on paving, the shadow map draws those
     const raster = (x0, z0, x1, z1, top) => {
       for (let j = Math.max(0, Math.floor((z0 - T.z0) / sc)); j <= Math.min(sz - 1, Math.ceil((z1 - T.z0) / sc)); j++)
         for (let i = Math.max(0, Math.floor((x0 - T.x0) / sc)); i <= Math.min(sx - 1, Math.ceil((x1 - T.x0) / sc)); i++) occ[j * sx + i] = Math.max(occ[j * sx + i], top);
     };
     for (const b of this.world.city.buildings) footprint(b.x, b.z, b.yaw, b.w, b.d, 0, (x, z) => raster(x, z, x, z, b.base + b.h));
     for (const k of this.world.city.containers) raster(k.x0, k.z0, k.x1, k.z1, (k.y ?? CITY.y) + k.h);
-    const occAt = (x, z) => {
+    const occAt = (o, x, z) => {
       const fx = clamp((x - T.x0) / sc, 0, sx - 1.001), fz = clamp((z - T.z0) / sc, 0, sz - 1.001);
       const ix = Math.floor(fx), iz = Math.floor(fz), tx = fx - ix, tz = fz - iz, k = iz * sx + ix;
-      return lerp(lerp(occ[k], occ[k + 1], tx), lerp(occ[k + sx], occ[k + sx + 1], tx), tz);
+      return lerp(lerp(o[k], o[k + 1], tx), lerp(o[k + sx], o[k + sx + 1], tx), tz);
     };
-    const sun = new Float32Array(sx * sz);
+    const sun = new Float32Array(sx * sz), sunT = new Float32Array(sx * sz);
     const hx = Math.hypot(SUN_DIR.x, SUN_DIR.z), dx = SUN_DIR.x / hx, dz = SUN_DIR.z / hx, tanE = SUN_DIR.y / hx;
     for (let j = 0; j < sz; j++) for (let i = 0; i < sx; i++) {
       const x = T.x0 + i * sc, z = T.z0 + j * sc;
       const y0 = T.height(x, z) + 0.6;
-      let vis = 1;
+      let vis = 1, visT = 1;
       for (let t = 6; t < 900; t += 6 * (1 + t / 260)) {
         const rh = y0 + t * tanE; if (rh > 420) break;
-        const v = (rh - occAt(x + dx * t, z + dz * t)) / t * 9;
-        if (v < vis) { vis = v; if (vis <= 0) { vis = 0; break; } }
+        const px = x + dx * t, pz = z + dz * t;
+        if (visT > 0) visT = Math.min(visT, (rh - occAt(occT, px, pz)) / t * 9);
+        vis = Math.min(vis, (rh - occAt(occ, px, pz)) / t * 9);
+        if (vis <= 0 && visT <= 0) break;
       }
-      sun[j * sx + i] = clamp(vis, 0, 1);
+      sun[j * sx + i] = clamp(vis, 0, 1); sunT[j * sx + i] = clamp(visT, 0, 1);
     }
     this.sunGrid = { data: sun, sx, sz, sc };
+    this.sunGridT = { data: sunT, sx, sz, sc };
     // ambient occlusion from local relief (summed area table on the full grid)
     const sat = new Float64Array((Nx + 1) * (Nz + 1));
     for (let iz = 0; iz < Nz; iz++) { let row = 0; for (let ix = 0; ix < Nx; ix++) { row += H[iz * Nx + ix]; sat[(iz + 1) * (Nx + 1) + ix + 1] = sat[iz * (Nx + 1) + ix + 1] + row; } }
@@ -58,8 +62,8 @@ Object.assign(Gfx.prototype, {
     }
     this.aoMap = ao;
   },
-  sunVisAt(x, z) {
-    const G = this.sunGrid, T = this.world.terrain;
+  sunVisAt(x, z, terrainOnly) {
+    const G = terrainOnly ? this.sunGridT : this.sunGrid, T = this.world.terrain;
     if (T.tun[T.gi(x, z)]) return 0;
     const fx = clamp((x - T.x0) / G.sc, 0, G.sx - 1.001), fz = clamp((z - T.z0) / G.sc, 0, G.sz - 1.001);
     const ix = Math.floor(fx), iz = Math.floor(fz), tx = fx - ix, tz = fz - iz, k = iz * G.sx + ix, d = G.data;
@@ -274,7 +278,7 @@ reflectedLight.indirectDiffuse *= vA.w; reflectedLight.indirectSpecular *= vA.w;
       const l = H[iz * Nx + Math.max(0, ix - 1)], r = H[iz * Nx + Math.min(Nx - 1, ix + 1)], d = H[Math.max(0, iz - 1) * Nx + ix], u = H[Math.min(T.Nz - 1, iz + 1) * Nx + ix];
       const nxv = l - r, nzv = d - u, ny = 2 * c, L = Math.hypot(nxv, ny, nzv);
       nor[k * 3] = nxv / L; nor[k * 3 + 1] = ny / L; nor[k * 3 + 2] = nzv / L;
-      A[k * 4] = T.road[gi]; A[k * 4 + 1] = T.mud[gi]; A[k * 4 + 2] = this.sunVisAt(x, z); A[k * 4 + 3] = this.aoMap[gi] / 255;
+      A[k * 4] = T.road[gi]; A[k * 4 + 1] = T.mud[gi]; A[k * 4 + 2] = this.sunVisAt(x, z, true); A[k * 4 + 3] = this.aoMap[gi] / 255;
       B[k * 4] = T.rlat[gi]; B[k * 4 + 1] = T.rhw[gi]; B[k * 4 + 2] = T.asph[gi]; B[k * 4 + 3] = T.rail[gi];
       Cc[k * 4] = T.green[gi] / 255; Cc[k * 4 + 1] = T.beach[gi] / 255; Cc[k * 4 + 2] = T.city[gi] / 255; Cc[k * 4 + 3] = T.tun[gi] / 255;
       D[k * 3] = T.rs[gi]; D[k * 3 + 1] = T.rlanes[gi]; D[k * 3 + 2] = T.rfade[gi] / 255;
