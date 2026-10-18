@@ -360,7 +360,9 @@ class Car {
     const sp = this.spec, h = sp.hull, T = W.terrain, t = this._t;
     const pts = Car._hullPts || (Car._hullPts = (() => { const a = []; for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) a.push([sx, sy, sz]); a.push([0, 1, 0], [0, -1, -1], [0, -1, 1], [0, 1, -1], [0, 1, 1]); return a; })());
     const p = t.a, n = t.b, r = t.c, vp = t.d, tmp = t.e;
-    let maxPen = 0, pushN = new V3(), worst = 0;
+    let maxPen = 0, pushN = new V3(), worst = 0, harm = 0;
+    // the chassis' up axis: a belly that comes down flat on its wheels is a hard landing, not a crash
+    const up = this._up || (this._up = new V3()); up.set(0, 1, 0).applyQuaternion(this.q);
     for (const q of pts) {
       p.set(q[0] * h.hx * (q[1] > 0 ? 0.82 : 1), h.y + q[1] * h.hy, q[2] * h.hz * (q[1] > 0 ? 0.75 : 1)).applyQuaternion(this.q).add(this.pos);
       const gy = T.height(p.x, p.z);
@@ -380,12 +382,14 @@ class Car {
         if (vtl > 1e-3) { const jt = Math.min(0.55 * j, vtl / k * 0.5); J.addScaledVector(vt, -jt / vtl); }
         this.applyImpulse(J, p);
         if (-vn > worst) worst = -vn;
+        const flat = q[1] < 0 ? clamp((up.dot(n) - 0.8) / 0.15, 0, 1) : 0;
+        harm = Math.max(harm, -vn * (1 - 0.45 * flat));
       }
       if (penN > maxPen) { maxPen = penN; pushN.copy(n); }
     }
     if (maxPen > 0) this.pos.addScaledVector(pushN, maxPen * 0.8);
     if (worst > 3) { this.impact = Math.max(this.impact, worst); this.events.push({ type: 'scrape', v: worst }); }
-    if (worst > sp.tough) this.wreck('crash');
+    if (harm > sp.tough) this.wreck('crash');
   }
   spheres(out) { // two collision spheres in world space
     const sp = this.spec, h = sp.hull; const rad = Math.max(h.hx, h.hy) * 1.05;
