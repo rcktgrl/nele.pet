@@ -109,6 +109,11 @@ const DISTRICT = (() => {
     { id: 'lighthouse-ln', w: 8, pts: [[5052, -1262], [5095, -1242], [5130, -1222], [5160, -1205]] }, // down off the crest to the point
     { id: 'gate-rd', w: 12, pts: [[4290, 540], [4450, 540], [4600, 540], [4800, 540], [4950, 560]] },
     { id: 'stadium-dr', w: 12, pts: [[4300, 200], [4385, 200]] },
+    // across the railway between Downtown and the Saltworks, each lining up with a street on both sides
+    { id: 'union-north', w: 10, pts: [[4612, -885], [4640, -889], [4664, -893]] },
+    { id: 'saltworks-x1', w: 10, pts: [[4622, -535], [4655, -537], [4690, -540]] },
+    { id: 'saltworks-x2', w: 10, pts: [[4618, -262], [4660, -264], [4705, -266]] },
+    { id: 'saltworks-x3', w: 10, pts: [[4622, -78], [4662, -68], [4705, -56]] },
   ];
   const frame = new Index(), streets = [];
   for (const id of ['north-rd', 'mesa-blvd', 'valley-rd', 'coast']) frame.add(curve(def(id).pts, false), 'art:' + id);
