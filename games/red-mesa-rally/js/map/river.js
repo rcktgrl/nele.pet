@@ -170,7 +170,12 @@ function findBridges(T) {
       let wet = false; for (let k = i; k <= j; k++) if (T.river[T.gi(R.x[k], R.z[k])]) wet = true;
       // first the spans over water; then dry dips in a road that runs onto one of those decks (a junction at the bridgehead)
       let up = false; if (R.elev) for (let k = i; k <= j; k++) if (R.elev[k]) up = true;
-      if (pass === 0 ? wet || up : !wet && !up && j - i < 40 && (onDeck(R.x[Math.max(0, i - 2)], R.z[Math.max(0, i - 2)], R.y[i]) || onDeck(R.x[Math.min(N, j + 2)], R.z[Math.min(N, j + 2)], R.y[j]))) {
+      // the river's banks dug a gully under the road beside the water: that needs a deck too, not a 5 m drop
+      let gully = false;
+      if (!wet && !up && !R.def.street) for (let k = i; k <= j && !gully; k++) if (R.y[k] - T.rawH(R.x[k], R.z[k]) > 1.5) {
+        for (let u = -30; u <= 30 && !gully; u += 5) for (let v = -30; v <= 30; v += 5) if (T.river[T.gi(R.x[k] + u, R.z[k] + v)]) { gully = true; break; }
+      }
+      if (pass === 0 ? wet || up || gully : !wet && !up && j - i < 40 && (onDeck(R.x[Math.max(0, i - 2)], R.z[Math.max(0, i - 2)], R.y[i]) || onDeck(R.x[Math.min(N, j + 2)], R.z[Math.min(N, j + 2)], R.y[j]))) {
         let a = Math.max(0, i - 3), b = Math.min(N, j + 3), w = wet;
         // a dip at the end of this route's own deck lengthens that deck instead of standing beside it as a stub
         const own = pass && out.findIndex((B) => B.route === R.id && B.i0 <= b + 8 && B.i1 >= a - 8);
