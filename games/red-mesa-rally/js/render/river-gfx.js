@@ -171,7 +171,8 @@ Object.assign(Gfx.prototype, {
         si.push(a + 1, b + 1, a + 2, a + 2, b + 1, b + 2, a + 2, b + 2, a + 3, a + 3, b + 2, b + 3, a + 3, b + 3, a, a, b + 3, b); // right side, soffit, left side
       }
       const strip = (arr, ind, mat, uv) => {
-        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(ind); g.computeVertexNormals();
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); for (let t = 0; t < ind.length; t += 3) [ind[t + 1], ind[t + 2]] = [ind[t + 2], ind[t + 1]]; // the lists above wind clockwise from outside
+        g.setIndex(ind); g.computeVertexNormals();
         const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; grp.add(m);
       };
       strip(P, ti, B.rail ? ballast : R.surface === 'asphalt' ? top(R.def.lanes || 2) : planks, UV); strip(P, si, conc);

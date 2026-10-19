@@ -11,6 +11,7 @@ class Streets {
     this.findJunctions(T);
     this.paint = []; this.signals = []; this.stops = [];
     for (const J of this.junctions) this.dress(J, T);
+    this.rural = new Junctions(T, this);
     this.junctionMask();
     for (const P of city.lots || []) this.bays(P);
   }

@@ -5,7 +5,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@400;600;800&family=Saira+Stencil+One&display=swap">
-<link rel="stylesheet" href="css/style.css">
+<script>
+// one version for the loading-screen label and the ?v= cache-buster on every file (bump per release: 1.x features, 1.x.y fixes)
+const RMR_VERSION = '1.1';
+document.write('<link rel="stylesheet" href="css/style.css?v=' + RMR_VERSION + '">');
+</script>
 
 <canvas id="game" aria-label="Red Mesa Rally game view"></canvas>
 <div class="vignette"></div>
@@ -83,6 +87,7 @@
     <div class="bar"><i id="loadBar"></i></div>
     <div class="muted" id="loadText">Grading the dirt</div>
   </div>
+  <div class="version" id="version"></div>
 </div>
 
 <div class="screen scrim" id="title">
@@ -223,48 +228,54 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-<script src="js/core/util.js"></script>
-<script src="js/map/layout.js"></script>
-<script src="js/map/river.js"></script>
-<script src="js/map/village.js"></script>
-<script src="js/roads/routes.js"></script>
-<script src="js/map/district.js"></script>
-<script src="js/map/city.js"></script>
-<script src="js/map/streets.js"></script>
-<script src="js/map/terrain.js"></script>
-<script src="js/map/scatter.js"></script>
-<script src="js/cars/vehicles.js"></script>
-<script src="js/cars/car.js"></script>
-<script src="js/world/trains.js"></script>
-<script src="js/world/world.js"></script>
-<script src="js/race/ai.js"></script>
-<script src="js/race/race.js"></script>
-<script src="js/race/events.js"></script>
-<script src="js/render/gfx.js"></script>
-<script src="js/render/fx.js"></script>
-<script src="js/render/terrain-gfx.js"></script>
-<script src="js/render/east-gfx.js"></script>
-<script src="js/render/river-gfx.js"></script>
-<script src="js/cars/models.js"></script>
-<script src="js/audio/music.js"></script>
-<script src="js/story/voice-lines.js"></script>
-<script src="js/story/story.js"></script>
-<script src="js/game/common.js"></script>
-<script src="js/game/input.js"></script>
-<script src="js/audio/sfx.js"></script>
-<script src="js/game/camera.js"></script>
-<script src="js/map/map-image.js"></script>
-<script src="js/game/intro.js"></script>
-<script src="js/story/story-intro.js"></script>
-<script src="js/roads/traffic.js"></script>
-<script src="js/net/multiplayer.js"></script>
-<script src="js/game/game.js"></script>
-<script src="js/race/race-flow.js"></script>
-<script src="js/race/leaderboard.js"></script>
-<script src="js/game/menus.js"></script>
-<script src="js/net/mp-game.js"></script>
-<script src="js/game/hud.js"></script>
-<script src="js/map/map-view.js"></script>
-<script src="js/boot.js"></script>
+<script>
+document.getElementById('version').textContent = 'v' + RMR_VERSION;
+[
+  'js/core/util.js',
+  'js/map/layout.js',
+  'js/map/river.js',
+  'js/map/village.js',
+  'js/roads/routes.js',
+  'js/map/district.js',
+  'js/map/city.js',
+  'js/map/streets.js',
+  'js/map/junctions.js',
+  'js/map/terrain.js',
+  'js/map/scatter.js',
+  'js/cars/vehicles.js',
+  'js/cars/car.js',
+  'js/world/trains.js',
+  'js/world/world.js',
+  'js/race/ai.js',
+  'js/race/race.js',
+  'js/race/events.js',
+  'js/render/gfx.js',
+  'js/render/fx.js',
+  'js/render/terrain-gfx.js',
+  'js/render/east-gfx.js',
+  'js/render/river-gfx.js',
+  'js/cars/models.js',
+  'js/audio/music.js',
+  'js/story/voice-lines.js',
+  'js/story/story.js',
+  'js/game/common.js',
+  'js/game/input.js',
+  'js/audio/sfx.js',
+  'js/game/camera.js',
+  'js/map/map-image.js',
+  'js/game/intro.js',
+  'js/story/story-intro.js',
+  'js/roads/traffic.js',
+  'js/net/multiplayer.js',
+  'js/game/game.js',
+  'js/race/race-flow.js',
+  'js/race/leaderboard.js',
+  'js/game/menus.js',
+  'js/net/mp-game.js',
+  'js/game/hud.js',
+  'js/map/map-view.js',
+  'js/boot.js',
+].forEach(f => document.write('<script src="' + f + '?v=' + RMR_VERSION + '"><\/script>'));
+</script>
 
 </body></html>

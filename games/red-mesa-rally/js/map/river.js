@@ -144,7 +144,7 @@ function findBridges(T) {
     for (let k = a; k < b; k += 2) {
       const e = Math.min(b, k + 2), dx = R.x[e] - R.x[k], dz = R.z[e] - R.z[k], L = Math.hypot(dx, dz) || 1;
       const y0 = R.y[k], y1 = R.y[e];
-      span.pieces.push({ kind: 'slope', x: R.x[k] - dx / L * 0.4, z: R.z[k] - dz / L * 0.4, dx: dx / L, dz: dz / L, L: L + 0.4, Lt: L + 0.8, hw: R.width / 2 + 1.5, y0, y1, under: Math.min(y0, y1) - 3, bridge: true, gap: [false, false] });
+      span.pieces.push({ kind: 'slope', x: R.x[k] - dx / L * 0.4, z: R.z[k] - dz / L * 0.4, dx: dx / L, dz: dz / L, L: L + 0.4, Lt: L + 0.8, hw: R.width / 2 + 1.5, y0, y1, under: Math.min(y0, y1) - 3, bridge: true, surf: R.surface, gap: [false, false] });
     }
     // piers: in the water every 26 m, a pair under a road deck and one under the rail; a viaduct stands on them all the way,
     // except where they would land on a road, the railway or a city street
@@ -170,7 +170,12 @@ function findBridges(T) {
       let wet = false; for (let k = i; k <= j; k++) if (T.river[T.gi(R.x[k], R.z[k])]) wet = true;
       // first the spans over water; then dry dips in a road that runs onto one of those decks (a junction at the bridgehead)
       let up = false; if (R.elev) for (let k = i; k <= j; k++) if (R.elev[k]) up = true;
-      if (pass === 0 ? wet || up : !wet && !up && j - i < 40 && (onDeck(R.x[Math.max(0, i - 2)], R.z[Math.max(0, i - 2)], R.y[i]) || onDeck(R.x[Math.min(N, j + 2)], R.z[Math.min(N, j + 2)], R.y[j]))) {
+      // the river's banks dug a gully under the road beside the water: that needs a deck too, not a 5 m drop
+      let gully = false;
+      if (!wet && !up && !R.def.street) for (let k = i; k <= j && !gully; k++) if (R.y[k] - T.rawH(R.x[k], R.z[k]) > 1.5) {
+        for (let u = -30; u <= 30 && !gully; u += 5) for (let v = -30; v <= 30; v += 5) if (T.river[T.gi(R.x[k] + u, R.z[k] + v)]) { gully = true; break; }
+      }
+      if (pass === 0 ? wet || up || gully : !wet && !up && j - i < 40 && (onDeck(R.x[Math.max(0, i - 2)], R.z[Math.max(0, i - 2)], R.y[i]) || onDeck(R.x[Math.min(N, j + 2)], R.z[Math.min(N, j + 2)], R.y[j]))) {
         let a = Math.max(0, i - 3), b = Math.min(N, j + 3), w = wet;
         // a dip at the end of this route's own deck lengthens that deck instead of standing beside it as a stub
         const own = pass && out.findIndex((B) => B.route === R.id && B.i0 <= b + 8 && B.i1 >= a - 8);
