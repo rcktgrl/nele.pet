@@ -144,7 +144,7 @@ function findBridges(T) {
     for (let k = a; k < b; k += 2) {
       const e = Math.min(b, k + 2), dx = R.x[e] - R.x[k], dz = R.z[e] - R.z[k], L = Math.hypot(dx, dz) || 1;
       const y0 = R.y[k], y1 = R.y[e];
-      span.pieces.push({ kind: 'slope', x: R.x[k] - dx / L * 0.4, z: R.z[k] - dz / L * 0.4, dx: dx / L, dz: dz / L, L: L + 0.4, Lt: L + 0.8, hw: R.width / 2 + 1.5, y0, y1, under: Math.min(y0, y1) - 3, bridge: true, gap: [false, false] });
+      span.pieces.push({ kind: 'slope', x: R.x[k] - dx / L * 0.4, z: R.z[k] - dz / L * 0.4, dx: dx / L, dz: dz / L, L: L + 0.4, Lt: L + 0.8, hw: R.width / 2 + 1.5, y0, y1, under: Math.min(y0, y1) - 3, bridge: true, surf: R.surface, gap: [false, false] });
     }
     // piers: in the water every 26 m, a pair under a road deck and one under the rail; a viaduct stands on them all the way,
     // except where they would land on a road, the railway or a city street

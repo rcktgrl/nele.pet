@@ -296,6 +296,7 @@ class World {
   }
   findCrossings() {
     const T = this.terrain, rail = this.route('rail'), out = [];
+    const raised = (R, i) => (R.elev && R.elev[i]) || (R.covered && R.covered[i]) || T.bridges.some((B) => B.route === R.id && i >= B.i0 - 2 && i <= B.i1 + 2);
     for (const R of T.routes) {
       if (R === rail || R.def.noCarve) continue;
       let last = -1e9;
@@ -304,6 +305,9 @@ class World {
         if (Math.abs(x - R.x[0]) > 9000) continue;
         const pr = R.project(x, z, 0, -1);
         if (pr.dist < 5 && i * rail.step - last > 80) {
+          // only where the two meet at grade: not where one passes over or under the other on a bridge, viaduct or in a bore
+          const k = R.idx(Math.round(pr.s / R.step));
+          if (Math.abs(R.sample(R.y, pr.s) - rail.y[i]) > 1.5 || raised(rail, i) || raised(R, k)) continue;
           last = i * rail.step;
           const [dx, dz] = rail.dirAt(i * rail.step), [ex, ez] = R.dirAt(pr.s);
           out.push({ s: i * rail.step, x, z, y: rail.y[i], rdx: dx, rdz: dz, road: R.id, ex, ez, roadW: R.width, active: false });
@@ -354,6 +358,12 @@ class World {
     const asph = Math.max(T.bilinear(T.asph, x, z), city > 0.8 ? 1 : 0);
     T.normal(x, z, this._n);
     const rock = smooth(0.85, 0.7, this._n.y) * (1 - road) * (1 - asph);
+    // on a bridge, viaduct, ramp or car-park deck the grip is the deck's own, not the river bed or gap underneath
+    const o = y !== undefined && T.overlayAt(x, z), oy = o ? overlayLift(o, x, z) : -Infinity;
+    if (o && Math.abs(oy - y) < 1.2 && oy > T.rawH(x, z) + 0.3) {
+      const k = o.surf || 'asphalt';
+      return this.deckSurface(k === 'asphalt' ? 1 : 0, k === 'dirt' ? 1 : 0, k === 'rail' ? 1 : 0);
+    }
     s.road = road; s.mud = mud; s.asph = asph;
     s.water = (y !== undefined && y < WATER_Y) ? clamp((WATER_Y - y) * 1.5, 0, 1) : 0;
     let mu = lerp(lerp(0.94, 0.86, green), 0.8, beach);
@@ -363,6 +373,12 @@ class World {
     crr = lerp(crr, 0.02, road); crr = lerp(crr, 0.05, rail); crr = lerp(crr, 0.013, asph);
     s.crr = crr + s.water * 0.08;
     s.kind = mud > 0.4 ? 2 : asph > 0.5 ? 5 : rock > 0.5 ? 3 : (road > 0.5 || rail > 0.5) ? 1 : beach > 0.5 ? 0 : green > 0.45 ? 6 : 0;
+    return s;
+  }
+  deckSurface(asph, road, rail) {
+    const s = this._surf;
+    s.road = road; s.mud = 0; s.asph = asph; s.water = 0;
+    s.mu = asph ? 1.18 : road ? 1.1 : 0.95; s.crr = asph ? 0.013 : road ? 0.02 : 0.05; s.kind = asph ? 5 : 1;
     return s;
   }
   step(dt) {
