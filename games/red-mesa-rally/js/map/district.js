@@ -137,7 +137,7 @@ const DISTRICT = (() => {
 
   // a stretch of street is fine where it keeps off the railway and the ramps, does not run along the interstate or the
   // river, stays dry and out of the parks (crossing the interstate or the river is fine: they go over or under)
-  const clear = (pl, w, mayCrossRail) => {
+  const clear = (pl, w, mayCrossRail, inner) => {
     for (const h of obs.hits(pl)) if (h.tag === 'ramp' || (h.tag === 'rail' && !mayCrossRail)) return false;
     for (let i = 0; i < pl.length; i += 2) {
       const [x, z] = pl[i], n = obs.nearest(x, z, w / 2 + 26);
@@ -151,7 +151,8 @@ const DISTRICT = (() => {
       if (wet(x, z) || inPark(x, z)) return false;
     }
     // and it never ends underneath the interstate, where its last metres would have to climb onto the viaduct
-    for (const [x, z] of [pl[0], pl[pl.length - 1]]) { const n = obs.nearest(x, z, w / 2 + 20); if (n && n.tag === 'hwy') return false; }
+    // (inner: a piece in the middle of a street, which carries on past both its ends)
+    if (!inner) for (const [x, z] of [pl[0], pl[pl.length - 1]]) { const n = obs.nearest(x, z, w / 2 + 20); if (n && n.tag === 'hwy') return false; }
     return true;
   };
 
@@ -184,9 +185,12 @@ const DISTRICT = (() => {
       // and stop short of anything it may not touch: split round the bad stretches
       const pieces = []; let piece = [r[0]];
       for (let i = 1; i < r.length; i++) {
-        if (clear([r[i - 1], r[i]], d.w + 1, false)) piece.push(r[i]); else { if (piece.length > 1) pieces.push(piece); piece = [r[i]]; }
+        if (clear([r[i - 1], r[i]], d.w + 1, false, true)) piece.push(r[i]); else { if (piece.length > 1) pieces.push(piece); piece = [r[i]]; }
       }
       if (piece.length > 1) pieces.push(piece);
+      // a ring passes under the interstate, but where a piece ends, it backs off from underneath it
+      const under = (p) => { const n = obs.nearest(p[0], p[1], d.w / 2 + 21); return n && n.tag === 'hwy'; };
+      for (const pc of pieces) { while (pc.length > 1 && under(pc[pc.length - 1])) pc.pop(); while (pc.length > 1 && under(pc[0])) pc.shift(); }
       for (const pc of pieces) if (plen(pc) > 50) {
         const closed = n0 < 0 && pieces.length === 1;
         frame.add(pc, 'ring:' + d.id);
@@ -271,11 +275,6 @@ const DISTRICT = (() => {
       flush();
     }
   }
-
-  // the Port interchange ramp runs straight on until it meets a Marina street
-  { const r = def('ramp-port'), P = r.pts, a = P[P.length - 3], b = P[P.length - 2], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const ma = new Index(); for (const st of streets) if (st.dist === 'ma') ma.add(st.pts, 1);
-    for (let t = 0; t < 160; t += 2) { const p = [b[0] + (b[0] - a[0]) / L * t, b[1] + (b[1] - a[1]) / L * t], n = ma.nearest(p[0], p[1], 3); if (n) { P[P.length - 1] = n.p.map(Math.round); break; } } }
 
   /* ---------- route definitions ---------- */
   const defs = streets.map((st) => ({ id: st.id, closed: !!st.closed, width: st.w, surface: 'asphalt', lanes: 2, street: true, grade: 0.12, smoothWin: 8, sub: st.sub,

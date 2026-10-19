@@ -55,24 +55,27 @@ class Terrain {
       }
     };
     const fin = Route.compose({ id: 'finale', closed: false, width: 14, surface: 'asphalt', noCarve: true }, [
-      { route: R('coast'), from: [4600, 770], to: [2350, 210], dir: -1 },
-      { route: R('valley-rd'), from: [2350, 210], to: [2200, 320], dir: -1 },
-      { route: R('hwy'), from: [2200, 320], to: [1760, -40], dir: 1 },
-      { route: R('tunnel'), from: [1760, -40], to: [792, 10], dir: -1 },
+      { route: R('coast'), from: [4600, 770], to: [2334, 290], dir: -1 },
+      { route: R('ramp-valley-w'), from: [2334, 290], to: [2050, 245], dir: -1 },
+      { route: R('hwy'), from: [2050, 245], to: [1744, -102], dir: 1 },
+      { route: R('ramp-millbrook-s'), from: [1744, -102], to: [1841, -325], dir: 1 },
+      { route: R('tunnel'), from: [1841, -325], to: [792, 10], dir: -1 },
       { route: R('ridge'), from: [790, 12], to: [330, 60], dir: 1 },
       { route: R('trail-ridge'), from: [330, 60], to: [70, 110], dir: -1 },
     ]);
-    heights(fin, ['coast', 'valley-rd', 'hwy']);
+    heights(fin, ['coast', 'ramp-valley-w', 'hwy', 'ramp-millbrook-s', 'tunnel']);
     this.routes.push(fin);
-    // Calder Central Express: up the interstate from the tunnel, round over the pass junction, along the viaduct, down the Calder Central ramp,
+    // Calder Central Express: out of the tunnel, up the Millbrook slip road and the interstate, along the viaduct, down the Calder Central ramp,
     // across downtown on Mesa Blvd and down Kingsway to the port gate
     const exp = Route.compose({ id: 'express', closed: false, width: 13, surface: 'asphalt', noCarve: true }, [
-      { route: R('hwy'), from: [1760, -40], to: [3897, -730], dir: 1 },
+      { route: R('tunnel'), from: [1700, -5], to: [1845, -385], dir: 1 },
+      { route: R('ramp-millbrook-n'), from: [1845, -385], to: [1703, -502], dir: -1 },
+      { route: R('hwy'), from: [1703, -502], to: [3897, -730], dir: 1 },
       { route: R('ramp-central-w'), from: [3897, -730], to: [3846, -338], dir: 1 },
       { route: R('mesa-blvd'), from: [3846, -338], to: [4296, -350], dir: 1 },
       { route: R('kingsway'), from: [4296, -350], to: [4290, 520], dir: 1 },
     ]);
-    heights(exp, ['hwy', 'ramp-central-w', 'mesa-blvd', 'kingsway']);
+    heights(exp, ['tunnel', 'ramp-millbrook-n', 'hwy', 'ramp-central-w', 'mesa-blvd', 'kingsway']);
     this.routes.push(exp);
     // the Harbour street circuit: down Kingsway past the stadium, along the port gate, up Harbour Dr on the waterfront and back across town on Mesa Blvd
     const hb = [{ route: R('kingsway'), from: [4296, -350], to: [4290, 540], dir: 1 }, { route: R('gate-rd'), from: [4290, 540], to: [4950, 560], dir: 1 },
@@ -112,7 +115,7 @@ class Terrain {
   height(x, z) {
     const h = this.heightGrid(this.h, x, z);
     const tk = this.riverTunAt(x, z);
-    if (tk) { const M = this.riverTun; return M.mask[tk - 1] === 1 && this.probeY < RIVER.tunnel.under ? RIVER.tunnel.bed : M.top[tk - 1]; }
+    if (tk) { const M = this.riverTun; if (M.mask[tk - 1] === 1 && this.probeY < RIVER.tunnel.under) return RIVER.tunnel.bed; return this.ovGrid ? this.overlayHeight(x, z, M.top[tk - 1]) : M.top[tk - 1]; } // decks still pass over the lid
     if (x < CITY.x0 - 30) return this.ovGrid ? this.overlayHeight(x, z, h) : h;
     if (this.metro) { const f = this.subFloor(x, z); if (f !== null) return f; }
     return this.ovGrid ? this.overlayHeight(x, z, h) : h;
@@ -236,7 +239,8 @@ class Terrain {
       const pin = new Float32Array(nS + 1).fill(NaN), endY = [null, null];
       if (!R.closed && R.surface !== 'rail') for (const [e, dir] of [[0, 1], [nS, -1]]) {
         for (const O of done) {
-          const pe = O.project(R.x[e], R.z[e], 0, -1), reach = O.width / 2 + 4;
+          // a slip road keeps to the viaduct's height until it has cleared the main deck beside it
+          const pe = O.project(R.x[e], R.z[e], 0, -1), reach = def.ramp && O.def.viaduct ? (O.width + R.width) / 2 + 1 : O.width / 2 + 4;
           if (pe.dist > O.width / 2 + 3) continue;
           for (let k = e, hint = pe.s; k >= 0 && k <= nS; k += dir) {
             const pk = O.project(R.x[k], R.z[k], hint, 40); if (pk.dist > reach) break;
@@ -274,6 +278,7 @@ class Terrain {
       // viaducts: lifted over Port Calder's streets and over every road or railway that crosses them (one that ends on them is a junction)
       if (def.viaduct) {
         const lift = (i, y) => { pin[i] = Math.max(isNaN(pin[i]) ? prof[i] : pin[i], y); };
+        if (def.elevated) for (let i = 0; i <= nS; i++) lift(i, Math.max(this.rawH(R.x[i], R.z[i]), WATER_Y + 0.9) + 7.8); // on piers the whole way round
         if (!def.ramp) for (let i = 0; i <= nS; i++) if (DISTRICT.cell(R.x[i], R.z[i]) > 0 || (R.x[i] > FLAT.x0 && R.x[i] < FLAT.x1 && R.z[i] > FLAT.z0 && R.z[i] < FLAT.z1)) lift(i, CITY.y + 8.5);
         if (def.crossover) { // a figure of eight: the first pass through the middle goes over the second
           const C0 = [];
@@ -384,6 +389,11 @@ class Terrain {
           for (let k = 0; k <= len; k++) { const i = R.idx(i0 + k); R.mud[i] = 1; feat[i] -= 0.35 * Math.sin(Math.PI * k / len); }
         }
         R.mudZones = mudZones;
+      }
+      if (def.ramp && def.grade) { // a slip road gets no steeper than its grade anywhere, kinks at the pins included
+        const g = def.grade * R.step;
+        for (let i = 1; i <= nS; i++) if (isNaN(pin[i])) prof[i] = clamp(prof[i], prof[i - 1] - g, prof[i - 1] + g);
+        for (let i = nS - 1; i >= 0; i--) if (isNaN(pin[i])) prof[i] = clamp(prof[i], prof[i + 1] - g, prof[i + 1] + g);
       }
       for (let i = 0; i <= nS; i++) R.y[i] = prof[i] + feat[i];
       // well clear of the ground a viaduct stands on piers: no embankment, no tarmac painted underneath

@@ -225,7 +225,7 @@ class Story {
     if (ch === 0) return { text: 'Win any desert event', target: null };
     if (ch === 1) return { text: 'Win one more desert event', target: null };
     if (ch === 2) {
-      const R = g.world.route('tunnel'); const p = R.posAt(g.player.pos.x < 900 ? 4 : R.length - 40, {});
+      const R = g.world.route('tunnel'), sp = g.world.tunnelSpan(); const p = R.posAt(g.player.pos.x < 900 ? 4 : sp ? sp.i1 * R.step + 30 : R.length - 40, {}); // past the east portal
       return { text: 'Drive east through the Calder Tunnel', target: { x: p.x, z: p.z, name: 'Calder Tunnel' } };
     }
     if (ch === 3) {

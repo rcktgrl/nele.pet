@@ -16,28 +16,29 @@ const ROUTE_DEFS = [
   { id: 'trail-lake', closed: false, width: 9, trail: true, pts: [[-20, 220], [-50, 400], [-10, 560], [-20, 700]] },
   { id: 'trail-north', closed: false, width: 9, trail: true, pts: [[-300, -760], [-150, -800], [10, -760]] },
   // ---- the east ----
+  // out of the east portal it ducks under the interstate and runs up its east side into Millbrook (slip roads up to it on the way)
   { id: 'tunnel', closed: false, width: 13, surface: 'asphalt', tunnel: true, lanes: 2, grade: 0.05,
-    pts: [[792, 10], [850, 12], [1000, 16], [1250, 20], [1480, 18], [1600, 12], [1700, -10], [1760, -40]] },
-  // the interstate: up the valley past Millbrook to the Kestrel Pass junction, through Port Calder on a viaduct, back west along the coast.
-  // It flies over every road and railway that crosses it (viaduct), so you only get on at a junction or a ramp.
-  { id: 'hwy', closed: true, width: 22, surface: 'asphalt', lanes: 4, rails: true, smoothWin: 40, grade: 0.06, viaduct: true,
+    pts: [[792, 10], [850, 12], [1000, 16], [1250, 20], [1480, 18], [1600, 12], [1700, -5], [1780, -45], [1825, -130], [1840, -260], [1845, -400], [1860, -520], [1900, -598]] },
+  // the interstate: up the valley past Millbrook to the Kestrel Pass, through Port Calder and back west along the coast,
+  // on one long viaduct the whole way round (elevated): every road passes under it, and you only get on or off by a slip road.
+  { id: 'hwy', closed: true, width: 22, surface: 'asphalt', lanes: 4, rails: true, smoothWin: 40, grade: 0.06, viaduct: true, elevated: true,
     pts: [[1760, -40], [1690, -420], [1800, -820], [1990, -1060], [2160, -1120], [2380, -1390], [2720, -1440], [3021, -1390], [3150, -1330], [3400, -1180], [3640, -1060],
       [3870, -900], [3897, -640], [3897, -380], [3897, -120], [4022, 120], [4147, 380], [4120, 560], [3900, 560], [3600, 600], [3300, 640], [3150, 620], [2850, 585],
       [2550, 480], [2200, 320], [1900, 160]] },
   { id: 'coast', closed: false, width: 15, surface: 'asphalt', lanes: 2, rails: true, smoothWin: 30, grade: 0.08,
     pts: [[2350, 210], [2300, 500], [2450, 850], [2850, 1050], [3350, 1050], [3800, 905], [4000, 885], [4150, 850], [4262, 790], [4400, 772], [4650, 770], [4880, 768]] },
   { id: 'pass', closed: false, width: 11, surface: 'asphalt', lanes: 2, smoothWin: 25, grade: 0.11, rails: true,
-    // ends sit on the highway centreline; the north face is too steep to drop straight down, so it switchbacks
-    pts: [[3021, -1390], [3050, -1600], [2900, -1800], [3150, -1950], [3000, -2200], [2750, -2300], [2850, -2500], [2550, -2600], [2350, -2450], [2400, -2200],
-      [2420, -2060], [2400, -1920], [2150, -1870], [1990, -1845], [1895, -1805], [1885, -1750], [1960, -1725], [2100, -1690], [2400, -1580], [2430, -1480], [2430, -1405]] },
+    // starts where Lane-farm comes under the interstate, ends where Lane-valley carries on under it; the north face is too steep to drop straight down, so it switchbacks
+    pts: [[3075, -1470], [3050, -1600], [2900, -1800], [3150, -1950], [3000, -2200], [2750, -2300], [2850, -2500], [2550, -2600], [2350, -2450], [2400, -2200],
+      [2420, -2060], [2400, -1920], [2150, -1870], [1990, -1845], [1895, -1805], [1885, -1750], [1960, -1725], [2100, -1690], [2400, -1580], [2430, -1480], [2440, -1340]] },
   // ---- country roads: gravel tracks across the desert, farm lanes through the valley, logging roads in the pines ----
   { id: 'trail-west', closed: false, width: 10, trail: true, country: true, pts: [[-230, 270], [-380, 450], [-350, 650], [-180, 760], [-20, 700]] },
   { id: 'trail-mesa', closed: false, width: 10, trail: true, country: true, pts: [[-700, -40], [-560, -60], [-420, -30], [-260, -40], [-135, -60]] },
   { id: 'trail-spires', closed: false, width: 10, trail: true, country: true, pts: [[264, -302], [380, -235], [500, -180], [560, -130]] },
   { id: 'lane-valley', closed: false, width: 9, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
-    pts: [[2430, -1405], [2470, -1340], [2600, -950], [2450, -600], [2650, -250], [2605, 175]] },
+    pts: [[2440, -1340], [2490, -1250], [2600, -950], [2450, -600], [2650, -250], [2605, 175]] },
   { id: 'lane-farm', closed: false, width: 9, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
-    pts: [[3060, -332], [3000, -420], [2800, -700], [2950, -1000], [3219, -1272]] },
+    pts: [[3060, -332], [3000, -420], [2800, -700], [2950, -1000], [3090, -1180], [3115, -1350], [3075, -1470]] }, // under the interstate to the foot of the pass
   { id: 'track-pines', closed: false, width: 9, country: true, grade: 0.14, pts: [[2400, -1920], [2550, -1895], [2700, -1905], [2810, -1870], [2900, -1800]] },
   { id: 'track-logging', closed: false, width: 9, country: true, grade: 0.14, pts: [[2050, -1050], [2000, -1250], [2030, -1450], [2060, -1600], [2100, -1690]] },
   // ---- side roads: an orchard lane down to the coast, a dune loop by the beach, a ridge track over the pines, a mill lane across the valley ----
@@ -48,12 +49,12 @@ const ROUTE_DEFS = [
     pts: [[2020, 830], [2108, 936], [2183, 980], [2232, 936], [2250, 830], [2232, 724], [2183, 680], [2108, 724], [2020, 830], [1932, 936], [1857, 980], [1808, 936], [1790, 830], [1808, 724], [1857, 680], [1932, 724]] },
   { id: 'trail-dunes', closed: false, width: 10, trail: true, country: true, pts: [[2368, 731], [2310, 790], [2256, 830]] },
   { id: 'track-kestrel', closed: false, width: 10, country: true, grade: 0.13, jumps: 1,
-    pts: [[3150, -1950], [3330, -1870], [3560, -1830], [3780, -1720], [3790, -1540], [3600, -1390], [3360, -1205]] },
+    pts: [[3150, -1950], [3330, -1870], [3560, -1830], [3780, -1720], [3790, -1540], [3600, -1440], [3350, -1460], [3200, -1480], [3095, -1478]] },
   { id: 'lane-mill', closed: false, width: 9, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
-    pts: [[1750, -650], [1950, -590], [2150, -640], [2300, -570], [2450, -600]] },
+    pts: [[1900, -598], [1950, -590], [2150, -640], [2300, -570], [2450, -600]] },
   // ---- links into Port Calder: Valley Rd runs on as Canal St, Mesa Blvd straight across town to Harbour Dr, North Rd along the foot of the Heights to Kingsway ----
   { id: 'valley-rd', closed: false, width: 13, surface: 'asphalt', lanes: 2, rails: true, smoothWin: 20, grade: 0.07,
-    pts: [[2200, 320], [2350, 210], [2480, 192], [2605, 175], [2730, 160], [2849, 148], [2990, 160], [3150, 170], [3300, 175], [3460, 160], [3740, 140], [3960, 72], [4180, 130], [4296, 262]] },
+    pts: [[2350, 210], [2480, 192], [2605, 175], [2730, 160], [2849, 148], [2990, 160], [3150, 170], [3300, 175], [3460, 160], [3740, 140], [3960, 72], [4180, 130], [4296, 262]] },
   { id: 'mesa-blvd', closed: false, width: 12, surface: 'asphalt', lanes: 2, smoothWin: 20, grade: 0.08,
     pts: [[2627, -313], [2800, -315], [2960, -322], [3121, -339], [3300, -328], [3460, -332], [3700, -336], [3897, -340], [4100, -346], [4296, -350], [4500, -346], [4690, -326], [4900, -334], [5116, -346]] },
   { id: 'north-rd', closed: false, width: 11, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.09,
@@ -69,15 +70,36 @@ const ROUTE_DEFS = [
   { id: 'forest-rd', closed: false, width: 10, surface: 'asphalt', lanes: 2, country: true, smoothWin: 20, grade: 0.1,
     pts: [[2577, -2601], [2700, -2648], [2860, -2630], [2980, -2530], [3060, -2420], [3200, -2380], [3330, -2290], [3400, -2180], [3447, -2164], [3469, -2044],
       [3596, -1895], [3693, -1876], [3756, -1836], [3874, -1864], [3927, -1812], [4000, -1815], [4076, -1794]] },
-  // ---- interchanges: two-way slip roads off the viaduct down to the street grid ----
-  { id: 'ramp-kestrel', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
-    pts: [[3700, -1022], [3655, -1040], [3605, -1050], [3555, -1042], [3510, -1012], [3482, -960], [3472, -892]] },
+  // ---- interchanges: two-way slip roads off the viaduct, one leaving each way, so every movement is possible ----
+  // (each starts on the interstate and runs alongside it before peeling off down to the road below)
+  { id: 'ramp-millbrook-s', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.1, viaduct: true, ramp: true, // Millbrook: up from the tunnel road
+    pts: [[1744, -102], [1737, -140], [1733, -177], [1731, -210], [1735, -247], [1755, -278], [1790, -304], [1841, -325]] },
+  { id: 'ramp-millbrook-n', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
+    pts: [[1703, -502], [1703, -474], [1706, -448], [1710, -424], [1721, -395], [1747, -379], [1788, -376], [1845, -385]] },
+  { id: 'ramp-valley-w', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.1, viaduct: true, ramp: true, // Salt Coast: down to the coast road and Valley Rd
+    pts: [[2050, 245], [2093, 260], [2138, 275], [2175, 286], [2213, 297], [2252, 301], [2292, 299], [2334, 290]] },
+  { id: 'ramp-valley-e', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
+    pts: [[2570, 484], [2543, 468], [2518, 452], [2494, 435], [2462, 413], [2440, 384], [2426, 348], [2422, 305], [2426, 255], [2440, 198]] },
+  { id: 'ramp-pass-w', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true, // Kestrel Pass west: Lane-valley and the pass
+    pts: [[2230, -1204], [2251, -1228], [2273, -1252], [2292, -1269], [2317, -1289], [2347, -1302], [2382, -1308], [2422, -1305], [2468, -1295]] },
+  { id: 'ramp-pass-e', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
+    pts: [[2690, -1436], [2658, -1432], [2629, -1426], [2600, -1419], [2567, -1410], [2538, -1392], [2512, -1367], [2489, -1333], [2470, -1292]] },
+  { id: 'ramp-farm-w', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true, // Kestrel Pass east: the foot of the pass, Lane-farm and the ridge track
+    pts: [[2899, -1423], [2931, -1420], [2962, -1419], [2989, -1419], [3041, -1415], [3090, -1420]] },
+  { id: 'ramp-farm-e', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
+    pts: [[3421, -1174], [3395, -1191], [3371, -1212], [3353, -1230], [3325, -1253], [3302, -1279], [3283, -1310], [3270, -1344], [3262, -1382], [3258, -1423], [3260, -1468]] },
+  { id: 'ramp-kestrel-w', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true, // Mesa View: North Rd
+    pts: [[3470, -1140], [3494, -1124], [3517, -1108], [3537, -1091], [3563, -1069], [3578, -1039], [3582, -1002], [3576, -957], [3560, -905]] },
+  { id: 'ramp-kestrel', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.1, viaduct: true, ramp: true,
+    pts: [[3773, -982], [3747, -992], [3721, -1000], [3695, -1007], [3657, -1008], [3625, -977], [3600, -912]] },
   { id: 'ramp-central-w', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
     pts: [[3897, -730], [3893, -685], [3881, -640], [3868, -590], [3866, -520], [3866, -450], [3862, -380], [3852, -352], [3846, -338]] },
   { id: 'ramp-central-e', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
     pts: [[3912, -85], [3905, -125], [3912, -170], [3928, -220], [3930, -280], [3942, -318], [3950, -342]] },
-  { id: 'ramp-port', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
-    pts: [[3840, 566], [3795, 562], [3752, 548], [3724, 520], [3713, 482], [3710, 435]] }, // the end is set by district.js
+  { id: 'ramp-port', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true, // Sunset Marina
+    pts: [[3850, 561], [3818, 560], [3786, 559], [3759, 557], [3727, 555], [3704, 542], [3690, 518], [3683, 483], [3685, 437], [3695, 380], [3714, 312]] },
+  { id: 'ramp-port-e', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
+    pts: [[3523, 607], [3554, 599], [3584, 588], [3610, 578], [3639, 568], [3659, 549], [3669, 522], [3669, 486], [3659, 443], [3639, 392], [3610, 332]] },
   // the freight loop: round the valley and the coast, and out west through the rim mountains to circle the desert on a viaduct
   // (tunnels through the rim and the mesas, never at ground level out there)
   { id: 'rail', closed: true, width: 8, surface: 'rail', smoothWin: 70, passes: 6, grade: 0.03, noFeatures: true, sub: 6, lowland: 840,
