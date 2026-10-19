@@ -75,12 +75,27 @@ Object.assign(Gfx.prototype, {
     t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true;
     return (this.kerbTex = t);
   },
+  junctionTexture() {
+    if (this.juncTex) return this.juncTex;
+    const J = this.world.city.streets.rural, t = new THREE.DataTexture(J.tex, J.W, J.H, THREE.RGBAFormat, THREE.UnsignedByteType);
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
+    return (this.juncTex = t);
+  },
+  /* the shader's lookup into the country junction patches: the nearest patch centre wins */
+  junctionGLSL() {
+    const J = this.world.city.streets.rural, P = JPATCH, half = (P.size / 2).toFixed(1), f = (v) => v.toFixed(1);
+    if (!J.list.length) return '';
+    return `{ float best = 1e9; vec2 juv = vec2(0.0);
+    ${J.list.map((j) => `{ vec2 q = P.xz - vec2(${f(j.x)}, ${f(j.z)}); float m = max(abs(q.x), abs(q.y)); if (m < best) { best = m; juv = (vec2(${j.col * J.n}.0, ${j.row * J.n}.0) + (q + ${half}) / ${P.res.toFixed(2)}) / vec2(${J.W}.0, ${J.H}.0); } }`).join('\n    ')}
+    if (best < ${f(P.fade[1])}) { jW = 1.0 - smoothstep(${f(P.fade[0])}, ${f(P.fade[1])}, best); jT = texture2D(uJunc, juv); } }`;
+  },
   /* ---------- terrain material ---------- */
   terrainMaterial() {
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, envMapIntensity: 0.35 });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this.time;
       sh.uniforms.uKerb = { value: this.kerbTexture() };
+      sh.uniforms.uJunc = { value: this.junctionTexture() };
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\n' + TERRAIN_GLSL_PARS)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -88,7 +103,7 @@ vWPos = (modelMatrix * vec4(position,1.0)).xyz; vWNrm = normal; vA = aA; vB = aB
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
 varying vec4 vA; varying vec4 vB; varying vec4 vC; varying vec3 vD; varying vec3 vWPos; varying vec3 vWNrm;
-uniform sampler2D uKerb;
+uniform sampler2D uKerb; uniform sampler2D uJunc;
 ${NOISE_GLSL}
 float gWet; float gBump; float gGloss; vec3 gEmis;
 float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smoothstep(w - f, w + f, abs(d)); }`)
@@ -184,6 +199,18 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
       m = max(m, e);
     }
     m *= smoothstep(1400.0, 300.0, dist) * (0.75 + 0.25 * n4) * jfade;
+    // a country junction: its patch draws the tarmac with rounded corners, the edge lines round them, and the paint
+    float jW = 0.0; vec4 jT = vec4(1.0, 0.0, 0.0, 0.0);
+    ${this.junctionGLSL()}
+    if (jW > 0.0) {
+      float je = jT.r * 31.875 - 16.0, jk = fwidth(je) + 0.02, jd = jT.b * 31.875 - 16.0, jdash = step(0.5, fract(fract(jT.a * 2.0) * 2.0));
+      float jm = lineAA(jd, 0.08) * jdash * (1.0 - step(0.5, jT.g)); vec3 jmc = vec3(0.85, 0.72, 0.3);
+      float jedge = lineAA(je + 1.55, 0.08); if (jedge > jm) jmc = vec3(0.86); jm = max(jm, jedge);
+      jm *= smoothstep(1400.0, 300.0, dist) * (0.75 + 0.25 * n4);
+      m = mix(m, jm, jW); mc = mix(mc, jmc, jW);
+      asph = mix(asph, 1.0 - smoothstep(-jk, jk, je), jW);
+      tar = mix(tar, vec3(0.085, 0.087, 0.092) * (0.82 + 0.3 * n3 + 0.12 * n4), jW * 0.6);
+    }
     tar = mix(tar, mc, m * 0.85);
     col = mix(col, tar, asph);
     gGloss = max(gGloss, asph * 0.35);
