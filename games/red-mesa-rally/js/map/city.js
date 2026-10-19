@@ -257,7 +257,9 @@ class City {
     }
     // the ship: deck, a ramp up from the quay, and container stacks in bays with lanes between them
     this.decks.push({ kind: 'deck', x0: SHIP.x0, x1: SHIP.x1, z0: SHIP.z0, z1: SHIP.z1 - 14, y: SHIP.y });
-    this.decks.push({ kind: 'slope', x: SHIP.rampX0, z: SHIP.rampZ, dx: 1, dz: 0, L: SHIP.x0 - SHIP.rampX0, Lt: SHIP.x0 - SHIP.rampX0 + 1, hw: SHIP.rampHw, y0: CITY.y, y1: SHIP.y, ship: true });
+    { const r = SHIP.ramp, L = r.z0 - r.z1;
+      this.decks.push({ kind: 'slope', x: r.x, z: r.z0, dx: 0, dz: -1, L, Lt: L + 1, hw: r.hw, y0: CITY.y, y1: SHIP.y, ship: true });
+      this.decks.push({ kind: 'deck', x0: r.x - r.hw, x1: SHIP.x0 + 0.5, z0: SHIP.rampZ - SHIP.rampHw, z1: SHIP.rampZ + SHIP.rampHw, y: SHIP.y }); } // the landing
     for (const [x0, x1] of [[SHIP.x0 + 4, SHIP.x0 + 16.2], [SHIP.x1 - 16.2, SHIP.x1 - 4]]) {
       for (let zb = SHIP.z0 + 34; zb < SHIP.z1 - 30; zb += 24) for (let k = 0; k < 5; k++) {
         const z = zb + k * 3.1;
@@ -272,7 +274,7 @@ class City {
       h: (t) => { const c = Math.cos(t); return c < -0.15 ? 16 : c < 0.25 ? 16 - (c + 0.15) * 25 : 6 + 2 * Math.sin(t * 7); } }; }
     // gantry cranes on the south quay (clear of the slipway) and the east quay by the ship
     for (const x of [4340, 4480, 4820]) this.cranes.push({ x, z: 792, yaw: 0, color: x === 4480 ? 0xe0b020 : 0xd94c22 });
-    for (let k = 0; k < 3; k++) this.cranes.push({ x: 5136, z: -500 + k * 260, yaw: Math.PI / 2, color: 0xd94c22 });
+    for (let k = 0; k < 3; k++) this.cranes.push({ x: 5136, z: -440 + k * 260, yaw: Math.PI / 2, color: 0xd94c22 });
     this.yardFences(T, vm, green);
     this.streets = new Streets(T, this);
   }

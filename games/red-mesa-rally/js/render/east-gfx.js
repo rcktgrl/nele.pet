@@ -438,10 +438,19 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     // name on the hull
     const name = new THREE.Mesh(new THREE.PlaneGeometry(40, 5), new THREE.MeshStandardMaterial({ map: textTex(1024, 128, (x, w, h) => { x.clearRect(0, 0, w, h); x.fillStyle = '#f4f1e8'; x.font = '400 100px "Saira Stencil One", Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('CALDER STAR', w / 2, h / 2 + 4); }), transparent: true, side: THREE.DoubleSide }));
     name.position.set(S.x1 + 0.05, S.y - 4, S.z1 - 60); name.rotation.y = Math.PI / 2; g.add(name);
-    // ro-ro ramp from the quay
-    const rl = S.x0 - S.rampX0 + 1, ang = Math.atan2(S.y - CITY.y, rl - 1), ramp = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(rl, S.y - CITY.y), 0.5, S.rampHw * 2), new THREE.MeshStandardMaterial({ color: 0x6b6f75, roughness: 0.6, metalness: 0.5 }));
-    ramp.position.set(S.rampX0 + rl / 2, (S.y + CITY.y) / 2 - 0.2, S.rampZ); ramp.rotation.z = ang; g.add(ramp);
-    for (const sd of [-1, 1]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(rl, S.y - CITY.y), 1.0, 0.25), red); rail.position.set(S.rampX0 + rl / 2, (S.y + CITY.y) / 2 + 0.6, S.rampZ + sd * (S.rampHw + 0.1)); rail.rotation.z = ang; g.add(rail); }
+    // ro-ro ramp up along the quay to a landing that opens onto the deck, on legs
+    const R = S.ramp, rl = R.z0 - R.z1, rise = S.y - CITY.y, ang = Math.atan2(rise, rl), steel = new THREE.MeshStandardMaterial({ color: 0x6b6f75, roughness: 0.6, metalness: 0.5 });
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(R.hw * 2, 0.5, Math.hypot(rl, rise)), steel);
+    ramp.position.set(R.x, (S.y + CITY.y) / 2 - 0.25, (R.z0 + R.z1) / 2); ramp.rotation.x = ang; g.add(ramp);
+    for (const sd of [-1, 1]) { const rail = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.0, Math.hypot(rl, rise)), red); rail.position.set(R.x + sd * (R.hw + 0.1), (S.y + CITY.y) / 2 + 0.55, (R.z0 + R.z1) / 2); rail.rotation.x = ang; g.add(rail); }
+    const lx0 = R.x - R.hw, lx1 = S.x0 + 0.5, lz0 = S.rampZ - S.rampHw, lz1 = S.rampZ + S.rampHw;
+    const land = new THREE.Mesh(new THREE.BoxGeometry(lx1 - lx0, 0.5, lz1 - lz0), steel); land.position.set((lx0 + lx1) / 2, S.y - 0.25, S.rampZ); g.add(land);
+    for (const [x, z, w, d] of [[lx0 - 0.1, (R.z1 + lz0) / 2, 0.25, R.z1 - lz0], [(lx0 + S.x0) / 2, lz0 - 0.1, S.x0 - lx0, 0.25], [(R.x + R.hw + S.x0) / 2, lz1 + 0.1, S.x0 - R.x - R.hw, 0.25]]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.0, d), red); m.position.set(x, S.y + 0.5, z); g.add(m);
+    }
+    for (const [x, z] of [[lx0 + 1, lz0 + 1], [lx0 + 1, lz1 - 1], [lx1 - 2, lz0 + 1], [lx1 - 2, lz1 - 1], [R.x - R.hw + 1, R.z1 + rl / 2], [R.x + R.hw - 1, R.z1 + rl / 2]]) {
+      const top = z > lz1 ? S.y - rise / 2 : S.y, leg = new THREE.Mesh(new THREE.BoxGeometry(0.6, top - CITY.y, 0.6), steel); leg.position.set(x, (top + CITY.y) / 2 - 0.5, z); g.add(leg);
+    }
     g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this.scene.add(g);
   },

@@ -27,8 +27,9 @@ const FLAT = { x0: CITY.x0 - 24, x1: 5150, z0: CITY.z0 - 24, z1: 800 };
 /* the harbour: water dredged deep against the south and east quays, and a slipway down into it */
 const HARBOUR = [{ x0: 4250, x1: 5700, z0: FLAT.z1, z1: 1600 }, { x0: FLAT.x1, x1: 5700, z0: -760, z1: FLAT.z1 }];
 const SLIP = { x: 4650, z0: FLAT.z1 - 6, z1: FLAT.z1 + 62, hw: 8, y1: -4.6 };
-/* a ro-ro container ship tied up at the east quay: a ramp from the quay onto its deck */
-const SHIP = { x0: 5153, x1: 5191, z0: -650, z1: -390, y: 12.5, rampZ: -555, rampHw: 6, rampX0: 5106 };
+/* a ro-ro container ship tied up at the east quay. The ramp climbs along the quay beside the hull (clear of Harbour Dr) to a
+   landing at deck height, which opens sideways onto the deck between rampZ ± rampHw */
+const SHIP = { x0: 5153, x1: 5191, z0: -650, z1: -390, y: 12.5, rampZ: -557, rampHw: 8, ramp: { x: 5142, hw: 6, z0: -497, z1: -549 } };
 /* Calder Metro: a loop of twin-track tube under Port Calder, no road and no barrier. Cars drive on the rails: the inner track
    carries the stopping service (it runs with the race and waits at the platforms), the outer track the express, which runs
    the other way and never stops. Four portals each have a ramp down an open cut beside a street and on under it to the loop.
