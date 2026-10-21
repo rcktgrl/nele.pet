@@ -572,14 +572,13 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vTU;').replace('#include <uv_vertex>', '#include <uv_vertex>\nvTU = uv;');
     };
     const tube = new THREE.Mesh(g, tm); tube.castShadow = true; tube.receiveShadow = true; this.scene.add(tube);
-    // the floor of the bore, where the ground above was left alone (nearer the portals the cut terrain is the floor)
+    // the floor of the bore, portal to portal (the ground above the bore was left alone, and the terrain is cut away where the cut meets it)
     const rail = R.surface === 'rail', fw = R.width / 2 + 1.2, fp = [], fu = [], fi = [];
-    const inBore = (i) => R.bore && (R.bore[i] || R.bore[Math.max(0, i - 1)] || R.bore[Math.min(R.count, i + 1)]);
     for (let i = i0; i <= i1; i++) {
       const s = i * R.step, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), rx = dz, rz = -dx;
       for (const l of [-fw, fw]) { fp.push(p.x + rx * l, p.y + 0.03, p.z + rz * l); fu.push(l < 0 ? 0 : 1, s / 12); }
     }
-    for (let k = 0; k < i1 - i0; k++) if (inBore(i0 + k) && inBore(i0 + k + 1)) { const a = k * 2, b = a + 2; fi.push(a, b, a + 1, a + 1, b, b + 1); }
+    for (let k = 0; k < i1 - i0; k++) { const a = k * 2, b = a + 2; fi.push(a, b, a + 1, a + 1, b, b + 1); }
     if (fi.length) {
       const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(fp, 3)); fg.setAttribute('uv', new THREE.Float32BufferAttribute(fu, 2)); fg.setIndex(fi); fg.computeVertexNormals();
       if (fg.attributes.normal.array[1] < 0) { for (let t = 0; t < fi.length; t += 3) [fi[t + 1], fi[t + 2]] = [fi[t + 2], fi[t + 1]]; fg.setIndex(fi); fg.computeVertexNormals(); }

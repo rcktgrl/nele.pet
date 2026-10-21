@@ -450,7 +450,10 @@ class Terrain {
       for (let i = 0; i < nS; i++) {
         const j = R.idx(i + 1);
         const ax = R.x[i], az = R.z[i], bx = R.x[j], bz = R.z[j];
-        if (R.bore && R.bore[i] && R.bore[j]) { this.stampBore(ax, az, R.y[i], bx, bz, R.y[j], hw + 1.2, isR); continue; }
+        if (R.bore && R.covered.subarray(Math.max(0, i - 4), j + 5).includes(1)) { // the floor runs out under the cut, past where the lid's 4 m cells reach
+          this.stampBore(ax, az, R.y[i], bx, bz, R.y[j], hw + 1.2, isR);
+          if (R.bore[i] && R.bore[j]) continue;
+        }
         const cx = Math.round((ax - x0) / c), cz = Math.round((az - z0) / c);
         for (let dz = -rc; dz <= rc; dz++) for (let dx = -rc; dx <= rc; dx++) {
           const gx = cx + dx, gz = cz + dz; if (gx < 0 || gz < 0 || gx >= Nx || gz >= Nz) continue;
@@ -499,6 +502,15 @@ class Terrain {
       if (wmax[i] > 0) this.h[i] = lerp(this.h[i], tsum[i] / wsum[i], wmax[i]);
       const shore = 1 - smooth(0.4, 2.2, this.h[i] - WATER_Y);
       if (shore > 0 && this.h[i] > WATER_Y - 3 && i % this.Nx < 520) this.mud[i] = Math.max(this.mud[i], shore * 0.85);
+    }
+    // over a bore the ground is a lid above the crown, wherever a cut's blending dragged it lower
+    // (its 4 m cells reach out sideways, so it starts a little way in from each end of the bore and the step up stays inside it)
+    for (const R of this.routes) if (R.bore) for (let i = 6; i <= R.count - 6; i++) if (R.bore[i - 6] && R.bore[i + 6]) {
+      const r = R.width / 2 + 4, lid = R.y[i] + BORE_CROWN + 1.5, cx = Math.round((R.x[i] - x0) / c), cz = Math.round((R.z[i] - z0) / c), rc = Math.ceil(r / c) + 1;
+      for (let dz = -rc; dz <= rc; dz++) for (let dx = -rc; dx <= rc; dx++) {
+        const gx = cx + dx, gz = cz + dz; if (gx < 0 || gz < 0 || gx >= Nx || gz >= Nz) continue;
+        if (Math.hypot(x0 + gx * c - R.x[i], z0 + gz * c - R.z[i]) < r) { const gi = gz * Nx + gx; if (this.h[gi] < lid) this.h[gi] = lid; }
+      }
     }
   }
 }
