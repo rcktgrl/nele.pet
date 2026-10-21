@@ -465,12 +465,21 @@ vRW = (modelMatrix * vec4(position,1.0)).xyz;
     this.cellInstances(mergeGeos(jParts), leafMat, S.trees, placeJ, { cast: true, dist: 1100, lodMax: 420 });
     const jFar = new THREE.IcosahedronGeometry(1.5, 0); jFar.scale(1, 1.15, 1); jFar.translate(0, 2.7, 0); tint(jFar, 0.15, 0.185, 0.1);
     this.cellInstances(jFar, leafMat, S.trees, placeJ, { cast: false, dist: 1100, lodMin: 420 });
-    // sagebrush (desert) and meadow scrub (east)
-    const bGeo = new THREE.IcosahedronGeometry(0.7, low ? 0 : 1); bGeo.scale(1.25, 0.6, 1.25); lumpy(bGeo, 0.38, 2.2, 3); bGeo.translate(0, 0.25, 0); tint(bGeo, 1, 1, 1);
-    const bMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
-    const bFar = new THREE.IcosahedronGeometry(0.7, 0); bFar.scale(1.25, 0.6, 1.25); lumpy(bFar, 0.3, 2.2, 3); bFar.translate(0, 0.25, 0); tint(bFar, 1, 1, 1);
-    const placeB = (b, d, col) => { d.position.set(b.x, b.y, b.z); d.rotation.set(0, b.rot, 0); d.scale.set(b.s, b.s * (0.8 + b.seed * 0.5), b.s); const v = vis(b.x, b.z), k = b.seed; col.setRGB((0.22 + k * 0.1) * v, (0.21 + k * 0.05) * v, (0.13 + k * 0.03) * v); };
-    const placeG = (b, d, col) => { d.position.set(b.x, b.y, b.z); d.rotation.set(0, b.rot, 0); d.scale.set(b.s * 1.2, b.s * (0.7 + b.seed * 0.5), b.s * 1.2); const v = vis(b.x, b.z), g = b.g; col.setRGB(lerp(0.36, 0.12, g) * v * (0.8 + b.seed * 0.4), lerp(0.3, 0.22, g) * v, lerp(0.12, 0.06, g) * v); };
+    // sagebrush (desert) and meadow scrub (east): leafy clumps up on a few short woody stems, so they never read as stones
+    const bushGeo = (clumps, detail) => {
+      const parts = [], r = mulberry32(11);
+      for (let i = 0; i < 3; i++) { const st = new THREE.CylinderGeometry(0.035, 0.07, 0.55, 5); st.translate(0, 0.27, 0); st.rotateZ((r() - 0.5) * 0.6); st.rotateY(i * 2.1); tint(st, 0.32, 0.22, 0.14); parts.push(st); }
+      for (let i = 0; i < clumps; i++) {
+        const a = i / clumps * Math.PI * 2 + r(), d = i ? 0.38 + r() * 0.12 : 0, c = new THREE.IcosahedronGeometry(0.34 + r() * 0.12, detail);
+        c.scale(1, 0.8, 1); lumpy(c, 0.22, 3.2, i + 7); c.translate(Math.cos(a) * d, 0.62 + r() * 0.22 + (i ? 0 : 0.18), Math.sin(a) * d);
+        const sh = 0.85 + r() * 0.3; tint(c, sh, sh * 1.04, sh); parts.push(c);
+      }
+      return mergeGeos(parts);
+    };
+    const bGeo = bushGeo(low ? 4 : 6, low ? 0 : 1), bFar = bushGeo(3, 0);
+    const bMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
+    const placeB = (b, d, col) => { d.position.set(b.x, b.y - 0.05, b.z); d.rotation.set(0, b.rot, 0); d.scale.set(b.s, b.s * (0.8 + b.seed * 0.5), b.s); const v = vis(b.x, b.z), k = b.seed; col.setRGB((0.17 + k * 0.06) * v, (0.21 + k * 0.05) * v, (0.13 + k * 0.03) * v); };
+    const placeG = (b, d, col) => { d.position.set(b.x, b.y - 0.05, b.z); d.rotation.set(0, b.rot, 0); d.scale.set(b.s * 1.2, b.s * (0.7 + b.seed * 0.5), b.s * 1.2); const v = vis(b.x, b.z), g = b.g; col.setRGB(lerp(0.2, 0.08, g) * v * (0.8 + b.seed * 0.4), lerp(0.25, 0.2, g) * v, lerp(0.09, 0.06, g) * v); };
     this.cellInstances(bGeo, bMat, S.bushes, placeB, { cast: this.quality === 'high', dist: 420, lodMax: 230 });
     this.cellInstances(bFar, bMat, S.bushes, placeB, { cast: false, dist: 420, lodMin: 230 });
     this.cellInstances(bGeo, bMat, S.grassBush, placeG, { cast: false, dist: 420, lodMax: 230 });

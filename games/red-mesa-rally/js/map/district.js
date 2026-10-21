@@ -95,7 +95,8 @@ const DISTRICT = (() => {
     let run = []; rail.forEach((q, i) => { if (open[i]) run.push(q); else { if (run.length > 1) obs.add(run, 'rail'); run = []; } }); if (run.length > 1) obs.add(run, 'rail');
   }
   obs.add(hwy, 'hwy');
-  for (const d of ROUTE_DEFS) if (d.ramp) obs.add(curve(d.pts, false), 'ramp');
+  // a slip road that lands on a district street (toStreet) leaves its last metres off the list, so that street survives
+  for (const d of ROUTE_DEFS) if (d.ramp) { const pl = curve(d.pts, false); obs.add(d.toStreet ? slice(pl, 0, plen(pl) - 30) : pl, 'ramp'); }
   const lower = RIVER.reaches.find((r) => r.id === 'lower').pts.map((q) => [q.x, q.z]);
   obs.add(lower, 'river');
   const wet = (x, z) => naturalHeight(x, z) < 1.2;

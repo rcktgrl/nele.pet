@@ -185,12 +185,13 @@ function findBridges(T) {
       i = j + 1;
     }
   }
-  // leave the parapet open wherever another road joins at deck level
+  // leave the parapet open wherever another road joins at deck level: only where the wall would stand on that road's
+  // tarmac, so along a slip road's taper one of the two walls (the main deck's or the ramp's) is always there
   for (const B of out) for (const p of B.pieces) for (const R of Rs) {
     if (R.id === B.route) continue;
     for (const [si, side] of [[0, -1], [1, 1]]) {
       const l = side * p.hw, x = p.x - p.dz * l + p.dx * p.Lt / 2, z = p.z + p.dx * l + p.dz * p.Lt / 2, pr = R.project(x, z, 0, -1);
-      if (pr.dist < R.width / 2 + 3 && Math.abs(R.y[R.idx(Math.round(pr.s / R.step))] - (p.y0 + p.y1) / 2) < 2.5) p.gap[si] = true;
+      if (pr.dist < R.width / 2 + 2 && Math.abs(R.y[R.idx(Math.round(pr.s / R.step))] - (p.y0 + p.y1) / 2) < 2.5) p.gap[si] = true;
     }
   }
   return out;

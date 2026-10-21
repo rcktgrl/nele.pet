@@ -160,9 +160,12 @@ Object.assign(Gfx.prototype, {
       const R = this.world.route(B.route), hw = B.width / 2 + 1.5, D = B.rail ? 2.2 : 1.4;
       // one strip along the route samples: top, two sides and the soffit, plus the parapet walls
       const P = [], UV = [], pi = [], ti = [], si = [];
+      // a slip road's deck tucks a few cm under the main deck where the two overlap, or the two tops fight for the same depth
+      const mains = R.def.ramp ? T.routes.filter((O) => O.def.elevated) : [];
+      const under = (x, z, y) => mains.some((O) => { const pr = O.project(x, z, 0, -1); return pr.dist < O.width / 2 + 1.5 && Math.abs(O.sample(O.y, pr.s) - y) < 1; });
       for (let i = B.i0; i <= B.i1; i++) {
         const [dx, dz] = R.dirAt(i * R.step), rx = -dz, rz = dx, x = R.x[i], z = R.z[i], y = R.y[i];
-        for (const [l, h] of [[-hw, 0.02], [hw, 0.02], [hw, -D], [-hw, -D]]) { P.push(x + rx * l, y + h, z + rz * l); UV.push(l < 0 ? 0 : 1, i * R.step / 12); }
+        for (const [l, h] of [[-hw, 0.02], [hw, 0.02], [hw, -D], [-hw, -D]]) { const px = x + rx * l, pz = z + rz * l; P.push(px, y + h - (h > 0 && under(px, pz, y) ? 0.06 : 0), pz); UV.push(l < 0 ? 0 : 1, i * R.step / 12); }
       }
       const n = B.i1 - B.i0;
       for (let k = 0; k < n; k++) {

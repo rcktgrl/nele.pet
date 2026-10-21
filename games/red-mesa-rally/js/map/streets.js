@@ -6,7 +6,8 @@ const STREETMAP = { x0: 3240, z0: -1620, x1: 5260, z1: 1180, res: 0.7, far: 12, 
 class Streets {
   constructor(T, city) {
     const M = STREETMAP;
-    this.routes = T.routes.filter((R) => R.surface === 'asphalt' && !R.def.viaduct && !R.def.ramp && !R.def.noCarve && !R.def.trafficOnly && this.inBox(R));
+    // a slip road that lands on a street joins the plan for its last, ground-level stretch
+    this.routes = T.routes.filter((R) => R.surface === 'asphalt' && ((!R.def.viaduct && !R.def.ramp) || R.def.toStreet) && !R.def.noCarve && !R.def.trafficOnly && this.inBox(R));
     this.kerbMap();
     this.findJunctions(T);
     this.paint = []; this.signals = []; this.stops = [];
@@ -26,6 +27,7 @@ class Streets {
     this.routes.forEach((R, ri) => {
       for (let i = 0; i < R.count; i += 2) {
         const j = Math.min(R.count, i + 2), ax = R.x[i], az = R.z[i], bx = R.x[j], bz = R.z[j], r = reach(R);
+        if (R.elev && (R.elev[i] || R.elev[j])) continue;
         const ti0 = Math.floor((Math.min(ax, bx) - r - M.x0) / M.res / TILE), ti1 = Math.floor((Math.max(ax, bx) + r - M.x0) / M.res / TILE);
         const tj0 = Math.floor((Math.min(az, bz) - r - M.z0) / M.res / TILE), tj1 = Math.floor((Math.max(az, bz) + r - M.z0) / M.res / TILE);
         for (let tj = tj0; tj <= tj1; tj++) for (let ti = ti0; ti <= ti1; ti++) {

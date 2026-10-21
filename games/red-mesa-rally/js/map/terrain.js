@@ -314,6 +314,15 @@ class Terrain {
         for (let i = n - 1; i >= (R.closed ? -nS : 0); i--) if (!isNaN(pin[w(i)]) && !isNaN(pin[w(i + 1)])) pin[w(i)] = Math.max(pin[w(i)], pin[w(i + 1)] - g);
         if (R.closed) pin[nS] = pin[0];
       }
+      // a deck on piers the whole way: fair the pins into long vertical curves. A running max then a box of the same width
+      // never dips below what it was given, so every clearance above still holds
+      if (def.elevated) {
+        const W = 20, m = new Float32Array(nS + 1);
+        for (let it = 0; it < 3; it++) {
+          for (let i = 0; i <= nS; i++) { let v = -1e9; for (let j = -W; j <= W; j++) v = Math.max(v, pin[R.idx(i + j)]); m[i] = v; }
+          for (let i = 0; i <= nS; i++) { let a = 0; for (let j = -W; j <= W; j++) a += m[R.idx(i + j)]; pin[i] = a / (2 * W + 1); }
+        }
+      }
       // level crossings: engineered roads pin the rail height into the grade limiter below
       const hits = [];
       if (R.surface !== 'rail' && railHash.size && !def.viaduct) {
