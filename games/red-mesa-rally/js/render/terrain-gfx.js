@@ -341,7 +341,7 @@ reflectedLight.indirectDiffuse *= vA.w; reflectedLight.indirectSpecular *= vA.w;
   },
   updateTerrain(cam, budget) {
     const qd = this.quality === 'high' ? 1 : this.quality === 'medium' ? 0.75 : 0.55;
-    const hiDist = 380 * qd, midDist = 1150 * qd;
+    const hiDist = 800 * qd, midDist = 1900 * qd; // far enough out that the switch in detail does not show on roads and decks
     let builds = budget === undefined ? 2 : budget;
     const list = this.chunks.map((ch) => [Math.max(0, Math.hypot(ch.cx - cam.x, ch.cz - cam.z) - ch.half), ch]).sort((a, b) => a[0] - b[0]);
     const drop = (ch, k) => { if (ch[k]) { this.terrainGroup.remove(ch[k]); ch[k].geometry.dispose(); ch[k] = null; ch.sup.dirty = true; } };
