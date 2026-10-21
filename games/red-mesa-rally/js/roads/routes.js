@@ -96,10 +96,10 @@ const ROUTE_DEFS = [
     pts: [[3897, -730], [3893, -685], [3881, -640], [3868, -590], [3866, -520], [3866, -450], [3862, -380], [3852, -352], [3846, -338]] },
   { id: 'ramp-central-e', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
     pts: [[3912, -85], [3905, -125], [3912, -170], [3928, -220], [3930, -280], [3942, -318], [3950, -342]] },
-  { id: 'ramp-port', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true, // Sunset Marina
-    pts: [[3850, 561], [3818, 560], [3786, 559], [3759, 557], [3727, 555], [3704, 542], [3690, 518], [3683, 483], [3685, 437], [3695, 380], [3714, 312]] },
-  { id: 'ramp-port-e', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true,
-    pts: [[3523, 607], [3554, 599], [3584, 588], [3610, 578], [3639, 568], [3659, 549], [3669, 522], [3669, 486], [3659, 443], [3639, 392], [3610, 332]] },
+  { id: 'ramp-port', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true, toStreet: true, // Sunset Marina
+    pts: [[3850, 561], [3818, 560], [3786, 559], [3759, 557], [3727, 555], [3704, 542], [3690, 518], [3683, 483], [3685, 437], [3695, 380], [3714, 312], [3713, 262], [3704, 208]] }, // down into the Marina's main street
+  { id: 'ramp-port-e', closed: false, width: 10, surface: 'asphalt', lanes: 2, smoothWin: 12, grade: 0.07, viaduct: true, ramp: true, toStreet: true,
+    pts: [[3523, 607], [3554, 599], [3584, 588], [3610, 578], [3639, 568], [3659, 549], [3669, 522], [3669, 486], [3659, 443], [3639, 392], [3610, 332], [3594, 278], [3585, 227]] },
   // the freight loop: round the valley and the coast, and out west through the rim mountains to circle the desert on a viaduct
   // (tunnels through the rim and the mesas, never at ground level out there)
   { id: 'rail', closed: true, width: 8, surface: 'rail', smoothWin: 70, passes: 6, grade: 0.03, noFeatures: true, sub: 6, lowland: 840,
