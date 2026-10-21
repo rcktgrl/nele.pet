@@ -415,12 +415,33 @@ class World {
     this.collideCars();
     this.collideStatic();
   }
+  /* a car against something that does not move: restitution e along the wall normal (n, level), sliding friction along it,
+     through the car's full effective mass at the contact point so an off-centre hit turns it as much as it should and no more.
+     The caller passes the contact at the car's own height: a wall pushing at bumper height would roll it onto its side */
+  wallImpulse(c, nx, nz, px, py, pz, e) {
+    const m = c.spec.mass, t = this._wall || (this._wall = { r: new V3(), n: new V3(), a: new V3(), b: new V3(), v: new V3(), J: new V3(), p: new V3() });
+    const r = t.r.set(px - c.pos.x, py - c.pos.y, pz - c.pos.z), n = t.n.set(nx, 0, nz);
+    const vc = t.v.crossVectors(c.w, r).add(c.vel), vn = vc.dot(n);
+    if (vn >= 0) return;
+    const k = (dir) => 1 / m + dir.dot(c.invIWorld(t.a.crossVectors(r, dir), t.a).cross(r));
+    const Jn = -(1 + e) * vn / k(n);
+    const J = t.J.copy(n).multiplyScalar(Jn);
+    const vt = vc.addScaledVector(n, -vn); vt.y = 0; const sl = vt.length();
+    if (sl > 1e-3) { vt.multiplyScalar(1 / sl); J.addScaledVector(vt, -Math.min(sl / k(vt), 0.35 * Jn)); }
+    const wy = c.w.y;
+    c.applyImpulse(J, t.p.set(px, py, pz));
+    c.w.y = wy + clamp(c.w.y - wy, -2.2, 2.2); // a glancing blow turns the car, it never sends it spinning
+    c.wallT = 0.7; // and the car settles quickly afterwards (car.step)
+    // the wheels slow with the car: still spinning at the old road speed they would kick it round
+    const vf = c.vel.dot(c.forward(t.b)); for (const wh of c.wheels) if (Math.abs(wh.omega * c.spec.wheels.r) > Math.abs(vf)) wh.omega = vf / c.spec.wheels.r;
+  }
   collideStatic() {
     const S = this.scatter, P = this.props;
     const sph = [];
     for (const c of this.cars) {
       if (c.asleep || c.remote) continue;
       c.spheres(sph);
+      const hitThisStep = new Set();
       for (const s of sph) {
         const list = S.near(s.p.x, s.p.z);
         if (list) for (const o of list) {
@@ -448,14 +469,9 @@ class World {
           }
           const vn = c.vel.x * nx + c.vel.z * nz;
           c.pos.x += nx * pen; c.pos.z += nz * pen;
-          if (vn < 0) {
-            const soft = o.kind === 'rail' || o.kind === 'barrier' ? 1.05 : 1.25;
-            const J = new V3(nx, 0, nz).multiplyScalar(-vn * soft * c.spec.mass);
-            if (o.kind === 'rail' || o.kind === 'barrier' || o.kind === 'building' || o.kind === 'container') { // scrape along walls instead of sticking
-              const vt = new V3(c.vel.x - vn * nx, 0, c.vel.z - vn * nz);
-              J.addScaledVector(vt, -0.12 * c.spec.mass);
-            }
-            c.applyImpulse(J, new V3(cx, s.p.y, cz));
+          if (vn < 0 && !hitThisStep.has(o)) {
+            hitThisStep.add(o); // both hull spheres touching the same wall get one impulse between them
+            this.wallImpulse(c, nx, nz, cx, c.pos.y, cz, o.kind === 'rail' || o.kind === 'barrier' ? 0.15 : 0.25);
             c.impact = Math.max(c.impact, -vn);
             c.events.push({ type: 'hit', v: -vn, kind: o.kind });
             const limit = o.kind === 'rail' || o.kind === 'barrier' ? 1.5 : 1.05;
