@@ -367,6 +367,8 @@ class World {
     T.normal(x, z, this._n);
     const rock = smooth(0.85, 0.7, this._n.y) * (1 - road) * (1 - asph);
     // on a bridge, viaduct, ramp or car-park deck the grip is the deck's own, not the river bed or gap underneath
+    // down in a road or rail bore: the floor of the bore
+    if (y !== undefined && T.bores && T.probe(y + 1, () => T.boreFloor(x, z)) !== null) return this.deckSurface(T.boreRail.has(Math.round(x / 2) * 65536 + Math.round(z / 2)) ? 0 : 1, 0, 0);
     const o = y !== undefined && T.overlayAt(x, z), oy = o ? overlayLift(o, x, z) : -Infinity;
     if (o && Math.abs(oy - y) < 1.2 && oy > T.rawH(x, z) + 0.3) {
       const k = o.surf || 'asphalt';

@@ -572,9 +572,31 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vTU;').replace('#include <uv_vertex>', '#include <uv_vertex>\nvTU = uv;');
     };
     const tube = new THREE.Mesh(g, tm); tube.castShadow = true; tube.receiveShadow = true; this.scene.add(tube);
-    // mountain cover: the untouched mountainside laid back over the bore
+    // the floor of the bore, where the ground above was left alone (nearer the portals the cut terrain is the floor)
+    const rail = R.surface === 'rail', fw = R.width / 2 + 1.2, fp = [], fu = [], fi = [];
+    const inBore = (i) => R.bore && (R.bore[i] || R.bore[Math.max(0, i - 1)] || R.bore[Math.min(R.count, i + 1)]);
+    for (let i = i0; i <= i1; i++) {
+      const s = i * R.step, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), rx = dz, rz = -dx;
+      for (const l of [-fw, fw]) { fp.push(p.x + rx * l, p.y + 0.03, p.z + rz * l); fu.push(l < 0 ? 0 : 1, s / 12); }
+    }
+    for (let k = 0; k < i1 - i0; k++) if (inBore(i0 + k) && inBore(i0 + k + 1)) { const a = k * 2, b = a + 2; fi.push(a, b, a + 1, a + 1, b, b + 1); }
+    if (fi.length) {
+      const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(fp, 3)); fg.setAttribute('uv', new THREE.Float32BufferAttribute(fu, 2)); fg.setIndex(fi); fg.computeVertexNormals();
+      if (fg.attributes.normal.array[1] < 0) { for (let t = 0; t < fi.length; t += 3) [fi[t + 1], fi[t + 2]] = [fi[t + 2], fi[t + 1]]; fg.setIndex(fi); fg.computeVertexNormals(); }
+      const floorTex = this._boreFloorTex || (this._boreFloorTex = {});
+      const tex = floorTex[rail ? 'r' : 'a'] || (floorTex[rail ? 'r' : 'a'] = textTex(128, 256, (gg, w, h) => {
+        const r = mulberry32(rail ? 9 : 8);
+        gg.fillStyle = rail ? '#5d564e' : '#1d1e21'; gg.fillRect(0, 0, w, h);
+        for (let k = 0; k < 900; k++) { const v = (rail ? 70 : 30) + r() * 40; gg.fillStyle = `rgba(${v},${v},${v + 3},0.5)`; gg.fillRect(r() * w, r() * h, 2, 2); }
+        if (!rail) { gg.fillStyle = '#d8d4ca'; gg.fillRect(10, 0, 3, h); gg.fillRect(w - 13, 0, 3, h); gg.fillStyle = '#d6aa3a'; gg.fillRect(w / 2 - 2, 0, 4, h * 0.5); }
+      }, { repeat: true }));
+      const fm = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.35, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+      const floor = new THREE.Mesh(fg, fm); floor.receiveShadow = true; this.scene.add(floor);
+    }
+    // mountain cover: the mountainside laid back over the open cut just behind each portal (deeper in, the ground was never cut)
     const reach = tun.reach, W = 12;
     const cp = [], cn = [], cA = [], cB = [], cC = [], cD = [], ci = [];
+    const cut = (i) => !(R.bore && R.bore[i] && R.bore[Math.min(R.count, i + 1)]);
     for (let i = i0; i <= i1; i++) {
       const s = i * R.step, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), rx = dz, rz = -dx;
       for (let k = 0; k <= W; k++) {
@@ -587,7 +609,7 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
         cA.push(0, 0, 0.85, 1); cB.push(40, 8, 0, 0); cC.push(b.green, 0, 0, 0); cD.push(0, 0, 0);
       }
     }
-    for (let i = 0; i < i1 - i0; i++) for (let k = 0; k < W; k++) { const a = i * (W + 1) + k, b = a + W + 1; ci.push(a, b, a + 1, a + 1, b, b + 1); }
+    for (let i = 0; i < i1 - i0; i++) if (cut(i0 + i)) for (let k = 0; k < W; k++) { const a = i * (W + 1) + k, b = a + W + 1; ci.push(a, b, a + 1, a + 1, b, b + 1); }
     const cg = new THREE.BufferGeometry();
     cg.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3)); cg.setAttribute('normal', new THREE.Float32BufferAttribute(cn, 3));
     cg.setAttribute('aA', new THREE.Float32BufferAttribute(cA, 4)); cg.setAttribute('aB', new THREE.Float32BufferAttribute(cB, 4)); cg.setAttribute('aC', new THREE.Float32BufferAttribute(cC, 4)); cg.setAttribute('aD', new THREE.Float32BufferAttribute(cD, 3));
@@ -610,7 +632,7 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
       const shape = new THREE.Shape(); shape.moveTo(-reach, -1); shape.lineTo(reach, -1);
       for (const [lx, h] of line) shape.lineTo(lx, h);
       shape.lineTo(-reach, -1);
-      const hole = new THREE.Path(); hole.moveTo(-hw, -0.5); hole.lineTo(-hw, 4.6); hole.absarc(0, 4.6, hw, Math.PI, 0, true); hole.lineTo(hw, -0.5); hole.lineTo(-hw, -0.5);
+      const hole = new THREE.Path(); hole.moveTo(-hw, -0.5); hole.lineTo(-hw, 4.6); hole.absellipse(0, 4.6, hw, 3.4, Math.PI, 0, true); hole.lineTo(hw, -0.5); hole.lineTo(-hw, -0.5); // exactly the bore's own section
       shape.holes.push(hole);
       const fg = new THREE.ExtrudeGeometry(shape, { depth: 2, bevelEnabled: false, curveSegments: 16 });
       const face = new THREE.Mesh(fg, conc);

@@ -98,7 +98,12 @@ class Terrain {
     tdefs.push(rev('valley-rd'), rev('lane-orchard'), rev('lane-mill'), rev('kingsway'), rev('mesa-blvd'), rev('north-rd'), rev('harbour-dr'));
     for (const d of tdefs) {
       const T2 = new Route({ ...d, noCarve: true, trafficOnly: true });
-      for (let i = 0; i <= T2.count; i++) T2.y[i] = this.height(T2.x[i], T2.z[i]);
+      // a lane the other way asks for the ground at its own road's height, so through a bore it keeps to the bore's floor
+      const O = d.id.endsWith('-rev') && this.routes.find((r) => r.id === d.id.slice(0, -4) && !r.def.trafficOnly);
+      for (let i = 0; i <= T2.count; i++) {
+        const oy = O && O.covered ? O.sample(O.y, O.project(T2.x[i], T2.z[i], O.length - i * T2.step, 80).s) + 1 : Infinity;
+        T2.y[i] = this.probe(oy, () => this.height(T2.x[i], T2.z[i]));
+      }
       this.routes.push(T2);
     }
   }
@@ -112,7 +117,22 @@ class Terrain {
     if (tx + tz <= 1) return a + (b - a) * tx + (cc - a) * tz;
     return d + (cc - d) * (1 - tx) + (b - d) * (1 - tz);
   }
+  /* the floor of a road or rail bore on a 2 m grid, under ground that was left alone */
+  stampBore(ax, az, ay, bx, bz, by, r, rail) {
+    const M = this.bores || (this.bores = new Map()), RS = this.boreRail || (this.boreRail = new Set()), G = 2, vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz || 1;
+    for (let i = Math.floor((Math.min(ax, bx) - r) / G); i <= Math.ceil((Math.max(ax, bx) + r) / G); i++) for (let j = Math.floor((Math.min(az, bz) - r) / G); j <= Math.ceil((Math.max(az, bz) + r) / G); j++) {
+      const px = i * G, pz = j * G, t = clamp(((px - ax) * vx + (pz - az) * vz) / L2, 0, 1);
+      if (Math.hypot(px - ax - vx * t, pz - az - vz * t) < r) { M.set(i * 65536 + j, lerp(ay, by, t)); if (rail) RS.add(i * 65536 + j); }
+    }
+  }
+  /* the bore floor under (x, z) for the current probe (below the crown), or null for the ground above */
+  boreFloor(x, z) {
+    if (!this.bores) return null;
+    const y = this.bores.get(Math.round(x / 2) * 65536 + Math.round(z / 2));
+    return y !== undefined && this.probeY < y + BORE_CROWN ? y : null;
+  }
   height(x, z) {
+    const bf = this.boreFloor(x, z); if (bf !== null) return bf;
     const h = this.heightGrid(this.h, x, z);
     const tk = this.riverTunAt(x, z);
     if (tk) { const M = this.riverTun; if (M.mask[tk - 1] === 1 && this.probeY < RIVER.tunnel.under) return RIVER.tunnel.bed; return this.ovGrid ? this.overlayHeight(x, z, M.top[tk - 1]) : M.top[tk - 1]; } // decks still pass over the lid
@@ -187,6 +207,10 @@ class Terrain {
     return h;
   }
   normal(x, z, out) {
+    if (this.boreFloor(x, z) !== null) { // in a bore: the slope of the road
+      const e = 1, dhdx = (this.height(x + e, z) - this.height(x - e, z)) / (2 * e), dhdz = (this.height(x, z + e) - this.height(x, z - e)) / (2 * e), l = Math.hypot(dhdx, 1, dhdz);
+      out.x = -dhdx / l; out.y = 1 / l; out.z = -dhdz / l; return out;
+    }
     if (this.riverTunAt(x, z)) { out.x = 0; out.y = 1; out.z = 0; return out; } // the bore's water and the lid over it are both flat
     if (this.ovGrid && (this.overlayAt(x, z) || (x > CITY.x0 - 30 && this.metro && this.subFloor(x, z) !== null))) { // raised pieces and the metro: slope from the height function
       const e = 0.3, dhdx = (this.height(x + e, z) - this.height(x - e, z)) / (2 * e), dhdz = (this.height(x, z + e) - this.height(x, z - e)) / (2 * e), l = Math.hypot(dhdx, 1, dhdz);
@@ -408,14 +432,17 @@ class Terrain {
       // well clear of the ground a viaduct stands on piers: no embankment, no tarmac painted underneath
       const elev = def.viaduct || def.lowland ? R.elev = Uint8Array.from(R.y, (y, i) => y - this.rawH(R.x[i], R.z[i]) > 3.2 && (!def.lowland || R.x[i] < def.lowland + 60) ? 1 : 0) : null;
       R.feature = feat;
-      if (R.surface === 'rail') for (let i = 0; i <= nS; i++) { if (R.elev && R.elev[i]) continue; const k = rkey(R.x[i], R.z[i]); let l = railHash.get(k); if (!l) railHash.set(k, l = []); l.push([R.x[i], R.z[i], R.y[i]]); }
       // tunnel cover: where the untouched mountain stands well above the road
       if (def.tunnel || def.bores) {
         R.covered = new Uint8Array(nS + 1);
         for (let i = 0; i <= nS; i++) R.covered[i] = naturalHeight(R.x[i], R.z[i]) - R.y[i] > 9.5 ? 1 : 0;
         // close tiny gaps
         for (let i = 1; i < nS; i++) if (!R.covered[i] && R.covered[i - 1] && R.covered.slice(i, i + 12).includes(1)) R.covered[i] = 1;
+        // deeper than BORE_IN samples into the hill the ground above is left alone: the road runs in a bore underneath it
+        R.bore = new Uint8Array(nS + 1);
+        for (let i = 0; i <= nS; i++) { let ok = true; for (let k = -BORE_IN; k <= BORE_IN && ok; k++) { const j = i + k; if (j < 0 || j > nS || !R.covered[j]) ok = false; } R.bore[i] = ok ? 1 : 0; }
       }
+      if (R.surface === 'rail') for (let i = 0; i <= nS; i++) { if ((R.elev && R.elev[i]) || (R.bore && R.bore[i])) continue; const k = rkey(R.x[i], R.z[i]); let l = railHash.get(k); if (!l) railHash.set(k, l = []); l.push([R.x[i], R.z[i], R.y[i]]); }
       const hw = R.width / 2, shoulder = def.trail ? 10 : def.tunnel ? 16 : R.surface === 'rail' ? 14 : 16, reach = hw + shoulder;
       const rc = Math.ceil(reach / c) + 1;
       const isA = R.surface === 'asphalt', isR = R.surface === 'rail';
@@ -423,12 +450,15 @@ class Terrain {
       for (let i = 0; i < nS; i++) {
         const j = R.idx(i + 1);
         const ax = R.x[i], az = R.z[i], bx = R.x[j], bz = R.z[j];
+        if (R.bore && R.bore[i] && R.bore[j]) { this.stampBore(ax, az, R.y[i], bx, bz, R.y[j], hw + 1.2, isR); continue; }
         const cx = Math.round((ax - x0) / c), cz = Math.round((az - z0) / c);
         for (let dz = -rc; dz <= rc; dz++) for (let dx = -rc; dx <= rc; dx++) {
           const gx = cx + dx, gz = cz + dz; if (gx < 0 || gz < 0 || gx >= Nx || gz >= Nz) continue;
           const px = x0 + gx * c, pz = z0 + gz * c;
           const vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz || 1;
-          const t = clamp(((px - ax) * vx + (pz - az) * vz) / L2, 0, 1);
+          const tr = ((px - ax) * vx + (pz - az) * vz) / L2, t = clamp(tr, 0, 1);
+          // the cut stops square where the bore begins, so its rounded end doesn't scoop the hill out over the bore
+          if (R.bore && ((R.bore[j] && tr > 1) || (R.bore[i] && tr < 0))) continue;
           const d = Math.hypot(px - (ax + vx * t), pz - (az + vz * t));
           const gi = gz * Nx + gx;
           if (d < this.rdist[gi] && (!isR || d < hw + 2)) this.rdist[gi] = d;

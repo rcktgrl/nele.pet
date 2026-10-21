@@ -6,8 +6,17 @@ class CameraRig {
   constructor(cam, T) { this.cam = cam; this.T = T; this.mode = 0; this.pos = new THREE.Vector3(); this.look = new THREE.Vector3(); this.shake = 0; this.dir = new THREE.Vector3(0, 0, -1); this.fov = 62; this.init = false; this.back = false; this._v = new THREE.Vector3(); this.orbitA = 0; }
   snap() { this.init = false; }
   update(dt, car, opts) {
-    this.follow(dt, car, opts);
     const T = this.T;
+    T.probe(car.pos.y + 1, () => this.follow(dt, car, opts)); // the ground at the car's own level: a bore's floor, not the hill above it
+    // in a road or rail bore: keep the camera under the crown and inside the bore
+    const fl = T.probe(car.pos.y + 1, () => T.boreFloor(car.pos.x, car.pos.z));
+    if (fl !== null) {
+      const p = this.cam.position, c = car.pos, dir = this.cam.getWorldDirection(this._v), inside = (x, z) => T.probe(c.y + 1, () => T.boreFloor(x, z)) !== null;
+      if (!inside(p.x, p.z)) for (let k = 1; k <= 10; k++) { const t = k / 10, x = lerp(p.x, c.x, t), z = lerp(p.z, c.z, t); if (inside(x, z)) { p.x = x; p.z = z; break; } }
+      const ce = T.probe(c.y + 1, () => T.boreFloor(p.x, p.z)); if (ce !== null) p.y = Math.min(p.y, ce + 7.0);
+      this.cam.lookAt(p.x + dir.x * 10, p.y + dir.y * 10, p.z + dir.z * 10);
+      return;
+    }
     // a boat in the boat tunnel: keep the camera under the roof and inside the bore
     if (car.spec.boat && car.pos.y < RIVER.tunnel.under && T.inRiverTunnel(car.pos.x, car.pos.z)) {
       const p = this.cam.position, c = car.pos, dir = this.cam.getWorldDirection(this._v);

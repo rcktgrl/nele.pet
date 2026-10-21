@@ -6,6 +6,9 @@ const WORLD = { x0: -1050, z0: -2950, x1: 5350, z1: 2050, cell: 4 };
 WORLD.Sx = WORLD.x1 - WORLD.x0; WORLD.Sz = WORLD.z1 - WORLD.z0;
 WORLD.Nx = Math.round(WORLD.Sx / WORLD.cell) + 1; WORLD.Nz = Math.round(WORLD.Sz / WORLD.cell) + 1;
 const WATER_Y = -1.6;
+// road and rail bores: how many route samples (2 m) in from each portal the ground is still cut open, and how far above
+// the bore floor something still counts as inside it (the crown is at 8 m)
+const BORE_IN = 5, BORE_CROWN = 7.5;
 const HUB = { x: 0, z: 140, r: 85 };
 const MESAS = [
   { x: -430, z: -370, r: 165, h: 128 },
