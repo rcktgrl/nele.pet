@@ -214,8 +214,12 @@ class World {
   addQuays() {
     const S = this.scatter, top = CITY.y - 1.2, zq = FLAT.z1 + 1.2, xq = FLAT.x1 + 1.2;
     const south = [[4150, SLIP.x - SLIP.hw - 0.6], [SLIP.x + SLIP.hw + 0.6, xq]];
-    for (const [a, b] of south) for (let x = a; x < b; x += 40) { const o = S.addSegment(x, zq, Math.min(b, x + 40), zq, top, 'barrier'); o.r = 0.8; }
-    for (let z = -760; z < zq; z += 40) { const o = S.addSegment(xq, z, xq, Math.min(zq, z + 40), top, 'barrier'); o.r = 0.8; }
+    // the quay edge in 4 m pieces, open wherever a road runs across it (the coast road's bridge at the river mouth)
+    const roads = this.terrain.routes.filter((R) => !R.def.noCarve && !R.def.trafficOnly && R.surface !== 'rail');
+    const onRoad = (x, z) => roads.some((R) => R.project(x, z, 0, -1).dist < R.width / 2 + 1.5);
+    const edge = (ax, az, bx, bz) => { if (onRoad((ax + bx) / 2, (az + bz) / 2)) return; const o = S.addSegment(ax, az, bx, bz, top, 'barrier'); o.r = 0.8; };
+    for (const [a, b] of south) for (let x = a; x < b; x += 4) edge(x, zq, Math.min(b, x + 4), zq);
+    for (let z = -760; z < zq; z += 4) edge(xq, z, xq, Math.min(zq, z + 4));
     for (const sd of [-1, 1]) { const o = S.addSegment(SLIP.x + sd * (SLIP.hw + 0.6), zq, SLIP.x + sd * (SLIP.hw + 0.6), SLIP.z1, top - 1.5, 'barrier'); o.r = 0.6; }
     // car-park ramps: a parapet along the open side and across the top landing
     for (const P of this.city.carParks) {
