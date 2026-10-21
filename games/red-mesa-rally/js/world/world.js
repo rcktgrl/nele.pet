@@ -154,25 +154,27 @@ class World {
         seg(pa.x - adz * l, pa.z + adx * l, pb.x - bdz * l, pb.z + bdx * l, t, r);
       }
     };
-    // outer wall in runs between the ramp mouths
-    const gaps = M.spurs.map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]).sort((a, b) => a[0] - b[0]);
-    let s = gaps.length ? gaps[gaps.length - 1][1] - R.length : 0;
-    for (const [g0, g1] of gaps) { line(s, g0, METRO.wallL - 0.3, top, 0.3); s = g1; }
-    if (!gaps.length) line(0, R.length, METRO.wallL - 0.3, top, 0.3);
-    line(0, R.length, METRO.wallR, top, 0.3);
+    // both walls in runs between the ramps that come in through them
+    for (const [side, wl] of [[-1, METRO.wallL - 0.3], [1, METRO.wallR]]) {
+      const gaps = M.spurs.filter((sp) => sp.side === side).map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]).sort((a, b) => a[0] - b[0]);
+      let s = gaps.length ? gaps[gaps.length - 1][1] - R.length : 0;
+      for (const [g0, g1] of gaps) { line(s, g0, wl, top, 0.3); s = g1; }
+      if (!gaps.length) line(0, R.length, wl, top, 0.3);
+    }
     for (const sp of M.spurs) for (const sd of [-1, 1]) {
-      const l = sd * (METRO.rampHw + 0.3), aEnd = sp.L + METRO.wallL + 2 - 0.3;
+      const l = sd * (METRO.rampHw + 0.3), aEnd = metroSpurEnd(sp) - 0.3;
       for (let a = 0; a < aEnd; a += 6) {
         const b = Math.min(aEnd, a + 6);
         seg(sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l, sp.x + sp.dx * b - sp.dz * l, sp.z + sp.dz * b + sp.dx * l, metroSpurY(a) + 3.6, 0.3);
       }
     }
-    // up on the street: a parapet down both sides of each open cut and across its far end
+    // up on the street: the station hall's side walls and back wall, from the street up to its roof
     for (const sp of M.spurs) {
-      const g = METRO.rampHw + 0.6, P = (a, l) => [sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l], top = CITY.y + 1.0, a0 = 9;
-      const par = (p, q) => { const o = S.addSegment(...p, ...q, top, 'barrier'); o.r = 0.35; o.bot = CITY.y - 0.8; };
-      for (const sd of [-1, 1]) for (let a = a0; a < sp.cover; a += 8) par(P(a, sd * g), P(Math.min(sp.cover, a + 8), sd * g));
+      const g = METRO.rampHw + 0.6, P = (a, l) => [sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l], top = CITY.y + METRO.hallH;
+      const par = (p, q) => { const o = S.addSegment(...p, ...q, top, 'barrier'); o.r = 0.5; o.bot = CITY.y - 0.8; };
+      for (const sd of [-1, 1]) for (let a = 0; a < sp.cover; a += 8) par(P(a, sd * g), P(Math.min(sp.cover, a + 8), sd * g));
       par(P(sp.cover, -g), P(sp.cover, g));
+      const t = P(0.55, -(METRO.rampHw + 1.75)), o = S.addObstacle(t[0], t[1], 0.75, top + 3.5, 'barrier'); o.bot = CITY.y - 0.8; // the METRO totem at the front corner
     }
   }
   /* river bridges: parapets along both edges (boats pass under them) and the piers in the water */
