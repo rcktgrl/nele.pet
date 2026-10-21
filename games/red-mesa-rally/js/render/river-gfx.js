@@ -224,7 +224,7 @@ Object.assign(Gfx.prototype, {
     const tube = new THREE.Mesh(g, m); tube.receiveShadow = true; this.scene.add(tube);
     // the lid: the ground as it was, laid back over the cut, in the terrain's own material so paving and grass carry on across it
     const M = T.riverTun, Wn = 10, cp = [], cn = [], cA = [], cB = [], cC = [], cD = [], ci = [];
-    const topAt = (x, z) => { const k = T.riverTunAt(x, z); return k ? M.top[k - 1] : T.rawH(x, z); };
+    const topAt = (x, z) => { const k = T.riverTunAt(x, z); return k ? M.top[k - 1] : Math.max(T.rawH(x, z), U.ceil + 1.2); }; // the mouth rows sit just past the mask: keep them up at the lid, not down on the river bed
     for (let i = idx0; i <= idx1; i++) {
       const a = U.pts[Math.max(0, i - 1)], b = U.pts[Math.min(U.pts.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]), rx = -(b[1] - a[1]) / L, rz = (b[0] - a[0]) / L;
       for (let k = 0; k <= Wn; k++) {
@@ -238,14 +238,22 @@ Object.assign(Gfx.prototype, {
     for (const [nm, arr, sz] of [['position', cp, 3], ['normal', cn, 3], ['aA', cA, 4], ['aB', cB, 4], ['aC', cC, 4], ['aD', cD, 3]]) lg.setAttribute(nm, new THREE.Float32BufferAttribute(arr, sz));
     lg.setIndex(ci); lg.computeBoundingSphere();
     const lid = new THREE.Mesh(lg, this.terrainMat); lid.castShadow = true; lid.receiveShadow = true; this.scene.add(lid);
-    // headwalls: a concrete face across each mouth with the opening cut out, up to the ground above
+    // headwalls: a concrete face across each mouth with the opening cut out, filling the river's cut banks right up to the ground as it was
     const face = new THREE.MeshStandardMaterial({ color: 0x9d968b, roughness: 0.92 });
     for (const i of [idx0, idx1]) {
-      const a = U.pts[Math.max(0, i - 1)], b = U.pts[Math.min(U.pts.length - 1, i + 1)], yaw = Math.atan2(b[0] - a[0], b[1] - a[1]), [x, z] = U.pts[i];
-      const W = hw + 7, top = Math.max(T.rawH(x, z), U.ceil + 1.2) + 0.6, g = new THREE.Group();
-      const box = (x0, x1, b0, b1) => { const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, b1 - b0, 1.6), face); m.position.set((x0 + x1) / 2, (b0 + b1) / 2, 0); m.castShadow = true; m.receiveShadow = true; g.add(m); };
-      box(-W, -hw, y0, top); box(hw, W, y0, top); box(-hw, hw, y1, top); // the two piers and the lintel over the opening
-      g.position.set(x, 0, z); g.rotation.y = yaw; this.scene.add(g);
+      const a = U.pts[Math.max(0, i - 1)], b = U.pts[Math.min(U.pts.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]), yaw = Math.atan2(b[0] - a[0], b[1] - a[1]), [x, z] = U.pts[i];
+      const at = (lx) => [x + lx * (b[1] - a[1]) / L, z - lx * (b[0] - a[0]) / L]; // local +x of the rotated wall, in the world
+      const top = (lx) => { const [px, pz] = at(lx); return Math.max(naturalHeight(px, pz), U.ceil + 1.2) + 0.6; };
+      // out to where the banks are back at the ground's own height
+      const edge = (sg) => { let l = hw + 2; while (l < 70) { const [px, pz] = at(sg * l); if (T.rawH(px, pz) > naturalHeight(px, pz) - 0.4 && l > M.lid) break; l += 2; } return sg * (l + 2); };
+      const l0 = edge(-1), l1 = edge(1), N = Math.ceil((l1 - l0) / 2), shape = new THREE.Shape();
+      shape.moveTo(l0, y0); shape.lineTo(l1, y0);
+      for (let k = N; k >= 0; k--) { const lx = l0 + (l1 - l0) * k / N; shape.lineTo(lx, top(lx)); }
+      const hole = new THREE.Path(); hole.moveTo(-hw, y0 + 0.01); hole.lineTo(-hw, y1); hole.lineTo(hw, y1); hole.lineTo(hw, y0 + 0.01); hole.lineTo(-hw, y0 + 0.01);
+      shape.holes.push(hole);
+      const wg = new THREE.ExtrudeGeometry(shape, { depth: 1.6, bevelEnabled: false }); wg.translate(0, 0, -0.8);
+      const m = new THREE.Mesh(wg, face); m.castShadow = true; m.receiveShadow = true;
+      m.position.set(x, 0, z); m.rotation.y = yaw; this.scene.add(m);
     }
   },
 });
