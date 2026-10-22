@@ -66,7 +66,8 @@ class City {
       });
       return ok && hi - lo < 3 ? [lo, hi] : null;
     };
-    for (const sp of metroSpurs()) for (let a = 0; a <= sp.cover + 4; a += 1) for (let l = -9; l <= 9; l += 1) { const k = oi(sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l); if (k >= 0) occ[k] = 1; }
+    // the station halls, and the way in kept clear in front of each
+    for (const sp of metroSpurs()) for (let a = -14; a <= sp.cover + 4; a += 1) for (let l = -10; l <= 10; l += 1) { const k = oi(sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l); if (k >= 0) occ[k] = 1; }
     const claim = (x, z, yaw, w, d, m) => footprint(x, z, yaw, w, d, m, (px, pz) => { const k = oi(px, pz); if (k >= 0) occ[k] = 1; });
     const aabb = (o) => { const P = boxCorners(o); o.x0 = Math.min(...P.map((p) => p[0])); o.x1 = Math.max(...P.map((p) => p[0])); o.z0 = Math.min(...P.map((p) => p[1])); o.z1 = Math.max(...P.map((p) => p[1])); return o; };
     const WALLS = [[0.93, 0.9, 0.84], [0.88, 0.82, 0.7], [0.78, 0.84, 0.86], [0.86, 0.74, 0.56], [0.95, 0.94, 0.92], [0.72, 0.8, 0.7], [0.9, 0.72, 0.62]];
@@ -275,8 +276,11 @@ class City {
     // gantry cranes on the south quay (clear of the slipway) and the east quay by the ship
     for (const x of [4340, 4480, 4820]) this.cranes.push({ x, z: 792, yaw: 0, color: x === 4480 ? 0xe0b020 : 0xd94c22 });
     for (let k = 0; k < 3; k++) this.cranes.push({ x: 5136, z: -440 + k * 260, yaw: Math.PI / 2, color: 0xd94c22 });
+    // the metro runs a hand under the street: whatever stands over it keeps its footings out of the tube's roof
+    for (const o of [...this.buildings, ...T.village]) if (o.w && footprint(o.x, o.z, o.yaw, o.w, o.d, 0.5, (px, pz) => T.metroAt(px, pz) === 0) === false) o.y0 = Math.max(o.y0, METRO.ceil + 0.08);
     this.yardFences(T, vm, green);
     this.streets = new Streets(T, this);
+    this.lamps = this.lamps.filter((l) => !inMetroHall(l.x, l.z)); for (const k of ['stops', 'signals']) this.streets[k] = this.streets[k].filter((l) => !inMetroHall(l.x, l.z));
   }
   /* picket fences round the suburban back yards: down both sides and across the back, wherever the line stays off the streets */
   yardFences(T, vm, green) {

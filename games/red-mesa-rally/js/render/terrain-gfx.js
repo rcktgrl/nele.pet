@@ -89,6 +89,19 @@ Object.assign(Gfx.prototype, {
     ${J.list.map((j) => `{ vec2 q = P.xz - vec2(${f(j.x)}, ${f(j.z)}); float m = max(abs(q.x), abs(q.y)); if (m < best) { best = m; juv = (vec2(${j.col * J.n}.0, ${j.row * J.n}.0) + (q + ${half}) / ${P.res.toFixed(2)}) / vec2(${J.W}.0, ${J.H}.0); } }`).join('\n    ')}
     if (best < ${f(P.fade[1])}) { jW = 1.0 - smoothstep(${f(P.fade[0])}, ${f(P.fade[1])}, best); jT = texture2D(uJunc, juv); } }`;
   },
+  /* where a cut runs into a bore, the ground steps up from the cut floor to the lid over one 4 m cell: cut that step out of the tube */
+  boreGLSL() {
+    const f = (v) => v.toFixed(2), out = [];
+    for (const R of this.world.terrain.routes) if (R.bore) for (let i = 0; i <= R.count; i++) {
+      const edge = R.bore[i] && (!R.bore[i - 1] || !R.bore[i + 1]); if (!edge) continue;
+      const into = R.bore[i + 1] ? 1 : -1, [dx, dz] = R.dirAt(i * R.step), ux = dx * into, uz = dz * into;
+      // back through the open cut to the portal: inside the tube only the tube and its floor show
+      let k = i, y0 = R.y[i], y1 = R.y[i]; while (k - into >= 0 && k - into <= R.count && (R.covered[k - into] || Math.abs(k - i) < 4)) k -= into;
+      for (let m = Math.min(i, k); m <= Math.max(i, k); m++) { y0 = Math.min(y0, R.y[m]); y1 = Math.max(y1, R.y[m]); }
+      out.push(`{ vec2 q = P.xz - vec2(${f(R.x[i])}, ${f(R.z[i])}); float a = dot(q, vec2(${f(ux)}, ${f(uz)})), l = abs(dot(q, vec2(${f(-uz)}, ${f(ux)}))); if (a > ${f(-Math.abs(k - i) * R.step - 1)} && a < 30.0 && l < ${f(R.width / 2 + 1.2)} && P.y > ${f(y0 - 0.4)} && P.y < ${f(y1 + BORE_CROWN + 0.6)}) discard; } // bore mouth and cut`);
+    }
+    return out.join('\n  ');
+  },
   /* ---------- terrain material ---------- */
   terrainMaterial() {
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, envMapIntensity: 0.35 });
@@ -111,6 +124,7 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
 {
   vec3 P = vWPos; vec3 Nw = normalize(vWNrm); float slope = 1.0 - Nw.y;
   ${metroSpurs().map((sp) => `{ vec2 q = P.xz - vec2(${sp.x.toFixed(2)}, ${sp.z.toFixed(2)}); float a = dot(q, vec2(${sp.dx}, ${sp.dz})), l = abs(dot(q, vec2(${-sp.dz}, ${sp.dx}))); if (a > -0.5 && a < ${sp.cover.toFixed(1)} && l < ${(METRO.rampHw + 0.3).toFixed(2)}) discard; } // metro cut`).join('\n  ')}
+  ${this.boreGLSL()}
   float vRoad = vA.x, vMud = vA.y, lat = vB.x, hw = vB.y, asph = vB.z, rail = vB.w, jbox = 0.0;
   float green = vC.x, beach = vC.y, city = vC.z, tun = vC.w, rs = vD.x, lanes = vD.y, jfade = 1.0 - vD.z;
   float dist = length(vViewPosition);

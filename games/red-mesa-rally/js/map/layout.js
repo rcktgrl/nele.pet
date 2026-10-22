@@ -6,6 +6,9 @@ const WORLD = { x0: -1050, z0: -2950, x1: 5350, z1: 2050, cell: 4 };
 WORLD.Sx = WORLD.x1 - WORLD.x0; WORLD.Sz = WORLD.z1 - WORLD.z0;
 WORLD.Nx = Math.round(WORLD.Sx / WORLD.cell) + 1; WORLD.Nz = Math.round(WORLD.Sz / WORLD.cell) + 1;
 const WATER_Y = -1.6;
+// road and rail bores: how many route samples (2 m) in from each portal the ground is still cut open, and how far above
+// the bore floor something still counts as inside it (the crown is at 8 m)
+const BORE_IN = 5, BORE_CROWN = 7.5;
 const HUB = { x: 0, z: 140, r: 85 };
 const MESAS = [
   { x: -430, z: -370, r: 165, h: 128 },
@@ -32,19 +35,27 @@ const SLIP = { x: 4650, z0: FLAT.z1 - 6, z1: FLAT.z1 + 62, hw: 8, y1: -4.6 };
 const SHIP = { x0: 5153, x1: 5191, z0: -650, z1: -390, y: 12.5, rampZ: -557, rampHw: 8, ramp: { x: 5142, hw: 6, z0: -497, z1: -549 } };
 /* Calder Metro: a loop of twin-track tube under Port Calder, no road and no barrier. Cars drive on the rails: the inner track
    carries the stopping service (it runs with the race and waits at the platforms), the outer track the express, which runs
-   the other way and never stops. Four portals each have a ramp down an open cut beside a street and on under it to the loop.
+   the other way and never stops. Every stop has a station hall up on the street: drive in under its canopy and a ramp takes you
+   down through the hall and on under the city to the loop, joining it at the platforms (side -1 from the outside of the loop,
+   +1 from the inside, past the platform's end).
    Lateral offsets are measured to the right of the loop's direction of travel, which is the inside of the loop. */
-const METRO = { y: 0.5, ceil: 4.8, under: CITY.y - 1.5, wallL: -5.2, tracks: [-2.3, 2.3], wallR: 5, plat: 11.4, rampLen: 58, rampHw: 5.5, cut: 50,
+const METRO = { y: 0.5, ceil: 4.8, under: CITY.y - 1.5, wallL: -5.2, tracks: [-2.3, 2.3], wallR: 5, plat: 11.4, rampLen: 58, rampHw: 5.5, cut: 50, hallH: 6.5,
   box: { x0: 3480, z0: -1080, x1: 5080, z1: 620 },
   loop: [[3650, -450], [3950, -470], [4250, -446], [4370, -452], [4418, -510], [4424, -600], [4470, -690], [4600, -750], [4700, -880], [4850, -990],
     [5000, -800], [4960, -400], [4820, -50], [4560, 175], [4430, 470], [4150, 520], [3900, 450], [3640, 330], [3560, -100]],
-  portals: [{ name: 'Kingsway', x: 4299, z: -555.9, dx: 0.9994, dz: -0.0337, L: 122 }, { name: 'Westgate', x: 3996.4, z: -534.4, dx: -0.0346, dz: 0.9994, L: 66 },
-    { name: 'Mesa View', x: 3467.9, z: -256.7, dx: 0.9848, dz: 0.1739, L: 104 }, { name: 'Harbour Dr', x: 5112.1, z: -483.7, dx: -0.9834, dz: -0.1813, L: 132 }],
+  portals: [{ name: 'Downtown', x: 4315.1, z: -605, dx: 0.92, dz: 0.3918, L: 115, side: -1 }, { name: 'Union', x: 4601.3, z: -871.7, dx: 0.5269, dz: 0.8499, L: 80, side: -1 },
+    { name: 'Kestrel Heights', x: 4885.4, z: -861.9, dx: 0.8048, dz: -0.5936, L: 80, side: 1 }, { name: 'Saltworks', x: 5038.9, z: -461.4, dx: -0.999, dz: 0.044, L: 66, side: -1 },
+    { name: 'Stadium', x: 4639.4, z: 186.5, dx: -0.7331, dz: -0.6801, L: 66, side: -1 }, { name: 'Port', x: 4270.1, z: 585.6, dx: 0.0188, dz: -0.9998, L: 66, side: -1 },
+    { name: 'Sunset Marina', x: 3697.8, z: 463.2, dx: 0.5901, dz: -0.8073, L: 72, side: -1 }, { name: 'Mesa View', x: 3483.8, z: -266.1, dx: 0.9848, dz: 0.1739, L: 90, side: -1 }],
   stations: [{ name: 'DOWNTOWN', at: [4422, -560] }, { name: 'UNION', at: [4640, -800] }, { name: 'KESTREL HEIGHTS', at: [4900, -930] }, { name: 'SALTWORKS', at: [4965, -450] },
     { name: 'STADIUM', at: [4600, 150] }, { name: 'PORT', at: [4290, 500] }, { name: 'SUNSET MARINA', at: [3770, 390] }, { name: 'MESA VIEW', at: [3575, -250] }],
   stationLen: 76 };
-/* the portal ramps: mouth on the street, an open cut METRO.cut long, then a covered ramp on down to the loop */
+/* the station ramps: mouth on the street, down through the station hall (METRO.cut long, open to its roof), then a covered ramp on down to the loop */
 function metroSpurs() { return METRO.portals.map((p, k) => ({ k, ...p, cover: METRO.cut })); }
+/* how far down a ramp its walls run: just through the loop's wall on the side it comes in from */
+const metroSpurEnd = (sp) => sp.L - (sp.side > 0 ? METRO.wallR : -METRO.wallL) + 2;
+/* inside a station hall or on the way in just in front of it: kept clear of lamps and signs */
+const inMetroHall = (x, z) => metroSpurs().some((sp) => { const a = (x - sp.x) * sp.dx + (z - sp.z) * sp.dz, l = Math.abs(-(x - sp.x) * sp.dz + (z - sp.z) * sp.dx); return a > -16 && a < sp.cover + 2 && l < METRO.rampHw + 4; });
 const metroSpurY = (a) => lerp(CITY.y, METRO.y, smooth(0, METRO.rampLen, a));
 const metroSpurCeil = (a) => (a >= METRO.cut ? Math.min(metroSpurY(a) + 4.3, METRO.ceil) : metroSpurY(a) + 4.3); // open sky over the cut
 /* where boats go in: a parking spot on land and a mooring on the water, facing out */

@@ -134,6 +134,13 @@ function carveRiver(T) {
       }
     }
   }
+  // under the boat tunnel's lid the cut banks would show inside the culvert: the ground there drops out of sight below its floor
+  const y0 = U.bed - 2;
+  for (let gz = 0; gz < Nz; gz++) for (let gx = 0; gx < Nx; gx++) {
+    const px = x0 + gx * c, pz = z0 + gz * c; if (px < bx0 || pz < bz0 || px > bx0 + nx * G || pz > bz0 + nz * G) continue;
+    let inside = false; for (const [ox, oz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) { const k = T.riverTunAt(px + ox, pz + oz); if (k && M.mask[k - 1] === 1) inside = true; }
+    if (inside) { const gi = gz * Nx + gx; if (T.h[gi] > y0) T.h[gi] = y0; }
+  }
 }
 
 /* road and rail decks wherever the river cut away the ground under a route: raised overlays that boats pass under */

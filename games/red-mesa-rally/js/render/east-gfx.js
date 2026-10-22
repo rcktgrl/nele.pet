@@ -572,9 +572,30 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vTU;').replace('#include <uv_vertex>', '#include <uv_vertex>\nvTU = uv;');
     };
     const tube = new THREE.Mesh(g, tm); tube.castShadow = true; tube.receiveShadow = true; this.scene.add(tube);
-    // mountain cover: the untouched mountainside laid back over the bore
+    // the floor of the bore, portal to portal (the ground above the bore was left alone, and the terrain is cut away where the cut meets it)
+    const rail = R.surface === 'rail', fw = R.width / 2 + 1.2, fp = [], fu = [], fi = [];
+    for (let i = i0; i <= i1; i++) {
+      const s = i * R.step, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), rx = dz, rz = -dx;
+      for (const l of [-fw, fw]) { fp.push(p.x + rx * l, p.y + 0.03, p.z + rz * l); fu.push(l < 0 ? 0 : 1, s / 12); }
+    }
+    for (let k = 0; k < i1 - i0; k++) { const a = k * 2, b = a + 2; fi.push(a, b, a + 1, a + 1, b, b + 1); }
+    if (fi.length) {
+      const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(fp, 3)); fg.setAttribute('uv', new THREE.Float32BufferAttribute(fu, 2)); fg.setIndex(fi); fg.computeVertexNormals();
+      if (fg.attributes.normal.array[1] < 0) { for (let t = 0; t < fi.length; t += 3) [fi[t + 1], fi[t + 2]] = [fi[t + 2], fi[t + 1]]; fg.setIndex(fi); fg.computeVertexNormals(); }
+      const floorTex = this._boreFloorTex || (this._boreFloorTex = {});
+      const tex = floorTex[rail ? 'r' : 'a'] || (floorTex[rail ? 'r' : 'a'] = textTex(128, 256, (gg, w, h) => {
+        const r = mulberry32(rail ? 9 : 8);
+        gg.fillStyle = rail ? '#5d564e' : '#1d1e21'; gg.fillRect(0, 0, w, h);
+        for (let k = 0; k < 900; k++) { const v = (rail ? 70 : 30) + r() * 40; gg.fillStyle = `rgba(${v},${v},${v + 3},0.5)`; gg.fillRect(r() * w, r() * h, 2, 2); }
+        if (!rail) { gg.fillStyle = '#d8d4ca'; gg.fillRect(10, 0, 3, h); gg.fillRect(w - 13, 0, 3, h); gg.fillStyle = '#d6aa3a'; gg.fillRect(w / 2 - 2, 0, 4, h * 0.5); }
+      }, { repeat: true }));
+      const fm = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.35, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+      const floor = new THREE.Mesh(fg, fm); floor.receiveShadow = true; this.scene.add(floor);
+    }
+    // mountain cover: the mountainside laid back over the open cut just behind each portal (deeper in, the ground was never cut)
     const reach = tun.reach, W = 12;
     const cp = [], cn = [], cA = [], cB = [], cC = [], cD = [], ci = [];
+    const cut = (i) => !(R.bore && R.bore[i] && R.bore[Math.min(R.count, i + 1)]);
     for (let i = i0; i <= i1; i++) {
       const s = i * R.step, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), rx = dz, rz = -dx;
       for (let k = 0; k <= W; k++) {
@@ -587,7 +608,7 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
         cA.push(0, 0, 0.85, 1); cB.push(40, 8, 0, 0); cC.push(b.green, 0, 0, 0); cD.push(0, 0, 0);
       }
     }
-    for (let i = 0; i < i1 - i0; i++) for (let k = 0; k < W; k++) { const a = i * (W + 1) + k, b = a + W + 1; ci.push(a, b, a + 1, a + 1, b, b + 1); }
+    for (let i = 0; i < i1 - i0; i++) if (cut(i0 + i)) for (let k = 0; k < W; k++) { const a = i * (W + 1) + k, b = a + W + 1; ci.push(a, b, a + 1, a + 1, b, b + 1); }
     const cg = new THREE.BufferGeometry();
     cg.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3)); cg.setAttribute('normal', new THREE.Float32BufferAttribute(cn, 3));
     cg.setAttribute('aA', new THREE.Float32BufferAttribute(cA, 4)); cg.setAttribute('aB', new THREE.Float32BufferAttribute(cB, 4)); cg.setAttribute('aC', new THREE.Float32BufferAttribute(cC, 4)); cg.setAttribute('aD', new THREE.Float32BufferAttribute(cD, 3));
@@ -610,7 +631,7 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
       const shape = new THREE.Shape(); shape.moveTo(-reach, -1); shape.lineTo(reach, -1);
       for (const [lx, h] of line) shape.lineTo(lx, h);
       shape.lineTo(-reach, -1);
-      const hole = new THREE.Path(); hole.moveTo(-hw, -0.5); hole.lineTo(-hw, 4.6); hole.absarc(0, 4.6, hw, Math.PI, 0, true); hole.lineTo(hw, -0.5); hole.lineTo(-hw, -0.5);
+      const hole = new THREE.Path(); hole.moveTo(-hw, -0.5); hole.lineTo(-hw, 4.6); hole.absellipse(0, 4.6, hw, 3.4, Math.PI, 0, true); hole.lineTo(hw, -0.5); hole.lineTo(-hw, -0.5); // exactly the bore's own section
       shape.holes.push(hole);
       const fg = new THREE.ExtrudeGeometry(shape, { depth: 2, bevelEnabled: false, curveSegments: 16 });
       const face = new THREE.Mesh(fg, conc);
@@ -652,9 +673,10 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     cuts.sort((a, b) => a[0] - b[0]);
     const runs = []; let s = cuts[cuts.length - 1][1] - R.length;
     for (const [a, b, st] of cuts) { runs.push([s, a, null]); runs.push([a, b, st]); s = b; }
-    const gaps = M.spurs.map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]);
+    const gapsOn = (side) => M.spurs.filter((sp) => sp.side === side).map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]);
     const L0 = METRO.wallL, WR = METRO.wallR, PL = METRO.plat, TRS = METRO.tracks;
-    const inGap = (a, b) => gaps.some(([g0, g1]) => [-R.length, 0, R.length].some((k) => b + k > g0 && a + k < g1));
+    const gapIn = (gaps) => (a, b) => gaps.some(([g0, g1]) => [-R.length, 0, R.length].some((k) => b + k > g0 && a + k < g1));
+    const inGap = gapIn(gapsOn(-1)), inGapR = gapIn(gapsOn(1)); // the ramps come in through the outer wall, or past a platform's end through the inner one
     // the floor across the tube: a sleeper bed under each track, plain ballast either side
     const floor = []; let l0 = L0;
     for (const t of TRS) { if (t - 2.2 > l0) floor.push([l0, t - 2.2, 'ballast']); floor.push([t - 2.2, t + 2.2, 'bed']); l0 = t + 2.2; }
@@ -669,7 +691,7 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
         quad('plat', P(a, WR, Y + 1), P(b, WR, Y + 1), P(a, PL, Y + 1), P(b, PL, Y + 1), nUp, [0, a / 4, 0, b / 4, 1, a / 4, 1, b / 4]);
         quad('edge', P(a, WR, Y), P(b, WR, Y), P(a, WR, Y + 1), P(b, WR, Y + 1), latN(a, -1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
         quad('swall', P(a, PL, Y + 1), P(b, PL, Y + 1), P(a, PL, CE), P(b, PL, CE), latN(a, -1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
-      } else quad('wall', P(a, WR, Y), P(b, WR, Y), P(a, WR, CE), P(b, WR, CE), latN(a, -1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
+      } else if (!inGapR(a, b)) quad('wall', P(a, WR, Y), P(b, WR, Y), P(a, WR, CE), P(b, WR, CE), latN(a, -1), [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
       // the rails, two tracks of them
       for (const TR of TRS) for (const off of [-0.72, 0.72]) quad('rail', P(a, TR + off - 0.06, Y + 0.18), P(b, TR + off - 0.06, Y + 0.18), P(a, TR + off + 0.06, Y + 0.18), P(b, TR + off + 0.06, Y + 0.18), nUp, [0, 0, 0, 1, 1, 0, 1, 1]);
     });
@@ -685,7 +707,7 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     }
     // the portal ramps
     for (const sp of M.spurs) {
-      const g = METRO.rampHw + 0.3, aEnd = sp.L + METRO.wallL + 2, rx = -sp.dz, rz = sp.dx;
+      const g = METRO.rampHw + 0.3, aEnd = metroSpurEnd(sp), rx = -sp.dz, rz = sp.dx;
       const Q = (a, l, y) => [sp.x + sp.dx * a + rx * l, y, sp.z + sp.dz * a + rz * l];
       for (let a = 0; a < aEnd; a += 2) {
         const b = Math.min(aEnd, a + 2), ya = metroSpurY(a), yb = metroSpurY(b), ca = metroSpurCeil(a), cb = metroSpurCeil(b);
@@ -767,22 +789,43 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
         sg.rotation.y = Math.atan2(-dz, dx); grp.add(sg);
       }
     }
-    // portals: a concrete headwall where the cut goes under, a frame round the mouth and the METRO sign over it
-    const frame = new THREE.MeshStandardMaterial({ color: 0x5f5a54, roughness: 0.85 }), teal = new THREE.MeshStandardMaterial({ color: 0x1f7a8c, roughness: 0.5 });
+    // the station halls: a long low hall over each ramp's open stretch, the street front under a canopy with the METRO sign over it
+    const conc = new THREE.MeshStandardMaterial({ color: 0xc9c2b4, roughness: 0.85 }), frame = new THREE.MeshStandardMaterial({ color: 0x5f5a54, roughness: 0.85 });
+    const teal = new THREE.MeshStandardMaterial({ color: 0x1f7a8c, roughness: 0.5 }), glass = new THREE.MeshStandardMaterial({ color: 0x9fd6e0, roughness: 0.15, metalness: 0.3, transparent: true, opacity: 0.45 });
+    const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 2.4, 2.0) });
+    const logoTex = textTex(256, 256, (x, w, h) => { x.fillStyle = '#c4161c'; x.beginPath(); x.arc(w / 2, h / 2, w * 0.46, 0, TAU); x.fill(); x.fillStyle = '#f4f1e8'; x.font = '400 170px "Saira Stencil One", Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('M', w / 2, h / 2 + 10); });
+    const logo = new THREE.MeshStandardMaterial({ map: logoTex, emissive: 0xffffff, emissiveMap: logoTex, emissiveIntensity: 0.7, transparent: true, alphaTest: 0.5 });
+    const HY = CITY.y, HH = METRO.hallH;
     for (const sp of M.spurs) {
-      const g = METRO.rampHw + 0.3, base = metroSpurY(sp.cover), so = metroSpurCeil(sp.cover) - base, top = CITY.y + 2.4, yaw = Math.atan2(sp.dx, sp.dz);
-      const fg = new THREE.Group(); fg.position.set(sp.x + sp.dx * sp.cover, base, sp.z + sp.dz * sp.cover); fg.rotation.y = yaw;
-      const box = (w, h, d, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.castShadow = true; b.receiveShadow = true; fg.add(b); };
-      for (const sd of [-1, 1]) box(1.6, top - base, 1.0, sd * (g + 0.8), (top - base) / 2, -0.3, frame);
-      box(2 * g + 2.8, top - base - so, 1.0, 0, (so + top - base) / 2, -0.3, frame);
-      box(2 * g + 2.8, 0.25, 1.1, 0, so + 0.05, -0.3, teal);
+      const g = METRO.rampHw + 0.3, Lh = sp.cover, wt = 0.9, yaw = Math.atan2(sp.dx, sp.dz), so = metroSpurCeil(Lh);
+      const fg = new THREE.Group(); fg.position.set(sp.x, 0, sp.z); fg.rotation.y = yaw; // local +z runs down the ramp
+      const box = (w, h, d, x, y, z, m, shadow = true) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.castShadow = shadow; b.receiveShadow = true; fg.add(b); return b; };
+      // side walls from the street to the roof, the back wall from the ramp's tunnel roof up, the roof with a glazed strip down the middle
+      for (const sd of [-1, 1]) box(wt, HH + 0.5, Lh + 0.9, sd * (g + wt / 2), HY - 0.5 + (HH + 0.5) / 2, Lh / 2 + 0.45, conc);
+      box(2 * g + 2 * wt, HY + HH - so, wt, 0, (so + HY + HH) / 2, Lh + 0.45, conc);
+      for (const sd of [-1, 1]) box(g + wt - 1.6, 0.5, Lh + 0.9, sd * (1.6 + (g + wt - 1.6) / 2), HY + HH + 0.25, Lh / 2 + 0.45, frame);
+      box(3.2, 0.12, Lh + 0.9, 0, HY + HH + 0.3, Lh / 2 + 0.45, glass, false);
+      for (let a = 4; a < Lh; a += 7) box(2 * g, 0.3, 0.3, 0, HY + HH - 0.15, a, frame);
+      for (let a = 3; a < Lh - 2; a += 7) box(0.6, 0.08, 3, 0, HY + HH - 0.36, a + 2, glow, false); // lamps under the roof
+      // the street front: a lintel over the way in, the facade above it, the canopy out over the pavement on two posts
+      const lin = HY + 4.6;
+      box(2 * g + 2 * wt, HY + HH + 0.5 - lin, wt, 0, (lin + HY + HH + 0.5) / 2, 0.45, conc);
+      box(2 * g + 2 * wt + 0.4, 0.4, 0.3, 0, HY + HH + 0.5, 0.05, teal);
+      box(2 * g + 2 * wt + 3, 0.35, 6.5, 0, lin - 0.2, -3.0, frame);
+      box(2 * g + 2 * wt + 3.2, 0.12, 6.7, 0, lin - 0.4, -3.0, teal, false);
+      for (const sd of [-1, 1]) box(0.35, lin - HY, 0.35, sd * (g + wt + 1.0), HY + (lin - HY) / 2, -5.9, frame);
       const tex = textTex(1024, 192, (x, w, h) => {
         x.fillStyle = '#16100c'; x.fillRect(0, 0, w, h);
         x.fillStyle = '#c4161c'; x.beginPath(); x.arc(100, h / 2, 64, 0, TAU); x.fill(); x.fillStyle = '#f4f1e8'; x.font = '400 90px "Saira Stencil One", Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('M', 100, h / 2 + 4);
-        x.textAlign = 'left'; x.font = '700 78px "Saira Condensed", sans-serif'; x.fillText('CALDER METRO', 190, h * 0.36); x.fillStyle = '#7fd0de'; x.font = '700 56px "Saira Condensed", sans-serif'; x.fillText(sp.name.toUpperCase() + ' RAMP  ·  DRIVE IN', 190, h * 0.74);
+        x.textAlign = 'left'; x.font = '700 78px "Saira Condensed", sans-serif'; x.fillText(sp.name.toUpperCase(), 190, h * 0.36); x.fillStyle = '#7fd0de'; x.font = '700 56px "Saira Condensed", sans-serif'; x.fillText('CALDER METRO  ·  DRIVE IN', 190, h * 0.74);
       });
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(2 * g + 2, (2 * g + 2) * 0.1875), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.6, roughness: 0.5 }));
-      sign.position.set(0, (so + top - base) / 2, -0.82); sign.rotation.y = Math.PI; fg.add(sign);
+      const sw = 2 * g + 1, sign = new THREE.Mesh(new THREE.PlaneGeometry(sw, sw * 0.1875), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.6, roughness: 0.5 }));
+      sign.position.set(0, (lin + HY + HH) / 2 + 0.1, -0.02); sign.rotation.y = Math.PI; fg.add(sign);
+      // a totem with the M on it at the front corner, seen down the street
+      box(1.1, HH + 3.5, 1.1, g + wt + 0.55, HY + (HH + 3.5) / 2, 0.55, teal);
+      for (const [ox, oz, ry] of [[0, -0.01, Math.PI], [0.56, 0.55, Math.PI / 2], [-0.56, 0.55, -Math.PI / 2]]) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), logo); m.position.set(g + wt + 0.55 + ox, HY + HH + 2.4, oz); m.rotation.y = ry; fg.add(m);
+      }
       this.scene.add(fg);
     }
     // the trains: the stopper in teal, the express in red, both lit up front so you can see them coming down the tube

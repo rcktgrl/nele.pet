@@ -154,25 +154,27 @@ class World {
         seg(pa.x - adz * l, pa.z + adx * l, pb.x - bdz * l, pb.z + bdx * l, t, r);
       }
     };
-    // outer wall in runs between the ramp mouths
-    const gaps = M.spurs.map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]).sort((a, b) => a[0] - b[0]);
-    let s = gaps.length ? gaps[gaps.length - 1][1] - R.length : 0;
-    for (const [g0, g1] of gaps) { line(s, g0, METRO.wallL - 0.3, top, 0.3); s = g1; }
-    if (!gaps.length) line(0, R.length, METRO.wallL - 0.3, top, 0.3);
-    line(0, R.length, METRO.wallR, top, 0.3);
+    // both walls in runs between the ramps that come in through them
+    for (const [side, wl] of [[-1, METRO.wallL - 0.3], [1, METRO.wallR]]) {
+      const gaps = M.spurs.filter((sp) => sp.side === side).map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]).sort((a, b) => a[0] - b[0]);
+      let s = gaps.length ? gaps[gaps.length - 1][1] - R.length : 0;
+      for (const [g0, g1] of gaps) { line(s, g0, wl, top, 0.3); s = g1; }
+      if (!gaps.length) line(0, R.length, wl, top, 0.3);
+    }
     for (const sp of M.spurs) for (const sd of [-1, 1]) {
-      const l = sd * (METRO.rampHw + 0.3), aEnd = sp.L + METRO.wallL + 2 - 0.3;
+      const l = sd * (METRO.rampHw + 0.3), aEnd = metroSpurEnd(sp) - 0.3;
       for (let a = 0; a < aEnd; a += 6) {
         const b = Math.min(aEnd, a + 6);
         seg(sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l, sp.x + sp.dx * b - sp.dz * l, sp.z + sp.dz * b + sp.dx * l, metroSpurY(a) + 3.6, 0.3);
       }
     }
-    // up on the street: a parapet down both sides of each open cut and across its far end
+    // up on the street: the station hall's side walls and back wall, from the street up to its roof
     for (const sp of M.spurs) {
-      const g = METRO.rampHw + 0.6, P = (a, l) => [sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l], top = CITY.y + 1.0, a0 = 9;
-      const par = (p, q) => { const o = S.addSegment(...p, ...q, top, 'barrier'); o.r = 0.35; o.bot = CITY.y - 0.8; };
-      for (const sd of [-1, 1]) for (let a = a0; a < sp.cover; a += 8) par(P(a, sd * g), P(Math.min(sp.cover, a + 8), sd * g));
+      const g = METRO.rampHw + 0.6, P = (a, l) => [sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l], top = CITY.y + METRO.hallH;
+      const par = (p, q) => { const o = S.addSegment(...p, ...q, top, 'barrier'); o.r = 0.5; o.bot = CITY.y - 0.8; };
+      for (const sd of [-1, 1]) for (let a = 0; a < sp.cover; a += 8) par(P(a, sd * g), P(Math.min(sp.cover, a + 8), sd * g));
       par(P(sp.cover, -g), P(sp.cover, g));
+      const t = P(0.55, -(METRO.rampHw + 1.75)), o = S.addObstacle(t[0], t[1], 0.75, top + 3.5, 'barrier'); o.bot = CITY.y - 0.8; // the METRO totem at the front corner
     }
   }
   /* river bridges: parapets along both edges (boats pass under them) and the piers in the water */
@@ -367,6 +369,8 @@ class World {
     T.normal(x, z, this._n);
     const rock = smooth(0.85, 0.7, this._n.y) * (1 - road) * (1 - asph);
     // on a bridge, viaduct, ramp or car-park deck the grip is the deck's own, not the river bed or gap underneath
+    // down in a road or rail bore: the floor of the bore
+    if (y !== undefined && T.bores && T.probe(y + 1, () => T.boreFloor(x, z)) !== null) return this.deckSurface(T.boreRail.has(Math.round(x / 2) * 65536 + Math.round(z / 2)) ? 0 : 1, 0, 0);
     const o = y !== undefined && T.overlayAt(x, z), oy = o ? overlayLift(o, x, z) : -Infinity;
     if (o && Math.abs(oy - y) < 1.2 && oy > T.rawH(x, z) + 0.3) {
       const k = o.surf || 'asphalt';
@@ -415,12 +419,33 @@ class World {
     this.collideCars();
     this.collideStatic();
   }
+  /* a car against something that does not move: restitution e along the wall normal (n, level), sliding friction along it,
+     through the car's full effective mass at the contact point so an off-centre hit turns it as much as it should and no more.
+     The caller passes the contact at the car's own height: a wall pushing at bumper height would roll it onto its side */
+  wallImpulse(c, nx, nz, px, py, pz, e) {
+    const m = c.spec.mass, t = this._wall || (this._wall = { r: new V3(), n: new V3(), a: new V3(), b: new V3(), v: new V3(), J: new V3(), p: new V3() });
+    const r = t.r.set(px - c.pos.x, py - c.pos.y, pz - c.pos.z), n = t.n.set(nx, 0, nz);
+    const vc = t.v.crossVectors(c.w, r).add(c.vel), vn = vc.dot(n);
+    if (vn >= 0) return;
+    const k = (dir) => 1 / m + dir.dot(c.invIWorld(t.a.crossVectors(r, dir), t.a).cross(r));
+    const Jn = -(1 + e) * vn / k(n);
+    const J = t.J.copy(n).multiplyScalar(Jn);
+    const vt = vc.addScaledVector(n, -vn); vt.y = 0; const sl = vt.length();
+    if (sl > 1e-3) { vt.multiplyScalar(1 / sl); J.addScaledVector(vt, -Math.min(sl / k(vt), 0.35 * Jn)); }
+    const wy = c.w.y;
+    c.applyImpulse(J, t.p.set(px, py, pz));
+    c.w.y = wy + clamp(c.w.y - wy, -2.2, 2.2); // a glancing blow turns the car, it never sends it spinning
+    c.wallT = 0.7; // and the car settles quickly afterwards (car.step)
+    // the wheels slow with the car: still spinning at the old road speed they would kick it round
+    const vf = c.vel.dot(c.forward(t.b)); for (const wh of c.wheels) if (Math.abs(wh.omega * c.spec.wheels.r) > Math.abs(vf)) wh.omega = vf / c.spec.wheels.r;
+  }
   collideStatic() {
     const S = this.scatter, P = this.props;
     const sph = [];
     for (const c of this.cars) {
       if (c.asleep || c.remote) continue;
       c.spheres(sph);
+      const hitThisStep = new Set();
       for (const s of sph) {
         const list = S.near(s.p.x, s.p.z);
         if (list) for (const o of list) {
@@ -448,14 +473,9 @@ class World {
           }
           const vn = c.vel.x * nx + c.vel.z * nz;
           c.pos.x += nx * pen; c.pos.z += nz * pen;
-          if (vn < 0) {
-            const soft = o.kind === 'rail' || o.kind === 'barrier' ? 1.05 : 1.25;
-            const J = new V3(nx, 0, nz).multiplyScalar(-vn * soft * c.spec.mass);
-            if (o.kind === 'rail' || o.kind === 'barrier' || o.kind === 'building' || o.kind === 'container') { // scrape along walls instead of sticking
-              const vt = new V3(c.vel.x - vn * nx, 0, c.vel.z - vn * nz);
-              J.addScaledVector(vt, -0.12 * c.spec.mass);
-            }
-            c.applyImpulse(J, new V3(cx, s.p.y, cz));
+          if (vn < 0 && !hitThisStep.has(o)) {
+            hitThisStep.add(o); // both hull spheres touching the same wall get one impulse between them
+            this.wallImpulse(c, nx, nz, cx, c.pos.y, cz, o.kind === 'rail' || o.kind === 'barrier' ? 0.15 : 0.25);
             c.impact = Math.max(c.impact, -vn);
             c.events.push({ type: 'hit', v: -vn, kind: o.kind });
             const limit = o.kind === 'rail' || o.kind === 'barrier' ? 1.5 : 1.05;

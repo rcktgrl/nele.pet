@@ -341,6 +341,7 @@ class Car {
       this.w.addScaledVector(right, -pitchRate * (1 - Math.exp(-0.8 * dt)) + lv.dot(right) * 0.9 * dt);
     }
     this.w.multiplyScalar(1 - (this.onGround ? 0.4 : 0.25) * dt);
+    if (this.wallT > 0) { this.wallT -= dt; if (this.onGround) this.w.y *= Math.exp(-2.5 * dt); } // just off a wall: the yaw it picked up dies away
     this.pos.addScaledVector(this.vel, dt);
     const wq = t.qi.set(this.w.x * dt * 0.5, this.w.y * dt * 0.5, this.w.z * dt * 0.5, 0).multiply(this.q);
     this.q.x += wq.x; this.q.y += wq.y; this.q.z += wq.z; this.q.w += wq.w; this.q.normalize();
