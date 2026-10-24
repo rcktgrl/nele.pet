@@ -90,6 +90,16 @@ function riverBed(q, d, h) {
   if (d < q.hw) return lerp(centre, edge, (d / q.hw) * (d / q.hw));
   return lerp(edge, Math.max(h, edge), smooth(q.hw, q.hw + q.bank, d));
 }
+/* at sea level the river runs through a floodplain ~2 m above the water, then the valley side climbs gently (1:4, 1:2 past 30 m)
+   instead of the 10 m cut bank riverBed alone would leave; 0..1 how much of that applies to a reach (none up in the hills or in town) */
+const FLOOD_EXT = 95;
+const floodW = (q) => (q.con ? 0 : smooth(WATER_Y + 4, WATER_Y + 1, q.wl));
+function floodBank(q, d, h, x, z) {
+  const u = d - q.hw, F = 12 + 4 * (Math.sin(x * 0.013) + Math.cos(z * 0.011)), sp = (v) => (v + Math.hypot(v, 6)) / 2;
+  const edge = riverBed(q, q.hw, h), lip = q.wl + 1.8;
+  const y = edge + (lip - edge) * smooth(0, 9, u) + 0.04 * u + 0.25 * sp(u - F) + 0.25 * sp(u - F - 30);
+  return (y + h - Math.hypot(y - h, 2)) / 2; // soft min: no crease where the bank meets the land
+}
 
 /* carve every reach into the height grid: water, beds and banks only ever lower the ground */
 function carveRiver(T) {
@@ -116,10 +126,29 @@ function carveRiver(T) {
     M.mask[k] = best[k] < U.hw ? 1 : 2;
     M.top[k] = Math.max(T.rawH(bx0 + (k % nx) * G, bz0 + Math.floor(k / nx) * G), U.ceil + 1.2);
   }
+  // roads and rail beside the floodplain keep their ground: an embankment falls away 1:2 from the formation (elevated spans and bores stand clear)
+  const prot = new Map(), near = new Set(), NB = 16, nk = (x, z) => Math.floor(x / NB) * 100003 + Math.floor(z / NB);
+  for (const R of RIVER.reaches) for (const q of R.pts) if (floodW(q) > 0) {
+    const r = q.hw + FLOOD_EXT + 40; for (let u = -r; u <= r + NB; u += NB) for (let v = -r; v <= r + NB; v += NB) near.add(nk(q.x + u, q.z + v));
+  }
+  for (const O of T.routes) {
+    if (O.def.noCarve || O.def.trafficOnly || O.def.elevated) continue;
+    const hw = O.width / 2 + 1.5, rr = Math.ceil((hw + 30) / c);
+    for (let k = 0; k <= O.count; k++) {
+      if ((O.elev && O.elev[k]) || (O.covered && O.covered[k]) || !near.has(nk(O.x[k], O.z[k]))) continue;
+      const cx = Math.round((O.x[k] - x0) / c), cz = Math.round((O.z[k] - z0) / c);
+      for (let dz = -rr; dz <= rr; dz++) for (let dx = -rr; dx <= rr; dx++) {
+        const gx = cx + dx, gz = cz + dz; if (gx < 0 || gz < 0 || gx >= Nx || gz >= Nz) continue;
+        const d = Math.hypot(x0 + gx * c - O.x[k], z0 + gz * c - O.z[k]); if (d > hw + 30) continue;
+        const gi = gz * Nx + gx, y = O.y[k] - 0.5 * Math.max(0, d - hw); if (!(prot.get(gi) >= y)) prot.set(gi, y);
+      }
+    }
+  }
+  const h0 = T.h.slice(); // the floodplain is shaped from the ground as the roads left it, so overlapping reaches agree
   for (const R of RIVER.reaches) {
     const Q = R.pts;
     for (let i = 0; i < Q.length - 1; i++) {
-      const a = Q[i], b = Q[i + 1], reach = Math.max(a.hw + a.bank, b.hw + b.bank), rc = Math.ceil(reach / c) + 1;
+      const a = Q[i], b = Q[i + 1], fl = Math.max(floodW(a), floodW(b)) > 0, reach = Math.max(a.hw + a.bank, b.hw + b.bank, fl ? Math.max(a.hw, b.hw) + FLOOD_EXT : 0), rc = Math.ceil(reach / c) + 1;
       const cx = Math.round(((a.x + b.x) / 2 - x0) / c), cz = Math.round(((a.z + b.z) / 2 - z0) / c), half = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 2 / c);
       const vx = b.x - a.x, vz = b.z - a.z, L2 = vx * vx + vz * vz || 1;
       for (let dz = -rc - half; dz <= rc + half; dz++) for (let dx = -rc - half; dx <= rc + half; dx++) {
@@ -127,8 +156,11 @@ function carveRiver(T) {
         const px = x0 + gx * c, pz = z0 + gz * c, t = clamp(((px - a.x) * vx + (pz - a.z) * vz) / L2, 0, 1);
         const d = Math.hypot(px - a.x - vx * t, pz - a.z - vz * t); if (d > reach) continue;
         const q = { hw: lerp(a.hw, b.hw, t), bank: lerp(a.bank, b.bank, t), wl: lerp(a.wl, b.wl, t), con: a.con || b.con };
-        if (d > q.hw + q.bank) continue;
-        const gi = gz * Nx + gx, y = riverBed(q, d, T.h[gi]);
+        const g = fl && d > q.hw ? floodW(q) : 0;
+        if (d > (g > 0 ? q.hw + FLOOD_EXT : q.hw + q.bank)) continue;
+        const gi = gz * Nx + gx, h = T.h[gi], y0 = d > q.hw + q.bank ? h : riverBed(q, d, h);
+        let y = y0;
+        if (g > 0 && !DISTRICT.cell(px, pz)) { const p = prot.get(gi); y = Math.max(lerp(y0, floodBank(q, d, h0[gi], px, pz), g), p === undefined ? -1e9 : Math.min(y0, p)); }
         if (y < T.h[gi]) T.h[gi] = y;
         if (d < q.hw + 1 && !T.riverTunAt(px, pz)) T.river[gi] = 255;
       }
