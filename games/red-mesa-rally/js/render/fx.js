@@ -78,7 +78,11 @@ class FX {
     this.smoke = new ParticleSystem(gfx, gfx.quality === 'low' ? 1800 : 3500, false, puff);
     this.fire = new ParticleSystem(gfx, 1500, true, glow);
   }
-  update(dt) { this.smoke.update(dt, this.gfx.world.terrain); this.fire.update(dt, this.gfx.world.terrain); if (this.gfx.millWheel) this.gfx.millWheel.rotation.z -= dt * 0.6; }
+  update(dt) { this.smoke.update(dt, this.gfx.world.terrain); this.fire.update(dt, this.gfx.world.terrain); if (this.gfx.millWheel) this.gfx.millWheel.rotation.z -= dt * 0.6;
+    // spray where the stream pours off the dam
+    const D = this.gfx.damFoam, C = this.gfx.camera.position;
+    if (D && Math.hypot(C.x - D.x, C.z - D.z) < 350) for (let n = dt * 14; n > 0; n--) if (Math.random() < n) { const l = (Math.random() * 2 - 1) * D.w; this.dust(D.x + D.rx * l, WATER_Y + 0.1, D.z + D.rz * l, D.dx * 3, D.dz * 3, 0.9, 4); }
+  }
   dust(x, y, z, vx, vz, amount, kind) {
     const r = Math.random;
     if (kind === 2) { // mud: dark heavy clods + brown spray

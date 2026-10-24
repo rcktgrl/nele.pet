@@ -310,13 +310,13 @@ class Car {
     // aero + water drag
     F.addScaledVector(this.vel, -0.5 * 1.2 * sp.cda * speed);
     F.addScaledVector(up, -sp.down * speed * speed);
-    const comY = this.pos.y;
-    if (comY < WATER_Y + 1.0) {
-      const depth = clamp(WATER_Y + 1.0 - comY, 0, 2);
+    const comY = this.pos.y, wy = T.waterY(this.pos.x, this.pos.z);
+    if (comY < wy + 1.0) {
+      const depth = clamp(wy + 1.0 - comY, 0, 2);
       F.addScaledVector(this.vel, -depth * m * 0.55);
       F.y += depth * m * 9.81 * 0.35;
       this.inWater = Math.max(this.inWater, depth);
-      if (comY < WATER_Y - 1.2) this.wreck('drowned');
+      if (comY < wy - 1.2) this.wreck('drowned');
     }
     // boost
     if (boostOn) { F.addScaledVector(fwd, sp.boost.force * m * (this.onGround ? 1 : 0.5)); this.heat += sp.boost.heat * dt; }

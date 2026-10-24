@@ -198,6 +198,8 @@ class World {
       for (let k = 0; k < 4; k++) { const [ax, az] = P[k], [bx, bz] = P[(k + 1) % 4]; S.addSegment(ax, az, bx, bz, o.y1 + o.h, 'barrier').r = 0.3; }
       if (o.wheel) S.addObstacle(o.wheel.x, o.wheel.z, 1.4, WATER_Y + o.wheel.r * 1.6, 'barrier');
     }
+    // the Calder dam: a wall across the stream, so boats stay on the sea-level water below it
+    { const D = RIVER.dam, w = D.hw + 3; S.addSegment(D.x + D.dz * w, D.z - D.dx * w, D.x - D.dz * w, D.z + D.dx * w, D.surf + 0.5, 'barrier').r = 1.6; }
   }
   /* harbour quay faces: low walls that stop boats but sit under the wheels of anything on the quay */
   /* Calder Stadium: the stands are solid all round, open at the way in */
@@ -381,7 +383,7 @@ class World {
       return this.deckSurface(k === 'asphalt' ? 1 : 0, k === 'dirt' ? 1 : 0, k === 'rail' ? 1 : 0);
     }
     s.road = road; s.mud = mud; s.asph = asph;
-    s.water = (y !== undefined && y < WATER_Y) ? clamp((WATER_Y - y) * 1.5, 0, 1) : 0;
+    const wy = T.waterY(x, z); s.water = (y !== undefined && y < wy) ? clamp((wy - y) * 1.5, 0, 1) : 0;
     let mu = lerp(lerp(0.94, 0.86, green), 0.8, beach);
     mu = lerp(mu, 1.1, road); mu = lerp(mu, 0.95, rail); mu = lerp(mu, 1.18, asph); mu = lerp(mu, 1.1, rock);
     s.mu = mu * (s.water ? 0.85 : 1);

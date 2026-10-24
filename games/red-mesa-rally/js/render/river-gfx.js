@@ -141,6 +141,24 @@ Object.assign(Gfx.prototype, {
     const m = this.water.material.clone(); m.normalMap = this.waterNormal.clone(); m.normalMap.repeat.set(1, 1); m.normalMap.needsUpdate = true;
     m.color = new THREE.Color(0.07, 0.13, 0.13); m.side = THREE.DoubleSide;
     const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; this.scene.add(mesh);
+    this.buildDam(m);
+  },
+  /* the Calder dam at the foot of the stream: a concrete wall bank to bank, the stream pouring over a spillway in the middle */
+  buildDam(waterMat) {
+    const D = RIVER.dam, T = this.world.terrain, rx = D.dz, rz = -D.dx, top = D.surf + 0.5, foot = WATER_Y - 4.5, th = 3.2;
+    // out into each bank until the ground stands above the crest
+    const reach = (sg) => { let l = D.hw; while (l < D.hw + 60 && T.rawH(D.x + rx * l * sg, D.z + rz * l * sg) < top + 0.6) l += 1; return l + 2; };
+    const l0 = -reach(-1), l1 = reach(1), sw = D.hw * 0.55, conc = new THREE.MeshStandardMaterial({ color: 0xa39d92, roughness: 0.9 });
+    const g = new THREE.Group(); g.position.set(D.x, 0, D.z); g.rotation.y = Math.atan2(D.dx, D.dz); this.scene.add(g);
+    const box = (a, b, y0, y1, d, z, mat) => { const o = new THREE.Mesh(new THREE.BoxGeometry(b - a, y1 - y0, d), mat); o.position.set((a + b) / 2, (y0 + y1) / 2, z); o.castShadow = o.receiveShadow = true; g.add(o); return o; };
+    box(l0, -sw, foot, top, th, th / 2, conc); box(sw, l1, foot, top, th, th / 2, conc); // the wall either side of the spillway
+    box(-sw, sw, foot, D.surf - 0.15, th, th / 2, conc); // the spillway sill, just under the stream
+    box(-sw - 0.4, -sw, D.surf - 0.15, top + 0.25, th + 0.6, th / 2, conc); box(sw, sw + 0.4, D.surf - 0.15, top + 0.25, th + 0.6, th / 2, conc); // piers at its ends
+    // the overflow: a sheet of water over the sill and down the face into the river below
+    const fall = new THREE.PlaneGeometry(sw * 2, Math.hypot(1.4, D.surf - WATER_Y), 1, 1), fm = waterMat.clone(); fm.color = new THREE.Color(0.5, 0.6, 0.6); fm.opacity = 0.75;
+    const sheet = new THREE.Mesh(fall, fm); sheet.position.set(0, (D.surf + WATER_Y) / 2 - 0.05, th + 0.7); sheet.rotation.x = Math.atan2(-1.4, D.surf - WATER_Y); g.add(sheet);
+    const lip = new THREE.Mesh(new THREE.PlaneGeometry(sw * 2, th), waterMat); lip.rotation.x = -Math.PI / 2; lip.position.set(0, D.surf - 0.1, th / 2); g.add(lip);
+    this.damFoam = { x: D.x + D.dx * (th + 1.6), z: D.z + D.dz * (th + 1.6), dx: D.dx, dz: D.dz, rx, rz, w: sw };
   },
   /* decks, parapets and piers wherever a road or the railway crosses the river */
   buildBridges() {

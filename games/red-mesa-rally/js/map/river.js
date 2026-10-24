@@ -79,7 +79,10 @@ const RIVER = (() => {
   const b0 = Math.max(0, up.findIndex((q) => q.z > -560 && q.wl <= WATER_Y));
   const line = [...up.slice(b0), ...armL, ...down, { x: 4330, z: 838 }, { x: 4420, z: 860 }];
   const racePts = line.filter((_, i) => i % 3 === 0 || i === line.length - 1).map((q) => [q.x, q.z]);
-  return { CTRL, P, s, wl, reaches, island, tunnel, ISL, boatStart: up[b0], racePts, length: s[n - 1] };
+  // the dam where the mountain stream meets sea level: its own water ribbon ends at the upstream face, boats stay below it
+  const K = up.reduce((k, q, i) => (q.wl > WATER_Y + 1.1 ? i : k), 0), dq = up[K], dn = up[Math.min(up.length - 1, K + 1)], dL = Math.hypot(dn.x - dq.x, dn.z - dq.z) || 1;
+  const dam = { i: K, x: dq.x, z: dq.z, dx: (dn.x - dq.x) / dL, dz: (dn.z - dq.z) / dL, hw: dq.hw * 1.15, surf: dq.wl - 0.12 };
+  return { CTRL, P, s, wl, reaches, island, tunnel, ISL, dam, boatStart: up[b0], racePts, length: s[n - 1] };
 })();
 
 /* bed height a reach asks for at distance d from its centre, given the ground h there */
@@ -143,6 +146,18 @@ function carveRiver(T) {
         const gi = gz * Nx + gx, y = O.y[k] - 0.5 * Math.max(0, d - hw); if (!(prot.get(gi) >= y)) prot.set(gi, y);
       }
     }
+  }
+  // the stream's own surface above the dam, cell by cell (everywhere else the water is the sea-level plane): cars brake, splash and drown in it
+  const UW = T.upWater = new Map(), UD = new Map(), UQ = RIVER.reaches[0].pts;
+  for (let i = 0; i < RIVER.dam.i; i++) {
+    const a = UQ[i], b = UQ[i + 1], vx = b.x - a.x, vz = b.z - a.z, L2 = vx * vx + vz * vz || 1, r = Math.max(a.hw, b.hw) * 1.15 + c;
+    for (let gz = Math.floor((Math.min(a.z, b.z) - r - z0) / c); gz <= Math.ceil((Math.max(a.z, b.z) + r - z0) / c); gz++)
+      for (let gx = Math.floor((Math.min(a.x, b.x) - r - x0) / c); gx <= Math.ceil((Math.max(a.x, b.x) + r - x0) / c); gx++) {
+        if (gx < 0 || gz < 0 || gx >= Nx || gz >= Nz) continue;
+        const px = x0 + gx * c, pz = z0 + gz * c, t = clamp(((px - a.x) * vx + (pz - a.z) * vz) / L2, 0, 1);
+        const d = Math.hypot(px - a.x - vx * t, pz - a.z - vz * t); if (d > lerp(a.hw, b.hw, t) * 1.15) continue;
+        const gi = gz * Nx + gx; if (!(UD.get(gi) <= d)) { UD.set(gi, d); UW.set(gi, lerp(a.wl, b.wl, t) - 0.12); } // the nearest stretch decides
+      }
   }
   const h0 = T.h.slice(); // the floodplain is shaped from the ground as the roads left it, so overlapping reaches agree
   for (const R of RIVER.reaches) {

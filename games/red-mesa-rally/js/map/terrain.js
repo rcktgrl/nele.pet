@@ -163,6 +163,8 @@ class Terrain {
   /* inside the covered bore of the boat tunnel (whoever is asking decides whether that is the ground) */
   inRiverTunnel(x, z) { const k = this.riverTunAt(x, z); return k > 0 && this.riverTun.mask[k - 1] === 1; }
   /* 1 + the cell index when (x, z) is under the boat tunnel's lid, else 0 */
+  /* the water surface over (x, z): the mountain stream's own level above the dam, else the sea-level plane */
+  waterY(x, z) { const w = this.upWater && this.upWater.get(this.gi(x, z)); return w === undefined ? WATER_Y : w; }
   riverTunAt(x, z) {
     const M = this.riverTun; if (!M) return 0;
     const i = Math.round((x - M.x0) / M.G), j = Math.round((z - M.z0) / M.G);
