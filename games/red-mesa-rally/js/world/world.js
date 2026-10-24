@@ -156,13 +156,13 @@ class World {
     };
     // both walls in runs between the ramps that come in through them
     for (const [side, wl] of [[-1, METRO.wallL - 0.3], [1, METRO.wallR]]) {
-      const gaps = M.spurs.filter((sp) => sp.side === side).map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]).sort((a, b) => a[0] - b[0]);
+      const gaps = M.spurs.filter((sp) => sp.side === side).map((sp) => sp.gap).sort((a, b) => a[0] - b[0]);
       let s = gaps.length ? gaps[gaps.length - 1][1] - R.length : 0;
       for (const [g0, g1] of gaps) { line(s, g0, wl, top, 0.3); s = g1; }
       if (!gaps.length) line(0, R.length, wl, top, 0.3);
     }
     for (const sp of M.spurs) for (const sd of [-1, 1]) {
-      const l = sd * (METRO.rampHw + 0.3), aEnd = metroSpurEnd(sp) - 0.3;
+      const l = sd * (METRO.rampHw + 0.3), aEnd = metroSpurEnd(sp, sd) - 0.3;
       for (let a = 0; a < aEnd; a += 6) {
         const b = Math.min(aEnd, a + 6);
         seg(sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l, sp.x + sp.dx * b - sp.dz * l, sp.z + sp.dz * b + sp.dx * l, metroSpurY(a) + 3.6, 0.3);
@@ -370,6 +370,10 @@ class World {
     const rock = smooth(0.85, 0.7, this._n.y) * (1 - road) * (1 - asph);
     // on a bridge, viaduct, ramp or car-park deck the grip is the deck's own, not the river bed or gap underneath
     // down in a road or rail bore: the floor of the bore
+    // down in the metro, or on a station ramp: its own asphalt, whatever lies on the ground overhead
+    const mm = y !== undefined ? T.metroAt(x, z) : 0;
+    const hall = mm > 1 && ((sp) => (x - sp.x) * sp.dx + (z - sp.z) * sp.dz < sp.cover)(T.metro.spurs[mm - 2]);
+    if (mm && (hall || y < METRO.under)) return this.deckSurface(1, 0, 0);
     if (y !== undefined && T.bores && T.probe(y + 1, () => T.boreFloor(x, z)) !== null) return this.deckSurface(T.boreRail.has(Math.round(x / 2) * 65536 + Math.round(z / 2)) ? 0 : 1, 0, 0);
     const o = y !== undefined && T.overlayAt(x, z), oy = o ? overlayLift(o, x, z) : -Infinity;
     if (o && Math.abs(oy - y) < 1.2 && oy > T.rawH(x, z) + 0.3) {

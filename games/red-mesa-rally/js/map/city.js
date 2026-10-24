@@ -280,6 +280,8 @@ class City {
     for (const o of [...this.buildings, ...T.village]) if (o.w && footprint(o.x, o.z, o.yaw, o.w, o.d, 0.5, (px, pz) => T.metroAt(px, pz) === 0) === false) o.y0 = Math.max(o.y0, METRO.ceil + 0.08);
     this.yardFences(T, vm, green);
     this.streets = new Streets(T, this);
+    const hitsHall = (f) => { for (let t = 0; t <= 1; t += 0.05) if (inMetroHall(lerp(f.ax, f.bx, t), lerp(f.az, f.bz, t))) return true; return false; };
+    this.fences = this.fences.filter((f) => !hitsHall(f)); // no fence or hedge runs through a station hall
     this.lamps = this.lamps.filter((l) => !inMetroHall(l.x, l.z)); for (const k of ['stops', 'signals']) this.streets[k] = this.streets[k].filter((l) => !inMetroHall(l.x, l.z));
   }
   /* picket fences round the suburban back yards: down both sides and across the back, wherever the line stays off the streets */

@@ -673,7 +673,7 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     cuts.sort((a, b) => a[0] - b[0]);
     const runs = []; let s = cuts[cuts.length - 1][1] - R.length;
     for (const [a, b, st] of cuts) { runs.push([s, a, null]); runs.push([a, b, st]); s = b; }
-    const gapsOn = (side) => M.spurs.filter((sp) => sp.side === side).map((sp) => [sp.s - METRO.rampHw - 0.3, sp.s + METRO.rampHw + 0.3]);
+    const gapsOn = (side) => M.spurs.filter((sp) => sp.side === side).map((sp) => sp.gap);
     const L0 = METRO.wallL, WR = METRO.wallR, PL = METRO.plat, TRS = METRO.tracks;
     const gapIn = (gaps) => (a, b) => gaps.some(([g0, g1]) => [-R.length, 0, R.length].some((k) => b + k > g0 && a + k < g1));
     const inGap = gapIn(gapsOn(-1)), inGapR = gapIn(gapsOn(1)); // the ramps come in through the outer wall, or past a platform's end through the inner one
@@ -707,15 +707,20 @@ reflectedLight.directDiffuse *= 0.0; reflectedLight.directSpecular *= 0.0; refle
     }
     // the portal ramps
     for (const sp of M.spurs) {
-      const g = METRO.rampHw + 0.3, aEnd = metroSpurEnd(sp), rx = -sp.dz, rz = sp.dx;
+      const g = METRO.rampHw + 0.3, aEnd = metroSpurEnd(sp), rx = -sp.dz, rz = sp.dx, eL = metroSpurEnd(sp, -1), eR = metroSpurEnd(sp, 1);
       const Q = (a, l, y) => [sp.x + sp.dx * a + rx * l, y, sp.z + sp.dz * a + rz * l];
       for (let a = 0; a < aEnd; a += 2) {
         const b = Math.min(aEnd, a + 2), ya = metroSpurY(a), yb = metroSpurY(b), ca = metroSpurCeil(a), cb = metroSpurCeil(b);
-        const nUp = [0, 1, 0];
-        quad('road', Q(a, -g, ya), Q(b, -g, yb), Q(a, g, ya), Q(b, g, yb), nUp, [0, a / 10, 0, b / 10, 1, a / 10, 1, b / 10]);
-        const open = a < sp.cover, ta = open ? CITY.y + 0.9 : ca, tb = open ? ta : cb; // the cut is open to the sky, its walls up to a parapet
-        if (!open) quad('ceil', Q(a, -g, ca), Q(b, -g, cb), Q(a, g, ca), Q(b, g, cb), [0, -1, 0], [0, a / 6, 0, b / 6, 1, a / 6, 1, b / 6]);
-        for (const sd of [-1, 1]) quad(open ? 'rwall' : 'wall', Q(a, sd * g, ya), Q(b, sd * g, yb), Q(a, sd * g, Math.max(ta, ya + 0.9)), Q(b, sd * g, Math.max(tb, yb + 0.9)), [-rx * sd, 0, -rz * sd], [a / 3, 0, b / 3, 0, a / 3, 1, b / 3, 1]);
+        const nUp = [0, 1, 0], [aL, bL, aR, bR] = [Math.min(a, eL), Math.min(b, eL), Math.min(a, eR), Math.min(b, eR)]; // each edge stops at the loop's wall, the floor tapers in between
+        quad('road', Q(aL, -g, metroSpurY(aL)), Q(bL, -g, metroSpurY(bL)), Q(aR, g, metroSpurY(aR)), Q(bR, g, metroSpurY(bR)), nUp, [0, aL / 10, 0, bL / 10, 1, aR / 10, 1, bR / 10]);
+        const open = a < sp.cover, ta = open ? CITY.y - 0.4 : ca, tb = open ? ta : cb; // the cut is open to the sky; up in the hall its walls stop under the hall's own walls
+        if (!open) quad('ceil', Q(aL, -g, metroSpurCeil(aL)), Q(bL, -g, metroSpurCeil(bL)), Q(aR, g, metroSpurCeil(aR)), Q(bR, g, metroSpurCeil(bR)), [0, -1, 0], [0, aL / 6, 0, bL / 6, 1, aR / 6, 1, bR / 6]);
+        for (const sd of [-1, 1]) {
+          const e = sd < 0 ? eL : eR; if (a >= e) continue;
+          const bb = Math.min(b, e), ybb = metroSpurY(bb), tbb = open ? ta : metroSpurCeil(bb), l = sd * (g - (open ? 0.03 : 0));
+          if (open && ta <= Math.max(ya, ybb) + 0.05) continue;
+          quad(open ? 'rwall' : 'wall', Q(a, l, ya), Q(bb, l, ybb), Q(a, l, Math.max(ta, ya)), Q(bb, l, Math.max(tbb, ybb)), [-rx * sd, 0, -rz * sd], [a / 3, 0, bb / 3, 0, a / 3, 1, bb / 3, 1]);
+        }
         if (!open && (Math.floor(a / 9) !== Math.floor(b / 9))) quad('lamp', Q(a, -0.35, Math.min(ca, cb) - 0.03), Q(a + 3, -0.35, Math.min(ca, cb) - 0.03), Q(a, 0.35, Math.min(ca, cb) - 0.03), Q(a + 3, 0.35, Math.min(ca, cb) - 0.03), [0, -1, 0], [0, 0, 0, 1, 1, 0, 1, 1]);
       }
     }

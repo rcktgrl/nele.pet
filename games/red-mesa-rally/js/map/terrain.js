@@ -2,6 +2,26 @@
 /* Red Mesa Rally · Terrain grid: heights, road carving, surfaces and collision queries */
 
 /* ---------- Terrain grid ---------- */
+/* a closed loop through pts with every bend at least minR across, returned as points about 4 m apart */
+function smoothLoop(pts, minR) {
+  const R0 = new Route({ id: 'loop', closed: true, width: 1, keepStart: true, pts }), n = R0.count, K = 8; // the bend measured over 16 m either side
+  let x = Array.from(R0.x.subarray(0, n)), z = Array.from(R0.z.subarray(0, n));
+  const ease = (pass, tight) => {
+    const nx = x.slice(), nz = z.slice(); let moved = 0;
+    for (let i = 0; i < n; i++) {
+      const a = (i - pass + n) % n, b = (i + pass) % n, mx = (x[a] + x[b]) / 2, mz = (z[a] + z[b]) / 2;
+      const chord = Math.hypot(x[b] - x[a], z[b] - z[a]), sag = Math.hypot(x[i] - mx, z[i] - mz), r = sag > 1e-6 ? chord * chord / (8 * sag) + sag / 2 : 1e9;
+      if (!tight || r < minR) { nx[i] += (mx - x[i]) * 0.3; nz[i] += (mz - z[i]) * 0.3; moved++; }
+    }
+    x = nx; z = nz; return moved;
+  };
+  for (let it = 0; it < 800 && ease(K, true); it++);
+  for (let it = 0; it < 40; it++) { ease(4, false); ease(2, false); } // and a light pass all round so the eased bends blend into the rest
+  const m = Math.floor(n / 2), out = []; // evenly spaced all the way round, seam included
+  for (let k = 0; k < m; k++) { const t = k * n / m, i = Math.floor(t), j = (i + 1) % n, f = t - i; out.push([lerp(x[i], x[j], f), lerp(z[i], z[j], f)]); }
+  return out;
+}
+
 class Terrain {
   constructor() {
     const { Nx, Nz, cell } = WORLD, n = Nx * Nz;
@@ -84,7 +104,7 @@ class Terrain {
     heights(harbour, ['kingsway', 'gate-rd', 'harbour-dr', 'mesa-blvd']);
     this.routes.push(harbour);
     // the Calder Metro loop (its road centreline) and the floor grid that stands in for the ground underneath downtown
-    const metro = new Route({ id: 'metro', closed: true, width: 12, surface: 'asphalt', noCarve: true, metro: true, lanes: 2, sub: 6, pts: METRO.loop });
+    const metro = new Route({ id: 'metro', closed: true, width: 12, surface: 'asphalt', noCarve: true, metro: true, lanes: 2, sub: 2, pts: smoothLoop(METRO.loop, METRO.minR) });
     metro.y.fill(METRO.y); this.routes.push(metro);
     this.buildMetro(metro);
     // the river race line: never carved, it just rides the water
@@ -149,8 +169,19 @@ class Terrain {
     return i >= 0 && j >= 0 && i < M.nx && j < M.nz && M.mask[j * M.nx + i] ? j * M.nx + i + 1 : 0;
   }
   /* metro mask on a 2 m grid: 0 solid ground, 1 the loop, 2 + k portal ramp k */
+  /* the tube runs on smooth curves: the spline sampled finely, then any bend tighter than minR eased out */
   buildMetro(R) {
     const B = METRO.box, G = 2, x0 = B.x0, z0 = B.z0, nx = Math.ceil((B.x1 - B.x0) / G) + 1, nz = Math.ceil((B.z1 - B.z0) / G) + 1;
+    // each ramp runs from its mouth on the street to the loop's centreline, its two walls each stop where they meet the loop's wall
+    const lat = (x, z) => { const q = R.project(x, z, 0, -1), p = R.posAt(q.s, {}), [dx, dz] = R.dirAt(q.s); return { s: q.s, l: -(x - p.x) * dz + (z - p.z) * dx }; };
+    for (const p of METRO.portals) {
+      const at = (a, l) => lat(p.x + p.dx * a - p.dz * l, p.z + p.dz * a + p.dx * l), wall = p.side > 0 ? METRO.wallR : -METRO.wallL;
+      const reach = (l, lim) => { let a = METRO.cut; while (a < 400 && p.side * at(a, l).l > lim) a += 0.1; return a; };
+      p.L = +reach(0, 0).toFixed(1);
+      p.ends = [-1, 1].map((sd) => +reach(sd * (METRO.rampHw + 0.3), wall).toFixed(2));
+      const ss = [-1, 1].map((sd, k) => at(p.ends[k], sd * (METRO.rampHw + 0.3)).s);
+      p.gap = [Math.min(...ss) - 0.3, Math.max(...ss) + 0.3];
+    }
     const M = this.metro = { G, x0, z0, nx, nz, mask: new Uint8Array(nx * nz), R, spurs: metroSpurs() };
     const stamp = (x, z, v) => { const i = Math.round((x - x0) / G), j = Math.round((z - z0) / G); if (i >= 0 && j >= 0 && i < nx && j < nz) M.mask[j * nx + i] = v; };
     for (const sp of M.spurs) {
