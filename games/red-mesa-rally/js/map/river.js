@@ -79,7 +79,10 @@ const RIVER = (() => {
   const b0 = Math.max(0, up.findIndex((q) => q.z > -560 && q.wl <= WATER_Y));
   const line = [...up.slice(b0), ...armL, ...down, { x: 4330, z: 838 }, { x: 4420, z: 860 }];
   const racePts = line.filter((_, i) => i % 3 === 0 || i === line.length - 1).map((q) => [q.x, q.z]);
-  return { CTRL, P, s, wl, reaches, island, tunnel, ISL, boatStart: up[b0], racePts, length: s[n - 1] };
+  // the dam where the mountain stream meets sea level: its own water ribbon ends at the upstream face, boats stay below it
+  const K = up.reduce((k, q, i) => (q.wl > WATER_Y + 1.1 ? i : k), 0), dq = up[K], dn = up[Math.min(up.length - 1, K + 1)], dL = Math.hypot(dn.x - dq.x, dn.z - dq.z) || 1;
+  const dam = { i: K, x: dq.x, z: dq.z, dx: (dn.x - dq.x) / dL, dz: (dn.z - dq.z) / dL, hw: dq.hw * 1.15, surf: dq.wl - 0.12 };
+  return { CTRL, P, s, wl, reaches, island, tunnel, ISL, dam, boatStart: up[b0], racePts, length: s[n - 1] };
 })();
 
 /* bed height a reach asks for at distance d from its centre, given the ground h there */
@@ -89,6 +92,16 @@ function riverBed(q, d, h) {
   const centre = Math.min(q.wl - 1.1, WATER_Y - (q.con ? 3.6 : 4.5) + up * 2.5), edge = Math.min(q.wl - 0.25, WATER_Y - (q.con ? 3.2 : 1.2) + up * 1.7);
   if (d < q.hw) return lerp(centre, edge, (d / q.hw) * (d / q.hw));
   return lerp(edge, Math.max(h, edge), smooth(q.hw, q.hw + q.bank, d));
+}
+/* at sea level the river runs through a floodplain ~2 m above the water, then the valley side climbs gently (1:4, 1:2 past 30 m)
+   instead of the 10 m cut bank riverBed alone would leave; 0..1 how much of that applies to a reach (none up in the hills or in town) */
+const FLOOD_EXT = 95;
+const floodW = (q) => (q.con ? 0 : smooth(WATER_Y + 4, WATER_Y + 1, q.wl));
+function floodBank(q, d, h, x, z) {
+  const u = d - q.hw, F = 12 + 4 * (Math.sin(x * 0.013) + Math.cos(z * 0.011)), sp = (v) => (v + Math.hypot(v, 6)) / 2;
+  const edge = riverBed(q, q.hw, h), lip = q.wl + 1.8;
+  const y = edge + (lip - edge) * smooth(0, 9, u) + 0.04 * u + 0.25 * sp(u - F) + 0.25 * sp(u - F - 30);
+  return (y + h - Math.hypot(y - h, 2)) / 2; // soft min: no crease where the bank meets the land
 }
 
 /* carve every reach into the height grid: water, beds and banks only ever lower the ground */
@@ -116,10 +129,41 @@ function carveRiver(T) {
     M.mask[k] = best[k] < U.hw ? 1 : 2;
     M.top[k] = Math.max(T.rawH(bx0 + (k % nx) * G, bz0 + Math.floor(k / nx) * G), U.ceil + 1.2);
   }
+  // roads and rail beside the floodplain keep their ground: an embankment falls away 1:2 from the formation (elevated spans and bores stand clear)
+  const prot = new Map(), near = new Set(), NB = 16, nk = (x, z) => Math.floor(x / NB) * 100003 + Math.floor(z / NB);
+  for (const R of RIVER.reaches) for (const q of R.pts) if (floodW(q) > 0) {
+    const r = q.hw + FLOOD_EXT + 40; for (let u = -r; u <= r + NB; u += NB) for (let v = -r; v <= r + NB; v += NB) near.add(nk(q.x + u, q.z + v));
+  }
+  for (const O of T.routes) {
+    if (O.def.noCarve || O.def.trafficOnly || O.def.elevated) continue;
+    const hw = O.width / 2 + 1.5, rr = Math.ceil((hw + 30) / c);
+    for (let k = 0; k <= O.count; k++) {
+      if ((O.elev && O.elev[k]) || (O.covered && O.covered[k]) || !near.has(nk(O.x[k], O.z[k]))) continue;
+      const cx = Math.round((O.x[k] - x0) / c), cz = Math.round((O.z[k] - z0) / c);
+      for (let dz = -rr; dz <= rr; dz++) for (let dx = -rr; dx <= rr; dx++) {
+        const gx = cx + dx, gz = cz + dz; if (gx < 0 || gz < 0 || gx >= Nx || gz >= Nz) continue;
+        const d = Math.hypot(x0 + gx * c - O.x[k], z0 + gz * c - O.z[k]); if (d > hw + 30) continue;
+        const gi = gz * Nx + gx, y = O.y[k] - 0.5 * Math.max(0, d - hw); if (!(prot.get(gi) >= y)) prot.set(gi, y);
+      }
+    }
+  }
+  // the stream's own surface above the dam, cell by cell (everywhere else the water is the sea-level plane): cars brake, splash and drown in it
+  const UW = T.upWater = new Map(), UD = new Map(), UQ = RIVER.reaches[0].pts;
+  for (let i = 0; i < RIVER.dam.i; i++) {
+    const a = UQ[i], b = UQ[i + 1], vx = b.x - a.x, vz = b.z - a.z, L2 = vx * vx + vz * vz || 1, r = Math.max(a.hw, b.hw) * 1.15 + c;
+    for (let gz = Math.floor((Math.min(a.z, b.z) - r - z0) / c); gz <= Math.ceil((Math.max(a.z, b.z) + r - z0) / c); gz++)
+      for (let gx = Math.floor((Math.min(a.x, b.x) - r - x0) / c); gx <= Math.ceil((Math.max(a.x, b.x) + r - x0) / c); gx++) {
+        if (gx < 0 || gz < 0 || gx >= Nx || gz >= Nz) continue;
+        const px = x0 + gx * c, pz = z0 + gz * c, t = clamp(((px - a.x) * vx + (pz - a.z) * vz) / L2, 0, 1);
+        const d = Math.hypot(px - a.x - vx * t, pz - a.z - vz * t); if (d > lerp(a.hw, b.hw, t) * 1.15) continue;
+        const gi = gz * Nx + gx; if (!(UD.get(gi) <= d)) { UD.set(gi, d); UW.set(gi, lerp(a.wl, b.wl, t) - 0.12); } // the nearest stretch decides
+      }
+  }
+  const h0 = T.h.slice(); // the floodplain is shaped from the ground as the roads left it, so overlapping reaches agree
   for (const R of RIVER.reaches) {
     const Q = R.pts;
     for (let i = 0; i < Q.length - 1; i++) {
-      const a = Q[i], b = Q[i + 1], reach = Math.max(a.hw + a.bank, b.hw + b.bank), rc = Math.ceil(reach / c) + 1;
+      const a = Q[i], b = Q[i + 1], fl = Math.max(floodW(a), floodW(b)) > 0, reach = Math.max(a.hw + a.bank, b.hw + b.bank, fl ? Math.max(a.hw, b.hw) + FLOOD_EXT : 0), rc = Math.ceil(reach / c) + 1;
       const cx = Math.round(((a.x + b.x) / 2 - x0) / c), cz = Math.round(((a.z + b.z) / 2 - z0) / c), half = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 2 / c);
       const vx = b.x - a.x, vz = b.z - a.z, L2 = vx * vx + vz * vz || 1;
       for (let dz = -rc - half; dz <= rc + half; dz++) for (let dx = -rc - half; dx <= rc + half; dx++) {
@@ -127,19 +171,21 @@ function carveRiver(T) {
         const px = x0 + gx * c, pz = z0 + gz * c, t = clamp(((px - a.x) * vx + (pz - a.z) * vz) / L2, 0, 1);
         const d = Math.hypot(px - a.x - vx * t, pz - a.z - vz * t); if (d > reach) continue;
         const q = { hw: lerp(a.hw, b.hw, t), bank: lerp(a.bank, b.bank, t), wl: lerp(a.wl, b.wl, t), con: a.con || b.con };
-        if (d > q.hw + q.bank) continue;
-        const gi = gz * Nx + gx, y = riverBed(q, d, T.h[gi]);
+        const g = fl && d > q.hw ? floodW(q) : 0;
+        if (d > (g > 0 ? q.hw + FLOOD_EXT : q.hw + q.bank)) continue;
+        if (T.riverTunAt(px, pz)) continue; // the boat tunnel's covered stretch is never cut: the ground stays as it was and is its own lid
+        const gi = gz * Nx + gx, h = T.h[gi], y0 = d > q.hw + q.bank ? h : riverBed(q, d, h);
+        let y = y0;
+        if (g > 0 && !DISTRICT.cell(px, pz)) { const p = prot.get(gi); y = Math.max(lerp(y0, floodBank(q, d, h0[gi], px, pz), g), p === undefined ? -1e9 : Math.min(y0, p)); }
         if (y < T.h[gi]) T.h[gi] = y;
         if (d < q.hw + 1 && !T.riverTunAt(px, pz)) T.river[gi] = 255;
       }
     }
   }
-  // under the boat tunnel's lid the cut banks would show inside the culvert: the ground there drops out of sight below its floor
-  const y0 = U.bed - 2;
+  // over the culvert the ground is the lid: never lower than its top (the terrain shader cuts it out of the tube at the mouths)
   for (let gz = 0; gz < Nz; gz++) for (let gx = 0; gx < Nx; gx++) {
     const px = x0 + gx * c, pz = z0 + gz * c; if (px < bx0 || pz < bz0 || px > bx0 + nx * G || pz > bz0 + nz * G) continue;
-    let inside = false; for (const [ox, oz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) { const k = T.riverTunAt(px + ox, pz + oz); if (k && M.mask[k - 1] === 1) inside = true; }
-    if (inside) { const gi = gz * Nx + gx; if (T.h[gi] > y0) T.h[gi] = y0; }
+    const k = T.riverTunAt(px, pz), gi = gz * Nx + gx; if (k && T.h[gi] < M.top[k - 1]) T.h[gi] = M.top[k - 1];
   }
 }
 

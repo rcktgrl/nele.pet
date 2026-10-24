@@ -39,7 +39,7 @@ const SHIP = { x0: 5153, x1: 5191, z0: -650, z1: -390, y: 12.5, rampZ: -557, ram
    down through the hall and on under the city to the loop, joining it at the platforms (side -1 from the outside of the loop,
    +1 from the inside, past the platform's end).
    Lateral offsets are measured to the right of the loop's direction of travel, which is the inside of the loop. */
-const METRO = { y: 0.5, ceil: 4.8, under: CITY.y - 1.5, wallL: -5.2, tracks: [-2.3, 2.3], wallR: 5, plat: 11.4, rampLen: 58, rampHw: 5.5, cut: 50, hallH: 6.5,
+const METRO = { y: 0.5, ceil: 4.8, under: CITY.y - 1.5, wallL: -5.2, tracks: [-2.3, 2.3], wallR: 5, plat: 11.4, minR: 110, rampLen: 58, rampHw: 5.5, cut: 50, hallH: 6.5,
   box: { x0: 3480, z0: -1080, x1: 5080, z1: 620 },
   loop: [[3650, -450], [3950, -470], [4250, -446], [4370, -452], [4418, -510], [4424, -600], [4470, -690], [4600, -750], [4700, -880], [4850, -990],
     [5000, -800], [4960, -400], [4820, -50], [4560, 175], [4430, 470], [4150, 520], [3900, 450], [3640, 330], [3560, -100]],
@@ -53,7 +53,7 @@ const METRO = { y: 0.5, ceil: 4.8, under: CITY.y - 1.5, wallL: -5.2, tracks: [-2
 /* the station ramps: mouth on the street, down through the station hall (METRO.cut long, open to its roof), then a covered ramp on down to the loop */
 function metroSpurs() { return METRO.portals.map((p, k) => ({ k, ...p, cover: METRO.cut })); }
 /* how far down a ramp its walls run: just through the loop's wall on the side it comes in from */
-const metroSpurEnd = (sp) => sp.L - (sp.side > 0 ? METRO.wallR : -METRO.wallL) + 2;
+const metroSpurEnd = (sp, sd) => (sd ? sp.ends[sd > 0 ? 1 : 0] : Math.max(...sp.ends)); // ends and gap are worked out against the loop in Terrain.buildMetro
 /* inside a station hall or on the way in just in front of it: kept clear of lamps and signs */
 const inMetroHall = (x, z) => metroSpurs().some((sp) => { const a = (x - sp.x) * sp.dx + (z - sp.z) * sp.dz, l = Math.abs(-(x - sp.x) * sp.dz + (z - sp.z) * sp.dx); return a > -16 && a < sp.cover + 2 && l < METRO.rampHw + 4; });
 const metroSpurY = (a) => lerp(CITY.y, METRO.y, smooth(0, METRO.rampLen, a));

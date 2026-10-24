@@ -64,7 +64,7 @@ class CameraRig {
     }
     if (this.mode === 0) { dist = (6.4 + Math.min(2.5, speed * 0.04)) * big; h = 2.25 * big; lookH = 1.05 * big; } else { dist = (9 + Math.min(3, speed * 0.05)) * big; h = 3.4 * big; lookH = 1.2 * big; }
     const target = new THREE.Vector3(c.pos.x - dir.x * dist, c.pos.y + h, c.pos.z - dir.z * dist);
-    const gy = Math.max(this.T.height(target.x, target.z), WATER_Y) + 1.3; if (target.y < gy) target.y = gy;
+    const gy = Math.max(this.T.height(target.x, target.z), this.T.waterY(target.x, target.z)) + 1.3; if (target.y < gy) target.y = gy;
     if (!this.init) this.pos.copy(target); else { const kp = 1 - Math.exp(-dt * 10); this.pos.lerp(target, kp); this.pos.y = lerp(this.pos.y, target.y, 1 - Math.exp(-dt * (c.onGround ? 6 : 3))); }
     const ly = c.pos.y + lookH;
     const lookT = new THREE.Vector3(c.pos.x + dir.x * 3, ly, c.pos.z + dir.z * 3);
@@ -72,7 +72,7 @@ class CameraRig {
     this.init = true;
     const sh = this.shake; this.shake = Math.max(0, this.shake - dt * 2.2);
     const jitter = new THREE.Vector3((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh).multiplyScalar(0.35);
-    const camGy = Math.max(this.T.height(this.pos.x, this.pos.z), WATER_Y + 0.3) + 0.9; if (this.pos.y < camGy) this.pos.y = camGy;
+    const camGy = Math.max(this.T.height(this.pos.x, this.pos.z), this.T.waterY(this.pos.x, this.pos.z) + 0.3) + 0.9; if (this.pos.y < camGy) this.pos.y = camGy;
     this.cam.position.copy(this.pos).add(jitter);
     this.cam.lookAt(this.look);
     this.setFov(dt, 60 + Math.min(20, speed * 0.24) + (c.boosting ? 9 : 0));

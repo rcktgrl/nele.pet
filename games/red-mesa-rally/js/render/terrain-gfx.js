@@ -100,6 +100,12 @@ Object.assign(Gfx.prototype, {
       for (let m = Math.min(i, k); m <= Math.max(i, k); m++) { y0 = Math.min(y0, R.y[m]); y1 = Math.max(y1, R.y[m]); }
       out.push(`{ vec2 q = P.xz - vec2(${f(R.x[i])}, ${f(R.z[i])}); float a = dot(q, vec2(${f(ux)}, ${f(uz)})), l = abs(dot(q, vec2(${f(-uz)}, ${f(ux)}))); if (a > ${f(-Math.abs(k - i) * R.step - 1)} && a < 30.0 && l < ${f(R.width / 2 + 1.2)} && P.y > ${f(y0 - 0.4)} && P.y < ${f(y1 + BORE_CROWN + 0.6)}) discard; } // bore mouth and cut`);
     }
+    // the boat tunnel: the ground runs on over the culvert, so cut it out of the tube and the mouth in front of each headwall
+    const U = RIVER.tunnel;
+    for (const [i, into] of [[U.s.findIndex((v) => v >= U.open[0]), 1], [U.s.findIndex((v) => v >= U.open[1]), -1]]) {
+      const a = U.pts[Math.max(0, i - 1)], b = U.pts[Math.min(U.pts.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]), ux = (b[0] - a[0]) / L * into, uz = (b[1] - a[1]) / L * into, [x, z] = U.pts[i];
+      out.push(`{ vec2 q = P.xz - vec2(${f(x)}, ${f(z)}); float a = dot(q, vec2(${f(ux)}, ${f(uz)})), l = abs(dot(q, vec2(${f(-uz)}, ${f(ux)}))); if (a > -8.0 && a < 24.0 && l < ${f(U.hw + 0.4)} && P.y > mix(-99.0, ${f(WATER_Y)}, step(a, 0.0)) && P.y < ${f(U.ceil + 0.5)}) discard; } // boat tunnel mouth (outside it only above the water, so the bed stays)`);
+    }
     return out.join('\n  ');
   },
   /* ---------- terrain material ---------- */

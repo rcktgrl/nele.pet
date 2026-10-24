@@ -339,7 +339,8 @@ class Game {
   /* ----- main loop ----- */
   frame(now) {
     requestAnimationFrame((t) => this.frame(t));
-    let dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
+    // rAF time can lag a performance.now() set by endEvent/unpause/map close: a negative dt made every camera lerp extrapolate (#39)
+    let dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000)); this.last = now;
     const I = this.input;
     if (this.state === 'splash' && (I.pressed.size || (I.padButtons && I.padButtons.length))) { I.pressed.clear(); this.startIntro(); }
     if (this.state === 'intro' && (I.was('Escape') || I.was('Enter') || I.was('Space') || I.padPressed(0) || I.padPressed(9))) { I.pressed.clear(); this.endIntro(); }

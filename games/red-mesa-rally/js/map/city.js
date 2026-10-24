@@ -246,6 +246,8 @@ class City {
       if (this.ramps.length >= 14) break;
       const rid = T.routes.indexOf(R) + 1, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s);
       if (this.ramps.some((r) => Math.hypot(r.cx - p.x, r.cz - p.z) < 260)) continue;
+      // never on a bridge: a kicker is solid right down to the ground, so it would stand in the river as a wall for the boats
+      if (T.bridges.some((B) => B.route === R.id && B.i0 * R.step < s + L / 2 + 8 && B.i1 * R.step > s - L / 2 - 8)) continue;
       let ok = true;
       for (let a = -L / 2 - 8; a <= L / 2 + 8 && ok; a += 4) {
         const q = R.posAt(s + a, {}), [ex, ez] = R.dirAt(s + a);
@@ -280,6 +282,8 @@ class City {
     for (const o of [...this.buildings, ...T.village]) if (o.w && footprint(o.x, o.z, o.yaw, o.w, o.d, 0.5, (px, pz) => T.metroAt(px, pz) === 0) === false) o.y0 = Math.max(o.y0, METRO.ceil + 0.08);
     this.yardFences(T, vm, green);
     this.streets = new Streets(T, this);
+    const hitsHall = (f) => { for (let t = 0; t <= 1; t += 0.05) if (inMetroHall(lerp(f.ax, f.bx, t), lerp(f.az, f.bz, t))) return true; return false; };
+    this.fences = this.fences.filter((f) => !hitsHall(f)); // no fence or hedge runs through a station hall
     this.lamps = this.lamps.filter((l) => !inMetroHall(l.x, l.z)); for (const k of ['stops', 'signals']) this.streets[k] = this.streets[k].filter((l) => !inMetroHall(l.x, l.z));
   }
   /* picket fences round the suburban back yards: down both sides and across the back, wherever the line stays off the streets */

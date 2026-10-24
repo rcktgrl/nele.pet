@@ -141,6 +141,24 @@ Object.assign(Gfx.prototype, {
     const m = this.water.material.clone(); m.normalMap = this.waterNormal.clone(); m.normalMap.repeat.set(1, 1); m.normalMap.needsUpdate = true;
     m.color = new THREE.Color(0.07, 0.13, 0.13); m.side = THREE.DoubleSide;
     const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; this.scene.add(mesh);
+    this.buildDam(m);
+  },
+  /* the Calder dam at the foot of the stream: a concrete wall bank to bank, the stream pouring over a spillway in the middle */
+  buildDam(waterMat) {
+    const D = RIVER.dam, T = this.world.terrain, rx = D.dz, rz = -D.dx, top = D.surf + 0.5, foot = WATER_Y - 4.5, th = 3.2;
+    // out into each bank until the ground stands above the crest
+    const reach = (sg) => { let l = D.hw; while (l < D.hw + 60 && T.rawH(D.x + rx * l * sg, D.z + rz * l * sg) < top + 0.6) l += 1; return l + 2; };
+    const l0 = -reach(-1), l1 = reach(1), sw = D.hw * 0.55, conc = new THREE.MeshStandardMaterial({ color: 0xa39d92, roughness: 0.9 });
+    const g = new THREE.Group(); g.position.set(D.x, 0, D.z); g.rotation.y = Math.atan2(D.dx, D.dz); this.scene.add(g);
+    const box = (a, b, y0, y1, d, z, mat) => { const o = new THREE.Mesh(new THREE.BoxGeometry(b - a, y1 - y0, d), mat); o.position.set((a + b) / 2, (y0 + y1) / 2, z); o.castShadow = o.receiveShadow = true; g.add(o); return o; };
+    box(l0, -sw, foot, top, th, th / 2, conc); box(sw, l1, foot, top, th, th / 2, conc); // the wall either side of the spillway
+    box(-sw, sw, foot, D.surf - 0.15, th, th / 2, conc); // the spillway sill, just under the stream
+    box(-sw - 0.4, -sw, D.surf - 0.15, top + 0.25, th + 0.6, th / 2, conc); box(sw, sw + 0.4, D.surf - 0.15, top + 0.25, th + 0.6, th / 2, conc); // piers at its ends
+    // the overflow: a sheet of water over the sill and down the face into the river below
+    const fall = new THREE.PlaneGeometry(sw * 2, Math.hypot(1.4, D.surf - WATER_Y), 1, 1), fm = waterMat.clone(); fm.color = new THREE.Color(0.5, 0.6, 0.6); fm.opacity = 0.75;
+    const sheet = new THREE.Mesh(fall, fm); sheet.position.set(0, (D.surf + WATER_Y) / 2 - 0.05, th + 0.7); sheet.rotation.x = Math.atan2(-1.4, D.surf - WATER_Y); g.add(sheet);
+    const lip = new THREE.Mesh(new THREE.PlaneGeometry(sw * 2, th), waterMat); lip.rotation.x = -Math.PI / 2; lip.position.set(0, D.surf - 0.1, th / 2); g.add(lip);
+    this.damFoam = { x: D.x + D.dx * (th + 1.6), z: D.z + D.dz * (th + 1.6), dx: D.dx, dz: D.dz, rx, rz, w: sw };
   },
   /* decks, parapets and piers wherever a road or the railway crosses the river */
   buildBridges() {
@@ -204,13 +222,13 @@ Object.assign(Gfx.prototype, {
   buildBoatTunnel() {
     const U = RIVER.tunnel, T = this.world.terrain, hw = U.hw, y0 = U.bed - 1.5, y1 = U.ceil;
     const idx0 = U.s.findIndex((s) => s >= U.open[0]), idx1 = U.s.findIndex((s) => s >= U.open[1]);
-    const prof = [[-hw, y0], [-hw, y1], [hw, y1], [hw, y0]];
+    const prof = [[-hw, y0], [-hw, y1], [hw, y1], [hw, y0], [-hw, y0]]; // closed: walls, roof and the floor under the water
     const pos = [], uv = [], idx = [];
     for (let i = idx0; i <= idx1; i++) {
       const a = U.pts[Math.max(0, i - 1)], b = U.pts[Math.min(U.pts.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]), rx = -(b[1] - a[1]) / L, rz = (b[0] - a[0]) / L;
-      prof.forEach(([l, y], k) => { pos.push(U.pts[i][0] + rx * l, y, U.pts[i][1] + rz * l); uv.push(k / 3, U.s[i]); });
+      prof.forEach(([l, y], k) => { pos.push(U.pts[i][0] + rx * l, y, U.pts[i][1] + rz * l); uv.push(k / 4, U.s[i]); });
     }
-    for (let i = 0; i < idx1 - idx0; i++) for (let k = 0; k < 3; k++) { const a = i * 4 + k, b = a + 4; idx.push(a, a + 1, b, a + 1, b + 1, b); }
+    for (let i = 0; i < idx1 - idx0; i++) for (let k = 0; k < 4; k++) { const a = i * 5 + k, b = a + 5; idx.push(a, a + 1, b, a + 1, b + 1, b); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
     const m = new THREE.MeshStandardMaterial({ color: 0x8a847a, roughness: 0.9, side: THREE.DoubleSide });
     m.onBeforeCompile = (sh) => {
@@ -218,28 +236,12 @@ Object.assign(Gfx.prototype, {
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vTU; float gLamp;').replace('#include <color_fragment>', `#include <color_fragment>
 { float u = vTU.x, s = vTU.y;
   diffuseColor.rgb *= mix(0.72, 1.0, step(0.05, fract(s / 4.0)));
-  gLamp = step(0.47, u) * step(u, 0.53) * step(0.85, fract(s / 12.0)); }`)
+  gLamp = step(0.355, u) * step(u, 0.395) * step(0.85, fract(s / 12.0)); }`)
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gLamp * vec3(0.9, 2.6, 3.0) + diffuseColor.rgb * vec3(0.12, 0.2, 0.24);');
     };
     const tube = new THREE.Mesh(g, m); tube.receiveShadow = true; this.scene.add(tube);
-    // the lid: the ground as it was, laid back over the cut, in the terrain's own material so paving and grass carry on across it
-    const M = T.riverTun, Wn = 10, cp = [], cn = [], cA = [], cB = [], cC = [], cD = [], ci = [];
-    const topAt = (x, z) => { const k = T.riverTunAt(x, z); return k ? M.top[k - 1] : Math.max(T.rawH(x, z), U.ceil + 1.2); }; // the mouth rows sit just past the mask: keep them up at the lid, not down on the river bed
-    for (let i = idx0; i <= idx1; i++) {
-      const a = U.pts[Math.max(0, i - 1)], b = U.pts[Math.min(U.pts.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]), rx = -(b[1] - a[1]) / L, rz = (b[0] - a[0]) / L;
-      for (let k = 0; k <= Wn; k++) {
-        const l = (-1 + 2 * k / Wn) * (M.lid - 0.6), x = U.pts[i][0] + rx * l, z = U.pts[i][1] + rz * l, gi = T.gi(x, z);
-        cp.push(x, topAt(x, z) + 0.03, z); cn.push(0, 1, 0);
-        cA.push(T.road[gi], 0, 1, 1); cB.push(T.rlat[gi], T.rhw[gi], T.asph[gi], 0); cC.push(T.green[gi] / 255, T.beach[gi] / 255, T.city[gi] / 255, 0); cD.push(T.rs[gi], T.rlanes[gi], T.rfade[gi] / 255);
-      }
-    }
-    for (let i = 0; i < idx1 - idx0; i++) for (let k = 0; k < Wn; k++) { const a = i * (Wn + 1) + k, b = a + Wn + 1; ci.push(a, a + 1, b, a + 1, b + 1, b); }
-    const lg = new THREE.BufferGeometry();
-    for (const [nm, arr, sz] of [['position', cp, 3], ['normal', cn, 3], ['aA', cA, 4], ['aB', cB, 4], ['aC', cC, 4], ['aD', cD, 3]]) lg.setAttribute(nm, new THREE.Float32BufferAttribute(arr, sz));
-    lg.setIndex(ci); lg.computeBoundingSphere();
-    const lid = new THREE.Mesh(lg, this.terrainMat); lid.castShadow = true; lid.receiveShadow = true; this.scene.add(lid);
     // headwalls: a concrete face across each mouth with the opening cut out, filling the river's cut banks right up to the ground as it was
-    const face = new THREE.MeshStandardMaterial({ color: 0x9d968b, roughness: 0.92 });
+    const face = new THREE.MeshStandardMaterial({ color: 0x9d968b, roughness: 0.92 }), M = T.riverTun;
     for (const i of [idx0, idx1]) {
       const a = U.pts[Math.max(0, i - 1)], b = U.pts[Math.min(U.pts.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]), yaw = Math.atan2(b[0] - a[0], b[1] - a[1]), [x, z] = U.pts[i];
       const at = (lx) => [x + lx * (b[1] - a[1]) / L, z - lx * (b[0] - a[0]) / L]; // local +x of the rotated wall, in the world
