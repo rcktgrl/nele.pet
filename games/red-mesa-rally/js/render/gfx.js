@@ -128,11 +128,20 @@ class Gfx {
     this.marks = new TyreMarks(this);
     this.beacons = [];
     this.gates = new THREE.Group(); sc.add(this.gates);
+    this.applyAnisotropy();
+  }
+  // on high every surface texture gets the GPU's full anisotropic filtering, so road decks and markings stay sharp far ahead
+  applyAnisotropy() {
+    if (!this.scene) return;
+    const a = this.quality === 'high' ? this.renderer.capabilities.getMaxAnisotropy() : 4, seen = new Set();
+    const fix = (t) => { if (!t || !t.isTexture || seen.has(t)) return; seen.add(t); if (t.anisotropy !== a) { t.anisotropy = a; t.needsUpdate = true; } };
+    this.scene.traverse((o) => { for (const m of [].concat(o.material || [])) for (const k of ['map', 'normalMap', 'roughnessMap', 'bumpMap', 'emissiveMap']) fix(m[k]); });
   }
   setQuality(q) {
     this.quality = q;
     const dpr = window.devicePixelRatio || 1;
     this.renderer.setPixelRatio(q === 'high' ? Math.min(dpr, 1.75) : q === 'medium' ? Math.min(dpr, 1.25) : Math.min(dpr, 0.85));
+    this.applyAnisotropy();
     if (this.sun) { const s = q === 'high' ? 2048 : q === 'medium' ? 1536 : 1024; this.sun.shadow.mapSize.set(s, s); if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; } }
   }
   resize(w, h) { this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
