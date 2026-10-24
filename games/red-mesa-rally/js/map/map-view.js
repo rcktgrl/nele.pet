@@ -66,9 +66,8 @@ Object.assign(Game.prototype, {
     for (const T of this.world.trains) for (const c of T.cars) { ctx.fillStyle = '#e8c22a'; ctx.beginPath(); ctx.arc(mapX(c.pose.x), mapZ(c.pose.z), 3.5, 0, TAU); ctx.fill(); }
     for (const c of this.world.cars) { if (c === P || c.civilian || c.hidden) continue; ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(mapX(c.pos.x), mapZ(c.pos.z), c.remote ? 7 : 4.5, 0, TAU); ctx.fill(); if (c.remote) { ctx.strokeStyle = '#6fb7d9'; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 4; label(c.name, c.pos.x, c.pos.z - 40, '#9fd6ef'); } }
     for (const D of BOAT_DOCKS) { const x = mapX(D.water.x), y = mapZ(D.water.z); ctx.fillStyle = '#6fb7d9'; ctx.beginPath(); ctx.arc(x, y, 6, 0, TAU); ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 4; label('BOAT LAUNCH', D.water.x, D.water.z + 70, '#9fd6ef'); }
-    ctx.save(); ctx.translate(mapX(P.pos.x), mapZ(P.pos.z));
-    const f = P.forward(new THREE.Vector3()); ctx.rotate(Math.atan2(f.x, -f.z));
-    ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(11, 12); ctx.lineTo(0, 6); ctx.lineTo(-11, 12); ctx.closePath(); ctx.fillStyle = '#ff6a1a'; ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.restore();
+    const me = this.mapMe, f = P.forward(new THREE.Vector3());
+    me.style.left = (clamp(mapX(P.pos.x), 0, MAP_W) / MAP_W * 100) + '%'; me.style.top = (clamp(mapZ(P.pos.z), 0, MAP_H) / MAP_H * 100) + '%';
+    me.children[1].style.transform = `rotate(${Math.atan2(f.x, -f.z)}rad)`;
   },
 });
