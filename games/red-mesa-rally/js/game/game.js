@@ -231,6 +231,9 @@ class Game {
       pin.addEventListener('click', () => { this.mapSel = s; $('miType').textContent = this.typeLabel(s.ev); $('miName').textContent = s.ev.name; const mi = $('mapInfo'); const low = s.z > 0; mi.style.top = low ? '12px' : 'auto'; mi.style.bottom = low ? 'auto' : '12px'; mi.classList.add('on'); });
       wrap.appendChild(pin);
     }
+    // the player's own marker sits above every pin so it can never be hidden
+    const me = this.mapMe = document.createElement('div'); me.className = 'mapme';
+    me.innerHTML = '<b></b><i></i><span>You</span>'; wrap.appendChild(me);
     this.refreshPauseButtons();
   }
   refreshPauseButtons() {

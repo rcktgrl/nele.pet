@@ -172,6 +172,11 @@ table.res.lb { font-size: 16px; }
 .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; border: 0; background: none; cursor: pointer; display: grid; justify-items: center; gap: 2px; }
 .pin i { width: 18px; height: 18px; transform: rotate(45deg); border: 2px solid var(--ink); }
 .pin span { font-weight: 800; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--sand); background: rgba(18,12,9,.75); padding: 1px 6px; white-space: nowrap; }
+.mapme { position: absolute; z-index: 3; width: 0; height: 0; pointer-events: none; }
+.mapme b { position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 2px var(--ink), 0 0 14px #ff6a1a; animation: mepulse 1.2s ease-out infinite; }
+.mapme i { position: absolute; left: -13px; top: -15px; width: 26px; height: 30px; background: #ff6a1a; clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%); filter: drop-shadow(0 0 2px #000) drop-shadow(0 0 1px #000); }
+.mapme span { position: absolute; left: 0; top: -48px; transform: translateX(-50%); font-weight: 800; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink); background: #ff6a1a; padding: 1px 7px; white-space: nowrap; box-shadow: 0 0 0 2px var(--ink); }
+@keyframes mepulse { 0% { transform: scale(.55); opacity: 1; } 100% { transform: scale(1.35); opacity: 0; } }
 #mapInfo { position: absolute; left: 12px; bottom: 12px; right: 12px; background: var(--panel); padding: 12px 14px; display: none; gap: 8px; }
 #mapInfo.on { display: grid; }
 
