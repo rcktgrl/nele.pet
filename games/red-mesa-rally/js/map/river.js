@@ -158,6 +158,7 @@ function carveRiver(T) {
         const q = { hw: lerp(a.hw, b.hw, t), bank: lerp(a.bank, b.bank, t), wl: lerp(a.wl, b.wl, t), con: a.con || b.con };
         const g = fl && d > q.hw ? floodW(q) : 0;
         if (d > (g > 0 ? q.hw + FLOOD_EXT : q.hw + q.bank)) continue;
+        if (T.riverTunAt(px, pz)) continue; // the boat tunnel's covered stretch is never cut: the ground stays as it was and is its own lid
         const gi = gz * Nx + gx, h = T.h[gi], y0 = d > q.hw + q.bank ? h : riverBed(q, d, h);
         let y = y0;
         if (g > 0 && !DISTRICT.cell(px, pz)) { const p = prot.get(gi); y = Math.max(lerp(y0, floodBank(q, d, h0[gi], px, pz), g), p === undefined ? -1e9 : Math.min(y0, p)); }
@@ -166,12 +167,10 @@ function carveRiver(T) {
       }
     }
   }
-  // under the boat tunnel's lid the cut banks would show inside the culvert: the ground there drops out of sight below its floor
-  const y0 = U.bed - 2;
+  // over the culvert the ground is the lid: never lower than its top (the terrain shader cuts it out of the tube at the mouths)
   for (let gz = 0; gz < Nz; gz++) for (let gx = 0; gx < Nx; gx++) {
     const px = x0 + gx * c, pz = z0 + gz * c; if (px < bx0 || pz < bz0 || px > bx0 + nx * G || pz > bz0 + nz * G) continue;
-    let inside = false; for (const [ox, oz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) { const k = T.riverTunAt(px + ox, pz + oz); if (k && M.mask[k - 1] === 1) inside = true; }
-    if (inside) { const gi = gz * Nx + gx; if (T.h[gi] > y0) T.h[gi] = y0; }
+    const k = T.riverTunAt(px, pz), gi = gz * Nx + gx; if (k && T.h[gi] < M.top[k - 1]) T.h[gi] = M.top[k - 1];
   }
 }
 
