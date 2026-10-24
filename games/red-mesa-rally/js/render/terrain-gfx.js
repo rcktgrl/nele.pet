@@ -275,6 +275,18 @@ reflectedLight.indirectDiffuse *= vA.w; reflectedLight.indirectSpecular *= vA.w;
       let S = sup.get(key); if (!S) { S = { subs: [] }; sup.set(key, S); }
       ch.sup = S; S.subs.push(ch); this.chunks.push(ch);
     }
+    // chunks under a bridge or viaduct and its approaches: on high they stay at full detail at any distance,
+    // so the ground and road around the decks never reshape as the camera moves
+    const nCx = Math.ceil((T.Nx - 1) / CH), byCell = (ix, iz) => this.chunks[Math.floor(iz / CH) * nCx + Math.floor(ix / CH)];
+    for (const B of T.bridges) {
+      const R = this.world.route(B.route), m = (B.width / 2 + 12) / T.cell;
+      for (let i = Math.max(0, B.i0 - 8); i <= Math.min(R.count, B.i1 + 8); i++) {
+        const ix = (R.x[i] - T.x0) / T.cell, iz = (R.z[i] - T.z0) / T.cell;
+        for (const [ax, az] of [[-m, -m], [m, -m], [-m, m], [m, m]]) {
+          const ch = byCell(clamp(ix + ax, 0, T.Nx - 2), clamp(iz + az, 0, T.Nz - 2)); if (ch) ch.deck = true;
+        }
+      }
+    }
     // one mesh per superchunk; a sub-chunk's triangles drop out of the index while finer detail covers it
     this.supers = [];
     for (const S of sup.values()) {
@@ -359,10 +371,12 @@ reflectedLight.indirectDiffuse *= vA.w; reflectedLight.indirectSpecular *= vA.w;
     let builds = budget === undefined ? 2 : budget;
     const list = this.chunks.map((ch) => [Math.max(0, Math.hypot(ch.cx - cam.x, ch.cz - cam.z) - ch.half), ch]).sort((a, b) => a[0] - b[0]);
     const drop = (ch, k) => { if (ch[k]) { this.terrainGroup.remove(ch[k]); ch[k].geometry.dispose(); ch[k] = null; ch.sup.dirty = true; } };
+    const pin = this.quality === 'high';
     for (const [d, ch] of list) {
-      if (d < hiDist && !ch.hi && builds > 0) {
+      const far = !(pin && ch.deck) && d > hiDist;
+      if (!far && !ch.hi && builds > 0) {
         builds--; ch.hi = new THREE.Mesh(this.chunkGeometry(ch, 1, 5), this.terrainMat); ch.hi.receiveShadow = true; this.terrainGroup.add(ch.hi); ch.sup.dirty = true;
-      } else if (ch.hi && d > hiDist + 160) drop(ch, 'hi');
+      } else if (ch.hi && far && d > hiDist + 160) drop(ch, 'hi');
       if (d < midDist && !ch.mid && !ch.hi && builds > 0) {
         builds--; ch.mid = new THREE.Mesh(this.chunkGeometry(ch, 2, 8), this.terrainMat); ch.mid.receiveShadow = true; this.terrainGroup.add(ch.mid); ch.sup.dirty = true;
       } else if (ch.mid && d > midDist + 250) drop(ch, 'mid');
