@@ -18,7 +18,7 @@ const EVENTS = [
     at: (() => { const sp = metroSpurs()[0] || { x: 4300, z: -560, dx: 1, dz: 0 }; return { x: sp.x - sp.dx * 16, z: sp.z - sp.dz * 16, yaw: Math.atan2(-sp.dx, -sp.dz) }; })(),
     blurb: 'Two laps of the Calder Metro loop, under the city, against Vic Calder and his crew. Start down the Kingsway ramp. No road down there, just two tracks: the stopping train runs your way, the express comes at you. Switch tracks to stay alive.' },
   { id: 'river', name: 'Calder River Run', type: 'sprint', route: 'river', laps: 1, ai: 5, region: 'city', boat: true, finishBack: 40,
-    at: (() => { const q = RIVER.boatStart, dx = 2470 - q.x, dz = -610 - q.z, L = Math.hypot(dx, dz); return { x: q.x + dx / L * 48, z: q.z + dz / L * 48 }; })(),
+    at: (() => { const q = RIVER.boatStart, dx = 2470 - q.x, dz = -610 - q.z, L = Math.hypot(dx, dz); return { x: q.x + dx / L * 48, z: q.z + dz / L * 48, yaw: Math.atan2(dx, dz) }; })(), // parked on the bank, facing the water
     blurb: 'Skiffs from Millbrook down to the harbour. Left or right round the island, then the open channel under the bridges or the dark boat tunnel under the docks. Both ways are the same length.' },
   { id: 'finale', name: 'Coast to Canyon', type: 'sprint', route: 'finale', laps: 1, ai: 5, region: 'city', aiCars: ['ironside', 'kaze'], boss: true, locked: true, blurb: 'Vic Calder, his best crew and you. From the harbour, along the coast, through the tunnel and home to the festival. Winner keeps the valley.' },
 ];

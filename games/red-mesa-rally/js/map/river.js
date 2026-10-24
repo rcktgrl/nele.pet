@@ -112,7 +112,7 @@ function carveRiver(T) {
   // top keeps the ground as it was before the cut, so the lid sits exactly where the land was
   const U = RIVER.tunnel, G = 2, xs = U.pts.map((p) => p[0]), zs = U.pts.map((p) => p[1]);
   const bx0 = Math.min(...xs) - 20, bz0 = Math.min(...zs) - 20, nx = Math.ceil((Math.max(...xs) + 20 - bx0) / G), nz = Math.ceil((Math.max(...zs) + 20 - bz0) / G);
-  const M = T.riverTun = { G, x0: bx0, z0: bz0, nx, nz, mask: new Uint8Array(nx * nz), top: new Float32Array(nx * nz), lid: U.hw + 3.5 };
+  const M = T.riverTun = { G, x0: bx0, z0: bz0, nx, nz, mask: new Uint8Array(nx * nz), wet: new Uint8Array(nx * nz), top: new Float32Array(nx * nz), lid: U.hw + 3.5 };
   const best = new Float32Array(nx * nz).fill(1e9);
   for (let i = 0; i < U.pts.length - 1; i++) {
     if (U.s[i] < U.open[0] || U.s[i + 1] > U.open[1]) continue;
@@ -123,6 +123,18 @@ function carveRiver(T) {
         const x = bx0 + gi * G, z = bz0 + gj * G, t = ((x - ax) * vx + (z - az) * vz) / L2; if (t < -0.02 || t > 1.02) continue; // square ends: the mouths stay open
         const d = Math.hypot(x - ax - vx * t, z - az - vz * t), k = gj * nx + gi;
         if (d < best[k]) best[k] = d;
+      }
+  }
+  // the water lane itself, a little past each mouth: the ground over the culvert is up at the lid, and the height grid would
+  // otherwise ramp a boat up onto it just outside the headwall
+  for (let i = 0; i < U.pts.length - 1; i++) {
+    if (U.s[i + 1] < U.open[0] - 14 || U.s[i] > U.open[1] + 14) continue;
+    const [ax, az] = U.pts[i], [bx, bz] = U.pts[i + 1], vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz || 1;
+    for (let gj = Math.floor((Math.min(az, bz) - U.hw - bz0) / G); gj <= Math.ceil((Math.max(az, bz) + U.hw - bz0) / G); gj++)
+      for (let gi = Math.floor((Math.min(ax, bx) - U.hw - bx0) / G); gi <= Math.ceil((Math.max(ax, bx) + U.hw - bx0) / G); gi++) {
+        if (gi < 0 || gj < 0 || gi >= nx || gj >= nz) continue;
+        const x = bx0 + gi * G, z = bz0 + gj * G, t = clamp(((x - ax) * vx + (z - az) * vz) / L2, 0, 1);
+        if (Math.hypot(x - ax - vx * t, z - az - vz * t) < U.hw - 0.5) M.wet[gj * nx + gi] = 1;
       }
   }
   for (let k = 0; k < nx * nz; k++) if (best[k] < M.lid) {
@@ -207,7 +219,7 @@ function findBridges(T) {
       const gi = T.gi(R.x[k], R.z[k]);
       acc += R.step; if (acc < 26 || !(T.river[gi] || (R.elev && R.elev[k] && dry(R.x[k], R.z[k])))) continue;
       acc = 0; const [dx, dz] = R.dirAt(k * R.step);
-      for (const l of span.rail ? [0] : [-(R.width / 2 - 2), R.width / 2 - 2]) span.piers.push({ x: R.x[k] - dz * l, z: R.z[k] + dx * l, top: R.y[k] - 0.9, bot: T.h[T.gi(R.x[k] - dz * l, R.z[k] + dx * l)] - 0.5, dx, dz });
+      for (const l of span.rail ? [0] : [-(R.width / 2 - 2), R.width / 2 - 2]) if (!T.riverTunWet(R.x[k] - dz * l, R.z[k] + dx * l)) span.piers.push({ x: R.x[k] - dz * l, z: R.z[k] + dx * l, top: R.y[k] - 0.9, bot: T.h[T.gi(R.x[k] - dz * l, R.z[k] + dx * l)] - 0.5, dx, dz });
     }
     out.push(span); return span;
   };

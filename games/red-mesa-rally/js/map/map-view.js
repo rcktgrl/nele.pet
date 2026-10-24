@@ -9,7 +9,7 @@ Object.assign(Game.prototype, {
   },
   travelTo(spot) {
     if (this.player.spec.boat) this.spawnPlayer(this.landVehicle);
-    const at = spot.ev.at;
+    const ev = spot.ev, at = ev.at && { ...ev.at, yaw: ev.at.yaw !== undefined ? ev.at.yaw : Math.atan2(ev.at.x - spot.x, ev.at.z - spot.z) }; // no yaw given: face the beacon
     if (at) { this.player.reset(at.x + Math.sin(at.yaw) * 4, at.z + Math.cos(at.yaw) * 4, at.yaw, this.world.terrain, 0.5); this.rig.snap(); this.toast('Fast travel', spot.ev.name); return; }
     const R = this.world.route(spot.ev.route);
     const p = R.posAt(R.closed ? R.length - 60 : 0, {}); const dx = spot.x - p.x, dz = spot.z - p.z;

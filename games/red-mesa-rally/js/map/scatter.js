@@ -15,7 +15,7 @@ class Scatter {
     const slopeAt = (x, z) => { T.normal(x, z, nrm); return nrm.y; };
     const okDesert = (x, z, clear) => {
       if (Math.hypot(x, z) > 940) return false;
-      if (T.rdist[T.gi(x, z)] < clear || T.river[T.gi(x, z)]) return false;
+      if (T.rdist[T.gi(x, z)] < clear || T.river[T.gi(x, z)] || T.riverTunAt(x, z)) return false;
       if (T.height(x, z) < WATER_Y + 0.6) return false;
       if (Math.hypot(x - HUB.x, z - HUB.z) < HUB.r + 20) return false;
       return true;
@@ -64,7 +64,7 @@ class Scatter {
     const okEast = (x, z, clear) => {
       if (x < 1250) return false;
       const gi = T.gi(x, z);
-      if (T.rdist[gi] < clear || T.rail[gi] > 0 || T.city[gi] || T.tun[gi] || T.river[gi] || T.lot[gi]) return false;
+      if (T.rdist[gi] < clear || T.rail[gi] > 0 || T.city[gi] || T.tun[gi] || T.river[gi] || T.lot[gi] || T.riverTunAt(x, z)) return false;
       const y = T.h[gi]; if (y < WATER_Y + 1.5) return false;
       if (eastSDF(x, z).d > -10) return false;
       return true;
@@ -125,9 +125,9 @@ class Scatter {
     const C = this.city;
     for (const b of C.buildings) if (!b.crown) { const P = boxCorners(b); for (let k = 0; k < 4; k++) this.addSegment(...P[k], ...P[(k + 1) % 4], b.base + b.h, 'building').r = 0.3; }
     for (const k of C.containers) this.addBox(k.x0, k.z0, k.x1, k.z1, (k.y ?? CITY.y) + k.h, 'container');
-    for (const l of C.lamps) this.addObstacle(l.x, l.z, 0.22, l.y + 8, 'pole');
+    for (const l of C.lamps) this.addObstacle(l.x, l.z, 0.22, l.y + 8, 'pole').bot = l.y - 1; // a lamp on a bridge deck leaves the water under it free
     // the junctions' signals and signs, the parked cars, the fences and hedges
-    for (const l of [...C.streets.signals, ...C.streets.stops]) this.addObstacle(l.x, l.z, 0.2, l.y + 5, 'pole');
+    for (const l of [...C.streets.signals, ...C.streets.stops]) this.addObstacle(l.x, l.z, 0.2, l.y + 5, 'pole').bot = l.y - 1;
     for (const p of C.parked) { const P = boxCorners({ x: p.x, z: p.z, yaw: p.yaw, w: 1.9, d: p.van ? 5.2 : 4.5 }); for (let k = 0; k < 4; k++) this.addSegment(...P[k], ...P[(k + 1) % 4], p.y + (p.van ? 2.2 : 1.4), 'barrier').r = 0.15; }
     for (const f of C.fences) this.addSegment(f.ax, f.az, f.bx, f.bz, f.y + (f.kind === 'chain' ? 2 : 1.1), 'rail').r = f.kind === 'hedge' ? 0.45 : 0.12;
     for (const t of C.parkTrees) this.addObstacle(t.x, t.z, 0.45 * t.s, t.y + 6, 'tree');
