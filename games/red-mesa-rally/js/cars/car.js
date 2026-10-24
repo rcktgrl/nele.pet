@@ -128,20 +128,20 @@ class Car {
     if (grounded && !afloat) { const slick = Math.abs(this.pos.x - SLIP.x) < SLIP.hw + 2 && this.pos.z > SLIP.z0 ? 0.5 : 1.8; aF -= Math.sign(vF) * Math.min(Math.abs(vF) / dt, slick); aR = -Math.sign(vR) * Math.min(Math.abs(vR) / dt, slick * 2); }
     this.vel.x += (fx * aF + rx * aR) * dt; this.vel.z += (fz * aF + rz * aR) * dt;
     // steering: rudder needs flow, outboards give a little at rest
-    const flow = clamp(vF / 7, -1, 1);
+    const flow = clamp(vF / 6, -1, 1);
     const wantW = -(this.frozen ? 0 : inp.steer) * B.turn * (afloat ? flow * (inp.handbrake > 0.5 ? 1.35 : 1) + 0.28 * Math.sign(drive || 1) * (1 - Math.abs(flow)) : grounded ? flow * 0.3 : 0);
-    this.w.y += (wantW - this.w.y) * (1 - Math.exp(-dt * (afloat ? 3.2 : 6)));
+    this.w.y += (wantW - this.w.y) * (1 - Math.exp(-dt * (afloat ? 4.2 : 6)));
     this.w.x = 0; this.w.z = 0;
     this.steerAngle = inp.steer * 0.4;
     // planing attitude: bow up with speed, lean into the turn
-    const plane = afloat ? clamp(Math.abs(vF) / 20, 0, 1) : 0;
+    const plane = afloat ? clamp(Math.abs(vF) / 24, 0, 1) : 0;
     const pitch = afloat ? plane * 0.075 - (boostOn ? -0.02 : 0) : grounded ? 0 : clamp(Math.atan2(this.vel.y, Math.max(2, Math.abs(vF))) * 0.6, -0.5, 0.4);
     const roll = afloat ? -inp.steer * plane * 0.14 + clamp(vR * 0.02, -0.08, 0.08) : 0;
     this.q.setFromEuler((this._eu || (this._eu = new EU())).set(pitch, yaw, roll, 'YXZ'));
     this.pos.addScaledVector(this.vel, dt);
     // engine note follows the props
     const E = sp.engine; this.gear = 1;
-    this.rpm = lerp(this.rpm, E.idle + (E.red - E.idle) * clamp(Math.abs(drive) * (afloat ? 0.55 : 0.8) + Math.abs(vF) / 30 * 0.45, 0, 1), 1 - Math.exp(-dt * 5));
+    this.rpm = lerp(this.rpm, E.idle + (E.red - E.idle) * clamp(Math.abs(drive) * (afloat ? 0.55 : 0.8) + Math.abs(vF) / 42 * 0.45, 0, 1), 1 - Math.exp(-dt * 5));
     const bm = 40;
     if (this.pos.x < WORLD.x0 + bm) { this.pos.x = WORLD.x0 + bm; this.vel.x = Math.abs(this.vel.x) * 0.3; }
     if (this.pos.x > WORLD.x1 - bm) { this.pos.x = WORLD.x1 - bm; this.vel.x = -Math.abs(this.vel.x) * 0.3; }

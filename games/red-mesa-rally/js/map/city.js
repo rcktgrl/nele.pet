@@ -246,6 +246,8 @@ class City {
       if (this.ramps.length >= 14) break;
       const rid = T.routes.indexOf(R) + 1, p = R.posAt(s, {}), [dx, dz] = R.dirAt(s);
       if (this.ramps.some((r) => Math.hypot(r.cx - p.x, r.cz - p.z) < 260)) continue;
+      // never on a bridge: a kicker is solid right down to the ground, so it would stand in the river as a wall for the boats
+      if (T.bridges.some((B) => B.route === R.id && B.i0 * R.step < s + L / 2 + 8 && B.i1 * R.step > s - L / 2 - 8)) continue;
       let ok = true;
       for (let a = -L / 2 - 8; a <= L / 2 + 8 && ok; a += 4) {
         const q = R.posAt(s + a, {}), [ex, ez] = R.dirAt(s + a);

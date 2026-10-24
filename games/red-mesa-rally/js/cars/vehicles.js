@@ -59,9 +59,9 @@ const VEHICLES = {
     susp: { rest: 0.3, k: 40000, c: 3000, arb: 0 },
     tire: { mu: 1, dirt: 1, asphalt: 1, stiff: 0.7 }, drive: { type: 'rwd' },
     engine: { torque: 300, idle: 1100, red: 6200, inertia: 0.1, gears: [1], final: 1, rev: 1 },
-    brake: 1000, hbrake: 1000, steer: 0.5, cda: 0.8, down: 0, boost: { force: 3.0, heat: 0.24 }, tough: 18, mudGrip: 1,
-    boat: { thrust: 7.6, drag: 0.011, keel: 2.6, turn: 0.72, ride: 0.32 },
-    aiGrip: 6, aiGripAsph: 6, stats: { top: 72, zero: 3.0, to: 50, grip: 0.5, armour: 0.7 }, color: 0xf2efe6 },
+    brake: 1000, hbrake: 1000, steer: 0.5, cda: 0.8, down: 0, boost: { force: 5.0, heat: 0.24 }, tough: 24, mudGrip: 1,
+    boat: { thrust: 16, drag: 0.0056, keel: 3.4, turn: 1.05, ride: 0.32 },
+    aiGrip: 6, aiGripAsph: 6, stats: { top: 150, zero: 2.3, to: 50, grip: 0.6, armour: 0.7 }, color: 0xf2efe6 },
   // ---- civilian traffic (not driveable) ----
   sedan: { id: 'sedan', name: 'Calder Cruiser', cls: 'Sedan', blurb: 'Family four-door.', traffic: true,
     mass: 1350, dims: [1.8, 1.45, 4.6], hull: { hx: 0.88, hy: 0.55, hz: 2.25, y: 0.2 },
