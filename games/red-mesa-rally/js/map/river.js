@@ -223,6 +223,31 @@ function findBridges(T) {
       acc = 0; const [dx, dz] = R.dirAt(k * R.step);
       for (const l of span.rail ? [0] : [-(R.width / 2 - 2), R.width / 2 - 2]) if (!T.riverTunWet(R.x[k] - dz * l, R.z[k] + dx * l) && !inChannel(R.x[k] - dz * l, R.z[k] + dx * l)) span.piers.push({ x: R.x[k] - dz * l, z: R.z[k] + dx * l, top: R.y[k] - 0.9, bot: T.h[T.gi(R.x[k] - dz * l, R.z[k] + dx * l)] - 0.5, dx, dz });
     }
+    // out over the desert the railway stands on an old timber trestle instead: a battered bent every 6 m, tall and bare,
+    // two raked outer legs and two plumb posts, each down to its own foot on the ground
+    if (span.rail && !wet && R.elev) {
+      span.trestle = true; span.piers = []; span.bents = [];
+      const road = (x, z) => { const gi = T.gi(x, z); return T.river[gi] || (T.rown[gi] && T.rdist[gi] < T.rhw[gi] + 1.5); };
+      for (let k = a; k <= b; k += 3) {
+        if (!R.elev[k]) continue;
+        const [dx, dz] = R.dirAt(k * R.step), rx = -dz, rz = dx, top = R.y[k] - 2.2, gC = T.h[T.gi(R.x[k], R.z[k])];
+        if (top - gC < 0.6) continue;
+        const spread = 3.1 + 0.16 * (top - gC), legs = [];
+        for (const [lt, lb] of [[-3.1, -spread], [-1.1, -1.1], [1.1, 1.1], [3.1, spread]]) {
+          const fx = R.x[k] + rx * lb, fz = R.z[k] + rz * lb;
+          if (!road(fx, fz)) legs.push({ lt, lb, bot: T.h[T.gi(fx, fz)] - 0.4, fx, fz }); // never a leg standing in a road
+        }
+        if (legs.length < 2) { // a track runs along right underneath: a wide bent straddles it, its two legs splayed out past the verges
+          legs.length = 0;
+          for (let w = spread + 2; w <= 16 && !legs.length; w += 1.5) {
+            const ft = [-w, w].map((lb) => [lb, R.x[k] + rx * lb, R.z[k] + rz * lb]);
+            if (ft.every(([, fx, fz]) => !road(fx, fz))) for (const [lb, fx, fz] of ft) legs.push({ lt: Math.sign(lb) * 3.1, lb, bot: T.h[T.gi(fx, fz)] - 0.4, fx, fz });
+          }
+        }
+        // over a road the bracing stops high enough for a truck to pass under it
+        if (legs.length >= 2) span.bents.push({ x: R.x[k], z: R.z[k], rx, rz, top, legs, clear: legs.length < 4 ? gC + 6 : -1e9 });
+      }
+    }
     out.push(span); return span;
   };
   // the road deck at (x, z) if a bridge already carries one there at about height y

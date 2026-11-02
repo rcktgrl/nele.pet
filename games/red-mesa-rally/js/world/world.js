@@ -41,7 +41,7 @@ class World {
       return { ...st, s, side: side[0] >= side[1] ? 1 : -1, elevated: p.y - T.h[T.gi(p.x, p.z)] > 3 };
     });
     this.train = new Train(this, R);
-    this.passenger = new Train(this, R, { name: 'Calder Valley Line', consist: ['loco', 'coach', 'coach', 'coach', 'coach'], stops: ['millbrook', 'redmesa', 'port', 'union'], vmax: 31, dwell: 20 });
+    this.passenger = new Train(this, R, { name: 'Calder Valley Line', consist: ['loco', 'coach', 'coach', 'coach', 'coach'], stops: ['millbrook', 'port', 'union'], vmax: 31, dwell: 20 });
     this.trains = [this.train, this.passenger];
     // one single track, so both trains keep the same period: the quicker one runs slower to match, and makes up the last
     // few seconds at its first stop; then the passenger's phase is set where the two stay furthest apart all round
@@ -187,6 +187,7 @@ class World {
         const o = S.addSegment(ax, az, bx, bz, Math.max(p.y0, p.y1) + 1.0, 'rail'); o.r = 0.3; o.bot = Math.min(p.y0, p.y1) - 1.2;
       }
       for (const q of B.piers) { const o = S.addObstacle(q.x, q.z, B.rail ? 1.6 : 1.1, q.top, 'barrier'); o.bot = q.bot; }
+      for (const t of B.bents || []) for (const L of t.legs) { const o = S.addObstacle(L.fx, L.fz, 0.45, t.top, 'barrier'); o.bot = L.bot; }
     }
     // the boat tunnel's side walls: real walls down at the water, so a boat glances off them instead of being lifted onto the lid
     const U = RIVER.tunnel;
