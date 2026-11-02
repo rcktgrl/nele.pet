@@ -48,9 +48,12 @@ class Terrain {
     this.bridges = findBridges(this);
     // the road the deck replaced is not painted down on the cut-away ground under it (no asphalt, verge or markings there)
     this.underDeck = new Uint8Array(Nx * Nz);
-    for (const B of this.bridges) { const own = this.routes.findIndex((R) => R.id === B.route) + 1; for (const p of B.pieces) for (let u = 0; u <= p.Lt; u += 1) for (let v = -p.hw; v <= p.hw; v += 1) {
+    // over water the bank under the deck is bare ground too, not the town's paving (roads that really pass underneath keep theirs)
+    for (const B of this.bridges) { const own = this.routes.findIndex((R) => R.id === B.route) + 1; for (const p of B.pieces) for (let u = 0; u <= p.Lt; u += 1) for (let v = -p.hw - 3; v <= p.hw + 3; v += 1) {
       const x = p.x + p.dx * u - p.dz * v, z = p.z + p.dz * u + p.dx * v, gi = this.gi(x, z);
-      if (this.rown[gi] === own && this.h[gi] < Math.min(p.y0, p.y1) - 1.5) { this.underDeck[gi] = 1; this.road[gi] = 0; this.asph[gi] = 0; this.rlanes[gi] = 0; }
+      if (this.h[gi] >= Math.min(p.y0, p.y1) - 1.5) continue;
+      if (this.rown[gi] === own) { this.underDeck[gi] = 1; this.road[gi] = 0; this.asph[gi] = 0; this.rlanes[gi] = 0; }
+      else if (B.wet && !(this.rown[gi] && this.rdist[gi] < this.rhw[gi] + 3)) this.underDeck[gi] = 1;
     } }
     this.village = planVillage(this);
     yield 'Paving Port Calder';
@@ -59,7 +62,7 @@ class Terrain {
       if (x < 1100) continue;
       const b = biomeAt(x, z, this.h[i]);
       this.green[i] = b.green * 255; this.beach[i] = b.beach * 255; this.forest[i] = b.forest * 255;
-      this.city[i] = DISTRICT.cell(x, z) * 255;
+      this.city[i] = this.underDeck[i] ? 0 : DISTRICT.cell(x, z) * 255;
       // the town's own streets keep a sidewalk and a grass verge on their outer side too, where the district ends at the kerb
       // (tagged with a trace of beach so the shader can trim the verge to a clean line along the kerb)
       let verge = false;
