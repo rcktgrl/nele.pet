@@ -328,8 +328,18 @@ class Game {
       const l = this.world.metroLane(q.x, q.z);
       c.reset(q.x - dz * l, q.z + dx * l, Math.atan2(-dx, -dz), this.world.terrain, lift, q.y); return;
     }
+    // down in a road or rail bore: back on its line, on the floor, not up on the mountain over it
+    const T = this.world.terrain;
+    if (!c.spec.boat && T.bores && T.probe(c.pos.y + 1, () => T.boreFloor(c.pos.x, c.pos.z)) !== null) {
+      for (const tun of this.world.tunnelSpans()) {
+        const R = tun.R, s = R.project(c.pos.x, c.pos.z, 0, -1).s, q = R.posAt(s, {});
+        if (s < tun.i0 * R.step || s > tun.i1 * R.step || Math.hypot(q.x - c.pos.x, q.z - c.pos.z) > R.width / 2 + 8) continue;
+        const [dx, dz] = R.dirAt(s), f = Math.cos(c.yaw() - Math.atan2(-dx, -dz)) < 0 ? -1 : 1; // keep facing the way it was going
+        c.reset(q.x, q.z, Math.atan2(-dx * f, -dz * f), T, lift, q.y); return;
+      }
+    }
     const p = c.spec.boat ? this.world.findWetSpot(c.pos.x, c.pos.z) : this.world.findDrySpot(c.pos.x, c.pos.z);
-    c.reset(p.x, p.z, p.yaw !== null ? p.yaw : c.yaw(), this.world.terrain, lift);
+    c.reset(p.x, p.z, p.yaw !== null ? p.yaw : c.yaw(), T, lift);
   }
   toast(text, small, cls) {
     const el = document.createElement('div'); el.className = 'toast ' + (cls || ''); el.innerHTML = text + (small ? `<small>${small}</small>` : '');

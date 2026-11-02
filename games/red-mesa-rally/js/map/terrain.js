@@ -497,7 +497,9 @@ class Terrain {
         const j = R.idx(i + 1);
         const ax = R.x[i], az = R.z[i], bx = R.x[j], bz = R.z[j];
         if (R.bore && R.covered.subarray(Math.max(0, i - 4), j + 5).includes(1)) { // the floor runs out under the cut, past where the lid's 4 m cells reach
-          this.stampBore(ax, az, R.y[i], bx, bz, R.y[j], hw + 1.2, isR);
+          // deep inside, the floor reaches well past the walls (which sit at hw + 1.55): a corner of a car shoved against the wall
+          // must still find the floor, not the mountain over the bore, or the hull contact throws the car up onto the hillside
+          this.stampBore(ax, az, R.y[i], bx, bz, R.y[j], R.bore[i] && R.bore[j] ? hw + 6 : hw + 1.2, isR);
           if (R.bore[i] && R.bore[j]) continue;
         }
         const cx = Math.round((ax - x0) / c), cz = Math.round((az - z0) / c);

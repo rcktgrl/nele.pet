@@ -370,6 +370,8 @@ class Car {
       const gy = T.height(p.x, p.z);
       const pen = gy - p.y;
       if (pen <= 0) continue;
+      // in a bore, a corner poking past the floor's edge is pressed against the wall (a collider), not under ground to climb out of
+      if (pen > 2 && T.bores && T.boreFloor(this.pos.x, this.pos.z) !== null && T.boreFloor(p.x, p.z) === null) continue;
       T.normal(p.x, p.z, n);
       const penN = pen * n.y;
       r.subVectors(p, this.pos);
