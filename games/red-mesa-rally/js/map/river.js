@@ -214,12 +214,14 @@ function findBridges(T) {
     // piers: in the water every 26 m, a pair under a road deck and one under the rail; a viaduct stands on them all the way,
     // except where they would land on a road, the railway or a city street
     const dry = (x, z) => { const gi = T.gi(x, z); return !T.river[gi] && !T.rown[gi] && !(T.rail[gi] > 0); };
+    // and none in the boat race's channel: each river bridge leaves a clear navigation span over the race line
+    const inChannel = (x, z) => { const L = RIVER.racePts; for (let k = 0; k < L.length - 1; k++) { const [ax, az] = L[k], [bx, bz] = L[k + 1], vx = bx - ax, vz = bz - az, t = clamp(((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1), 0, 1); if (Math.hypot(x - ax - vx * t, z - az - vz * t) < 13) return true; } return false; };
     let acc = 13;
     if (wet || R.elev) for (let k = a; k < b; k++) {
       const gi = T.gi(R.x[k], R.z[k]);
       acc += R.step; if (acc < 26 || !(T.river[gi] || (R.elev && R.elev[k] && dry(R.x[k], R.z[k])))) continue;
       acc = 0; const [dx, dz] = R.dirAt(k * R.step);
-      for (const l of span.rail ? [0] : [-(R.width / 2 - 2), R.width / 2 - 2]) if (!T.riverTunWet(R.x[k] - dz * l, R.z[k] + dx * l)) span.piers.push({ x: R.x[k] - dz * l, z: R.z[k] + dx * l, top: R.y[k] - 0.9, bot: T.h[T.gi(R.x[k] - dz * l, R.z[k] + dx * l)] - 0.5, dx, dz });
+      for (const l of span.rail ? [0] : [-(R.width / 2 - 2), R.width / 2 - 2]) if (!T.riverTunWet(R.x[k] - dz * l, R.z[k] + dx * l) && !inChannel(R.x[k] - dz * l, R.z[k] + dx * l)) span.piers.push({ x: R.x[k] - dz * l, z: R.z[k] + dx * l, top: R.y[k] - 0.9, bot: T.h[T.gi(R.x[k] - dz * l, R.z[k] + dx * l)] - 0.5, dx, dz });
     }
     out.push(span); return span;
   };
