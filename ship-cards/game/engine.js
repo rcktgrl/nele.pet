@@ -21,7 +21,7 @@
   };
   // Ships missing from coriolis-data: base values copied from the closest ship and marked as estimates.
   const SHIP_ESTIMATE = {
-    anacondamkii: { from: 'anaconda', name: 'Anaconda Mk II', mfr: 'Faulcon DeLacy', hull: { hullMass: 921 } }, // hull mass fitted to Inara's 54.82 ly jump
+    anacondamkii: { from: 'anaconda', name: 'Anaconda Mk II', mfr: 'Faulcon DeLacy', hull: { hullMass: 865 } }, // hull mass fitted to Inara's 54.82 ly jump (with exact engineering rolls)
     mediumtransport01: { from: 'type_8_transport', name: 'Lynx Highliner', mfr: 'Saud Kruger' }
   };
   const WEAPON_GROUPS = new Set(['pl', 'ul', 'bl', 'mc', 'c', 'fc', 'pa', 'rg', 'mr', 'tp', 'nl', 'axmc', 'axmr', 'ggc', 'gpc', 'gsc', 'rfl', 'rsl', 'pas', 'tbsc', 'tbrfl', 'tbem']);
@@ -94,8 +94,31 @@
     const lvl = +eng.Level || 0, q = eng.Quality == null ? 1 : +eng.Quality;
     return Math.max(0, Math.min(1, ((lvl - 1) + q) / 5));
   }
+  let USE_REAL = false; // true when db.eng (coriolis blueprint tables) is loaded: exact rolls replace the BP estimates
+  function applyEng(m, eng, E) { // apply blueprint roll (grade + quality) and experimental to a module copy
+    const out = Object.assign({}, m);
+    const feats = {};
+    const g = E.bp[lc(eng.BlueprintName)];
+    if (g && g[String(eng.Level)]) {
+      const q = eng.Quality == null ? 1 : +eng.Quality;
+      for (const [k, r] of Object.entries(g[String(eng.Level)])) feats[k] = (feats[k] || 0) + r[0] + q * (r[1] - r[0]);
+    }
+    const sp = eng.ExperimentalEffect && E.sp[lc(eng.ExperimentalEffect)];
+    if (sp) for (const [k, v] of Object.entries(sp)) if (typeof v === 'number') feats[k] = (feats[k] || 0) + v;
+    for (const [k, v] of Object.entries(feats)) {
+      if (k === 'shieldboost' || k === 'hullboost') out[k] = (1 + (out[k] || 0)) * (1 + v) - 1;
+      else if (k === 'rof') { if (out.fireint) out.fireint *= (1 + v); }
+      else if (k === 'optmul') { for (const x of ['minmul', 'optmul', 'maxmul']) if (out[x] != null) out[x] *= (1 + v); }
+      else if (/res$/.test(k)) continue;
+      else if (typeof out[k] === 'number') {
+        const meth = E.method[k] || 'multiplicative';
+        if (meth === 'additive') out[k] += v; else if (meth === 'overwrite') out[k] = v; else out[k] *= (1 + v);
+      }
+    }
+    return out;
+  }
   function bpEffect(eng, key) {
-    if (!eng) return 0;
+    if (!eng || USE_REAL) return 0;
     let bp = lc(eng.BlueprintName);
     if (/^weapon_/.test(bp) || !BP[bp]) { const m = /_(overcharged|shortrange|rapidfire|efficient|highcapacity|longrange|focused|sturdy|lightweight)$/.exec(bp); if (m) bp = 'weapon_' + m[1]; }
     return ((BP[bp] || {})[key] || 0) * progress(eng);
@@ -113,6 +136,7 @@
 
   // ---------- engine ----------
   function build(loadout, db) {
+    USE_REAL = !!db.eng;
     const notes = [];
     const shipKey = lc(loadout.Ship);
     let hull, est = null;
@@ -146,6 +170,7 @@
         else if (/_armour_grade(\d)/.test(item)) { const g = +/_armour_grade(\d)/.exec(item)[1]; const b = hull.bulkheads[Math.min(g, hull.bulkheads.length) - 1] || hull.bulkheads[0]; m = { grp: 'bh', mass: b.mass, hullboost: b.hullboost }; }
         else { m = { grp: '?', mass: 0 }; notes.push('Unknown module ' + item + ' counted as empty.'); }
       }
+      if (eng && USE_REAL) m = applyEng(m, eng, db.eng);
       mass += m.mass || 0;
       const g = m.grp;
       if (WEAPON_GROUPS.has(g)) { const d = weaponDps(m) * (1 + bpEffect(eng, 'dps')); const dist = m.damagedist || { K: 1 }; for (const k in dist) dps[k] = (dps[k] || 0) + d * dist[k]; if (g === 'nl') mines++; }

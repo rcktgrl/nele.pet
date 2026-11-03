@@ -150,8 +150,8 @@ function attachHTML(a){
 }
 
 async function main(){
-  const [modules,ships,fleet]=await Promise.all(['data/modules.json','data/ships.json','../fleet-loadouts-filled.json'].map(u=>fetch(u).then(r=>r.json())));
-  const db={modules,ships};
+  const [modules,ships,eng,fleet]=await Promise.all(['data/modules.json','data/ships.json','data/engineering.json','../fleet-loadouts-filled.json'].map(u=>fetch(u).then(r=>r.json())));
+  const db={modules,ships,eng};
   const cards=fleet.map(l=>ShipCards.build(l,db)).sort((a,b)=>b.cost-a.cost);
   const max={};for(const k of ['dps','shield','hull','jump','speed','cargo','passengers'])max[k]=Math.max(...cards.map(c=>c.stats[k]));
   document.getElementById('ships').innerHTML=cards.map(c=>cardHTML(c,max)).join('')+blankCard('EFS Lucifer','Dolphin','lucifer-dolphin');
