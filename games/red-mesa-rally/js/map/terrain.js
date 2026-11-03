@@ -327,8 +327,11 @@ class Terrain {
       const inBore = (i) => bores.some(([a, b]) => i >= a && i <= b);
       if (def.lowland) {
         const env = new Float32Array(nS + 1), W = 40;
-        for (let i = 0; i <= nS; i++) if (R.x[i] < def.lowland) { let m = -1e9; for (let k = -W; k <= W; k++) { const j = R.idx(i + k); if (!inBore(j)) m = Math.max(m, this.rawH(R.x[j], R.z[j])); } env[i] = m; }
-        for (let i = 0; i <= nS; i++) if (R.x[i] < def.lowland && !inBore(i)) prof[i] = env[i] + 7.8;
+        // (the cliff face a portal opens in is not floor to clear: the deck runs into it, so it is left out of the envelope)
+        const nearBore = (i) => bores.some(([a, b]) => i >= a - 30 && i <= b + 30);
+        for (let i = 0; i <= nS; i++) if (R.x[i] < def.lowland) { let m = -1e9; for (let k = -W; k <= W; k++) { const j = R.idx(i + k); if (!nearBore(j) || inBore(i)) m = Math.max(m, this.rawH(R.x[j], R.z[j])); } env[i] = m > -1e9 ? m : this.rawH(R.x[i], R.z[i]); }
+        // high enough that nothing on the desert floor gets a car up onto the trestles
+        for (let i = 0; i <= nS; i++) if (R.x[i] < def.lowland && !inBore(i)) prof[i] = env[i] + 13;
       }
       if (def.tunnel) { // bore straight through the mountain between the portal approaches
         const a = prof[0], b = prof[nS];
@@ -343,6 +346,21 @@ class Terrain {
         for (let j = -win; j <= win; j++) { acc += prof[R.idx(j)]; cnt++; }
         for (let i = 0; i <= nS; i++) { out[i] = acc / cnt; acc += prof[R.idx(i + win + 1)] - prof[R.idx(i - win)]; }
         prof = out;
+      }
+      // a bore marked 'low' brings the line down to the valley floor: from its desert portal it falls through the mountain just
+      // under the ruling grade, then keeps to the ground, so no long embankment walls off the valley beyond
+      const lowRun = new Set(); // ...and where it is still well up off the ground there it stands on an open trestle, not a bank
+      if (def.lowland) for (const [A, B, , low] of def.bores || []) if (low) {
+        const iA = Math.round(R.project(A[0], A[1], 0, -1).s / R.step), iB = Math.round(R.project(B[0], B[1], 0, -1).s / R.step);
+        const [d, v] = A[0] < def.lowland ? [iA, iB] : [iB, iA], dir = v > d ? 1 : -1, g0 = 0.028 * R.step;
+        const gnd = (i) => { let a = 0; for (let k = -10; k <= 10; k++) { const j = R.idx(i + k); a += this.rawH(R.x[j], R.z[j]); } return a / 21; };
+        const gv = gnd(v);
+        for (let n = 0; n < 900; n++) {
+          const i = R.idx(d + dir * n), inside = dir > 0 ? i <= v : i >= v, floor = (inside ? Math.min(gnd(i), gv) : gnd(i)) + 1.2;
+          const t = Math.max(floor, prof[d] - g0 * n);
+          if (!inside && prof[i] <= t) break;
+          prof[i] = Math.min(prof[i], t); lowRun.add(i);
+        }
       }
       if (!R.closed) for (let i = 0; i <= nS; i++) {
         const t = Math.min(i, nS - i) * R.step, w = smooth(0, 40, t), ey = endY[i * 2 <= nS ? 0 : 1];
@@ -479,7 +497,7 @@ class Terrain {
       }
       for (let i = 0; i <= nS; i++) R.y[i] = prof[i] + feat[i];
       // well clear of the ground a viaduct stands on piers: no embankment, no tarmac painted underneath
-      const elev = def.viaduct || def.lowland ? R.elev = Uint8Array.from(R.y, (y, i) => y - this.rawH(R.x[i], R.z[i]) > 3.2 && (!def.lowland || R.x[i] < def.lowland + 60) ? 1 : 0) : null;
+      const elev = def.viaduct || def.lowland ? R.elev = Uint8Array.from(R.y, (y, i) => y - this.rawH(R.x[i], R.z[i]) > 3.2 && (!def.lowland || R.x[i] < def.lowland + 60 || lowRun.has(i)) ? 1 : 0) : null;
       R.feature = feat;
       // tunnel cover: where the untouched mountain stands well above the road
       if (def.tunnel || def.bores) {

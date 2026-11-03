@@ -5,7 +5,6 @@
    world clock, so everyone in a session sees them in the same place, and both park in a station while a race is on. ---------- */
 const CONSIST = ['loco', 'loco', 'box', 'tank', 'flat', 'box', 'hopper', 'flat', 'box', 'tank', 'box', 'flat'];
 const STATIONS = [
-  { id: 'redmesa', name: 'RED MESA', at: [150, 458] },
   { id: 'port', name: 'SUNSET MARINA', at: [3995, 625] },
   { id: 'union', name: 'CALDER UNION', at: [4650, -780] },
   { id: 'millbrook', name: 'MILLBROOK', at: [1835, -618] },

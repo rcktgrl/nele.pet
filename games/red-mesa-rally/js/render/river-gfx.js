@@ -173,6 +173,19 @@ Object.assign(Gfx.prototype, {
     const tops = {}, top = (lanes) => tops[lanes] || (tops[lanes] = new THREE.MeshStandardMaterial({ map: lines(lanes), roughness: 0.85 }));
     const ballast = new THREE.MeshStandardMaterial({ color: 0x6b6258, roughness: 1 });
     const planks = new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 0.95 }); // dirt tracks cross on timber
+    const timber = new THREE.MeshStandardMaterial({ color: 0x6e5038, roughness: 1 }); // sun-bleached, creosoted long ago
+    const tb = []; // every trestle beam in one list of triangles
+    const beam = (ax, ay, az, bx, by, bz, w) => { // a square timber from a to b, w thick
+      const ux = bx - ax, uy = by - ay, uz = bz - az, L = Math.hypot(ux, uy, uz) || 1;
+      let px = -uz, py = 0, pz = ux; if (Math.hypot(px, pz) < 1e-3 * L) { px = 1; pz = 0; } // a side axis, level
+      const pl = Math.hypot(px, py, pz); px /= pl; py /= pl; pz /= pl;
+      let qx = uy * pz - uz * py, qy = uz * px - ux * pz, qz = ux * py - uy * px; const ql = Math.hypot(qx, qy, qz); qx /= ql; qy /= ql; qz /= ql;
+      const h = w / 2, c = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, j]) => [px * i * h + qx * j * h, py * i * h + qy * j * h, pz * i * h + qz * j * h]);
+      for (let k = 0; k < 4; k++) {
+        const a0 = c[k], a1 = c[(k + 1) % 4], A = [ax + a0[0], ay + a0[1], az + a0[2]], Bv = [ax + a1[0], ay + a1[1], az + a1[2]], C = [bx + a1[0], by + a1[1], bz + a1[2]], D = [bx + a0[0], by + a0[1], bz + a0[2]];
+        tb.push(...A, ...Bv, ...C, ...A, ...C, ...D);
+      }
+    };
     const T = this.world.terrain, grp = new THREE.Group();
     for (const B of T.bridges) {
       const R = this.world.route(B.route), hw = B.width / 2 + 1.5, D = B.rail ? 2.2 : 1.4;
@@ -196,7 +209,19 @@ Object.assign(Gfx.prototype, {
         g.setIndex(ind); g.computeVertexNormals();
         const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; grp.add(m);
       };
-      strip(P, ti, B.rail ? ballast : R.surface === 'asphalt' ? top(R.def.lanes || 2) : planks, UV); strip(P, si, conc);
+      strip(P, ti, B.rail ? ballast : R.surface === 'asphalt' ? top(R.def.lanes || 2) : planks, UV); strip(P, si, B.trestle ? timber : conc);
+      for (const t of B.bents || []) { // the bent: cap, legs, then a girt and an X of sway bracing every storey down to the lowest foot
+        const at = (l, y) => [t.x + t.rx * l, y, t.z + t.rz * l];
+        beam(...at(-3.6, t.top - 0.2), ...at(3.6, t.top - 0.2), 0.45);
+        for (const L of t.legs) beam(...at(L.lt, t.top), ...at(L.lb, L.bot), 0.38);
+        const legL = t.legs[0], legR = t.legs[t.legs.length - 1], lx = (L, y) => L.lt + (L.lb - L.lt) * (t.top - y) / (t.top - L.bot || 1);
+        const floor = Math.max(legL.bot + 0.6, legR.bot + 0.6, t.clear);
+        for (let y = t.top - 0.8; y > floor + 0.6; y -= 5) {
+          const y2 = Math.max(y - 5, floor);
+          beam(...at(lx(legL, y2), y2), ...at(lx(legR, y2), y2), 0.28);
+          beam(...at(lx(legL, y), y), ...at(lx(legR, y2), y2), 0.22); beam(...at(lx(legR, y), y), ...at(lx(legL, y2), y2), 0.22);
+        }
+      }
       if (!B.rail) { // parapets: inner faces and tops, the outer face is the deck side carried up
         const W = [];
         for (let i = 0; i <= n; i++) {
@@ -215,6 +240,10 @@ Object.assign(Gfx.prototype, {
         const r = B.rail ? 1.6 : 1.1, c = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.15, h, 14), conc);
         c.position.set(q.x, q.bot + h / 2, q.z); c.castShadow = true; c.receiveShadow = true; grp.add(c);
       }
+    }
+    if (tb.length) {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(tb, 3)); g.computeVertexNormals();
+      const m = new THREE.Mesh(g, timber); m.castShadow = true; m.receiveShadow = true; grp.add(m);
     }
     mergeByMaterial(grp); this.scene.add(grp);
   },
