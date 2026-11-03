@@ -136,7 +136,12 @@
       if (!m) { // newer modules not in coriolis-data: fixed stand-ins
         if (/fighterbaymk2/.test(item)) { m = { grp: 'fh', mass: (db.modules['int_fighterbay_size' + size + '_class1'] || { mass: 20 }).mass / 2, bays: size >= 6 ? 2 : 1 }; }
         else if (/largecargorack/.test(item)) { m = { grp: 'cr', mass: 0, cargo: Math.pow(2, size) * 1.5 }; }
-        else if (/mkii_passengercabin/.test(item)) { m = { grp: 'pci', mass: 0, passengers: [0, 1, 2, 3, 4, 6, 10, 16, 24][size] || 4 }; notes.push('Mk II cabin capacity estimated.'); }
+        else if (/mkii_passengercabin/.test(item)) { // Mk II cabins (Lynx Highliner): values from Coriolis, sent by Sam 2026-11-03
+          const cls = +((/class(\d)/.exec(item) || [])[1] || 1);
+          const known = { '3_1': [6, 5], '4_1': [12, 10], '5_1': [24, 20], '6_2': [24, 40] }[size + '_' + cls];
+          if (known) m = { grp: 'pci', passengers: known[0], mass: known[1] };
+          else { m = { grp: 'pci', mass: 0, passengers: 6 * Math.pow(2, size - 3) }; notes.push('Mk II cabin size ' + size + ' class ' + cls + ' capacity is a guess.'); }
+        }
         else if (/mkiilargebuggybay/.test(item)) { m = { grp: 'pvr', mass: 16, bays: 2 }; }
         else if (/_armour_grade(\d)/.test(item)) { const g = +/_armour_grade(\d)/.exec(item)[1]; const b = hull.bulkheads[Math.min(g, hull.bulkheads.length) - 1] || hull.bulkheads[0]; m = { grp: 'bh', mass: b.mass, hullboost: b.hullboost }; }
         else { m = { grp: '?', mass: 0 }; notes.push('Unknown module ' + item + ' counted as empty.'); }
