@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Fleet Cards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&family=Saira:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a filterable grid of flip cards built from fleet loadouts. Single dark look. Frame colour = rarity. */
+:root{
+  --void:#07050d; --card:#140c24; --card-hi:#241443; --panel:#1d1233; --line:#3b2766;
+  --accent:#a07bff; --gold:#e8c35a; --gold-dim:#a88a3a; --ink:#efe9ff; --muted:#a99cc7;
+  --r-common:#8d8aa0; --r-uncommon:#5fd08a; --r-rare:#5aa9ff; --r-epic:#c27bff; --r-legendary:#f2c94c;
+  --f-display:"Saira Condensed","Arial Narrow",sans-serif; --f-body:"Saira",system-ui,sans-serif; --f-data:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--f-body);padding:24px max(16px,env(safe-area-inset-left,0px)) 48px max(16px,env(safe-area-inset-right,0px))}
+header{max-width:1240px;margin:0 auto 18px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between}
+h1{font-family:var(--f-display);font-weight:800;font-size:32px;letter-spacing:.04em;text-transform:uppercase;margin:0;line-height:1}
+h1 span{color:var(--gold)}
+.sub{color:var(--muted);font-size:13px;margin:4px 0 0;max-width:60ch}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:600 12px var(--f-body);color:var(--ink);background:#120d1c;border:1px solid #2d2340;border-radius:999px;padding:6px 12px;cursor:pointer;text-transform:capitalize}
+.chip[aria-pressed="true"]{background:var(--gold);color:#241800;border-color:var(--gold)}
+.chip:focus-visible,.card:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+h2{max-width:1240px;margin:28px auto 12px;font-family:var(--f-display);font-size:18px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.grid{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:22px}
+.stage{perspective:1200px}
+.card{position:relative;width:100%;aspect-ratio:63/100;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.2,.7,.2,1);cursor:pointer;border:0;padding:0;background:none;color:inherit;font:inherit;text-align:left;display:block}
+.card.flipped{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;border-radius:14px;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden;
+  background:linear-gradient(160deg,var(--card-hi),var(--card) 45%,#0b0714);box-shadow:0 0 0 2px var(--rc),0 0 0 5px var(--card),0 0 0 6px var(--line),0 18px 40px -14px var(--rc);
+  display:flex;flex-direction:column;padding:11px 11px 9px;gap:7px}
+.back{transform:rotateY(180deg)}
+.top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.name{font-family:var(--f-display);font-weight:800;font-size:22px;line-height:.95;text-transform:uppercase;min-width:0;overflow-wrap:anywhere}
+.name small{display:block;font-weight:500;font-size:11px;letter-spacing:.14em;color:var(--gold);margin-top:3px}
+.cost{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;text-align:center;line-height:1;
+  background:radial-gradient(circle at 35% 30%,#fff3c4,var(--gold) 45%,#7d6020);color:#2a1a00;font-family:var(--f-display);font-weight:800;font-size:17px}
+.cost span{display:block;font-size:7px;letter-spacing:.1em}
+.art{position:relative;flex:none;height:30%;border-radius:7px;overflow:hidden;background:#000;box-shadow:inset 0 0 0 1px var(--gold-dim)}
+.art img{width:100%;height:100%;object-fit:cover;display:block}
+.art .none{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-data);font-size:10px;color:var(--muted);letter-spacing:.08em}
+.art .ident{position:absolute;right:6px;bottom:5px;font-family:var(--f-data);font-size:9px;color:var(--gold);background:#07050dcc;padding:1px 5px;border-radius:3px;letter-spacing:.1em}
+.typeline{display:flex;justify-content:space-between;gap:6px;font-family:var(--f-display);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;padding:3px 7px;border-radius:4px;background:linear-gradient(90deg,#4a2c8f,var(--panel))}
+.typeline b{color:var(--rc)}
+.stats{margin:0;display:grid;grid-template-columns:auto 1fr auto;gap:3px 7px;align-items:center}
+.stats dt{font-family:var(--f-display);font-weight:700;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.meter{height:5px;border-radius:3px;background:var(--panel);overflow:hidden;box-shadow:inset 0 0 0 1px var(--line)}
+.meter i{display:block;height:100%;width:var(--v);background:linear-gradient(90deg,var(--accent),var(--gold))}
+.stats dd{margin:0;font-family:var(--f-data);font-size:10px;text-align:right;font-variant-numeric:tabular-nums;min-width:62px}
+.roles{display:flex;flex-wrap:wrap;gap:4px}
+.role{font-family:var(--f-display);font-weight:700;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--panel);border:1px solid var(--line);color:var(--ink)}
+.role.main{background:var(--gold);color:#241800;border-color:var(--gold)}
+.abil{font-size:10.5px;line-height:1.35;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:5px 7px;display:flex;flex-direction:column;gap:2px}
+.abil strong{font-family:var(--f-display);color:var(--gold);letter-spacing:.06em;text-transform:uppercase;font-size:11px}
+.foot{margin-top:auto;display:flex;justify-content:space-between;gap:6px;font-family:var(--f-data);font-size:8.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.back h3{margin:0;font-family:var(--f-display);font-size:17px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
+.meta{font-family:var(--f-data);font-size:9.5px;color:var(--muted);line-height:1.5}
+.meta b{color:var(--ink);font-weight:500}
+.slots{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:1px}
+.slots li{list-style:none;font-family:var(--f-data);font-size:9px;display:flex;justify-content:space-between;gap:6px;border-bottom:1px dashed #3b276688;padding:1px 0}
+.slots ul{margin:0;padding:0}
+.slots li span:last-child{color:var(--gold);text-align:right;white-space:nowrap}
+.slots li.filled span:first-child::after{content:" · filled";color:var(--accent)}
+.note{font-size:9.5px;color:#ffb27a;line-height:1.35}
+@media (prefers-reduced-motion:reduce){.card{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Fleet <span>Cards</span></h1>
+    <p class="sub">Every stat comes from the ship's real loadout through fixed rules. Badge = points cost. Frame colour = rarity (share of engineering potential used). Tap a card to see its loadout.</p>
+  </div>
+  <div class="filters" id="filters" role="group" aria-label="Filter by role"></div>
+</header>
+<main>
+  <h2>Ships</h2>
+  <div class="grid" id="ships"><p class="sub">Loading fleet data…</p></div>
+  <h2>Attachments</h2>
+  <div class="grid" id="attach"></div>
+</main>
+<script src="engine.js"></script>
+<script>
+const IMG={ 'EFS Alectrona':'alectrona-sidewinder','EFS Aeolus':'aeolus-eagle','EFS Lucifer':'lucifer-dolphin','EFS Aion':'aion-viper-mk3','EFS Behemoth':'behemoth-panther-clipper-mk2',
+ 'EFS Anubis':'anubis-type6','EFS Thanatos':'thanatos-cobra-mk4','EFS Hermes':'hermes-diamondback-explorer','EFS Aphrodite':'aphrodite-adder','EFS Baphomet':'baphomet-cobra-mk5',
+ 'EFS Hades':'hades-cobra-mk3','EFS Poseidon':'poseidon-vulture','EFS Hercules':'hercules-asp-explorer','EFS Eos':'eos-mandalay','EFS Ponos':'ponos-type8','EFS Freya':'freya-fer-de-lance',
+ 'EFS Thor':'thor-python','EFS Artemis':'artemis-mamba','EFS Hephaestus':'hephaestus-type9','EFS Nyx':'nyx-python-mk2','EFS Odin':'odin-anaconda','EFS Götterfunke':'goetterfunke-federal-corvette',
+ 'EFS Ares':'ares-type10','EFS Zeus':'zeus-krait-mk2','EFS Zephyr':'zephyr-unknown','EFS Njord':'njord-caspian-explorer','EFS Vidar':'vidar-anaconda-mk2' };
+// Shipyard screenshots have the ship right of centre; other shots get their own framing.
+const POS={ 'zephyr-unknown':'50% 55%','njord-caspian-explorer':'40% 45%','vidar-anaconda-mk2':'55% 50%' };
+const RC={Common:'var(--r-common)',Uncommon:'var(--r-uncommon)',Rare:'var(--r-rare)',Epic:'var(--r-epic)',Legendary:'var(--r-legendary)'};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n);
+const BP_NAMES={weapon_efficient:'Efficient',weapon_overcharged:'Overcharged',weapon_longrange:'Long range',weapon_shortrange:'Short range',weapon_rapidfire:'Rapid fire',weapon_highcapacity:'High capacity',weapon_focused:'Focused',weapon_sturdy:'Sturdy',weapon_lightweight:'Lightweight'};
+const bpName=bp=>{const k=String(bp).toLowerCase();const m=/_(overcharged|shortrange|rapidfire|efficient|highcapacity|longrange|focused|sturdy|lightweight)$/.exec(k);if(m&&!/^(shield|armour|hull|fsd|engine|power)/.test(k))return BP_NAMES['weapon_'+m[1]];return k.split('_').slice(1).join(' ').replace(/\b\w/g,c=>c.toUpperCase())||k};
+const modName=it=>it.replace(/^(hpt_|int_)/,'').replace(/_armour_grade(\d)/,' armour G$1').replace(/_size(\d+)_class(\d+)/,(m,s,c)=>' '+s+'ABCDE'[5-c]).replace(/_/g,' ');
+
+function cardHTML(c,max){
+  const img=IMG[c.name];const rc=RC[c.rarity]||RC.Common;
+  const bar=(v,m)=>Math.round(Math.sqrt(Math.max(0,v)/Math.max(1,m))*100);
+  const st=c.stats;
+  const rows=[['Firepower',st.dps,max.dps,st.dps+' dps'],['Shields',st.shield,max.shield,fmt(st.shield)+' MJ'],['Hull',st.hull,max.hull,fmt(st.hull)],['Jump',st.jump,max.jump,st.jump+' ly'],['Speed',st.speed,max.speed,st.speed+' m/s']];
+  if(st.cargo) rows.push(['Cargo',st.cargo,max.cargo,st.cargo+' t']);
+  if(st.passengers) rows.push(['Cabins',st.passengers,max.passengers,st.passengers+' pax']);
+  const ab=c.abilities.slice(0,1).map(a=>`<div class="abil"><strong>${esc(a[0])}</strong>${esc(a[1])}</div>`).join('');
+  const bays=[c.bays.fighter&&c.bays.fighter+' vessel bay'+(c.bays.fighter>1?'s':''),c.bays.srv&&c.bays.srv+' SRV bay'+(c.bays.srv>1?'s':''),c.bays.rhino&&c.bays.rhino+' Rhino bay'+(c.bays.rhino>1?'s':'')].filter(Boolean).join(' · ');
+  const slots=c.slots.map(s=>`<li class="${s.filled?'filled':''}"><span>${esc(modName(s.item))}</span><span>${s.eng?esc(bpName(s.eng.bp))+' G'+s.eng.grade:''}</span></li>`).join('');
+  return `<div class="stage" data-roles="${c.roles.join(' ')}"><button class="card" style="--rc:${rc}" aria-label="${esc(c.name)} card, tap to flip">
+   <div class="face front">
+    <div class="top"><div class="name">${esc(c.name.replace(/^EFS /,''))}<small>${esc(c.type)}</small></div><div class="cost"><div>${c.cost}<span>PTS</span></div></div></div>
+    <div class="art">${img?`<img src="../fleet/card/${img}.jpg" alt="${esc(c.name)}" loading="lazy" style="object-position:${POS[img]||'50% 50%'}">`:'<span class="none">NO IMAGE YET</span>'}<span class="ident">${esc(c.ident)}</span></div>
+    <div class="typeline"><span>${esc(c.mainRole)}</span><b>${esc(c.rarity)} · ${c.engScore}%</b></div>
+    <dl class="stats">${rows.map(r=>`<dt>${r[0]}</dt><div class="meter" style="--v:${bar(r[1],r[2])}%"><i></i></div><dd>${esc(r[3])}</dd>`).join('')}</dl>
+    <div class="roles">${c.roles.map(r=>`<span class="role${r===c.mainRole?' main':''}">${r}</span>`).join('')}</div>
+    ${ab}
+    <div class="foot"><span>${esc(c.maker||'')}</span><span>${esc(bays||'')}</span></div>
+   </div>
+   <div class="face back">
+    <h3>${esc(c.name)}</h3>
+    <div class="meta"><b>${c.engineered}</b> engineered modules · <b>${c.experimentals}</b> experimentals · engineering score <b>${c.engScore}%</b><br>
+     Damage: thermal <b>${st.dpsSplit.thermal}</b> · kinetic <b>${st.dpsSplit.kinetic}</b> · explosive <b>${st.dpsSplit.explosive}</b>${st.mines?` · <b>${st.mines}</b> mine launchers`:''}<br>Mass <b>${st.mass} t</b>${st.scb?` · SCB <b>${st.scb} MJ</b>`:''}</div>
+    ${c.notes.map(n=>`<div class="note">${esc(n)}</div>`).join('')}
+    ${c.abilities.length?`<div class="meta">Abilities: ${c.abilities.map(a=>'<b>'+esc(a[0])+'</b>').join(' · ')}</div>`:''}
+    <div class="slots"><ul>${slots}</ul></div>
+    <div class="foot"><span>${esc(c.ident)}</span><span>${c.cost} pts</span></div>
+   </div></button></div>`;
+}
+function blankCard(name,type,img){
+  return `<div class="stage" data-roles=""><button class="card" style="--rc:var(--r-common)" aria-label="${esc(name)} card"><div class="face front">
+   <div class="top"><div class="name">${esc(name.replace(/^EFS /,''))}<small>${esc(type)}</small></div><div class="cost"><div>?<span>PTS</span></div></div></div>
+   <div class="art"><img src="../fleet/card/${img}.jpg" alt="${esc(name)}" loading="lazy" style="object-position:62% 46%"></div>
+   <div class="typeline"><span>No loadout data</span><b>—</b></div>
+   <p class="meta">Inara has no loadout for this ship yet. Send its Coriolis link to give it stats.</p>
+   <div class="foot"><span>Saud Kruger</span><span></span></div></div><div class="face back"><h3>${esc(name)}</h3><p class="meta">No loadout data.</p></div></button></div>`;
+}
+function attachHTML(a){
+  return `<div class="stage"><button class="card" style="--rc:var(--accent)" aria-label="${esc(a.name)} attachment card"><div class="face front">
+   <div class="top"><div class="name">${esc(a.name)}<small>${esc(a.kind)}</small></div><div class="cost"><div>${a.cost}<span>PTS</span></div></div></div>
+   <div class="art">${a.img?`<img src="../fleet/card/${a.img}.jpg" alt="${esc(a.name)}" loading="lazy" style="object-position:50% 50%">`:'<span class="none">NO IMAGE YET</span>'}</div>
+   <div class="typeline"><span>${esc(a.slot)}</span><b>${esc(a.maker)}</b></div>
+   <dl class="stats">${a.rows.map(r=>`<dt>${r[0]}</dt><div class="meter" style="--v:${Math.round(r[1]*100)}%"><i></i></div><dd>${esc(r[2])}</dd>`).join('')}</dl>
+   <div class="abil"><strong>${esc(a.abil[0])}</strong>${esc(a.abil[1])}</div>
+   <div class="foot"><span>Attachment</span><span>${esc(a.slot)}</span></div></div>
+   <div class="face back"><h3>${esc(a.name)}</h3><p class="meta">${esc(a.rule)}</p></div></button></div>`;
+}
+
+async function main(){
+  const [modules,ships,fleet]=await Promise.all(['data/modules.json','data/ships.json','../fleet-loadouts-filled.json'].map(u=>fetch(u).then(r=>r.json())));
+  const db={modules,ships};
+  const cards=fleet.map(l=>ShipCards.build(l,db)).sort((a,b)=>b.cost-a.cost);
+  const max={};for(const k of ['dps','shield','hull','jump','speed','cargo','passengers'])max[k]=Math.max(...cards.map(c=>c.stats[k]));
+  document.getElementById('ships').innerHTML=cards.map(c=>cardHTML(c,max)).join('')+blankCard('EFS Lucifer','Dolphin','lucifer-dolphin');
+  // attachments: fixed definitions. Fighter firepower = one unengineered large gimballed multicannon.
+  const fdps=Math.round(ShipCards.build({Ship:'eagle',Modules:[{Slot:'x',Item:'hpt_multicannon_gimbal_large'}]},db).stats.dps*10)/10;
+  const att=Object.values(ShipCards.FIGHTERS).map(f=>({name:f.name,kind:'Fighter',maker:f.maker,slot:'Vessel hangar',cost:2,img:null,
+    rows:[['Firepower',f.atk/1.3,Math.round(fdps*f.atk)+' dps'],['Toughness',f.hull/1.2,'×'+f.hull],['Evasion',f.evade/1.4,'×'+f.evade]],
+    abil:['Launch','One fighter out at a time. Spare fighters replace a lost one.'],rule:'Firepower equals one size-3 weapon ('+fdps+' dps, large gimballed multicannon), scaled by the chassis. Only one fighter per ship is deployed; extra fighter cards are replacements.'}));
+  att.push({name:'Nomad',kind:'Exobio shuttle',maker:'EFS Phobos',slot:'Vessel hangar',cost:3,img:'phobos-nomad',rows:[['Firepower',0.4,Math.round(fdps*0.5)+' dps'],['Survey',1,'exobio'],['Surface',0.5,'light']],
+    abil:['Exobio survey','Earns credits or draws a card each turn it is deployed.'],rule:'Mix of fighter, SRV and explorer: half a fighter\'s firepower, plus the exobio survey effect. Not limited by the one-fighter rule.'});
+  att.push({name:'Scarab',kind:'SRV',maker:'Surface',slot:'SRV bay',cost:1,img:null,rows:[['Firepower',0.25,'light'],['Scouting',0.6,'scan'],['Surface',0.7,'all-round']],abil:['Recon','Reveals one enemy card.'],rule:'All-round SRV: small scouting bonus and light ground support.'});
+  att.push({name:'Scorpion',kind:'SRV',maker:'Surface',slot:'SRV bay',cost:2,img:null,rows:[['Firepower',0.5,'medium'],['Toughness',0.6,'armoured'],['Surface',0.6,'combat']],abil:['Ground assault','Small attack and defence bonus for its ship.'],rule:'Combat SRV: small attack and defence bonus.'});
+  att.push({name:'Rhino',kind:'Surface mining vessel',maker:'Surface',slot:'Mk II large SRV bay',cost:2,img:null,rows:[['Mining',1,'ore'],['Needs cargo',0.7,'free space'],['Surface',0.6,'mining']],abil:['Surface mining','Makes resources each turn, only while its ship has free cargo space. More space, more output (capped).'],rule:'Only fits the Mk II large planetary vehicle hangar.'});
+  document.getElementById('attach').innerHTML=att.map(attachHTML).join('');
+  // role filters
+  const roles=['all','combat','trader','explorer','miner','passenger','support','carrier'];
+  const fl=document.getElementById('filters');
+  fl.innerHTML=roles.map(r=>`<button class="chip" data-r="${r}" aria-pressed="${r==='all'}">${r}</button>`).join('');
+  fl.addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;fl.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));
+    document.querySelectorAll('#ships .stage').forEach(s=>s.hidden=b.dataset.r!=='all'&&!s.dataset.roles.split(' ').includes(b.dataset.r))});
+  document.addEventListener('click',e=>{const c=e.target.closest('.card');if(c)c.classList.toggle('flipped')});
+}
+main().catch(e=>{document.getElementById('ships').innerHTML='<p class="note">Could not load the fleet data: '+esc(e.message)+'</p>'});
+</script>
+</body>
+</html>
