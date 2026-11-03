@@ -125,6 +125,8 @@ class Terrain {
     const tdefs = [rev('hwy'), rev('coast'), rev('tunnel'), rev('pass'), rev('lane-valley'), rev('lane-farm'), loop('city-a', hb)];
     tdefs.push({ ...tdefs[6], id: 'city-a-rev', pts: tdefs[6].pts.slice().reverse() });
     tdefs.push(rev('valley-rd'), rev('lane-orchard'), rev('lane-mill'), rev('kingsway'), rev('mesa-blvd'), rev('north-rd'), rev('harbour-dr'));
+    // and the way back along every longer side street in the districts, so everyday traffic can run both ways down them too
+    for (const O of this.routes.filter(isTrafficStreet)) if (!tdefs.some((d) => d.id === O.id + '-rev')) tdefs.push(rev(O.id));
     for (const d of tdefs) {
       const T2 = new Route({ ...d, noCarve: true, trafficOnly: true });
       // a lane the other way asks for the ground at its own road's height, so through a bore it keeps to the bore's floor

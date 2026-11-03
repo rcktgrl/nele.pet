@@ -107,6 +107,9 @@ const ROUTE_DEFS = [
     bores: [[[4652, -945], [4235, -1488], 'HEIGHTS TUNNEL'], [[1693, -548], [808, -500], 'RIM TUNNEL NORTH'], [[808, 470], [1698, 470], 'RIM TUNNEL SOUTH', 'low'], [[-292, -500], [-622, -378], 'MESA TUNNEL'], [[568, -500], [248, -500], 'MESA TUNNEL'], [[-717, 233], [-505, 424], 'MESA TUNNEL'], [[-756, -182], [-784, -45], 'MESA TUNNEL']] },
 ];
 
+/* a side street that gets everyday traffic both ways (the main roads have their own counts in TRAFFIC_PLAN) */
+const TRAFFIC_MAIN = new Set(['hwy', 'coast', 'tunnel', 'pass', 'lane-valley', 'lane-farm', 'kingsway', 'mesa-blvd', 'north-rd', 'harbour-dr', 'valley-rd', 'lane-orchard', 'lane-mill']);
+const isTrafficStreet = (R) => R.surface === 'asphalt' && R.length >= 400 && !TRAFFIC_MAIN.has(R.id) && !R.id.startsWith('cul-') && !R.def.trafficOnly && !R.def.noCarve && !R.def.viaduct && !R.def.ramp && !R.def.metro && !R.def.boat;
 function catmull(p0, p1, p2, p3, t) {
   const t2 = t * t, t3 = t2 * t;
   return [
