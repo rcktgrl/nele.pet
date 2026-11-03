@@ -24,16 +24,23 @@ function buildMapImage(world, gfx) {
     const i = (py * MAP_W + px) * 4; img.data[i] = R; img.data[i + 1] = G; img.data[i + 2] = B; img.data[i + 3] = 255;
   }
   g.putImageData(img, 0, 0);
-  // the mountain stream above Millbrook, and the boat tunnel under the docks
+  // the bare ground stays on its own for the big map, which draws the lines over it again, sharp, at whatever zoom it shows
+  const base = document.createElement('canvas'); base.width = MAP_W; base.height = MAP_H; base.getContext('2d').drawImage(c, 0, 0);
+  drawMapVectors(g, world, 1); c.base = base;
+  return c;
+}
+/* rivers, buildings, roads, rail and the metro over the ground, in map pixels; k scales every line width and mark */
+function drawMapVectors(g, world, k) {
+  const T = world.terrain;
   g.strokeStyle = 'rgba(60,104,116,.95)'; g.lineCap = 'round';
   const up = RIVER.reaches.find((r) => r.id === 'upper').pts;
-  for (let i = 1; i < up.length; i++) { const q = up[i]; if (q.wl <= WATER_Y + 1.1) break; g.lineWidth = clamp(q.hw / 4, 1.2, 3); g.beginPath(); g.moveTo(mapX(up[i - 1].x), mapZ(up[i - 1].z)); g.lineTo(mapX(q.x), mapZ(q.z)); g.stroke(); }
-  g.save(); g.setLineDash([4, 3]); g.lineWidth = 2.2; g.beginPath();
+  for (let i = 1; i < up.length; i++) { const q = up[i]; if (q.wl <= WATER_Y + 1.1) break; g.lineWidth = clamp(q.hw / 4, 1.2, 3) * k; g.beginPath(); g.moveTo(mapX(up[i - 1].x), mapZ(up[i - 1].z)); g.lineTo(mapX(q.x), mapZ(q.z)); g.stroke(); }
+  g.save(); g.setLineDash([4 * k, 3 * k]); g.lineWidth = 2.2 * k; g.beginPath();
   RIVER.tunnel.pts.forEach((q, i) => { const X = mapX(q.x ?? q[0]), Y = mapZ(q.z ?? q[1]); if (i) g.lineTo(X, Y); else g.moveTo(X, Y); });
   g.stroke(); g.restore(); g.lineCap = 'butt';
   // buildings
   g.fillStyle = 'rgba(214,200,180,.95)';
-  for (const o of T.village) { g.save(); g.translate(mapX(o.x), mapZ(o.z)); g.rotate(-o.yaw); g.fillRect(-o.w / 2 * MAP_W / WORLD.Sx, -o.d / 2 * MAP_H / WORLD.Sz, Math.max(1.5, o.w * MAP_W / WORLD.Sx), Math.max(1.5, o.d * MAP_H / WORLD.Sz)); g.restore(); }
+  for (const o of T.village) { g.save(); g.translate(mapX(o.x), mapZ(o.z)); g.rotate(-o.yaw); g.fillRect(-o.w / 2 * MAP_W / WORLD.Sx, -o.d / 2 * MAP_H / WORLD.Sz, Math.max(1.5 * k, o.w * MAP_W / WORLD.Sx), Math.max(1.5 * k, o.d * MAP_H / WORLD.Sz)); g.restore(); }
   g.fillStyle = 'rgba(200,196,188,.85)';
   for (const bd of world.city.buildings) { g.beginPath(); boxCorners(bd).forEach(([x, z], k) => (k ? g.lineTo(mapX(x), mapZ(z)) : g.moveTo(mapX(x), mapZ(z)))); g.fill(); }
   for (const R of T.routes) {
@@ -41,23 +48,22 @@ function buildMapImage(world, gfx) {
     g.beginPath();
     for (let i = 0; i <= R.count; i += 2) { const X = mapX(R.x[i]), Y = mapZ(R.z[i]); if (i === 0) g.moveTo(X, Y); else g.lineTo(X, Y); }
     if (R.closed) g.closePath();
-    if (R.surface === 'rail') { g.setLineDash([]); g.strokeStyle = 'rgba(30,26,24,.9)'; g.lineWidth = 2.6; g.stroke(); g.setLineDash([5, 5]); g.strokeStyle = 'rgba(230,226,216,.9)'; g.lineWidth = 1.2; g.stroke(); g.setLineDash([]); continue; }
+    if (R.surface === 'rail') { g.setLineDash([]); g.strokeStyle = 'rgba(30,26,24,.9)'; g.lineWidth = 2.6 * k; g.stroke(); g.setLineDash([5 * k, 5 * k]); g.strokeStyle = 'rgba(230,226,216,.9)'; g.lineWidth = 1.2 * k; g.stroke(); g.setLineDash([]); continue; }
     const asph = R.surface === 'asphalt';
-    g.strokeStyle = 'rgba(20,12,8,.6)'; g.lineWidth = R.def.trail ? 2.4 : asph ? (R.id === 'hwy' ? 5.5 : 4.2) : 4; g.stroke();
-    g.strokeStyle = R.def.trail ? 'rgba(240,222,190,.75)' : asph ? (R.id === 'hwy' ? '#f2c230' : '#f4f1e8') : 'rgba(250,236,210,.95)'; g.lineWidth = R.def.trail ? 1.1 : asph ? (R.id === 'hwy' ? 3 : 2) : 2; g.stroke();
+    g.strokeStyle = 'rgba(20,12,8,.6)'; g.lineWidth = (R.def.trail ? 2.4 : asph ? (R.id === 'hwy' ? 5.5 : 4.2) : 4) * k; g.stroke();
+    g.strokeStyle = R.def.trail ? 'rgba(240,222,190,.75)' : asph ? (R.id === 'hwy' ? '#f2c230' : '#f4f1e8') : 'rgba(250,236,210,.95)'; g.lineWidth = (R.def.trail ? 1.1 : asph ? (R.id === 'hwy' ? 3 : 2) : 2) * k; g.stroke();
   }
   // the Calder Metro: the loop under downtown and its four ramps
   const M = T.metro;
   if (M) {
-    g.save(); g.setLineDash([6, 4]); g.strokeStyle = 'rgba(42,179,200,.95)'; g.lineWidth = 2.6; g.beginPath();
+    g.save(); g.setLineDash([6 * k, 4 * k]); g.strokeStyle = 'rgba(42,179,200,.95)'; g.lineWidth = 2.6 * k; g.beginPath();
     for (let i = 0; i <= M.R.count; i += 3) { const X = mapX(M.R.x[i]), Y = mapZ(M.R.z[i]); if (i === 0) g.moveTo(X, Y); else g.lineTo(X, Y); }
     g.closePath(); g.stroke(); g.setLineDash([]);
     for (const sp of M.spurs) {
       g.beginPath(); g.moveTo(mapX(sp.x), mapZ(sp.z)); g.lineTo(mapX(sp.x + sp.dx * sp.L), mapZ(sp.z + sp.dz * sp.L)); g.stroke();
-      g.fillStyle = '#c4161c'; g.beginPath(); g.arc(mapX(sp.x), mapZ(sp.z), 5, 0, TAU); g.fill();
-      g.fillStyle = '#f4f1e8'; g.font = '700 8px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('M', mapX(sp.x), mapZ(sp.z) + 0.5);
+      g.fillStyle = '#c4161c'; g.beginPath(); g.arc(mapX(sp.x), mapZ(sp.z), 5 * k, 0, TAU); g.fill();
+      g.fillStyle = '#f4f1e8'; g.font = `700 ${8 * k}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('M', mapX(sp.x), mapZ(sp.z) + 0.5 * k);
     }
     g.restore();
   }
-  return c;
 }

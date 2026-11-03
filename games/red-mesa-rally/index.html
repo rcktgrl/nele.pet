@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@400;600;800&family=Saira+Stencil+One&display=swap">
 <script>
 // one version for the loading-screen label and the ?v= cache-buster on every file (bump per release: 1.x features, 1.x.y fixes)
-const RMR_VERSION = '1.5';
+const RMR_VERSION = '1.5.1';
 document.write('<link rel="stylesheet" href="css/style.css?v=' + RMR_VERSION + '">');
 </script>
 
@@ -219,7 +219,7 @@ document.write('<link rel="stylesheet" href="css/style.css?v=' + RMR_VERSION + '
 
 <div class="screen scrim" id="mapScreen">
   <div style="display:grid;gap:10px;justify-items:center">
-    <div class="row" style="justify-content:space-between;width:100%"><div class="eyebrow">Red Mesa · Calder County</div><button class="btn" id="btnMapClose">Close · M</button></div>
+    <div class="row" style="justify-content:space-between;width:100%"><div class="eyebrow">Red Mesa · Calder County</div><div class="row mapzoom"><button class="btn" id="btnMapOut" title="Zoom out (−)">−</button><span id="mapZoomLevel">1×</span><button class="btn" id="btnMapIn" title="Zoom in (+)">+</button><button class="btn" id="btnMapFit" title="Whole map (0)">Fit</button></div><button class="btn" id="btnMapClose">Close · M</button></div>
     <div class="mapwrap" id="mapwrap">
       <canvas id="bigmap" width="1024" height="1024"></canvas>
       <div id="mapInfo"><div><div class="eyebrow" id="miType"></div><h2 id="miName" style="font-size:32px"></h2></div><div class="row"><button class="btn primary" id="btnTravel">Travel there</button><button class="btn" id="btnWaypoint">Set waypoint</button></div></div>
