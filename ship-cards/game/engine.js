@@ -219,7 +219,7 @@
         const a = EXP[key] || EXPN[key.replace(/^(weapon|shieldbooster|shield|armour|engine|fsd|powerplant|powerdistributor)_/, '').replace(/_/g, '')] || [key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), 'Special effect.'];
         if (!abilities.find(x => x[0] === a[0])) abilities.push(a);
       }
-      parts.push({ item, g, m, priority: mod.Priority == null ? 1 : +mod.Priority, weapon: WEAPON_GROUPS.has(g) });
+      parts.push({ item, g, m, priority: mod.Priority == null ? 1 : +mod.Priority, weapon: WEAPON_GROUPS.has(g), exp: eng && eng.ExperimentalEffect ? lc(eng.ExperimentalEffect) : null, size });
       slots.push({ slot: mod.Slot, item, grp: g, eng: eng ? { bp: eng.BlueprintName, grade: eng.Level, q: eng.Quality, exp: eng.ExperimentalEffect || null } : null, filled: !!mod.Filled });
     }
     // fuel in tank counts toward mass
@@ -266,7 +266,7 @@
     return {
       name: titleCase(loadout.ShipName || hull.name), ident: (loadout.ShipIdent || '').toUpperCase(), shipKey, type: hull.name, maker: hull.mfr,
       estimate: !!est, rarity, engScore: Math.round(score * 100), engineered: engCount, experimentals: expCount,
-      combat: combatProfile(parts, hull, unladen, jump),
+      combat: combatProfile(parts, hull, unladen, jump, { cargo, passengers, mining: has.mining > 0 && (has.refinery > 0 || cargo > 0), scanner: has.dss > 0 || roles.some(r => r.id === 'explorer') }),
       stats: { dps: round1(totalDps), dpsSplit: { thermal: round1(dps.T), kinetic: round1(dps.K), explosive: round1(dps.E), absolute: round1(dps.A) }, shield: Math.round(shield), scb: Math.round(scb), hull: Math.round(hullPts), jump: round1(jump), speed: Math.round(speed), mass: Math.round(unladen), cargo, passengers, mines },
       bays: { fighter: fighterBays, srv: srvBays, rhino: rhinoBays },
       roles: roles.map(r => r.id), mainRole: main ? main.id : 'none', abilities, cost, slots, notes: [...new Set(notes)]
@@ -275,7 +275,8 @@
   // ---------- combat profile (Coriolis Calculations.js: shieldMetrics, armourMetrics, _weaponSustainedDps) ----------
   const DR_SH = (genMult, combined) => { const max = genMult * 0.7; return combined < max ? (max / 2) + (max - max / 2) * (combined / max) : combined; };
   const DR_AR = (...mults) => { const max = Math.min(0.7, ...mults); const comb = mults.reduce((a, v) => a * v, 1); const d = 0.35 + (max - 0.35) * (comb / max); return d < 0.7 ? d : comb; };
-  function combatProfile(parts, hull, mass, jump) {
+  function combatProfile(parts, hull, mass, jump, extra) {
+    extra = extra || {};
     // power: if modules need more than the power plant makes, switch off by priority (5 first), like the game
     const pp = parts.find(p => p.g === 'pp');
     const pgen = pp ? (pp.m.pgen || 0) : 0;
@@ -321,7 +322,8 @@
       const mount = /_turret/.test(p.item) ? 'turret' : /_gimbal/.test(p.item) ? 'gimbal' : 'fixed';
       const guided = /basicmissilerack|advancedtorppylon|_seeker|atmissile/.test(p.item); // seekers and torpedoes track their target
       return { item: p.item, sdps: dps * sf, eps, dist: m.damagedist || { K: 1 }, falloff: m.falloff || null, range: m.range || 3000, piercing: m.piercing || 0,
-        shotspeed: guided ? null : (m.shotspeed || null), mount };
+        shotspeed: guided ? null : (m.shotspeed || null), mount,
+        heal: p.exp === 'special_regeneration_sequence' ? 'regen' : p.exp === 'special_concordant_sequence' ? 'concordant' : null };
     });
     const pd = (on.find(p => p.g === 'pd') || { m: {} }).m;
     const thr = (on.find(p => p.g === 't') || { m: null }).m;
@@ -331,6 +333,9 @@
       hardness: hull.hardness || 50, size: hull.size || 2, shield, armour: { max: armourTotal, mult: amult }, weapons,
       pd: { wepcap: pd.wepcap || 10, weprate: pd.weprate || 1, syscap: pd.syscap || 10, sysrate: pd.sysrate || 1 },
       pitchMax, pipSpeed: hull.pipSpeed || 0.05, speedMax, minthrust: hull.minthrust || 50, jump,
+      repair: on.filter(p => p.g === 'rpl').reduce((a, p) => a + (p.size || 1), 0),
+      scanner: !!extra.scanner,
+      vp: { cargo: extra.cargo || 0, passengers: extra.passengers || 0, mining: !!extra.mining },
       power: { gen: Math.round(pgen * 100) / 100, draw: Math.round(draw * 100) / 100, notes: powerNotes }
     };
   }
