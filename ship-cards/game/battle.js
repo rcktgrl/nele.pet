@@ -7,17 +7,18 @@
    Numbers marked DESIGN are game rules, not Elite data. Pure logic: no DOM. Browser (window.Battle) and Node. */
 (function (root) {
   'use strict';
-  const ROUND = 5, DT = 0.5;
+  const ROUND = 3, DT = 0.5; // seconds per round (Sam: shorter rounds)
+  const PER5 = ROUND / 5;    // per-round values below were set for 5 s rounds; scale them so the per-second rate stays the same
   const ROWS = { 1: 500, 2: 1000, 3: 1500 }, ROW_NAME = { 1: 'Front', 2: 'Middle', 3: 'Back' };
   const RANGES = { short: 500, medium: 1000, long: 1500 };
-  const FSD_ROUNDS = 3;
+  const FSD_ROUNDS = 5;      // 15 s charge
   // DESIGN values
-  const VP = { cargoPer: 200, paxPer: 40, mining: 2, scan: 0.5, killPerPoint: 1 };
-  const SCAN_ROUNDS = 2, SCAN_HIT = 0.2;             // scanned targets are easier to hit
-  const REPAIR_PER_CLASS = 15;                       // hull per round per repair limpet controller class
+  const VP = { cargoPer: 200 / PER5, paxPer: 40 / PER5, mining: 2 * PER5, scan: 0.5 * PER5, killPerPoint: 1 };
+  const SCAN_ROUNDS = 3, SCAN_HIT = 0.2;             // scanned targets are easier to hit
+  const REPAIR_PER_CLASS = 15 * PER5;                       // hull per round per repair limpet controller class
   const REGEN_SEQ_HEAL = 1.0;                        // shield MJ restored per point of beam damage
   const CONCORDANT_REGEN = 2.0;                      // friendly shield regen multiplier while being hit
-  const FIGHTER_RELAUNCH = 2;                        // rounds until a replacement fighter launches
+  const FIGHTER_RELAUNCH = 3;                        // rounds until a replacement fighter launches
   const HULL_SIZE = { 0: 15, 1: 40, 2: 70, 3: 130 }; // metres; 0 = fighter
   const MOUNT_TRACK = { fixed: 1, gimbal: 0.7, turret: 0.7 };
 

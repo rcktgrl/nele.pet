@@ -92,7 +92,7 @@ label.inline{display:flex;gap:6px;align-items:center;font-size:13px}
 <div class="wrap">
   <header>
     <h1>Fleet <span>Battle</span></h1>
-    <p class="sub"><a href="index.html">See all cards</a> · Prototype v2. Deploy ships into rows (Front 500 m, Middle 1000 m, Back 1500 m; two ships fight at the distance of the one further back). Each turn you deploy one ship, move ships one row and give orders, then everything on the table fights for 5 seconds with Elite's numbers. Win by reaching the victory points or by removing the enemy fleet.</p>
+    <p class="sub"><a href="index.html">See all cards</a> · Prototype v2. Deploy ships into rows (Front 500 m, Middle 1000 m, Back 1500 m; two ships fight at the distance of the one further back). Each turn you deploy one ship, move ships one row and give orders, then everything on the table fights for 3 seconds with Elite's numbers. Win by reaching the victory points or by removing the enemy fleet.</p>
   </header>
 
   <section id="setup" class="panel">
@@ -222,7 +222,7 @@ function controls(){
     if(u.fighters) h+=`<p class="small">Fighters: ${esc(Battle.FIGHTER_TYPES[u.fighters.type].name)} · ${u.fighters.spare} in the hangar${u.fighters.cooldown?` · next launch in ${u.fighters.cooldown} round(s)`:''}</p>`;
   }
   const n=Object.values(orders.units).filter(o=>Object.keys(o).length).length;
-  h+=`<p class="small">Changes this turn: ${orders.deploy?'1 deployment, ':''}${n} ship order${n===1?'':'s'}.</p><button class="btn primary" id="end">End turn and fight 5 s</button>`;
+  h+=`<p class="small">Changes this turn: ${orders.deploy?'1 deployment, ':''}${n} ship order${n===1?'':'s'}.</p><button class="btn primary" id="end">End turn and fight ${Battle.ROUND} s</button>`;
   $('controls').innerHTML=h;
   const C=$('controls');
   C.querySelectorAll('[data-dep]').forEach(b=>b.onclick=()=>{const r=+b.dataset.dep;orders.deploy=r?{id:u.id,row:r}:null;controls()});
