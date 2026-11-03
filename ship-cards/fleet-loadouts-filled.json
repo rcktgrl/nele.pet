@@ -420,66 +420,6 @@
      "Level": 1,
      "Quality": 1
     }
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint1",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint2",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint3",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint4",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint5",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint1",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint2",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint3",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint4",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -902,36 +842,6 @@
      "Level": 3,
      "Quality": 0.66
     }
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint2",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint3",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint1",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint2",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -1138,66 +1048,6 @@
      "Level": 2,
      "Quality": 1
     }
-   },
-   {
-    "Slot": "largehardpoint1",
-    "Item": "hpt_multicannon_gimbal_large",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "largehardpoint2",
-    "Item": "hpt_multicannon_gimbal_large",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint2",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint3",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint4",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint1",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint2",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint3",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint4",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -1398,30 +1248,6 @@
     "Item": "lakonminer_armour_grade1",
     "On": true,
     "Priority": 1
-   },
-   {
-    "Slot": "largehardpoint1",
-    "Item": "hpt_multicannon_gimbal_large",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint2",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint1",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -1699,66 +1525,6 @@
      "Level": 4,
      "Quality": 0.67
     }
-   },
-   {
-    "Slot": "largehardpoint1",
-    "Item": "hpt_multicannon_gimbal_large",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint2",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint1",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint2",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint3",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint4",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot101_size3",
-    "Item": "int_shieldgenerator_size3_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot102_size2",
-    "Item": "int_cargorack_size2_class1",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot103_size2",
-    "Item": "int_cargorack_size2_class1",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -1883,24 +1649,6 @@
     "On": true,
     "Priority": 1,
     "Value": 80320
-   },
-   {
-    "Slot": "tinyhardpoint1",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint2",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot101_size1",
-    "Item": "int_hullreinforcement_size1_class2",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -2475,48 +2223,6 @@
     "Item": "asp_armour_grade1",
     "On": true,
     "Priority": 1
-   },
-   {
-    "Slot": "slot101_size6",
-    "Item": "int_hullreinforcement_size5_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot102_size3",
-    "Item": "int_hullreinforcement_size3_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot103_size3",
-    "Item": "int_hullreinforcement_size3_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot104_size3",
-    "Item": "int_hullreinforcement_size3_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot105_size2",
-    "Item": "int_hullreinforcement_size2_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot106_size2",
-    "Item": "int_hullreinforcement_size2_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot107_size1",
-    "Item": "int_hullreinforcement_size1_class2",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -2672,24 +2378,6 @@
     "Item": "cobramkiii_armour_grade1",
     "On": true,
     "Priority": 1
-   },
-   {
-    "Slot": "slot101_size4",
-    "Item": "int_hullreinforcement_size4_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot102_size2",
-    "Item": "int_hullreinforcement_size2_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot103_size2",
-    "Item": "int_hullreinforcement_size2_class2",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -2870,36 +2558,6 @@
      "Level": 4,
      "Quality": 0.498
     }
-   },
-   {
-    "Slot": "largehardpoint1",
-    "Item": "hpt_multicannon_gimbal_large",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "largehardpoint2",
-    "Item": "hpt_multicannon_gimbal_large",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "largehardpoint3",
-    "Item": "hpt_multicannon_gimbal_large",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint2",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -3069,24 +2727,6 @@
      "Level": 3,
      "Quality": 1
     }
-   },
-   {
-    "Slot": "slot101_size2",
-    "Item": "int_hullreinforcement_size2_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot102_size1",
-    "Item": "int_hullreinforcement_size1_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot103_size1",
-    "Item": "int_hullreinforcement_size1_class2",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -3298,12 +2938,6 @@
      "Level": 3,
      "Quality": 0.86
     }
-   },
-   {
-    "Slot": "tinyhardpoint4",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -3515,18 +3149,6 @@
      "Level": 3,
      "Quality": 1
     }
-   },
-   {
-    "Slot": "hugehardpoint1",
-    "Item": "hpt_beamlaser_fixed_huge",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint6",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -3702,36 +3324,6 @@
      "Level": 3,
      "Quality": 1
     }
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint2",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint3",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint1",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint2",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -3903,36 +3495,6 @@
     "Item": "cobramkiv_armour_grade1",
     "On": true,
     "Priority": 1
-   },
-   {
-    "Slot": "slot101_size4",
-    "Item": "int_hullreinforcement_size4_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot102_size4",
-    "Item": "int_hullreinforcement_size4_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot103_size3",
-    "Item": "int_hullreinforcement_size3_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot104_size2",
-    "Item": "int_hullreinforcement_size2_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot105_size2",
-    "Item": "int_hullreinforcement_size2_class2",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -4077,36 +3639,6 @@
      "Level": 5,
      "Quality": 0.956
     }
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint1",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "smallhardpoint2",
-    "Item": "hpt_pulselaserburst_gimbal_small",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint1",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint2",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -4314,48 +3846,6 @@
      "Level": 4,
      "Quality": 0.474
     }
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint2",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint3",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint4",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint5",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot101_size6",
-    "Item": "int_fuelscoop_size4_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot102_size4",
-    "Item": "int_cargorack_size4_class1",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -4864,102 +4354,6 @@
      "Level": 2,
      "Quality": 0.832
     }
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint2",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint3",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint1",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint2",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint3",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint4",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint5",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint6",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot101_size7",
-    "Item": "int_hullreinforcement_size5_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot102_size6",
-    "Item": "int_hullreinforcement_size5_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot103_size5",
-    "Item": "int_hullreinforcement_size5_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "military04",
-    "Item": "int_guardianshieldreinforcement_size5_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "military05",
-    "Item": "int_guardianshieldreinforcement_size5_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot106_size4",
-    "Item": "int_hullreinforcement_size4_class2",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot107_size4",
-    "Item": "int_hullreinforcement_size4_class2",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -5304,12 +4698,6 @@
      "Level": 4,
      "Quality": 0.34
     }
-   },
-   {
-    "Slot": "tinyhardpoint1",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
    }
   ]
  },
@@ -6041,108 +5429,6 @@
      "Level": 1,
      "Quality": 1
     }
-   },
-   {
-    "Slot": "largehardpoint1",
-    "Item": "hpt_multicannon_gimbal_large",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint1",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint2",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint3",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint4",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint5",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "mediumhardpoint6",
-    "Item": "hpt_multicannon_gimbal_medium",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint3",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint4",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint5",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "tinyhardpoint6",
-    "Item": "hpt_shieldbooster_size0_class5",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot101_size6",
-    "Item": "int_cargorack_size6_class1",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot102_size5",
-    "Item": "int_cargorack_size5_class1",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot103_size5",
-    "Item": "int_cargorack_size5_class1",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot104_size4",
-    "Item": "int_cargorack_size4_class1",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot105_size4",
-    "Item": "int_cargorack_size4_class1",
-    "On": true,
-    "Filled": true
-   },
-   {
-    "Slot": "slot106_size3",
-    "Item": "int_cargorack_size3_class1",
-    "On": true,
-    "Filled": true
    }
   ]
  }

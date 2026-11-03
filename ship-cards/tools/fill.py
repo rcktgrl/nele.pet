@@ -26,6 +26,7 @@ def role(s):
 report=[]
 for s in fleet:
     e=empties(s)
+    if s['ShipName'].strip().lower() not in ('efs odin','efs anubis'): continue
     if not e: continue
     hp,ints=e
     if not hp and not ints: continue
