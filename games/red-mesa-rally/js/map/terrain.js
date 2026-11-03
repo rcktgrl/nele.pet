@@ -46,6 +46,15 @@ class Terrain {
     yield 'Running the river';
     carveRiver(this);
     this.bridges = findBridges(this);
+    // the road the deck replaced is not painted down on the cut-away ground under it (no asphalt, verge or markings there)
+    this.underDeck = new Uint8Array(Nx * Nz);
+    // over water the bank under the deck is bare ground too, not the town's paving (roads that really pass underneath keep theirs)
+    for (const B of this.bridges) { const own = this.routes.findIndex((R) => R.id === B.route) + 1; for (const p of B.pieces) for (let u = 0; u <= p.Lt; u += 1) for (let v = -p.hw - 3; v <= p.hw + 3; v += 1) {
+      const x = p.x + p.dx * u - p.dz * v, z = p.z + p.dz * u + p.dx * v, gi = this.gi(x, z);
+      if (this.h[gi] >= Math.min(p.y0, p.y1) - 1.5) continue;
+      if (this.rown[gi] === own) { this.underDeck[gi] = 1; this.road[gi] = 0; this.asph[gi] = 0; this.rlanes[gi] = 0; }
+      else if (B.wet && !(this.rown[gi] && this.rdist[gi] < this.rhw[gi] + 3)) this.underDeck[gi] = 1;
+    } }
     this.village = planVillage(this);
     yield 'Paving Port Calder';
     for (let iz = 0; iz < Nz; iz++) for (let ix = 0; ix < Nx; ix++) {
@@ -53,11 +62,11 @@ class Terrain {
       if (x < 1100) continue;
       const b = biomeAt(x, z, this.h[i]);
       this.green[i] = b.green * 255; this.beach[i] = b.beach * 255; this.forest[i] = b.forest * 255;
-      this.city[i] = DISTRICT.cell(x, z) * 255;
+      this.city[i] = this.underDeck[i] ? 0 : DISTRICT.cell(x, z) * 255;
       // the town's own streets keep a sidewalk and a grass verge on their outer side too, where the district ends at the kerb
       // (tagged with a trace of beach so the shader can trim the verge to a clean line along the kerb)
       let verge = false;
-      if (!this.city[i] && this.rown[i] && this.rdist[i] < this.rhw[i] + 12) { const O = this.routes[this.rown[i] - 1]; if (O.def.dist || /^(st|ring|cul)-/.test(O.id)) { this.city[i] = 150; verge = true; } }
+      if (!this.city[i] && !this.underDeck[i] && this.rown[i] && this.rdist[i] < this.rhw[i] + 12) { const O = this.routes[this.rown[i] - 1]; if (O.def.dist || /^(st|ring|cul)-/.test(O.id)) { this.city[i] = 150; verge = true; } }
       if (this.city[i]) { if (!verge) this.green[i] = this.city[i] < 200 ? 230 : 40; this.beach[i] = verge ? 1 : 0; }
     }
     // the finale reuses existing roads end to end
@@ -154,8 +163,9 @@ class Terrain {
   height(x, z) {
     const bf = this.boreFloor(x, z); if (bf !== null) return bf;
     const h = this.heightGrid(this.h, x, z);
+    if (this.probeY < RIVER.tunnel.under && this.riverTunWet(x, z)) return Math.min(h, RIVER.tunnel.bed); // in the boat tunnel's water lane
     const tk = this.riverTunAt(x, z);
-    if (tk) { const M = this.riverTun; if (M.mask[tk - 1] === 1 && this.probeY < RIVER.tunnel.under) return RIVER.tunnel.bed; return this.ovGrid ? this.overlayHeight(x, z, M.top[tk - 1]) : M.top[tk - 1]; } // decks still pass over the lid
+    if (tk) { const M = this.riverTun; if (this.probeY < RIVER.tunnel.under) return RIVER.tunnel.bed; /* down at the water the walls are colliders (World.addBridgeWalls), not a step up to the lid */ return this.ovGrid ? this.overlayHeight(x, z, M.top[tk - 1]) : M.top[tk - 1]; } // decks still pass over the lid
     if (x < CITY.x0 - 30) return this.ovGrid ? this.overlayHeight(x, z, h) : h;
     if (this.metro) { const f = this.subFloor(x, z); if (f !== null) return f; }
     return this.ovGrid ? this.overlayHeight(x, z, h) : h;
@@ -164,6 +174,12 @@ class Terrain {
   inRiverTunnel(x, z) { const k = this.riverTunAt(x, z); return k > 0 && this.riverTun.mask[k - 1] === 1; }
   /* the water surface over (x, z): the mountain stream's own level above the dam, else the sea-level plane */
   waterY(x, z) { const w = this.upWater && this.upWater.get(this.gi(x, z)); return w === undefined ? WATER_Y : w; }
+  /* in the boat tunnel's water lane, from just outside one mouth to just outside the other */
+  riverTunWet(x, z) {
+    const M = this.riverTun; if (!M) return false;
+    const i = Math.round((x - M.x0) / M.G), j = Math.round((z - M.z0) / M.G);
+    return i >= 0 && j >= 0 && i < M.nx && j < M.nz && M.wet[j * M.nx + i] === 1;
+  }
   /* 1 + the cell index when (x, z) is under the boat tunnel's lid, else 0 */
   riverTunAt(x, z) {
     const M = this.riverTun; if (!M) return 0;
@@ -484,7 +500,9 @@ class Terrain {
         const j = R.idx(i + 1);
         const ax = R.x[i], az = R.z[i], bx = R.x[j], bz = R.z[j];
         if (R.bore && R.covered.subarray(Math.max(0, i - 4), j + 5).includes(1)) { // the floor runs out under the cut, past where the lid's 4 m cells reach
-          this.stampBore(ax, az, R.y[i], bx, bz, R.y[j], hw + 1.2, isR);
+          // deep inside, the floor reaches well past the walls (which sit at hw + 1.55): a corner of a car shoved against the wall
+          // must still find the floor, not the mountain over the bore, or the hull contact throws the car up onto the hillside
+          this.stampBore(ax, az, R.y[i], bx, bz, R.y[j], R.bore[i] && R.bore[j] ? hw + 6 : hw + 1.2, isR);
           if (R.bore[i] && R.bore[j]) continue;
         }
         const cx = Math.round((ax - x0) / c), cz = Math.round((az - z0) / c);

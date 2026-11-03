@@ -281,7 +281,7 @@ class Gfx {
     fl.position.copy(this.bonfire).add(new THREE.Vector3(0, 2, 0)); g.add(fl);
   }
   makeArch(x, z, yaw, label, colA) {
-    const T = this.world.terrain, g = new THREE.Group(), y = T.height(x, z);
+    const T = this.world.terrain, g = new THREE.Group(), y = Math.max(T.height(x, z), T.waterY(x, z)); // over the river: stand on the water, not the bed
     const towerMat = new THREE.MeshStandardMaterial({ color: 0x1b1714, roughness: 0.6, metalness: 0.4 });
     for (const s of [-1, 1]) { const t = new THREE.Mesh(new THREE.BoxGeometry(1.1, 9, 1.1), towerMat); t.position.set(s * 11, 4.5, 0); t.castShadow = true; g.add(t); }
     const banner = new THREE.Mesh(new THREE.BoxGeometry(23, 2.6, 0.4), [towerMat, towerMat, towerMat, towerMat, new THREE.MeshStandardMaterial({ map: label || this.bannerTex, roughness: 0.7 }), new THREE.MeshStandardMaterial({ map: label || this.bannerTex, roughness: 0.7 })]);
@@ -290,7 +290,7 @@ class Gfx {
     return g;
   }
   makeGate(x, z, yaw, color) {
-    const T = this.world.terrain, g = new THREE.Group(), y = T.height(x, z);
+    const T = this.world.terrain, g = new THREE.Group(), y = Math.max(T.height(x, z), T.waterY(x, z)); // over the river: stand on the water, not the bed
     const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, emissive: new THREE.Color(color).multiplyScalar(0.15) });
     const arch = new THREE.Mesh(new THREE.TorusGeometry(9.5, 0.75, 10, 32, Math.PI), mat);
     arch.castShadow = true; g.add(arch);

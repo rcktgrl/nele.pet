@@ -61,7 +61,7 @@ class City {
       let lo = 1e9, hi = -1e9;
       const ok = footprint(x, z, yaw, w, d, m, (px, pz) => {
         const gi = T.gi(px, pz), k = oi(px, pz);
-        if (k < 0 || occ[k] || vm[gi] || T.river[gi] || T.rail[gi] > 0 || T.rdist[gi] < T.rhw[gi] + walk - m - 1 || green(px, pz)) return false;
+        if (k < 0 || occ[k] || vm[gi] || T.river[gi] || T.riverTunAt(px, pz) || T.rail[gi] > 0 || T.rdist[gi] < T.rhw[gi] + walk - m - 1 || green(px, pz)) return false;
         const y = T.h[gi]; if (y < WATER_Y + 1.2) return false; lo = Math.min(lo, y); hi = Math.max(hi, y);
       });
       return ok && hi - lo < 3 ? [lo, hi] : null;

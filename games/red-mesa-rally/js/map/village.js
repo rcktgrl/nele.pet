@@ -33,7 +33,7 @@ function planVillage(T) {
     const c = Math.cos(yaw), s = Math.sin(yaw); let lo = 1e9, hi = -1e9;
     for (const [a, b] of [[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1], [0, -1], [0, 1]]) {
       const lx = a * (w / 2 + 2), lz = b * (d / 2 + 2), px = x + lx * c + lz * s, pz = z - lx * s + lz * c, gi = T.gi(px, pz);
-      if (T.rdist[gi] < clear || T.river[gi] || T.rail[gi] > 0) return null;
+      if (T.rdist[gi] < clear || T.river[gi] || T.riverTunAt(px, pz) || T.rail[gi] > 0) return null;
       const y = T.h[gi]; if (y < WATER_Y + 1.2) return null; lo = Math.min(lo, y); hi = Math.max(hi, y);
     }
     return hi - lo < 3 ? [lo, hi] : null;

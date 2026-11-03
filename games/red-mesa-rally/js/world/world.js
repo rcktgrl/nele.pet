@@ -188,6 +188,13 @@ class World {
       }
       for (const q of B.piers) { const o = S.addObstacle(q.x, q.z, B.rail ? 1.6 : 1.1, q.top, 'barrier'); o.bot = q.bot; }
     }
+    // the boat tunnel's side walls: real walls down at the water, so a boat glances off them instead of being lifted onto the lid
+    const U = RIVER.tunnel;
+    for (let i = 0; i < U.pts.length - 1; i++) {
+      if (U.s[i] < U.open[0] || U.s[i + 1] > U.open[1]) continue;
+      const [ax, az] = U.pts[i], [bx, bz] = U.pts[i + 1], L = Math.hypot(bx - ax, bz - az) || 1, nx = -(bz - az) / L, nz = (bx - ax) / L;
+      for (const l of [-U.hw, U.hw]) { const o = S.addSegment(ax + nx * l, az + nz * l, bx + nx * l, bz + nz * l, U.ceil, 'barrier'); o.r = 0.4; o.bot = U.bed - 1; o.tunWall = true; }
+    }
   }
   /* Millbrook: every house a solid box */
   addVillage() {
@@ -218,10 +225,10 @@ class World {
   addQuays() {
     const S = this.scatter, top = CITY.y - 1.2, zq = FLAT.z1 + 1.2, xq = FLAT.x1 + 1.2;
     const south = [[4150, SLIP.x - SLIP.hw - 0.6], [SLIP.x + SLIP.hw + 0.6, xq]];
-    // the quay edge in 4 m pieces, open wherever a road runs across it (the coast road's bridge at the river mouth)
+    // the quay edge in 4 m pieces, open wherever a road runs across it (the coast road's bridge at the river mouth) or the river runs out through it
     const roads = this.terrain.routes.filter((R) => !R.def.noCarve && !R.def.trafficOnly && R.surface !== 'rail');
     const onRoad = (x, z) => roads.some((R) => R.project(x, z, 0, -1).dist < R.width / 2 + 1.5);
-    const edge = (ax, az, bx, bz) => { if (onRoad((ax + bx) / 2, (az + bz) / 2)) return; const o = S.addSegment(ax, az, bx, bz, top, 'barrier'); o.r = 0.8; };
+    const T = this.terrain, edge = (ax, az, bx, bz) => { const mx = (ax + bx) / 2, mz = (az + bz) / 2; if (onRoad(mx, mz) || T.river[T.gi(mx, mz)]) return; const o = S.addSegment(ax, az, bx, bz, top, 'barrier'); o.r = 0.8; };
     for (const [a, b] of south) for (let x = a; x < b; x += 4) edge(x, zq, Math.min(b, x + 4), zq);
     for (let z = -760; z < zq; z += 4) edge(xq, z, xq, Math.min(zq, z + 4));
     for (const sd of [-1, 1]) { const o = S.addSegment(SLIP.x + sd * (SLIP.hw + 0.6), zq, SLIP.x + sd * (SLIP.hw + 0.6), SLIP.z1, top - 1.5, 'barrier'); o.r = 0.6; }
@@ -450,12 +457,13 @@ class World {
     const sph = [];
     for (const c of this.cars) {
       if (c.asleep || c.remote) continue;
+      const inTun = c.pos.y < RIVER.tunnel.under && this.terrain.riverTunWet(c.pos.x, c.pos.z); // in the boat tunnel: all but its walls is up on the lid
       c.spheres(sph);
       const hitThisStep = new Set();
       for (const s of sph) {
         const list = S.near(s.p.x, s.p.z);
         if (list) for (const o of list) {
-          if (o.off || s.p.y - s.r > o.top || (o.bot !== undefined && s.p.y + s.r < o.bot) || !o.sub !== !c.under) continue;
+          if (o.off || (inTun && !o.tunWall) || s.p.y - s.r > o.top || (o.bot !== undefined && s.p.y + s.r < o.bot) || !o.sub !== !c.under) continue;
           let nx, nz, pen, cx, cz;
           if (o.type === 1) {
             cx = clamp(s.p.x, o.x0, o.x1); cz = clamp(s.p.z, o.z0, o.z1);

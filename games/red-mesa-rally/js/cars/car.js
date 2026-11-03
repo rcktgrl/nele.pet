@@ -38,7 +38,8 @@ class Car {
     if (y !== undefined && T.probeY !== y + 1) { T.probe(y + 1, () => this.reset(x, z, yaw, T, lift)); this.under = y + 1 < METRO.under && T.metroAt(x, z) > 0; return; }
     const sp = this.spec;
     if (sp.boat) { // afloat (or sat on the slipway) at ride height
-      this.pos.set(x, Math.max(T.height(x, z) + 0.6, WATER_Y + sp.boat.ride) + lift * 0.3, z);
+      const g = T.riverTunAt(x, z) || T.riverTunWet(x, z) ? T.probe(WATER_Y, () => T.height(x, z)) : T.height(x, z); // in the boat tunnel: back on its water, not up on the lid
+      this.pos.set(x, Math.max(g + 0.6, WATER_Y + sp.boat.ride) + lift * 0.3, z);
       this.q.setFromAxisAngle(new V3(0, 1, 0), yaw); this.boatYaw = yaw;
       this.vel.set(0, 0, 0); this.w.set(0, 0, 0);
       this.heat = Math.min(this.heat, 0.3); this.invuln = 3; this.wrecked = false; this.wreckT = 0; this.gear = 1; this.reverse = false; this.rpm = sp.engine.idle; this.airTime = 0;
@@ -369,6 +370,8 @@ class Car {
       const gy = T.height(p.x, p.z);
       const pen = gy - p.y;
       if (pen <= 0) continue;
+      // in a bore, a corner poking past the floor's edge is pressed against the wall (a collider), not under ground to climb out of
+      if (pen > 2 && T.bores && T.boreFloor(this.pos.x, this.pos.z) !== null && T.boreFloor(p.x, p.z) === null) continue;
       T.normal(p.x, p.z, n);
       const penN = pen * n.y;
       r.subVectors(p, this.pos);
