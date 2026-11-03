@@ -169,7 +169,7 @@ $('pickdone').onclick=()=>{
 function unitTile(u){
   const c=u.c,shMax=c.shield?c.shield.max:0,t=u.target&&Battle.get(G,u.target);
   const st=u.status==='destroyed'?'DESTROYED':u.status==='jumped'?'JUMPED':u.status==='charging'?`FSD ${u.fsd}`:u.status==='reserve'?'RESERVE':(u.broken&&shMax?'SHIELDS DOWN':'');
-  const ord=onTableU(u)&&t?`${u.order==='attack'?'→':u.order==='scan'?'scan':u.order==='heal'?'heal':'repair'} ${esc(Battle.name(t))}`:'';
+  const ord=onTableU(u)&&t?`${u.order==='attack'?'→':u.order==='scan'?'scan':u.order==='heal'?'heal':'repair'} ${esc(Battle.name(t))}`:(onTableU(u)&&u.order==='hold'?'holding fire':'');
   const pend=orders&&orders.units[u.id];
   const isT=targeting&&targetOk(u);
   return `<button class="u ${u.owner} ${u.kind==='fighter'?'fighter':''}${sel===u.id?' sel':''}${isT?' targetable':''}${u.status==='destroyed'||u.status==='jumped'?' dead':''}" data-id="${esc(u.id)}">
@@ -213,10 +213,11 @@ function controls(){
     const o=ensure(u),pips=o.pips||u.pips,row=o.row||u.row,ord=o.order||u.order,tgtId='target' in o?o.target:u.target,tgt=tgtId&&Battle.get(G,tgtId);
     h+=`<p class="small"><b>${esc(Battle.name(u))}</b> in the ${Battle.ROW_NAME[u.row]} row.${u.status==='charging'?' FSD charging: it cannot move.':''}</p>`;
     if(u.kind==='ship'&&u.status!=='charging') h+=`<div class="row"><span class="small">Move:</span>${[u.row-1,u.row,u.row+1].filter(r=>r>=1&&r<=3).map(r=>`<button class="btn" data-row="${r}" aria-pressed="${row===r}">${r===u.row?'Stay':Battle.ROW_NAME[r]}</button>`).join('')}</div>`;
-    h+=`<div class="pips">${pipsUI(pips)}</div><p class="small">Gold bar under hull = weapons capacitor. Beams drain it fast: more WEP pips refill it quicker.</p><p class="small">Pips ${pips.join('/')} · turn rate ${Battle.pitchAt(u.c,pips[1]).toFixed(0)}°/s · ${Math.round(Battle.speedAt(u.c,pips[1]))} m/s</p>`;
-    const opts=[['attack','Attack',u.c.weapons.length],['heal','Heal shields',u.c.weapons.some(w=>w.heal)],['repair','Repair hull',u.c.repair],['scan','Scan',u.c.scanner]].filter(x=>x[2]);
+    h+=`<div class="pips">${pipsUI(pips)}</div><p class="small">Hold fire stops shooting so the capacitor refills. Gold bar under hull = weapons capacitor. Beams drain it fast: more WEP pips refill it quicker.</p><p class="small">Pips ${pips.join('/')} · turn rate ${Battle.pitchAt(u.c,pips[1]).toFixed(0)}°/s · ${Math.round(Battle.speedAt(u.c,pips[1]))} m/s</p>`;
+    const opts=[['attack','Attack',u.c.weapons.length],['hold','Hold fire',u.c.weapons.length],['heal','Heal shields',u.c.weapons.some(w=>w.heal)],['repair','Repair hull',u.c.repair],['scan','Scan',u.c.scanner]].filter(x=>x[2]);
     h+=`<div class="row">${opts.map(([k,l])=>`<button class="btn" data-ord="${k}" aria-pressed="${ord===k}">${l}</button>`).join('')}</div>`;
     h+=`<p class="small">Target: <b>${tgt?esc(Battle.name(tgt)):'nearest enemy'}</b> <button class="btn" id="pickT">${targeting?'Tap a ship on the table…':'Choose target'}</button></p>`;
+    if(u.kind==='ship'&&u.status==='deployed'){const back=(o.row||u.row)===3;h+=`<label class="inline"><input type="checkbox" id="retreat" ${o.retreat?'checked':''} ${back?'':'disabled'}> Disengage: back to the reserve after this round${back?'':' (move to the Back row first)'}</label>`;}
     if(u.kind==='ship'&&u.status==='deployed') h+=`<label class="inline"><input type="checkbox" id="jump" ${o.jump?'checked':''}> Charge FSD and jump out (${Battle.FSD_ROUNDS} rounds)</label>`;
     if(u.fighters) h+=`<p class="small">Fighters: ${esc(Battle.FIGHTER_TYPES[u.fighters.type].name)} · ${u.fighters.spare} in the hangar${u.fighters.cooldown?` · next launch in ${u.fighters.cooldown} round(s)`:''}</p>`;
   }
@@ -232,6 +233,7 @@ function controls(){
     o.pips=p;controls()});
   const pt=$('pickT');if(pt)pt.onclick=()=>{const o=ensure(u),ord=o.order||u.order;targeting=targeting?null:(ord==='heal'||ord==='repair'?'friend':'enemy');render();controls()};
   const j=$('jump');if(j)j.onchange=()=>{ensure(u).jump=j.checked};
+  const rt=$('retreat');if(rt)rt.onchange=()=>{ensure(u).retreat=rt.checked};
   $('end').onclick=()=>finish(orders);
 }
 function onBoard(e){const t=e.target.closest('.u');if(!t||busy||G.winner)return;const u=Battle.get(G,t.dataset.id);if(!u)return;

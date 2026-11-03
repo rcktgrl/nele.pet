@@ -154,6 +154,10 @@
       if (o.pips && validPips(o.pips)) u.pips = o.pips.slice();
       if (o.order) u.order = o.order;
       if ('target' in o) u.target = o.target;
+      if (o.retreat && u.kind === 'ship' && u.status === 'deployed') {
+        if (u.row === 3) { u.retreating = true; ev.push(`${name(u)} disengages and pulls back.`); }
+        else ev.push(`${name(u)} can only disengage from the Back row.`);
+      }
       if (o.jump && u.status === 'deployed' && u.kind === 'ship') { u.status = 'charging'; u.fsd = FSD_ROUNDS; ev.push(`${name(u)} starts charging its FSD.`); }
     }
     return ev;
@@ -203,6 +207,7 @@
       for (const u of table) u.concordant = false;
       for (const u of table) {
         if (u.hull <= 0 || u.status === 'jumped') continue;
+        if (u.order === 'hold') { u.wepCap = Math.min(u.c.pd.wepcap, u.wepCap + wepRecharge(u.c.pd, u.pips[2]) * DT); continue; } // weapons cold: capacitor refills
         const tg = validTarget(g, u);
         if (!tg || tg.hull <= 0) continue;
         if (u.order === 'attack' || u.order === 'heal') {
@@ -222,6 +227,9 @@
         if (u.kind === 'ship') { const foe = u.owner === 'A' ? 'B' : 'A'; g.vp[foe] += u.card.cost * VP.killPerPoint; }
         if (u.kind === 'fighter') { const p = get(g, u.parent); if (p && p.fighters) { p.fighters.active = null; p.fighters.cooldown = FIGHTER_RELAUNCH; } }
         if (u.fighters && u.fighters.active) { const f = get(g, u.fighters.active); if (f && onTable(f)) { f.status = 'destroyed'; ev.push(`${name(f)} is lost with its carrier.`); } }
+      } else if (u.retreating) {
+        u.retreating = false; u.status = 'reserve'; u.row = 3; ev.push(`${name(u)} returns to the reserve.`);
+        if (u.fighters && u.fighters.active) { const f = get(g, u.fighters.active); if (f && onTable(f)) { f.status = 'jumped'; u.fighters.spare++; u.fighters.active = null; ev.push(`${name(f)} docks with its carrier.`); } }
       } else if (u.status === 'charging') {
         u.fsd--; if (u.fsd <= 0) { u.status = 'jumped'; ev.push(`${name(u)} jumps out.`);
           if (u.fighters && u.fighters.active) { const f = get(g, u.fighters.active); if (f) f.status = 'jumped'; } }
@@ -269,7 +277,10 @@
     for (const u of mine.filter(onTable)) {
       const o = {};
       const isCombat = u.c.weapons.length && (u.kind === 'fighter' || u.card.mainRole === 'combat');
-      if (u.kind === 'ship' && u.hull < u.c.armour.max * 0.2 && u.status === 'deployed' && living(g, owner).length > 1) { o.jump = true; }
+      if (u.kind === 'ship' && u.status === 'deployed' && u.hull < u.c.armour.max * 0.35 && living(g, owner).length > 1) {
+        if (u.row === 3) { o.retreat = true; o.order = 'hold'; orders.units[u.id] = o; continue; }
+        o.row = u.row + 1; o.pips = [4, 2, 0]; orders.units[u.id] = o; continue;
+      }
       if (isCombat) {
         const want = bestRow(u.c); if (want !== u.row) o.row = u.row + Math.sign(want - u.row);
         o.pips = u.broken && u.c.shield ? [4, 1, 1] : [2, 1, 3];
