@@ -9,7 +9,8 @@
   'use strict';
   const ROUND = 3, DT = 0.5; // seconds per round (Sam: shorter rounds)
   const PER5 = ROUND / 5;    // per-round values below were set for 5 s rounds; scale them so the per-second rate stays the same
-  const ROWS = { 1: 500, 2: 1000, 3: 1500 }, ROW_NAME = { 1: 'Front', 2: 'Middle', 3: 'Back' };
+  const ROWS = { 1: 500, 2: 1000, 3: 1500, 4: 3500 }, ROW_NAME = { 1: 'Front', 2: 'Middle', 3: 'Back', 4: 'Standoff' };
+  const STANDOFF = 4; // out of the fight: no enemy fire either way, but friendly beams and limpets can reach the Back row (Sam)
   const RANGES = { short: 500, medium: 1000, long: 1500 };
   const FSD_ROUNDS = 5;      // 15 s charge
   // DESIGN values
@@ -74,7 +75,8 @@
   const get = (g, id) => g.units.find(u => u.id === id);
   const onTable = u => u.status === 'deployed' || u.status === 'charging';
   const living = (g, owner) => g.units.filter(u => u.owner === owner && u.kind === 'ship' && u.status !== 'destroyed' && u.status !== 'jumped');
-  const distance = (a, b) => ROWS[Math.max(a.row, b.row)];
+  const distance = (a, b) => (a.row === STANDOFF || b.row === STANDOFF) ? Infinity : ROWS[Math.max(a.row, b.row)]; // enemies
+  const friendDistance = (a, b) => Math.max(500, Math.abs(ROWS[a.row] - ROWS[b.row]));
 
   // ---------- combat maths ----------
   function falloffFactor(w, metres) {
@@ -100,7 +102,8 @@
   function fireStep(src, dst) {
     const c = src.c; if (!c.weapons.length || !dst) return { shield: 0, hull: 0, healed: 0 };
     const friendly = src.owner === dst.owner;
-    const metres = friendly ? ROWS[Math.max(1, Math.abs(src.row - dst.row) + 1)] : distance(src, dst);
+    const metres = friendly ? friendDistance(src, dst) : distance(src, dst);
+    if (!isFinite(metres)) return { shield: 0, hull: 0, healed: 0 };
     const active = friendly ? c.weapons.filter(w => w.heal) : c.weapons;
     const eps = active.reduce((a, w) => a + w.eps, 0);
     const recharge = wepRecharge(c.pd, src.pips[2]);
@@ -154,13 +157,13 @@
     }
     for (const [id, o] of Object.entries(orders.units || {})) {
       const u = get(g, id); if (!u || u.owner !== owner || !onTable(u)) continue;
-      if (o.row && Math.abs(o.row - u.row) === 1 && u.status !== 'charging') { u.row = o.row; ev.push(`${name(u)} moves to the ${ROW_NAME[u.row]} row.`); }
+      if (o.row && ROWS[o.row] && Math.abs(o.row - u.row) === 1 && u.status !== 'charging' && !(u.kind === 'fighter' && o.row === STANDOFF)) { u.row = o.row; ev.push(`${name(u)} moves to the ${ROW_NAME[u.row]} row.`); }
       if (o.pips && validPips(o.pips)) u.pips = o.pips.slice();
       if (o.order) u.order = o.order;
       if ('target' in o) u.target = o.target;
       if (o.retreat && u.kind === 'ship' && u.status === 'deployed') {
-        if (u.row === 3) { u.retreating = true; ev.push(`${name(u)} disengages and pulls back.`); }
-        else ev.push(`${name(u)} can only disengage from the Back row.`);
+        if (u.row === STANDOFF) { u.retreating = true; ev.push(`${name(u)} disengages.`); }
+        else ev.push(`${name(u)} can only disengage from the Standoff row.`);
       }
       if (o.jump && u.status === 'deployed' && u.kind === 'ship') { u.status = 'charging'; u.fsd = FSD_ROUNDS; ev.push(`${name(u)} starts charging its FSD.`); }
     }
@@ -171,12 +174,13 @@
 
   function validTarget(g, u) {
     const t = u.target && get(g, u.target);
-    if (u.order === 'attack' && t && t.owner !== u.owner && onTable(t)) return t;
-    if ((u.order === 'heal' || u.order === 'repair') && t && t.owner === u.owner && onTable(t) && t !== u) return t;
-    if (u.order === 'scan' && t && t.owner !== u.owner && onTable(t)) return t;
-    if (u.order !== 'attack') return null;
-    // retarget: nearest enemy, then weakest
-    const foes = g.units.filter(x => x.owner !== u.owner && onTable(x));
+    if (u.order === 'attack' && t && t.owner !== u.owner && onTable(t) && isFinite(distance(u, t))) return t;
+    if (u.order === 'heal' && t && t.owner === u.owner && onTable(t) && t !== u) return t;
+    if (u.order === 'repair' && t && t.owner === u.owner && onTable(t) && t !== u && friendDistance(u, t) <= (u.c.repairRange || 0)) return t;
+    if (u.order === 'scan' && t && t.owner !== u.owner && onTable(t) && isFinite(distance(u, t))) return t;
+    if (u.order !== 'attack' || u.row === STANDOFF) return null;
+    // retarget: nearest enemy in reach, then weakest
+    const foes = g.units.filter(x => x.owner !== u.owner && onTable(x) && isFinite(distance(u, x)));
     if (!foes.length) return null;
     foes.sort((a, b) => distance(u, a) - distance(u, b) || (a.shield + a.hull) - (b.shield + b.hull));
     u.target = foes[0].id; return foes[0];
@@ -282,7 +286,7 @@
       const o = {};
       const isCombat = u.c.weapons.length && (u.kind === 'fighter' || u.card.mainRole === 'combat');
       if (u.kind === 'ship' && u.status === 'deployed' && u.hull < u.c.armour.max * 0.35 && living(g, owner).length > 1) {
-        if (u.row === 3) { o.retreat = true; o.order = 'hold'; orders.units[u.id] = o; continue; }
+        if (u.row === STANDOFF) { o.retreat = true; o.order = 'hold'; orders.units[u.id] = o; continue; }
         o.row = u.row + 1; o.pips = [4, 2, 0]; orders.units[u.id] = o; continue;
       }
       if (isCombat) {
@@ -295,7 +299,7 @@
         }
       } else {
         o.pips = [4, 2, 0];
-        if (u.row !== 3 && u.kind === 'ship') o.row = u.row + 1;
+        if (u.row < 3 && u.kind === 'ship') o.row = u.row + 1;
         const hurt = mine.filter(x => onTable(x) && x !== u && x.kind === 'ship').sort((a, b) => a.hull / a.c.armour.max - b.hull / b.c.armour.max)[0];
         if (u.c.repair && hurt && hurt.hull < hurt.c.armour.max) { o.order = 'repair'; o.target = hurt.id; }
         else if (u.c.scanner && foes.length) { o.order = 'scan'; o.target = foes.sort((a, b) => b.c.weapons.length - a.c.weapons.length)[0].id; }
@@ -309,7 +313,12 @@
     return orders;
   }
 
-  const api = { ROWS, ROW_NAME, RANGES, ROUND, FSD_ROUNDS, VP, FIGHTER_TYPES, ALL_PIPS, newGame, endTurn, aiOrders, living, onTable, distance, validPips,
+  function stateHash(g) { // compact fingerprint so both players can check they computed the same round
+    let h = 2166136261; const add = v => { const str = String(v); for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } };
+    for (const u of g.units) { add(u.id); add(u.status); add(u.row); add(Math.round(u.shield * 10)); add(Math.round(u.hull * 10)); }
+    add(Math.round(g.vp.A * 100)); add(Math.round(g.vp.B * 100)); add(g.round); return h.toString(16);
+  }
+  const api = { stateHash, STANDOFF, friendDistance, ROWS, ROW_NAME, RANGES, ROUND, FSD_ROUNDS, VP, FIGHTER_TYPES, ALL_PIPS, newGame, endTurn, aiOrders, living, onTable, distance, validPips,
     pitchAt, speedAt, hitChance, weaponDpsAt, sysResistance, get, name, setFighterDps: d => { FIGHTER_DPS = d; } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Battle = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -334,6 +334,7 @@
       pd: { wepcap: pd.wepcap || 10, weprate: pd.weprate || 1, syscap: pd.syscap || 10, sysrate: pd.sysrate || 1 },
       pitchMax, pipSpeed: hull.pipSpeed || 0.05, speedMax, minthrust: hull.minthrust || 50, jump,
       repair: on.filter(p => p.g === 'rpl').reduce((a, p) => a + (p.size || 1), 0),
+      repairRange: Math.max(0, ...on.filter(p => p.g === 'rpl').map(p => (p.m.range || 0) * 1000)), // limpet range from data (km → m)
       scanner: !!extra.scanner,
       vp: { cargo: extra.cargo || 0, passengers: extra.passengers || 0, mining: !!extra.mining },
       power: { gen: Math.round(pgen * 100) / 100, draw: Math.round(draw * 100) / 100, notes: powerNotes }
