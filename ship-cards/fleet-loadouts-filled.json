@@ -1,0 +1,6149 @@
+[
+ {
+  "Ship": "mandalay",
+  "ShipID": 130,
+  "ShipName": "Efs Eos",
+  "ShipIdent": "A05-T",
+  "ModulesValue": 35696089,
+  "Rebuy": 1784805,
+  "Modules": [
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_medium",
+    "On": true,
+    "Value": 47288,
+    "Engineering": {
+     "BlueprintName": "weapon_shortrange",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_distortion_field"
+    }
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_pulselaserburst_gimbal_medium",
+    "On": true,
+    "Value": 47288,
+    "Engineering": {
+     "BlueprintName": "weapon_shortrange",
+     "Level": 5,
+     "Quality": 0.2,
+     "ExperimentalEffect": "special_distortion_field"
+    }
+   },
+   {
+    "Slot": "mediumhardpoint3",
+    "Item": "hpt_pulselaserburst_gimbal_medium",
+    "On": true,
+    "Value": 47288,
+    "Engineering": {
+     "BlueprintName": "weapon_shortrange",
+     "Level": 5,
+     "Quality": 0.4,
+     "ExperimentalEffect": "special_distortion_field"
+    }
+   },
+   {
+    "Slot": "mediumhardpoint4",
+    "Item": "hpt_pulselaserburst_gimbal_medium",
+    "On": true,
+    "Value": 47288,
+    "Engineering": {
+     "BlueprintName": "weapon_shortrange",
+     "Level": 4,
+     "Quality": 1,
+     "ExperimentalEffect": "special_distortion_field"
+    }
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_multicannon_gimbal_small",
+    "On": true,
+    "Value": 13894,
+    "Engineering": {
+     "BlueprintName": "weapon_highcapacity",
+     "Level": 4,
+     "Quality": 1,
+     "ExperimentalEffect": "special_corrosive_shell"
+    }
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaser_turret_small",
+    "On": true,
+    "Value": 25350,
+    "Engineering": {
+     "BlueprintName": "weapon_rapidfire",
+     "Level": 4,
+     "Quality": 0.5,
+     "ExperimentalEffect": "special_scramble_spectrum"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 4,
+     "Quality": 0.75
+    }
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot01_size6",
+    "Item": "int_shieldgenerator_size6_class5",
+    "On": true,
+    "Value": 13408787,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_reinforced",
+     "Level": 5,
+     "Quality": 0.6
+    }
+   },
+   {
+    "Slot": "slot02_size5",
+    "Item": "int_guardianfsdbooster_size5",
+    "On": true,
+    "Priority": 4,
+    "Value": 6321023
+   },
+   {
+    "Slot": "slot03_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 33470
+   },
+   {
+    "Slot": "slot04_size4",
+    "Item": "int_guardianshieldreinforcement_size4_class2",
+    "On": true,
+    "Value": 404352
+   },
+   {
+    "Slot": "slot05_size3",
+    "Item": "int_cargorack_size3_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 10299
+   },
+   {
+    "Slot": "slot06_size3",
+    "Item": "int_cargorack_size3_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 10299
+   },
+   {
+    "Slot": "slot07_size2",
+    "Item": "int_buggybay_size2_class1",
+    "On": true,
+    "Value": 14918
+   },
+   {
+    "Slot": "slot08_size1",
+    "Item": "int_detailedsurfacescanner_tiny",
+    "On": true,
+    "Value": 219375
+   },
+   {
+    "Slot": "slot09_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 2,
+    "Value": 11194
+   },
+   {
+    "Slot": "slot10_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 4
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size5_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 3583267,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 5,
+     "Quality": 0.4,
+     "ExperimentalEffect": "special_powerplant_lightweight"
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size5_class5",
+    "On": true,
+    "Value": 4229902,
+    "Engineering": {
+     "BlueprintName": "engine_tuned",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_engine_haulage"
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size5_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 5075882,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_fsd_fuelcapacity"
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size4_class2",
+    "On": true,
+    "Value": 23516
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size5_class5",
+    "On": true,
+    "Value": 1028742,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_highfrequency",
+     "Level": 2,
+     "Quality": 0.25,
+     "ExperimentalEffect": "special_powerdistributor_fast"
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size5_class2",
+    "On": true,
+    "Value": 65840,
+    "Engineering": {
+     "BlueprintName": "sensor_longrange",
+     "Level": 2,
+     "Quality": 0.85
+    }
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 95311
+   },
+   {
+    "Slot": "armour",
+    "Item": "mandalay_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 3,
+     "Quality": 0.33
+    }
+   }
+  ]
+ },
+ {
+  "Ship": "type8",
+  "ShipID": 133,
+  "ShipName": "Efs Ponos",
+  "ShipIdent": "A05-P",
+  "HullValue": 33950066,
+  "ModulesValue": 16989950,
+  "Rebuy": 2547000,
+  "Modules": [
+   {
+    "Slot": "slot01_size7",
+    "Item": "int_cargorack_size7_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 1148959
+   },
+   {
+    "Slot": "slot02_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 300498
+   },
+   {
+    "Slot": "slot03_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 353527
+   },
+   {
+    "Slot": "slot04_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 353527
+   },
+   {
+    "Slot": "slot05_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 108776
+   },
+   {
+    "Slot": "slot06_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 108777
+   },
+   {
+    "Slot": "slot07_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 33469
+   },
+   {
+    "Slot": "slot08_size2",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Value": 13170
+   },
+   {
+    "Slot": "slot09_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 2,
+    "Value": 8892
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size5_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 4215607,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size5_class5",
+    "On": true,
+    "Value": 4229902,
+    "Engineering": {
+     "BlueprintName": "engine_tuned",
+     "Level": 5,
+     "Quality": 0.4
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size5_class5",
+    "On": true,
+    "Value": 5971625,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 4,
+     "Quality": 0.25
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size3_class2",
+    "On": true,
+    "Value": 9880
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size4_class2",
+    "On": true,
+    "Value": 27664
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size3_class2",
+    "On": true,
+    "Value": 9880
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 95310
+   },
+   {
+    "Slot": "armour",
+    "Item": "type8_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint3",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint4",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint5",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "ferdelance",
+  "ShipID": 142,
+  "ShipName": "EFS Freya",
+  "ShipIdent": "A05-N",
+  "HullValue": 42371080,
+  "ModulesValue": 31328101,
+  "Rebuy": 3684958,
+  "Modules": [
+   {
+    "Slot": "hugehardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_huge",
+    "On": true,
+    "Value": 1032291,
+    "Engineering": {
+     "BlueprintName": "weapon_shortrange",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_distortion_field"
+    }
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_railgun_fixed_medium",
+    "On": true,
+    "Value": 353177,
+    "Engineering": {
+     "BlueprintName": "weapon_highcapacity",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_feedback_cascade_cooled"
+    }
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_railgun_fixed_medium",
+    "On": true,
+    "Value": 353177,
+    "Engineering": {
+     "BlueprintName": "weapon_highcapacity",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_feedback_cascade_cooled"
+    }
+   },
+   {
+    "Slot": "mediumhardpoint3",
+    "Item": "hpt_railgun_fixed_medium",
+    "On": true,
+    "Value": 353177,
+    "Engineering": {
+     "BlueprintName": "weapon_highcapacity",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_feedback_cascade_cooled"
+    }
+   },
+   {
+    "Slot": "mediumhardpoint4",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Value": 47239,
+    "Engineering": {
+     "BlueprintName": "weapon_highcapacity",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_corrosive_shell"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class1",
+    "On": true,
+    "Value": 8288,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class1",
+    "On": true,
+    "Value": 8288,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class1",
+    "On": true,
+    "Value": 8288,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 4,
+     "Quality": 0.5
+    }
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class1",
+    "On": true,
+    "Value": 8288,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 0.4
+    }
+   },
+   {
+    "Slot": "tinyhardpoint5",
+    "Item": "hpt_shieldbooster_size0_class1",
+    "On": true,
+    "Value": 8288,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint6",
+    "Item": "hpt_shieldbooster_size0_class1",
+    "On": true,
+    "Value": 8288,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot01_size5",
+    "Item": "int_shieldgenerator_size5_class5",
+    "On": true,
+    "Value": 4229902,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_reinforced",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot02_size4",
+    "Item": "int_fuelscoop_size4_class5",
+    "On": true,
+    "Value": 2372185
+   },
+   {
+    "Slot": "slot03_size4",
+    "Item": "int_guardianshieldreinforcement_size4_class2",
+    "On": true,
+    "Value": 404352
+   },
+   {
+    "Slot": "slot04_size2",
+    "Item": "int_fsdinterdictor_size2_class5",
+    "On": true,
+    "Value": 2255526
+   },
+   {
+    "Slot": "slot05_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Value": 11194
+   },
+   {
+    "Slot": "slot06_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 2,
+    "Value": 7559
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size6_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 10749798,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size5_class5",
+    "On": true,
+    "Value": 4229902,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size4_class5",
+    "On": true,
+    "Value": 1601225,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size4_class2",
+    "On": true,
+    "Value": 23516
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size6_class5",
+    "On": true,
+    "Value": 2880477,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 3,
+     "Quality": 0.6657
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size4_class5",
+    "On": true,
+    "Value": 367409
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size3_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 5853
+   },
+   {
+    "Slot": "armour",
+    "Item": "ferdelance_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 4,
+     "Quality": 0.75
+    }
+   }
+  ]
+ },
+ {
+  "Ship": "cobramkv",
+  "ShipID": 151,
+  "ShipName": "EFS Baphomet",
+  "ShipIdent": "A05-O",
+  "HullValue": 1220495,
+  "ModulesValue": 11023948,
+  "Rebuy": 612224,
+  "Modules": [
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7045
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7045
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2901
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2901
+   },
+   {
+    "Slot": "slot01_size5",
+    "Item": "int_shieldgenerator_size5_class5",
+    "On": true,
+    "Value": 4229902
+   },
+   {
+    "Slot": "slot02_size4",
+    "Item": "int_fuelscoop_size4_class5",
+    "On": true,
+    "Priority": 2,
+    "Value": 2372185
+   },
+   {
+    "Slot": "slot03_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 28450
+   },
+   {
+    "Slot": "slot04_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 28450
+   },
+   {
+    "Slot": "slot05_size3",
+    "Item": "int_buggybay_size2_class1",
+    "On": true,
+    "Priority": 2,
+    "Value": 14918
+   },
+   {
+    "Slot": "slot06_size3",
+    "Item": "int_cargorack_size3_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 8755
+   },
+   {
+    "Slot": "slot07_size3",
+    "Item": "int_cargorack_size3_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 8755
+   },
+   {
+    "Slot": "slot08_size2",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 2,
+    "Value": 11193
+   },
+   {
+    "Slot": "slot09_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 2,
+    "Value": 7559
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size4_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 1194423,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 3,
+     "Quality": 0.3329
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size4_class5",
+    "On": true,
+    "Value": 1334354,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 3,
+     "Quality": 0.75
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size4_class5",
+    "On": true,
+    "Priority": 2,
+    "Value": 1601225,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size3_class2",
+    "On": true,
+    "Value": 8399
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size3_class5",
+    "On": true,
+    "Value": 131218
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size3_class1",
+    "On": true,
+    "Value": 3358
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size4_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 20498
+   },
+   {
+    "Slot": "armour",
+    "Item": "cobramkv_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 3,
+     "Quality": 0.66
+    }
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint3",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "panthermkii",
+  "ShipID": 153,
+  "ShipName": "Efs Behemoth",
+  "ShipIdent": "A05-XL",
+  "ModulesValue": 1217332,
+  "Rebuy": 60867,
+  "Modules": [
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2901
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7045
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7045
+   },
+   {
+    "Slot": "tinyhardpoint5",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "tinyhardpoint6",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Value": 15371
+   },
+   {
+    "Slot": "slot01_size8",
+    "Item": "int_cargorack_size8_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot02_size7",
+    "Item": "int_cargorack_size7_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 1148960
+   },
+   {
+    "Slot": "slot03_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot04_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "cargorack_increasedcapacity",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot05_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "cargorack_increasedcapacity",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot06_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "cargorack_increasedcapacity",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot07_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "cargorack_increasedcapacity",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot08_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 28450
+   },
+   {
+    "Slot": "slot09_size2",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "slot10_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Value": 7560
+   },
+   {
+    "Slot": "cargo01",
+    "Item": "int_largecargorack_size8_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "cargo02",
+    "Item": "int_largecargorack_size7_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size8_class5",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size8_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size7_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_fsd_heavy"
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size5_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size7_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size5_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size7_class3",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "armour",
+    "Item": "panthermkii_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "largehardpoint2",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint3",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint4",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint3",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint4",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "lakonminer",
+  "ShipID": 154,
+  "ShipName": "EFS Plouton",
+  "ShipIdent": "A05-K",
+  "Modules": [
+   {
+    "Slot": "largemininghardpoint1",
+    "Item": "hpt_miningtoolv2_fixed_large",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "mediumhardpoint3",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "mediummininghardpoint1",
+    "Item": "hpt_mining_subsurfdispmisle_fixed_medium",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "mediummininghardpoint2",
+    "Item": "hpt_mining_seismchrgwarhd_fixed_medium",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaser_gimbal_small",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "smallhardpoint3",
+    "Item": "hpt_pulselaser_gimbal_small",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "smallhardpoint4",
+    "Item": "hpt_pulselaser_gimbal_small",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "smallmininghardpoint1",
+    "Item": "hpt_mining_abrblstr_fixed_small",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_mrascanner_size0_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class3",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "slot01_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot02_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot03_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot04_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot05_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot06_size4",
+    "Item": "int_shieldgenerator_size4_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "slot07_size3",
+    "Item": "int_refinery_size3_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "slot08_size2",
+    "Item": "int_fuelscoop_size2_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "slot09_size1",
+    "Item": "int_detailedsurfacescanner_tiny",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "slot10_size1",
+    "Item": "int_dronecontrol_prospector_size1_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "limpetcontroller01",
+    "Item": "int_multidronecontrol_miningv2_size5_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "fighterbay01",
+    "Item": "int_fighterbay_size5_class1",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size6_class5",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size5_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size5_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size3_class2",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size7_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size3_class2",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "armour",
+    "Item": "lakonminer_armour_grade1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "mediumtransport01",
+  "ShipID": 159,
+  "ShipName": "Efs Zephyr",
+  "ShipIdent": "A05-U",
+  "ModulesValue": 1092723,
+  "Rebuy": 54636,
+  "Modules": [
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 3413
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 3413
+   },
+   {
+    "Slot": "slot01_size6",
+    "Item": "int_mkii_passengercabin_size6_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 239501
+   },
+   {
+    "Slot": "passenger02",
+    "Item": "int_mkii_passengercabin_size6_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 239501
+   },
+   {
+    "Slot": "passenger03",
+    "Item": "int_mkii_passengercabin_size5_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 38625
+   },
+   {
+    "Slot": "slot02_size5",
+    "Item": "int_mkii_passengercabin_size5_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 38625
+   },
+   {
+    "Slot": "passenger01",
+    "Item": "int_mkii_passengercabin_size6_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 239501
+   },
+   {
+    "Slot": "slot03_size4",
+    "Item": "int_shieldgenerator_size4_class3_fast",
+    "On": true,
+    "Value": 261639
+   },
+   {
+    "Slot": "slot04_size4",
+    "Item": "int_mkii_passengercabin_size4_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 20945
+   },
+   {
+    "Slot": "slot05_size3",
+    "Item": "int_mkii_passengercabin_size3_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot06_size2",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Value": 7560
+   },
+   {
+    "Slot": "slot07_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size5_class5",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size6_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 2,
+     "Quality": 0.3329
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size5_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size6_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size5_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size3_class2",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "armour",
+    "Item": "mediumtransport01_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 3,
+     "Quality": 1
+    }
+   }
+  ]
+ },
+ {
+  "Ship": "diamondbackxl",
+  "ShipID": 18,
+  "ShipName": "Efs Hermes",
+  "ShipIdent": "A05-F",
+  "HullValue": 1389917,
+  "ModulesValue": 10078927,
+  "Rebuy": 573444,
+  "Modules": [
+   {
+    "Slot": "slot01_size4",
+    "Item": "int_guardianfsdbooster_size4",
+    "On": true,
+    "Priority": 2,
+    "Value": 2689305
+   },
+   {
+    "Slot": "slot02_size4",
+    "Item": "int_fuelscoop_size4_class5",
+    "On": true,
+    "Priority": 2,
+    "Value": 2433010
+   },
+   {
+    "Slot": "slot03_size3",
+    "Item": "int_buggybay_size2_class1",
+    "On": true,
+    "Value": 14918
+   },
+   {
+    "Slot": "slot07_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Value": 11854
+   },
+   {
+    "Slot": "slot08_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Value": 8004
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size3_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 408350,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 3,
+     "Quality": 0.2857,
+     "ExperimentalEffect": "special_powerplant_cooled"
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size4_class2",
+    "On": true,
+    "Value": 50689,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size5_class5",
+    "On": true,
+    "Value": 4338361,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_fsd_fuelcapacity"
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size3_class2",
+    "On": true,
+    "Priority": 3,
+    "Value": 8614
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size4_class2",
+    "On": true,
+    "Value": 24118
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size3_class2",
+    "On": true,
+    "Value": 8614
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 83090
+   },
+   {
+    "Slot": "armour",
+    "Item": "diamondbackxl_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 4,
+     "Quality": 0.67
+    }
+   },
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot101_size3",
+    "Item": "int_shieldgenerator_size3_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot102_size2",
+    "Item": "int_cargorack_size2_class1",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot103_size2",
+    "Item": "int_cargorack_size2_class1",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "sidewinder",
+  "ShipID": 9,
+  "ShipName": "Efs Alectrona",
+  "ShipIdent": "A05-D",
+  "HullValue": 3587,
+  "ModulesValue": 814249,
+  "Rebuy": 40892,
+  "Modules": [
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_minelauncher_fixed_small_impulse",
+    "On": true,
+    "Value": 30932
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_minelauncher_fixed_small_impulse",
+    "On": true,
+    "Value": 30932
+   },
+   {
+    "Slot": "slot01_size2",
+    "Item": "int_shieldgenerator_size2_class5",
+    "On": true,
+    "Value": 136191,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 3,
+     "Quality": 0.83
+    }
+   },
+   {
+    "Slot": "slot02_size2",
+    "Item": "int_buggybay_size2_class1",
+    "On": true,
+    "Value": 15300
+   },
+   {
+    "Slot": "slot03_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Value": 11481
+   },
+   {
+    "Slot": "slot04_size1",
+    "Item": "int_fuelscoop_size1_class1",
+    "On": true,
+    "Value": 302
+   },
+   {
+    "Slot": "slot06_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Value": 7753
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size2_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 160224
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size2_class5",
+    "On": true,
+    "Value": 160224,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 3,
+     "Quality": 0.9286
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size2_class5",
+    "On": true,
+    "Value": 160224,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 3,
+     "Quality": 0
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size1_class2",
+    "On": true,
+    "Value": 1100
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size1_class5",
+    "On": true,
+    "Value": 17166,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 2,
+     "Quality": 0.8071
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size1_class2",
+    "On": true,
+    "Value": 1100
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size1_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 1000
+   },
+   {
+    "Slot": "armour",
+    "Item": "sidewinder_armour_grade3",
+    "On": true,
+    "Priority": 1,
+    "Value": 80320
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot101_size1",
+    "Item": "int_hullreinforcement_size1_class2",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "eagle",
+  "ShipID": 20,
+  "ShipName": "Efs Aeolus",
+  "ShipIdent": "A05-E",
+  "HullValue": 8458,
+  "ModulesValue": 853115,
+  "Rebuy": 43077,
+  "Modules": [
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Value": 7128
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_multicannon_gimbal_small",
+    "On": true,
+    "Value": 12113,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "smallhardpoint3",
+    "Item": "hpt_multicannon_gimbal_small",
+    "On": true,
+    "Value": 12113,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Value": 15765
+   },
+   {
+    "Slot": "slot01_size3",
+    "Item": "int_shieldgenerator_size3_class3_fast",
+    "On": true,
+    "Value": 71956,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 2,
+     "Quality": 0.714
+    }
+   },
+   {
+    "Slot": "slot02_size2",
+    "Item": "int_modulereinforcement_size2_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 9945
+   },
+   {
+    "Slot": "slot03_size1",
+    "Item": "int_modulereinforcement_size1_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 4144
+   },
+   {
+    "Slot": "slot04_size1",
+    "Item": "int_dockingcomputer_standard",
+    "On": true,
+    "Priority": 2,
+    "Value": 3825
+   },
+   {
+    "Slot": "slot05_size1",
+    "Item": "int_modulereinforcement_size1_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 4144
+   },
+   {
+    "Slot": "slot06_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Value": 8004
+   },
+   {
+    "Slot": "military01",
+    "Item": "int_hullreinforcement_size2_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 30600
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size2_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 136191
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size3_class5",
+    "On": true,
+    "Value": 431726,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 3,
+     "Quality": 0.8514
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size2_class2",
+    "On": true,
+    "Value": 5044,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 1,
+     "Quality": 0.9533
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size1_class2",
+    "On": true,
+    "Value": 1100
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size2_class5",
+    "On": true,
+    "Value": 48065,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 2,
+     "Quality": 0.8171
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size2_class5",
+    "On": true,
+    "Value": 48065
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size2_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 3187
+   },
+   {
+    "Slot": "armour",
+    "Item": "eagle_armour_grade1",
+    "On": true,
+    "Priority": 1
+   }
+  ]
+ },
+ {
+  "Ship": "anaconda",
+  "ShipID": 13,
+  "ShipName": "Efs Odin",
+  "ShipIdent": "A05-A",
+  "HullValue": 120606024,
+  "ModulesValue": 67239544,
+  "Rebuy": 9392281,
+  "Modules": [
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2975
+   },
+   {
+    "Slot": "tinyhardpoint8",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2975
+   },
+   {
+    "Slot": "slot05_size5",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 382500,
+    "Engineering": {
+     "BlueprintName": "hullreinforcement_heavyduty",
+     "Level": 2,
+     "Quality": 0.3867
+    }
+   },
+   {
+    "Slot": "slot06_size5",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 382500,
+    "Engineering": {
+     "BlueprintName": "hullreinforcement_heavyduty",
+     "Level": 2,
+     "Quality": 0.1967
+    }
+   },
+   {
+    "Slot": "slot07_size5",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 382500,
+    "Engineering": {
+     "BlueprintName": "hullreinforcement_heavyduty",
+     "Level": 2,
+     "Quality": 0.3667
+    }
+   },
+   {
+    "Slot": "slot08_size4",
+    "Item": "int_hullreinforcement_size4_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 165750,
+    "Engineering": {
+     "BlueprintName": "hullreinforcement_heavyduty",
+     "Level": 2,
+     "Quality": 0.3867
+    }
+   },
+   {
+    "Slot": "slot09_size4",
+    "Item": "int_buggybay_size4_class2",
+    "On": true,
+    "Priority": 3,
+    "Value": 73440
+   },
+   {
+    "Slot": "slot13_size2",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 3,
+    "Value": 7753
+   },
+   {
+    "Slot": "military01",
+    "Item": "int_hullreinforcement_size4_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 165750
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size8_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 1441233
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size6_class2",
+    "On": true,
+    "Value": 496623
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size6_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 13752602,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_fsd_heavy"
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size5_class2",
+    "On": true,
+    "Value": 67528
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size8_class5",
+    "On": true,
+    "Value": 27249391,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 3,
+     "Quality": 0.3214
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size8_class5",
+    "On": true,
+    "Value": 22582934
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 83090
+   },
+   {
+    "Slot": "armour",
+    "Item": "anaconda_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "hugehardpoint1",
+    "Item": "hpt_beamlaser_fixed_huge",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "largehardpoint2",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "largehardpoint3",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint5",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint6",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint7",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot101_size7",
+    "Item": "int_shieldgenerator_size7_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot102_size6",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot103_size6",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot104_size6",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot105_size4",
+    "Item": "int_hullreinforcement_size4_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot106_size1",
+    "Item": "int_hullreinforcement_size1_class2",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "asp",
+  "ShipID": 32,
+  "ShipName": "efs hercules",
+  "ShipIdent": "a05-h",
+  "HullValue": 5214890,
+  "ModulesValue": 15086032,
+  "Rebuy": 1015049,
+  "Modules": [
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Value": 48450
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Value": 48450
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_beamlaser_gimbal_small",
+    "On": true,
+    "Value": 63453
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_beamlaser_gimbal_small",
+    "On": true,
+    "Value": 63453
+   },
+   {
+    "Slot": "smallhardpoint3",
+    "Item": "hpt_beamlaser_gimbal_small",
+    "On": true,
+    "Value": 63453
+   },
+   {
+    "Slot": "smallhardpoint4",
+    "Item": "hpt_beamlaser_gimbal_small",
+    "On": true,
+    "Value": 63453
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2975
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7225
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7225
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2975
+   },
+   {
+    "Slot": "slot02_size5",
+    "Item": "int_shieldgenerator_size5_class2",
+    "On": true,
+    "Value": 160680
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size5_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 4338361
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size5_class5",
+    "On": true,
+    "Value": 4338361
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size5_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 4338361,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 0
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size4_class2",
+    "On": true,
+    "Value": 24118
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size4_class5",
+    "On": true,
+    "Value": 376829
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size5_class5",
+    "On": true,
+    "Value": 1055120
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 83090
+   },
+   {
+    "Slot": "armour",
+    "Item": "asp_armour_grade1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot101_size6",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot102_size3",
+    "Item": "int_hullreinforcement_size3_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot103_size3",
+    "Item": "int_hullreinforcement_size3_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot104_size3",
+    "Item": "int_hullreinforcement_size3_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot105_size2",
+    "Item": "int_hullreinforcement_size2_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot106_size2",
+    "Item": "int_hullreinforcement_size2_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot107_size1",
+    "Item": "int_hullreinforcement_size1_class2",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "cobramkiii",
+  "ShipID": 38,
+  "ShipName": "Efs hades",
+  "ShipIdent": "A05-C",
+  "HullValue": 176270,
+  "ModulesValue": 9194265,
+  "Rebuy": 468527,
+  "Modules": [
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Value": 51300,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Value": 51300,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaser_gimbal_small",
+    "On": true,
+    "Value": 5940
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaser_gimbal_small",
+    "On": true,
+    "Value": 5940
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_cloudscanner_size0_class5",
+    "On": true,
+    "Value": 1097095
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 8500
+   },
+   {
+    "Slot": "slot01_size4",
+    "Item": "int_fuelscoop_size4_class5",
+    "On": true,
+    "Priority": 3,
+    "Value": 2433010
+   },
+   {
+    "Slot": "slot03_size4",
+    "Item": "int_shieldgenerator_size4_class5",
+    "On": true,
+    "Value": 1368568,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot04_size2",
+    "Item": "int_buggybay_size2_class2",
+    "On": true,
+    "Value": 18360
+   },
+   {
+    "Slot": "slot07_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 2,
+    "Value": 7753
+   },
+   {
+    "Slot": "slot08_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 2,
+    "Value": 11481
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size4_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 1225049
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size4_class5",
+    "On": true,
+    "Value": 1368568
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size4_class5",
+    "On": true,
+    "Value": 1368568,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 2,
+     "Quality": 0.802
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size3_class2",
+    "On": true,
+    "Value": 8614
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size3_class5",
+    "On": true,
+    "Value": 134582,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size3_class2",
+    "On": true,
+    "Value": 8614
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size4_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 21023
+   },
+   {
+    "Slot": "armour",
+    "Item": "cobramkiii_armour_grade1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot101_size4",
+    "Item": "int_hullreinforcement_size4_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot102_size2",
+    "Item": "int_hullreinforcement_size2_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot103_size2",
+    "Item": "int_hullreinforcement_size2_class2",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "python",
+  "ShipID": 41,
+  "ShipName": "efs thor",
+  "ShipIdent": "A05-B",
+  "HullValue": 47025138,
+  "ModulesValue": 26035285,
+  "Rebuy": 3653021,
+  "Modules": [
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 8288
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 8288
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Value": 18083
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 273975,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 2,
+     "Quality": 0.8086
+    }
+   },
+   {
+    "Slot": "slot01_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 353527
+   },
+   {
+    "Slot": "slot02_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 300498
+   },
+   {
+    "Slot": "slot03_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 353527
+   },
+   {
+    "Slot": "slot04_size5",
+    "Item": "int_shieldgenerator_size5_class3_fast",
+    "On": true,
+    "Value": 723061,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 3,
+     "Quality": 0.8375
+    }
+   },
+   {
+    "Slot": "slot05_size5",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 95311
+   },
+   {
+    "Slot": "slot06_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 29179
+   },
+   {
+    "Slot": "slot07_size3",
+    "Item": "int_buggybay_size2_class2",
+    "On": true,
+    "Value": 17901
+   },
+   {
+    "Slot": "slot08_size3",
+    "Item": "int_fuelscoop_size3_class5",
+    "On": true,
+    "Value": 748324
+   },
+   {
+    "Slot": "slot09_size2",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Value": 13170
+   },
+   {
+    "Slot": "slot10_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Value": 8893
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size7_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 1405203
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size6_class5",
+    "On": true,
+    "Value": 15775043,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size5_class5",
+    "On": true,
+    "Value": 5075882,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size4_class2",
+    "On": true,
+    "Value": 24118
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size7_class2",
+    "On": true,
+    "Value": 516182,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 3,
+     "Quality": 0.507
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size6_class2",
+    "On": true,
+    "Value": 189078
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 97754
+   },
+   {
+    "Slot": "armour",
+    "Item": "python_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 4,
+     "Quality": 0.498
+    }
+   },
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "largehardpoint2",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "largehardpoint3",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "vulture",
+  "ShipID": 44,
+  "ShipName": "efs poseidon",
+  "ShipIdent": "a05-g",
+  "HullValue": 3987535,
+  "ModulesValue": 19688304,
+  "Rebuy": 1183794,
+  "Modules": [
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_beamlaser_gimbal_large",
+    "On": true,
+    "Value": 1985818
+   },
+   {
+    "Slot": "largehardpoint2",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Value": 491671,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 3,
+     "Quality": 0.822
+    }
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Value": 15371
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_crimescanner_size0_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 11513
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 273975,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Value": 16275
+   },
+   {
+    "Slot": "slot01_size5",
+    "Item": "int_shieldgenerator_size5_class5",
+    "On": true,
+    "Value": 4338361,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot02_size4",
+    "Item": "int_shieldcellbank_size4_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 367409
+   },
+   {
+    "Slot": "slot07_size1",
+    "Item": "int_dockingcomputer_standard",
+    "On": true,
+    "Priority": 3,
+    "Value": 3730
+   },
+   {
+    "Slot": "slot08_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 3,
+    "Value": 7752
+   },
+   {
+    "Slot": "military01",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 382500,
+    "Engineering": {
+     "BlueprintName": "hullreinforcement_heavyduty",
+     "Level": 2,
+     "Quality": 0.3375
+    }
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size4_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 1225049
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size5_class5",
+    "On": true,
+    "Value": 4338361,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 2,
+     "Quality": 0.9286
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size4_class5",
+    "On": true,
+    "Priority": 3,
+    "Value": 1368568
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size3_class2",
+    "On": true,
+    "Value": 8614
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size5_class5",
+    "On": true,
+    "Value": 1055120,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size4_class2",
+    "On": true,
+    "Value": 24118
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size3_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 6003
+   },
+   {
+    "Slot": "armour",
+    "Item": "vulture_armour_grade3",
+    "On": true,
+    "Priority": 1,
+    "Value": 3768096,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot101_size2",
+    "Item": "int_hullreinforcement_size2_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot102_size1",
+    "Item": "int_hullreinforcement_size1_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot103_size1",
+    "Item": "int_hullreinforcement_size1_class2",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "krait_mkii",
+  "ShipID": 49,
+  "ShipName": "Efs Zeus",
+  "ShipIdent": "A05-I",
+  "HullValue": 37535760,
+  "ModulesValue": 86852282,
+  "Rebuy": 6219404,
+  "Modules": [
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Value": 491671,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 4,
+     "Quality": 0.218
+    }
+   },
+   {
+    "Slot": "largehardpoint2",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Value": 491671,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 4,
+     "Quality": 0.26
+    }
+   },
+   {
+    "Slot": "largehardpoint3",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Value": 491671,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 3,
+     "Quality": 0.35
+    }
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_beamlaser_fixed_medium",
+    "On": true,
+    "Value": 248228
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_beamlaser_fixed_medium",
+    "On": true,
+    "Value": 248228
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7225
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 3072
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Value": 15371
+   },
+   {
+    "Slot": "slot01_size6",
+    "Item": "int_shieldgenerator_size6_class5",
+    "On": true,
+    "Value": 13752602,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot02_size6",
+    "Item": "int_fueltank_size6_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 333038
+   },
+   {
+    "Slot": "slot03_size5",
+    "Item": "int_fuelscoop_size5_class5",
+    "On": true,
+    "Value": 7962167
+   },
+   {
+    "Slot": "slot04_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 108777
+   },
+   {
+    "Slot": "slot05_size4",
+    "Item": "int_buggybay_size4_class2",
+    "On": true,
+    "Value": 71604
+   },
+   {
+    "Slot": "slot06_size3",
+    "Item": "int_dronecontrol_repair_size3_class5",
+    "On": true,
+    "Value": 84240
+   },
+   {
+    "Slot": "slot07_size3",
+    "Item": "int_dronecontrol_fueltransfer_size3_class5",
+    "On": true,
+    "Value": 84240
+   },
+   {
+    "Slot": "slot08_size2",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 3,
+    "Value": 11854
+   },
+   {
+    "Slot": "slot09_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Value": 7560
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size7_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 34146413,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size6_class5",
+    "On": true,
+    "Value": 13752602,
+    "Engineering": {
+     "BlueprintName": "engine_tuned",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size5_class5",
+    "On": true,
+    "Value": 5971625,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size4_class2",
+    "On": true,
+    "Value": 24118
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size7_class5",
+    "On": true,
+    "Value": 8272137,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 2,
+     "Quality": 0.72
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size6_class2",
+    "On": true,
+    "Value": 189078
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 83090
+   },
+   {
+    "Slot": "armour",
+    "Item": "krait_mkii_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 3,
+     "Quality": 0.86
+    }
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "mamba",
+  "ShipID": 54,
+  "ShipName": "Efs Artemis",
+  "ShipIdent": "A05-J",
+  "HullValue": 47126485,
+  "ModulesValue": 27434152,
+  "Rebuy": 3728033,
+  "Modules": [
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Value": 507579,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "largehardpoint2",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Value": 507579,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 3,
+     "Quality": 0.804
+    }
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_multicannon_gimbal_small",
+    "On": true,
+    "Value": 12505,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 3,
+     "Quality": 0.79
+    }
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_multicannon_gimbal_small",
+    "On": true,
+    "Value": 12505,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 2,
+     "Quality": 0.869
+    }
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 238850,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 4,
+     "Quality": 0.8733
+    }
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 238850,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 3,
+     "Quality": 0.5371
+    }
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class4",
+    "On": true,
+    "Value": 103700,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 2,
+     "Quality": 0.9067
+    }
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2975
+   },
+   {
+    "Slot": "tinyhardpoint5",
+    "Item": "hpt_crimescanner_size0_class3",
+    "On": true,
+    "Value": 103615
+   },
+   {
+    "Slot": "slot01_size5",
+    "Item": "int_shieldgenerator_size5_class5",
+    "On": true,
+    "Value": 4478720,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 3,
+     "Quality": 0.8533
+    }
+   },
+   {
+    "Slot": "slot02_size4",
+    "Item": "int_shieldcellbank_size4_class5",
+    "On": true,
+    "Value": 389022
+   },
+   {
+    "Slot": "slot03_size3",
+    "Item": "int_modulereinforcement_size3_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 73710
+   },
+   {
+    "Slot": "slot04_size2",
+    "Item": "int_buggybay_size2_class2",
+    "On": true,
+    "Priority": 2,
+    "Value": 18360
+   },
+   {
+    "Slot": "slot05_size2",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 2,
+    "Value": 8004
+   },
+   {
+    "Slot": "slot06_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 2,
+    "Value": 11854
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size6_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 11382139
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size5_class5",
+    "On": true,
+    "Value": 4478720,
+    "Engineering": {
+     "BlueprintName": "engine_tuned",
+     "Level": 5,
+     "Quality": 0.264
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size4_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 1412846
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size4_class2",
+    "On": true,
+    "Value": 24898
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size6_class5",
+    "On": true,
+    "Value": 3049917,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 2,
+     "Quality": 0.9514
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size4_class5",
+    "On": true,
+    "Value": 376829
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size1_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 975
+   },
+   {
+    "Slot": "armour",
+    "Item": "mamba_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "hugehardpoint1",
+    "Item": "hpt_beamlaser_fixed_huge",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint6",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "type9",
+  "ShipID": 61,
+  "ShipName": "EFs Hephaestus",
+  "ShipIdent": "A05-L",
+  "HullValue": 61291584,
+  "ModulesValue": 88922860,
+  "Rebuy": 7510722,
+  "Modules": [
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7045
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Value": 15765
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2975
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 8288
+   },
+   {
+    "Slot": "slot00_size8",
+    "Item": "int_cargorack_size8_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 3255387
+   },
+   {
+    "Slot": "slot01_size8",
+    "Item": "int_cargorack_size8_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 3255387
+   },
+   {
+    "Slot": "slot02_size7",
+    "Item": "int_cargorack_size7_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 976616
+   },
+   {
+    "Slot": "slot03_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 300498
+   },
+   {
+    "Slot": "slot04_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 108777
+   },
+   {
+    "Slot": "slot05_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 28450
+   },
+   {
+    "Slot": "slot06_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 28450
+   },
+   {
+    "Slot": "slot07_size3",
+    "Item": "int_cargorack_size3_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 8979
+   },
+   {
+    "Slot": "slot08_size3",
+    "Item": "int_cargorack_size3_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 10299
+   },
+   {
+    "Slot": "slot11_size2",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Value": 7560
+   },
+   {
+    "Slot": "slot12_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Value": 11194
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size6_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 11025433
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size7_class5",
+    "On": true,
+    "Value": 50006885,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size6_class5",
+    "On": true,
+    "Value": 16090544,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size5_class2",
+    "On": true,
+    "Value": 67528
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size6_class5",
+    "On": true,
+    "Value": 3388796
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size4_class2",
+    "On": true,
+    "Value": 27664
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size6_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 290340
+   },
+   {
+    "Slot": "armour",
+    "Item": "type9_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint3",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "cobramkiv",
+  "ShipID": 62,
+  "ShipName": "EFS thanatos",
+  "ShipIdent": "A05-M",
+  "HullValue": 496136,
+  "ModulesValue": 7025150,
+  "Rebuy": 376067,
+  "Modules": [
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Value": 48450,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 2,
+     "Quality": 0.8775
+    }
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Value": 48450,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 2,
+     "Quality": 0.84
+    }
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Value": 7310
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Value": 7310
+   },
+   {
+    "Slot": "smallhardpoint3",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Value": 7310
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_cloudscanner_size0_class3",
+    "On": true,
+    "Value": 103615
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Value": 15765
+   },
+   {
+    "Slot": "slot01_size4",
+    "Item": "int_shieldgenerator_size4_class5",
+    "On": true,
+    "Value": 1368568,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot02_size4",
+    "Item": "int_fuelscoop_size4_class5",
+    "On": true,
+    "Priority": 3,
+    "Value": 2433010
+   },
+   {
+    "Slot": "slot05_size3",
+    "Item": "int_shieldcellbank_size3_class4",
+    "On": true,
+    "Value": 53834
+   },
+   {
+    "Slot": "slot09_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 3,
+    "Value": 7752
+   },
+   {
+    "Slot": "slot10_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 3,
+    "Value": 11480
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size4_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 1225049,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size4_class5",
+    "On": true,
+    "Value": 1368568,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size4_class1",
+    "On": true,
+    "Value": 19878
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size3_class2",
+    "On": true,
+    "Value": 8614
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size3_class5",
+    "On": true,
+    "Value": 134582,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 1,
+     "Quality": 0.9543
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size3_class5",
+    "On": true,
+    "Value": 134582,
+    "Engineering": {
+     "BlueprintName": "sensor_lightweight",
+     "Level": 3,
+     "Quality": 0.9533
+    }
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size4_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 21023
+   },
+   {
+    "Slot": "armour",
+    "Item": "cobramkiv_armour_grade1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "slot101_size4",
+    "Item": "int_hullreinforcement_size4_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot102_size4",
+    "Item": "int_hullreinforcement_size4_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot103_size3",
+    "Item": "int_hullreinforcement_size3_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot104_size2",
+    "Item": "int_hullreinforcement_size2_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot105_size2",
+    "Item": "int_hullreinforcement_size2_class2",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "adder",
+  "ShipID": 65,
+  "ShipName": "Efs Aphrodite",
+  "ShipIdent": "A05-X",
+  "HullValue": 15480,
+  "ModulesValue": 7979796,
+  "Rebuy": 399763,
+  "Modules": [
+   {
+    "Slot": "slot01_size3",
+    "Item": "int_shieldgenerator_size3_class5",
+    "On": true,
+    "Value": 431726,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot02_size3",
+    "Item": "int_guardianfsdbooster_size3",
+    "On": true,
+    "Value": 1342932
+   },
+   {
+    "Slot": "slot03_size2",
+    "Item": "int_cargorack_size2_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 3169
+   },
+   {
+    "Slot": "slot04_size2",
+    "Item": "int_cargorack_size2_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 3169
+   },
+   {
+    "Slot": "slot05_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 2,
+    "Value": 8003
+   },
+   {
+    "Slot": "slot06_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 1,
+    "Value": 11481
+   },
+   {
+    "Slot": "slot07_size1",
+    "Item": "int_detailedsurfacescanner_tiny",
+    "On": true,
+    "Value": 212500
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size3_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 421561,
+    "Engineering": {
+     "BlueprintName": "powerplant_armoured",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size3_class5_fast",
+    "On": true,
+    "Value": 4976354,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_engine_overloaded"
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size3_class5",
+    "On": true,
+    "Value": 505119,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size1_class2",
+    "On": true,
+    "Value": 1100
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size2_class5",
+    "On": true,
+    "Value": 48065,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityengines",
+     "Level": 4,
+     "Quality": 0.66,
+     "ExperimentalEffect": "special_powerdistributor_fast"
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size3_class2",
+    "On": true,
+    "Value": 8614,
+    "Engineering": {
+     "BlueprintName": "sensor_lightweight",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size3_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 6003
+   },
+   {
+    "Slot": "armour",
+    "Item": "adder_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 5,
+     "Quality": 0.956
+    }
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "belugaliner",
+  "ShipID": 66,
+  "ShipName": "EFS Hera",
+  "ShipIdent": "A05-V",
+  "HullValue": 67732802,
+  "ModulesValue": 144097317,
+  "Rebuy": 10461310,
+  "Modules": [
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2975
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 2,
+     "Quality": 0.8414
+    }
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7045
+   },
+   {
+    "Slot": "tinyhardpoint5",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Priority": 2,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint6",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 238850,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 0.4
+    }
+   },
+   {
+    "Slot": "slot01_size6",
+    "Item": "int_shieldgenerator_size6_class5",
+    "On": true,
+    "Value": 13408787,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 3,
+     "Quality": 0.94
+    }
+   },
+   {
+    "Slot": "slot02_size6",
+    "Item": "int_fighterbay_size5_class1",
+    "On": true,
+    "Value": 505128
+   },
+   {
+    "Slot": "slot03_size6",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 970445
+   },
+   {
+    "Slot": "slot05_size5",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 970445
+   },
+   {
+    "Slot": "slot06_size5",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 970445
+   },
+   {
+    "Slot": "slot08_size3",
+    "Item": "int_guardianshieldreinforcement_size3_class2",
+    "On": true,
+    "Value": 168480
+   },
+   {
+    "Slot": "slot09_size3",
+    "Item": "int_guardianshieldreinforcement_size3_class2",
+    "On": true,
+    "Value": 168480
+   },
+   {
+    "Slot": "slot10_size3",
+    "Item": "int_guardianshieldreinforcement_size3_class2",
+    "On": true,
+    "Value": 168480
+   },
+   {
+    "Slot": "slot11_size3",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 4,
+    "Value": 11194
+   },
+   {
+    "Slot": "slot12_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 4,
+    "Value": 7752
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size6_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 11025433,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size7_class5",
+    "On": true,
+    "Value": 42505853,
+    "Engineering": {
+     "BlueprintName": "engine_tuned",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size7_class5",
+    "On": true,
+    "Value": 60008262,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 3,
+     "Quality": 0.666
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size8_class2",
+    "On": true,
+    "Value": 1482367
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_guardianpowerdistributor_size6",
+    "On": true,
+    "Value": 6593039
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size5_class2",
+    "On": true,
+    "Value": 67528
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size7_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 1513776
+   },
+   {
+    "Slot": "armour",
+    "Item": "belugaliner_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 4,
+     "Quality": 0.474
+    }
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint3",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint4",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint5",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot101_size6",
+    "Item": "int_fuelscoop_size4_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot102_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "type6",
+  "ShipID": 70,
+  "ShipName": "EFS Anubis",
+  "ShipIdent": "A05-Q",
+  "HullValue": 836073,
+  "ModulesValue": 6835589,
+  "Rebuy": 383583,
+  "Modules": [
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 8288
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 3413
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 273975
+   },
+   {
+    "Slot": "slot04_size4",
+    "Item": "int_fuelscoop_size4_class5",
+    "On": true,
+    "Value": 2790805
+   },
+   {
+    "Slot": "slot05_size3",
+    "Item": "int_shieldgenerator_size3_class2",
+    "On": true,
+    "Value": 18342
+   },
+   {
+    "Slot": "slot06_size2",
+    "Item": "int_cargorack_size2_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 3169
+   },
+   {
+    "Slot": "slot07_size2",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Value": 13170
+   },
+   {
+    "Slot": "slot08_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 2,
+    "Value": 8892
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size3_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 468401
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size4_class5",
+    "On": true,
+    "Value": 1569828
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size4_class5",
+    "On": true,
+    "Value": 1569828,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size2_class2",
+    "On": true,
+    "Value": 3529
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size3_class3",
+    "On": true,
+    "Value": 24700
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size2_class5",
+    "On": true,
+    "Value": 55134
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size4_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 24115
+   },
+   {
+    "Slot": "armour",
+    "Item": "type6_armour_grade1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot101_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot102_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot103_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "viper",
+  "ShipID": 73,
+  "ShipName": "Efs Aion",
+  "ShipIdent": "A05-R",
+  "HullValue": 65037,
+  "ModulesValue": 1845493,
+  "Rebuy": 95530,
+  "Modules": [
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Value": 50018,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 2,
+     "Quality": 0.942
+    }
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Value": 50018,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Value": 7547
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_pulselaserburst_gimbal_small",
+    "On": true,
+    "Value": 7547
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7459
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_chafflauncher_tiny",
+    "On": true,
+    "Value": 7459
+   },
+   {
+    "Slot": "slot01_size3",
+    "Item": "int_hullreinforcement_size3_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 73710
+   },
+   {
+    "Slot": "slot02_size3",
+    "Item": "int_shieldgenerator_size3_class3_fast",
+    "On": true,
+    "Value": 74284,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot03_size2",
+    "Item": "int_modulereinforcement_size2_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 31590
+   },
+   {
+    "Slot": "slot04_size1",
+    "Item": "int_fuelscoop_size1_class1",
+    "On": true,
+    "Value": 257
+   },
+   {
+    "Slot": "slot05_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Value": 7560
+   },
+   {
+    "Slot": "slot06_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 2,
+    "Value": 11852
+   },
+   {
+    "Slot": "military01",
+    "Item": "int_hullreinforcement_size3_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 73710
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size3_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 421561
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size3_class5",
+    "On": true,
+    "Value": 445693,
+    "Engineering": {
+     "BlueprintName": "engine_tuned",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_size3_class5",
+    "On": true,
+    "Value": 420933,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 4,
+     "Quality": 0.844
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size2_class2",
+    "On": true,
+    "Value": 3177
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size3_class5",
+    "On": true,
+    "Value": 138936,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 2,
+     "Quality": 0.802
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size3_class2",
+    "On": true,
+    "Value": 8892
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size2_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 3290
+   },
+   {
+    "Slot": "armour",
+    "Item": "viper_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 3,
+     "Quality": 0.89
+    }
+   }
+  ]
+ },
+ {
+  "Ship": "type9_military",
+  "ShipID": 89,
+  "ShipName": "Efs Ares",
+  "ShipIdent": "A05-Y",
+  "HullValue": 69663949,
+  "ModulesValue": 144888178,
+  "Rebuy": 10727610,
+  "Modules": [
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_pulselaserburst_turret_large",
+    "On": true,
+    "Value": 663332,
+    "Engineering": {
+     "BlueprintName": "weapon_shortrange",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "largehardpoint2",
+    "Item": "hpt_pulselaserburst_turret_large",
+    "On": true,
+    "Value": 663332,
+    "Engineering": {
+     "BlueprintName": "weapon_shortrange",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "largehardpoint3",
+    "Item": "hpt_pulselaserburst_turret_large",
+    "On": true,
+    "Value": 663332,
+    "Engineering": {
+     "BlueprintName": "weapon_shortrange",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "largehardpoint4",
+    "Item": "hpt_pulselaserburst_turret_large",
+    "On": true,
+    "Value": 663332,
+    "Engineering": {
+     "BlueprintName": "weapon_shortrange",
+     "Level": 2,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_railgun_fixed_small",
+    "On": true,
+    "Value": 50310
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_railgun_fixed_small",
+    "On": true,
+    "Value": 50310
+   },
+   {
+    "Slot": "tinyhardpoint7",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Value": 15371
+   },
+   {
+    "Slot": "tinyhardpoint8",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Value": 15371
+   },
+   {
+    "Slot": "slot01_size8",
+    "Item": "int_shieldgenerator_size8_class4",
+    "On": true,
+    "Value": 44914517,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_optimised",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot07_size3",
+    "Item": "int_modulereinforcement_size3_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 73710
+   },
+   {
+    "Slot": "slot08_size3",
+    "Item": "int_cargorack_size3_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 10298
+   },
+   {
+    "Slot": "slot11_size2",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 4,
+    "Value": 11481
+   },
+   {
+    "Slot": "slot12_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 4,
+    "Value": 7559
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size8_class1",
+    "On": true,
+    "Priority": 1,
+    "Value": 1441233
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size7_class5",
+    "On": true,
+    "Value": 43595746,
+    "Engineering": {
+     "BlueprintName": "engine_tuned",
+     "Level": 3,
+     "Quality": 1,
+     "ExperimentalEffect": "special_engine_haulage"
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size7_class5",
+    "On": true,
+    "Value": 51007023,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size5_class2",
+    "On": true,
+    "Value": 77458
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size7_class1",
+    "On": true,
+    "Value": 249137
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size4_class5",
+    "On": true,
+    "Value": 432245
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size6_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 283081
+   },
+   {
+    "Slot": "armour",
+    "Item": "type9_military_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 2,
+     "Quality": 0.832
+    }
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint3",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint5",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint6",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot101_size7",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot102_size6",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot103_size5",
+    "Item": "int_hullreinforcement_size5_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "military04",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "military05",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot106_size4",
+    "Item": "int_hullreinforcement_size4_class2",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot107_size4",
+    "Item": "int_hullreinforcement_size4_class2",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "federation_corvette",
+  "ShipID": 98,
+  "ShipName": "Efs G\u00f6Tterfunke",
+  "ShipIdent": "A05-Z",
+  "HullValue": 151783041,
+  "ModulesValue": 319194811,
+  "Rebuy": 23548898,
+  "Modules": [
+   {
+    "Slot": "hugehardpoint1",
+    "Item": "hpt_beamlaser_fixed_huge",
+    "On": true,
+    "Value": 1985818,
+    "Engineering": {
+     "BlueprintName": "weapon_overcharged",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_thermal_vent"
+    }
+   },
+   {
+    "Slot": "hugehardpoint2",
+    "Item": "hpt_beamlaser_fixed_huge",
+    "On": true,
+    "Value": 1985818,
+    "Engineering": {
+     "BlueprintName": "weapon_overcharged",
+     "Level": 4,
+     "Quality": 0.75,
+     "ExperimentalEffect": "special_thermal_vent"
+    }
+   },
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_beamlaser_gimbal_large",
+    "On": true,
+    "Value": 1985818,
+    "Engineering": {
+     "BlueprintName": "weapon_overcharged",
+     "Level": 5,
+     "Quality": 0.4,
+     "ExperimentalEffect": "special_thermal_vent"
+    }
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_pulselaserburst_turret_medium",
+    "On": true,
+    "Value": 134921,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 4,
+     "Quality": 0.5,
+     "ExperimentalEffect": "special_concordant_sequence"
+    }
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_pulselaserburst_turret_medium",
+    "On": true,
+    "Value": 134921,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 4,
+     "Quality": 0.5,
+     "ExperimentalEffect": "special_concordant_sequence"
+    }
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_beamlaser_turret_small",
+    "On": true,
+    "Value": 425000,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 4,
+     "Quality": 0.25,
+     "ExperimentalEffect": "special_regeneration_sequence"
+    }
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_beamlaser_turret_small",
+    "On": true,
+    "Value": 425000,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 4,
+     "Quality": 0.25,
+     "ExperimentalEffect": "special_regeneration_sequence"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 238850,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 0.2786,
+     "ExperimentalEffect": "special_shieldbooster_thermic"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 238850,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 0.81,
+     "ExperimentalEffect": "special_shieldbooster_thermic"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 238850,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shieldbooster_thermic"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint5",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 238850,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 0.8529,
+     "ExperimentalEffect": "special_shieldbooster_thermic"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint6",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 238850,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 0.9067,
+     "ExperimentalEffect": "special_shieldbooster_thermic"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint7",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_thermic",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shieldbooster_chunky"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint8",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Value": 238850,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_thermic",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shieldbooster_chunky"
+    }
+   },
+   {
+    "Slot": "slot01_size7",
+    "Item": "int_shieldgenerator_size7_class5",
+    "On": true,
+    "Value": 42505853,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_reinforced",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shield_resistive"
+    }
+   },
+   {
+    "Slot": "slot02_size7",
+    "Item": "int_fuelscoop_size7_class5",
+    "On": true,
+    "Priority": 3,
+    "Value": 75565960
+   },
+   {
+    "Slot": "slot03_size7",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 970445
+   },
+   {
+    "Slot": "slot04_size6",
+    "Item": "int_fighterbay_size6_class1",
+    "On": true,
+    "Value": 1549216
+   },
+   {
+    "Slot": "slot05_size6",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 970445
+   },
+   {
+    "Slot": "slot06_size5",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 970445
+   },
+   {
+    "Slot": "slot07_size5",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 970445
+   },
+   {
+    "Slot": "slot08_size4",
+    "Item": "int_guardianshieldreinforcement_size4_class2",
+    "On": true,
+    "Value": 404352
+   },
+   {
+    "Slot": "slot09_size4",
+    "Item": "int_guardianshieldreinforcement_size4_class2",
+    "On": true,
+    "Value": 404352
+   },
+   {
+    "Slot": "slot10_size3",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 4,
+    "Value": 11194
+   },
+   {
+    "Slot": "slot11_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 4,
+    "Value": 7559
+   },
+   {
+    "Slot": "military01",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 970445
+   },
+   {
+    "Slot": "military02",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 970445
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size8_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 99228893,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_powerplant_cooled"
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size7_class5",
+    "On": true,
+    "Value": 42505853,
+    "Engineering": {
+     "BlueprintName": "engine_tuned",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_engine_overloaded"
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size6_class5",
+    "On": true,
+    "Value": 16090544,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 0.2
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size5_class2",
+    "On": true,
+    "Value": 77458
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size8_class5",
+    "On": true,
+    "Value": 22582934,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_highfrequency",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_powerdistributor_fast"
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size8_class3",
+    "On": true,
+    "Value": 3613271
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size5_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 81013
+   },
+   {
+    "Slot": "armour",
+    "Item": "federation_corvette_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 4,
+     "Quality": 0.34
+    }
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ },
+ {
+  "Ship": "python_nx",
+  "ShipID": 127,
+  "ShipName": "Efs Nyx",
+  "ShipIdent": "A05-W",
+  "HullValue": 53656367,
+  "ModulesValue": 46592166,
+  "Rebuy": 5012426,
+  "Modules": [
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_dumbfiremissilerack_fixed_large",
+    "On": true,
+    "Value": 846569
+   },
+   {
+    "Slot": "largehardpoint2",
+    "Item": "hpt_dumbfiremissilerack_fixed_large",
+    "On": true,
+    "Value": 846569
+   },
+   {
+    "Slot": "largehardpoint3",
+    "Item": "hpt_dumbfiremissilerack_fixed_large",
+    "On": true,
+    "Value": 846569
+   },
+   {
+    "Slot": "largehardpoint4",
+    "Item": "hpt_dumbfiremissilerack_fixed_large",
+    "On": true,
+    "Value": 846569
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_dumbfiremissilerack_fixed_medium",
+    "On": true,
+    "Value": 199232
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_dumbfiremissilerack_fixed_medium",
+    "On": true,
+    "Value": 199232
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Priority": 3,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_cloudscanner_size0_class3",
+    "On": true,
+    "Value": 103615
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Priority": 3,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Priority": 2,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint5",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "tinyhardpoint6",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 232879,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot01_size6",
+    "Item": "int_shieldgenerator_size6_class4",
+    "On": true,
+    "Value": 4469596,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_reinforced",
+     "Level": 4,
+     "Quality": 0.25
+    }
+   },
+   {
+    "Slot": "slot02_size4",
+    "Item": "int_guardianfsdbooster_size4",
+    "On": true,
+    "Value": 3163887
+   },
+   {
+    "Slot": "slot03_size3",
+    "Item": "int_fuelscoop_size3_class5",
+    "On": true,
+    "Value": 748324
+   },
+   {
+    "Slot": "slot04_size2",
+    "Item": "int_buggybay_size2_class2",
+    "On": true,
+    "Value": 17901
+   },
+   {
+    "Slot": "slot05_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 3,
+    "Value": 11194
+   },
+   {
+    "Slot": "slot06_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 3,
+    "Value": 7559
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size6_class5",
+    "On": true,
+    "Priority": 1,
+    "Value": 10749798,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size6_class5",
+    "On": true,
+    "Value": 13408787,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size5_class5",
+    "On": true,
+    "Value": 5971625,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size4_class2",
+    "On": true,
+    "Value": 23516
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size6_class5",
+    "On": true,
+    "Value": 2880477,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_priorityweapons",
+     "Level": 2,
+     "Quality": 1,
+     "ExperimentalEffect": "special_powerdistributor_fast"
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size5_class2",
+    "On": true,
+    "Value": 65840
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size4_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 20498
+   },
+   {
+    "Slot": "armour",
+    "Item": "python_nx_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 2,
+     "Quality": 1
+    }
+   }
+  ]
+ },
+ {
+  "Ship": "anacondamkii",
+  "ShipID": 168,
+  "ShipName": "EFS Vidar",
+  "ShipIdent": "A05-AA",
+  "ModulesValue": 19498044,
+  "Rebuy": 974904,
+  "Modules": [
+   {
+    "Slot": "hugehardpoint1",
+    "Item": "hpt_beamlaser_fixed_huge",
+    "On": true,
+    "Value": 1985818,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_thermalshock"
+    }
+   },
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_beamlaser_gimbal_large",
+    "On": true,
+    "Value": 1985818,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_thermalshock"
+    }
+   },
+   {
+    "Slot": "largehardpoint2",
+    "Item": "hpt_beamlaser_gimbal_large",
+    "On": true,
+    "Value": 1985818,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_thermalshock"
+    }
+   },
+   {
+    "Slot": "largehardpoint3",
+    "Item": "hpt_beamlaser_gimbal_large",
+    "On": true,
+    "Value": 1985818,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_thermal_vent"
+    }
+   },
+   {
+    "Slot": "largehardpoint4",
+    "Item": "hpt_beamlaser_gimbal_large",
+    "On": true,
+    "Value": 1985818,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_thermal_vent"
+    }
+   },
+   {
+    "Slot": "smallhardpoint1",
+    "Item": "hpt_multicannon_turret_small",
+    "On": true,
+    "Value": 67626,
+    "Engineering": {
+     "BlueprintName": "weapon_highcapacity",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_corrosive_shell"
+    }
+   },
+   {
+    "Slot": "smallhardpoint2",
+    "Item": "hpt_beamlaser_turret_small",
+    "On": true,
+    "Value": 414375,
+    "Engineering": {
+     "BlueprintName": "weapon_efficient",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_concordant_sequence"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shieldbooster_chunky"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shieldbooster_chunky"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_plasmapointdefence_turret_tiny",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shieldbooster_chunky"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint5",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_heavyduty",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shieldbooster_chunky"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint6",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_resistive",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shieldbooster_chunky"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint7",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "shieldbooster_resistive",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shieldbooster_chunky"
+    }
+   },
+   {
+    "Slot": "tinyhardpoint8",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "slot01_size8",
+    "Item": "int_shieldgenerator_size8_class3_fast",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_reinforced",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_shield_regenerative"
+    }
+   },
+   {
+    "Slot": "slot02_size7",
+    "Item": "int_fuelscoop_size7_class5",
+    "On": true,
+    "Priority": 3
+   },
+   {
+    "Slot": "slot03_size7",
+    "Item": "int_fighterbaymk2_size7_class1",
+    "On": true
+   },
+   {
+    "Slot": "slot04_size5",
+    "Item": "int_dronecontrol_collection_size5_class5",
+    "On": true,
+    "Value": 644436
+   },
+   {
+    "Slot": "slot05_size5",
+    "Item": "int_guardianfsdbooster_size5",
+    "On": true,
+    "Value": 5372870
+   },
+   {
+    "Slot": "slot06_size5",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 824879
+   },
+   {
+    "Slot": "slot07_size4",
+    "Item": "int_guardianshieldreinforcement_size4_class2",
+    "On": true,
+    "Value": 343700
+   },
+   {
+    "Slot": "slot08_size4",
+    "Item": "int_mkiilargebuggybay_size4_class3",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "slot09_size3",
+    "Item": "int_detailedsurfacescanner_tiny",
+    "On": true,
+    "Value": 243750
+   },
+   {
+    "Slot": "slot10_size2",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 3,
+    "Value": 7560
+   },
+   {
+    "Slot": "slot11_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 3
+   },
+   {
+    "Slot": "cargo01",
+    "Item": "int_largecargorack_size6_class1",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "military01",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 824879
+   },
+   {
+    "Slot": "military02",
+    "Item": "int_guardianshieldreinforcement_size5_class2",
+    "On": true,
+    "Value": 824879
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size8_class5",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "powerplant_boosted",
+     "Level": 4,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size7_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 4,
+     "Quality": 1,
+     "ExperimentalEffect": "special_engine_haulage"
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size8_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_fsd_heavy"
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size5_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size8_class5",
+    "On": true,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_highfrequency",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size8_class5",
+    "On": true,
+    "Priority": 2
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size6_class3",
+    "On": true,
+    "Priority": 1
+   },
+   {
+    "Slot": "armour",
+    "Item": "anacondamkii_armour_grade3",
+    "On": true,
+    "Priority": 1,
+    "Engineering": {
+     "BlueprintName": "armour_heavyduty",
+     "Level": 5,
+     "Quality": 1
+    }
+   }
+  ]
+ },
+ {
+  "Ship": "explorer_nx",
+  "ShipID": 160,
+  "ShipName": "EFS Njord",
+  "ShipIdent": "A05-XP",
+  "HullValue": 151236494,
+  "ModulesValue": 229693671,
+  "Rebuy": 19046508,
+  "Modules": [
+   {
+    "Slot": "tinyhardpoint1",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2901
+   },
+   {
+    "Slot": "tinyhardpoint2",
+    "Item": "hpt_heatsinklauncher_turret_tiny",
+    "On": true,
+    "Value": 2901
+   },
+   {
+    "Slot": "slot01_size7",
+    "Item": "int_fuelscoop_size7_class5",
+    "On": true,
+    "Value": 75565960
+   },
+   {
+    "Slot": "slot02_size6",
+    "Item": "int_fighterbaymk2_size6_class1",
+    "On": true
+   },
+   {
+    "Slot": "slot05_size5",
+    "Item": "int_guardianfsdbooster_size5",
+    "On": true,
+    "Value": 6321023
+   },
+   {
+    "Slot": "slot06_size5",
+    "Item": "int_shieldgenerator_size5_class2",
+    "On": true,
+    "Value": 156663,
+    "Engineering": {
+     "BlueprintName": "shieldgenerator_reinforced",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot11_size2",
+    "Item": "int_buggybay_size2_class2",
+    "On": true,
+    "Value": 17901
+   },
+   {
+    "Slot": "slot12_size1",
+    "Item": "int_detailedsurfacescanner_tiny",
+    "On": true,
+    "Value": 207188,
+    "Engineering": {
+     "BlueprintName": "sensor_expanded",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "slot13_size1",
+    "Item": "int_supercruiseassist",
+    "On": true,
+    "Priority": 2,
+    "Value": 7559
+   },
+   {
+    "Slot": "slot14_size1",
+    "Item": "int_dockingcomputer_advanced",
+    "On": true,
+    "Priority": 2,
+    "Value": 11193
+   },
+   {
+    "Slot": "powerplant",
+    "Item": "int_powerplant_size8_class2",
+    "On": true,
+    "Priority": 1,
+    "Value": 3583267,
+    "Engineering": {
+     "BlueprintName": "powerplant_stealth",
+     "Level": 1,
+     "Quality": 1,
+     "ExperimentalEffect": "special_powerplant_lightweight"
+    }
+   },
+   {
+    "Slot": "mainengines",
+    "Item": "int_engine_size7_class5_gravityoptimised_mkii",
+    "On": false,
+    "Value": 56660301,
+    "Engineering": {
+     "BlueprintName": "engine_dirty",
+     "Level": 4,
+     "Quality": 1,
+     "ExperimentalEffect": "special_engine_overloaded"
+    }
+   },
+   {
+    "Slot": "frameshiftdrive",
+    "Item": "int_hyperdrive_overcharge_size8_class5_overchargebooster_mkii",
+    "On": true,
+    "Value": 67992362,
+    "Engineering": {
+     "BlueprintName": "fsd_longrange",
+     "Level": 5,
+     "Quality": 1,
+     "ExperimentalEffect": "special_fsd_heavy"
+    }
+   },
+   {
+    "Slot": "lifesupport",
+    "Item": "int_lifesupport_size5_class2",
+    "On": true,
+    "Value": 65840
+   },
+   {
+    "Slot": "powerdistributor",
+    "Item": "int_powerdistributor_size7_class5",
+    "On": true,
+    "Value": 8065334,
+    "Engineering": {
+     "BlueprintName": "powerdistributor_highfrequency",
+     "Level": 5,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "radar",
+    "Item": "int_sensors_size8_class2",
+    "On": true,
+    "Value": 1482367,
+    "Engineering": {
+     "BlueprintName": "sensor_lightweight",
+     "Level": 3,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "fueltank",
+    "Item": "int_fueltank_size7_class3",
+    "On": true,
+    "Priority": 1,
+    "Value": 1475932
+   },
+   {
+    "Slot": "armour",
+    "Item": "explorer_nx_armour_grade1",
+    "On": true,
+    "Priority": 1,
+    "Value": 8074565,
+    "Engineering": {
+     "BlueprintName": "armour_advanced",
+     "Level": 1,
+     "Quality": 1
+    }
+   },
+   {
+    "Slot": "largehardpoint1",
+    "Item": "hpt_multicannon_gimbal_large",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint1",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint2",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint3",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint4",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint5",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "mediumhardpoint6",
+    "Item": "hpt_multicannon_gimbal_medium",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint3",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint4",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint5",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "tinyhardpoint6",
+    "Item": "hpt_shieldbooster_size0_class5",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot101_size6",
+    "Item": "int_cargorack_size6_class1",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot102_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot103_size5",
+    "Item": "int_cargorack_size5_class1",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot104_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot105_size4",
+    "Item": "int_cargorack_size4_class1",
+    "On": true,
+    "Filled": true
+   },
+   {
+    "Slot": "slot106_size3",
+    "Item": "int_cargorack_size3_class1",
+    "On": true,
+    "Filled": true
+   }
+  ]
+ }
+]
