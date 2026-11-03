@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Fleet Battle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&family=Saira:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: setup (fleet picking) → battle table (enemy fleet top, the duel in the middle, your fleet bottom, controls + log beside). Single dark look. */
+:root{
+  --void:#07050d; --panel:#140c24; --panel2:#1d1233; --line:#3b2766; --ink:#efe9ff; --muted:#a99cc7;
+  --accent:#a07bff; --gold:#e8c35a; --shield:#5aa9ff; --hull:#ff9a4d; --bad:#ff6b7a; --good:#5fd08a;
+  --f-display:"Saira Condensed","Arial Narrow",sans-serif; --f-body:"Saira",system-ui,sans-serif; --f-data:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--f-body);padding:20px max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-family:var(--f-display);font-weight:800;font-size:30px;letter-spacing:.04em;text-transform:uppercase;margin:0;line-height:1}
+h1 span{color:var(--gold)}
+h2{font-family:var(--f-display);font-size:16px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0}
+.sub{color:var(--muted);font-size:13px;margin:4px 0 0;max-width:70ch;line-height:1.45}
+.btn{font:600 13px var(--f-body);color:var(--ink);background:#120d1c;border:1px solid #2d2340;border-radius:6px;padding:8px 12px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:var(--gold);color:#241800;border-color:var(--gold)}
+.btn[aria-pressed="true"]{background:var(--accent);color:#120a22;border-color:var(--accent)}
+.btn:focus-visible,.tile:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.tile{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:8px;overflow:hidden;cursor:pointer;text-align:left;color:inherit;font:inherit;padding:0;display:flex;flex-direction:column}
+.tile img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#000}
+.tile .noimg{aspect-ratio:16/9;display:grid;place-items:center;font-family:var(--f-data);font-size:10px;color:var(--muted);background:#000}
+.tile .tb{padding:6px 8px;display:flex;flex-direction:column;gap:3px}
+.tile .nm{font-family:var(--f-display);font-weight:800;font-size:15px;text-transform:uppercase;line-height:1}
+.tile .ty{font-size:10.5px;color:var(--muted)}
+.tile .pts{position:absolute;top:6px;right:6px;background:var(--gold);color:#241800;font-family:var(--f-display);font-weight:800;font-size:13px;border-radius:999px;padding:1px 8px}
+.tile.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}
+.tile.dead{opacity:.35;cursor:default}
+.tile.gone{opacity:.55;cursor:default}
+.bar{height:6px;border-radius:3px;background:#0b0714;overflow:hidden}
+.bar i{display:block;height:100%}
+.bar.sh i{background:var(--shield)}.bar.hu i{background:var(--hull)}
+.bar.sh.broken i{background:repeating-linear-gradient(90deg,#2b4f7a 0 4px,#16263b 4px 8px)}
+.st{font-family:var(--f-data);font-size:10px;color:var(--muted);display:flex;justify-content:space-between;gap:4px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:560px){.grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.tile .nm{font-size:13px}.tile .ty{display:none}.tile .st{font-size:9px}}
+.side{display:flex;flex-direction:column;gap:16px;min-width:0}
+.duel{display:grid;grid-template-columns:minmax(0,260px) auto minmax(0,260px);justify-content:center;gap:10px;align-items:center}
+.duel .who{min-width:0}
+.rangebox{font-family:var(--f-display);font-weight:800;font-size:22px;color:var(--gold);text-align:center;line-height:1}
+.rangebox small{display:block;font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}
+.pips{display:grid;grid-template-columns:auto auto 1fr auto;gap:6px 8px;align-items:center;font-family:var(--f-data);font-size:13px}
+.pips .lab{font-family:var(--f-display);font-weight:700;letter-spacing:.12em}
+.pipdots{display:flex;gap:3px}.pipdots i{width:14px;height:10px;border-radius:2px;background:#2a1f3d}.pipdots i.on{background:var(--gold)}
+.small{font-size:12px;color:var(--muted);line-height:1.45}
+.log{max-height:360px;overflow:auto;display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.45}
+.log p{margin:0;padding-bottom:8px;border-bottom:1px dashed #3b276688}
+.log b{color:var(--gold);font-weight:500}
+.winner{font-family:var(--f-display);font-weight:800;font-size:28px;color:var(--gold);text-transform:uppercase}
+.turn{font-family:var(--f-display);font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.turn span{color:var(--gold)}
+label.inline{display:flex;gap:6px;align-items:center;font-size:13px}
+select{font:14px var(--f-body);color:var(--ink);background:#0b0812;border:1px solid #2d2340;border-radius:5px;padding:6px 8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fleet <span>Battle</span></h1>
+    <p class="sub"><a href="index.html" style="color:var(--gold)">See all cards</a> · Prototype. Each round is 5 seconds of combat worked out with Elite's own numbers: weapon falloff, damage types against resistances, armour piercing, capacitors and shield regeneration. The more manoeuvrable ship controls the range.</p>
+  </header>
+
+  <!-- SETUP -->
+  <section id="setup" class="panel">
+    <div class="row">
+      <h2 style="margin-right:auto">New match</h2>
+      <span class="small">Opponent</span>
+      <button class="btn" id="m-ai" aria-pressed="true">Computer</button>
+      <button class="btn" id="m-hot" aria-pressed="false">Second player (same screen)</button>
+      <label class="inline">Points cap <select id="cap"><option>40</option><option selected>60</option><option>80</option><option>120</option></select></label>
+    </div>
+    <p class="small" id="pickhint"></p>
+    <div class="grid" id="pickgrid"></div>
+    <div class="row"><span class="small" id="picksum"></span><button class="btn primary" id="pickdone" style="margin-left:auto">Confirm fleet</button></div>
+  </section>
+
+  <!-- BATTLE -->
+  <section id="battle" class="layout" hidden>
+    <div class="side">
+      <div class="panel"><h2 id="labB">Opponent fleet</h2><div class="grid" id="fleetB"></div></div>
+      <div class="panel" id="table">
+        <div class="duel"><div class="who" id="duelA"></div><div class="rangebox" id="rangebox"></div><div class="who" id="duelB"></div></div>
+      </div>
+      <div class="panel"><h2 id="labA">Your fleet</h2><div class="grid" id="fleetA"></div></div>
+    </div>
+    <div class="side">
+      <div class="panel" id="controls"></div>
+      <div class="panel"><h2>Battle log</h2><div class="log" id="log"><p class="small">No rounds yet.</p></div></div>
+    </div>
+  </section>
+</div>
+<script src="engine.js"></script>
+<script src="battle.js"></script>
+<script>
+const IMG={ 'EFS Alectrona':'alectrona-sidewinder','EFS Aeolus':'aeolus-eagle','EFS Aion':'aion-viper-mk3','EFS Behemoth':'behemoth-panther-clipper-mk2','EFS Anubis':'anubis-type6','EFS Thanatos':'thanatos-cobra-mk4','EFS Hermes':'hermes-diamondback-explorer','EFS Aphrodite':'aphrodite-adder','EFS Baphomet':'baphomet-cobra-mk5','EFS Hades':'hades-cobra-mk3','EFS Poseidon':'poseidon-vulture','EFS Hercules':'hercules-asp-explorer','EFS Eos':'eos-mandalay','EFS Ponos':'ponos-type8','EFS Freya':'freya-fer-de-lance','EFS Thor':'thor-python','EFS Artemis':'artemis-mamba','EFS Hephaestus':'hephaestus-type9','EFS Nyx':'nyx-python-mk2','EFS Odin':'odin-anaconda','EFS Götterfunke':'goetterfunke-federal-corvette','EFS Ares':'ares-type10','EFS Zeus':'zeus-krait-mk2','EFS Zephyr':'zephyr-unknown','EFS Njord':'njord-caspian-explorer','EFS Vidar':'vidar-anaconda-mk2' };
+const IMG_BASE=window.IMG_BASE||'../fleet/card/';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const short=n=>n.replace(/^EFS /,'');
+let CARDS=[],mode='ai',cap=60,pick={A:[],B:[]},picking='A',G=null,stage=null,pending=null;
+const NAME={A:'Player 1',B:'Player 2'};
+
+function imgTag(name){const f=IMG[name];return f?`<img src="${IMG_BASE}${f}.jpg" alt="" loading="lazy">`:'<div class="noimg">NO IMAGE</div>'}
+function pickTile(c,sel){return `<button class="tile${sel?' sel':''}" data-n="${esc(c.name)}">${imgTag(c.name)}<span class="pts">${c.cost}</span><div class="tb"><span class="nm">${esc(short(c.name))}</span><span class="ty">${esc(c.type)} · ${esc(c.mainRole)}</span><span class="st"><span>${c.stats.dps} dps</span><span>${c.stats.shield} MJ</span><span>${c.stats.hull} hull</span></span></div></button>`}
+function renderPick(){
+  const sel=pick[picking];const used=sel.reduce((a,c)=>a+c.cost,0);
+  $('pickhint').textContent=`${mode==='hot'?NAME[picking]+': ':''}pick up to 3 ships, at most ${cap} points in total. Ships without weapons can still be played, but they can't damage anything.`;
+  $('pickgrid').innerHTML=CARDS.map(c=>pickTile(c,sel.includes(c))).join('');
+  $('picksum').textContent=`${sel.length}/3 ships · ${used}/${cap} points`;
+  $('pickdone').disabled=!sel.length;
+}
+$('pickgrid').addEventListener('click',e=>{const t=e.target.closest('.tile');if(!t)return;const c=CARDS.find(x=>x.name===t.dataset.n);const sel=pick[picking];
+  const i=sel.indexOf(c);if(i>=0)sel.splice(i,1);else{const used=sel.reduce((a,x)=>a+x.cost,0);if(sel.length<3&&used+c.cost<=cap)sel.push(c)}renderPick()});
+$('m-ai').onclick=()=>{mode='ai';$('m-ai').setAttribute('aria-pressed','true');$('m-hot').setAttribute('aria-pressed','false');renderPick()};
+$('m-hot').onclick=()=>{mode='hot';$('m-hot').setAttribute('aria-pressed','true');$('m-ai').setAttribute('aria-pressed','false');renderPick()};
+$('cap').onchange=e=>{cap=+e.target.value;pick={A:[],B:[]};picking='A';renderPick()};
+$('pickdone').onclick=()=>{
+  if(mode==='hot'&&picking==='A'){picking='B';renderPick();return}
+  if(mode==='ai'){ // computer picks the strongest affordable combat trio it can find (random tie-break)
+    const pool=CARDS.filter(c=>c.stats.dps>0).sort(()=>Math.random()-.5);let best=[];
+    for(let t=0;t<400;t++){const s=[];let u=0;for(const c of pool.sort(()=>Math.random()-.5)){if(s.length<3&&u+c.cost<=cap){s.push(c);u+=c.cost}}
+      const v=s.reduce((a,c)=>a+c.stats.dps+(c.stats.shield+c.stats.hull)/40,0);if(v>best.v||!best.v){best=s;best.v=v}}
+    pick.B=best;}
+  start();
+};
+
+function start(){
+  G=Battle.newGame(pick.A,pick.B);NAME.A=mode==='ai'?'You':'Player 1';NAME.B=mode==='ai'?'Computer':'Player 2';
+  $('labA').textContent=NAME.A+(mode==='ai'?'r fleet':' fleet');$('labB').textContent=NAME.B+' fleet';
+  $('setup').hidden=true;$('battle').hidden=false;nextStage();
+}
+function shipTile(s,selectable,sel){
+  const c=s.c;const shMax=c.shield?c.shield.max:0;
+  const st=s.status==='destroyed'?'DESTROYED':s.status==='jumped'?'JUMPED OUT':s.status==='charging'?`FSD ${s.fsd}`:s.broken&&shMax?'SHIELDS DOWN':'READY';
+  const cls=s.status==='destroyed'?' dead':s.status==='jumped'?' gone':'';
+  return `<button class="tile${sel?' sel':''}${cls}" data-id="${esc(s.id)}" ${selectable?'':'tabindex="-1"'}>${imgTag(s.card.name)}<div class="tb"><span class="nm">${esc(short(s.card.name))}</span><span class="ty">${esc(s.card.type)}</span>
+   ${shMax?`<div class="bar sh${s.broken?' broken':''}"><i style="width:${Math.round(s.shield/shMax*100)}%"></i></div>`:''}<div class="bar hu"><i style="width:${Math.round(s.hull/c.armour.max*100)}%"></i></div>
+   <span class="st"><span>${shMax?Math.round(s.shield)+' MJ':'no shield'}</span><span>${Math.round(s.hull)} hull</span></span><span class="st"><span>${st}</span><span>${c.weapons.length?Math.round(c.weapons.reduce((a,w)=>a+w.sdps,0))+' dps':'unarmed'}</span></span></div></button>`;
+}
+function render(){
+  const sel=pending&&pending.shipId;
+  $('fleetA').innerHTML=G.ships.filter(s=>s.owner==='A').map(s=>shipTile(s,stage&&stage.who==='A',sel===s.id)).join('');
+  $('fleetB').innerHTML=G.ships.filter(s=>s.owner==='B').map(s=>shipTile(s,stage&&stage.who==='B',sel===s.id)).join('');
+  const pa=G.pair?G.ships.find(s=>s.id===G.pair[0]):null,pb=G.pair?G.ships.find(s=>s.id===G.pair[1]):null;
+  $('duelA').innerHTML=pa?shipTile(pa,false,false):'<p class="small">No ship on the table yet.</p>';
+  $('duelB').innerHTML=pb?shipTile(pb,false,false):'';
+  $('rangebox').innerHTML=`${G.pair?Battle.RANGES[G.range]+' m':'—'}<small>${G.pair?G.range+' range':'range'}</small>`;
+}
+function pipsUI(p){return ['SYS','ENG','WEP'].map((l,i)=>`<span class="lab">${l}</span><button class="btn" data-pip="${i}" data-d="-1" aria-label="Less ${l}">−</button><span class="pipdots">${[0,1,2,3].map(k=>`<i class="${k<p[i]?'on':''}"></i>`).join('')}</span><button class="btn" data-pip="${i}" data-d="1" aria-label="More ${l}">+</button>`).join('')}
+function nextStage(){
+  if(G.winner){stage=null;pending=null;render();
+    const w=G.winner==='draw'?'Draw':NAME[G.winner]+(mode==='ai'&&G.winner==='A'?' win':' wins');
+    $('controls').innerHTML=`<div class="winner">${esc(w)}</div><p class="small">${G.endReason==='jumped'?'The other side has no ships left on the field.':'All ships of the losing side are destroyed.'} ${G.round} rounds.</p><button class="btn primary" id="again">New match</button>`;
+    $('again').onclick=()=>location.reload();return}
+  const att=G.initiative,def=att==='A'?'B':'A';
+  stage={who:att,role:'attack'};
+  if(mode==='ai'&&att==='B'){const am=Battle.aiAttack(G,'B');stage={who:'A',role:'defend',att:am};pending={shipId:defaultShip('A'),pips:[2,2,2],jump:false,newRange:G.range};}
+  else pending={shipId:defaultShip(att),range:G.range||'medium',pips:[2,2,2],jump:false};
+  render();controls();
+}
+function defaultShip(o){const al=Battle.alive(G,o);const ch=al.find(s=>s.status==='charging');if(ch)return ch.id;const cur=G.pair&&G.pair.find(id=>id.startsWith(o+':')&&al.some(s=>s.id===id));return cur||al[0].id}
+function controls(){
+  const who=stage.who,role=stage.role;const me=G.ships.find(s=>s.id===pending.shipId);
+  let h=`<div class="turn">${esc(NAME[who])}: <span>${role==='attack'?'play a ship':'counter'}</span></div>`;
+  if(role==='defend'){const a=stage.att;const as=G.ships.find(s=>s.id===a.shipId);
+    h+=`<p class="small">${esc(NAME[who==='A'?'B':'A'])} plays <b>${esc(short(as.card.name))}</b> at ${a.range} range, ${a.pips.join('/')} pips.</p>`;}
+  const charging=Battle.alive(G,who).find(s=>s.status==='charging');
+  h+=`<p class="small">${charging?'Your charging ship has to stay on the table until it jumps.':'Tap one of your ships to choose it.'} Chosen: <b>${esc(short(me.card.name))}</b></p>`;
+  if(role==='attack') h+=`<div class="row">${Object.keys(Battle.RANGES).map(r=>`<button class="btn" data-range="${r}" aria-pressed="${pending.range===r}">${r} ${Battle.RANGES[r]} m</button>`).join('')}</div>`;
+  h+=`<div class="pips">${pipsUI(pending.pips)}</div><p class="small">Pips: ${pending.pips.join('/')} (SYS/ENG/WEP, 6 in total, max 4 each). Turn rate ${Battle.pitchAt(me.c,pending.pips[1]).toFixed(1)}°/s.</p>`;
+  if(role==='defend'){const a=stage.att,as=G.ships.find(s=>s.id===a.shipId);const ma=Battle.pitchAt(as.c,a.pips[1]),md=Battle.pitchAt(me.c,pending.pips[1]);
+    const samePair=G.pair&&G.pair.includes(as.id)&&G.pair.includes(me.id);
+    h+= md>ma?`<p class="small" style="color:var(--good)">You out-turn them (${md.toFixed(1)} vs ${ma.toFixed(1)}°/s)${samePair?': the range stays where it is this round':''}. After the round you set the range:</p><div class="row">${Object.keys(Battle.RANGES).map(r=>`<button class="btn" data-nrange="${r}" aria-pressed="${pending.newRange===r}">${r}</button>`).join('')}</div>`
+      :`<p class="small">They out-turn you (${ma.toFixed(1)} vs ${md.toFixed(1)}°/s): they set the range.</p>`;}
+  if(!charging) h+=`<label class="inline"><input type="checkbox" id="jump" ${pending.jump?'checked':''}> Charge the FSD and jump out (${Battle.FSD_ROUNDS} rounds)</label>`;
+  h+=`<button class="btn primary" id="go">${role==='attack'?'Play':'Counter'}</button>`;
+  $('controls').innerHTML=h;
+  $('controls').querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{pending.range=b.dataset.range;controls()});
+  $('controls').querySelectorAll('[data-nrange]').forEach(b=>b.onclick=()=>{pending.newRange=b.dataset.nrange;controls()});
+  $('controls').querySelectorAll('[data-pip]').forEach(b=>b.onclick=()=>{const i=+b.dataset.pip,d=+b.dataset.d,p=pending.pips.slice();
+    if(d>0){if(p[i]>=4)return;const j=[0,1,2].filter(k=>k!==i).sort((x,y)=>p[y]-p[x])[0];if(p[j]<=0)return;p[i]++;p[j]--}
+    else{if(p[i]<=0)return;const j=[0,1,2].filter(k=>k!==i).sort((x,y)=>p[x]-p[y])[0];if(p[j]>=4)return;p[i]--;p[j]++}
+    pending.pips=p;controls()});
+  const j=$('jump');if(j)j.onchange=()=>pending.jump=j.checked;
+  $('go').onclick=submit;
+}
+function onTile(e){const t=e.target.closest('.tile');if(!t||!stage)return;const s=G.ships.find(x=>x.id===t.dataset.id);
+  if(!s||s.owner!==stage.who||s.status==='destroyed'||s.status==='jumped')return;const ch=Battle.alive(G,stage.who).find(x=>x.status==='charging');if(ch&&ch!==s)return;
+  pending.shipId=s.id;render();controls()}
+$('fleetA').addEventListener('click',onTile);$('fleetB').addEventListener('click',onTile);
+function submit(){
+  if(stage.role==='attack'){
+    const am={...pending};const def=stage.who==='A'?'B':'A';
+    if(mode==='ai'&&def==='B'){const dm=Battle.aiDefend(G,'B',am);resolve(am,dm);return}
+    stage={who:def,role:'defend',att:am};pending={shipId:defaultShip(def),pips:[2,2,2],jump:false,newRange:G.range};render();controls();
+  } else resolve(stage.att,{...pending});
+}
+function resolve(am,dm){
+  const e=Battle.playRound(G,am,dm);
+  const nm=id=>{const s=G.ships.find(x=>x.id===id);return (mode==='ai'?(s.owner==='A'?'your ':'their '):(NAME[s.owner]+'\'s '))+short(s.card.name)};
+  const dl=d=>`${Math.round(d.shield)} to shields, ${Math.round(d.hull)} to hull`;
+  const line=`<p><b>Round ${e.round}</b> · ${esc(nm(e.attacker.id))} at ${e.attacker.range} (${e.attacker.pips.join('/')}) vs ${esc(nm(e.defender.id))} (${e.defender.pips.join('/')}). Fought at <b>${e.range} m</b>${e.rangeBy==='kept'?' (the defender out-turned the attack and kept the range)':''}.<br>${esc(nm(e.attacker.id))}: ${dl(e.dealt.A)}. ${esc(nm(e.defender.id))}: ${dl(e.dealt.D)}.${e.events.length?'<br>'+e.events.map(esc).join(' '):''}${e.defenderMoved?`<br>${esc(nm(e.defender.id))} moves the fight to ${e.nextRange} range.`:''}</p>`;
+  const log=$('log');if(log.querySelector('.small'))log.innerHTML='';log.insertAdjacentHTML('afterbegin',line);
+  nextStage();
+}
+
+async function main(){
+  const base=window.DATA_BASE||'';
+  const [modules,ships,eng,fleet]=await Promise.all([base+'data/modules.json',base+'data/ships.json',base+'data/engineering.json',window.FLEET_URL||'../fleet-loadouts-filled.json'].map(u=>fetch(u).then(r=>r.json())));
+  CARDS=fleet.map(l=>ShipCards.build(l,{modules,ships,eng})).sort((a,b)=>b.cost-a.cost);
+  renderPick();
+}
+main().catch(e=>{$('pickgrid').innerHTML='<p class="small">Could not load the fleet data: '+esc(e.message)+'</p>'});
+</script>
+</body>
+</html>

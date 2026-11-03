@@ -96,26 +96,36 @@
     return Math.max(0, Math.min(1, ((lvl - 1) + q) / 5));
   }
   let USE_REAL = false; // true when db.eng (coriolis blueprint tables) is loaded: exact rolls replace the BP estimates
-  function applyEng(m, eng, E) { // apply blueprint roll (grade + quality) and experimental to a module copy
+  function applyEng(m, eng, E) { // Coriolis Module rules: blueprint roll, then experimental on top
     const out = Object.assign({}, m);
-    const feats = {};
+    if (m.damagedist) out.damagedist = Object.assign({}, m.damagedist);
+    const bp = {};
     const g = E.bp[lc(eng.BlueprintName)];
     if (g && g[String(eng.Level)]) {
       const q = eng.Quality == null ? 1 : +eng.Quality;
-      for (const [k, r] of Object.entries(g[String(eng.Level)])) feats[k] = (feats[k] || 0) + r[0] + q * (r[1] - r[0]);
+      for (const [k, r] of Object.entries(g[String(eng.Level)])) bp[k] = r[0] + q * (r[1] - r[0]);
     }
-    const sp = eng.ExperimentalEffect && E.sp[lc(eng.ExperimentalEffect)];
-    if (sp) for (const [k, v] of Object.entries(sp)) if (typeof v === 'number') feats[k] = (feats[k] || 0) + v;
-    for (const [k, v] of Object.entries(feats)) {
-      if (k === 'shieldboost' || k === 'hullboost') out[k] = (1 + (out[k] || 0)) * (1 + v) - 1;
-      else if (k === 'rof') { if (out.fireint) out.fireint *= (1 + v); }
-      else if (k === 'optmul') { for (const x of ['minmul', 'optmul', 'maxmul', 'minmulspeed', 'optmulspeed', 'maxmulspeed']) if (out[x] != null) out[x] *= (1 + v); }
-      else if (k === 'optmass') { for (const x of ['optmass', 'minmass', 'maxmass']) if (out[x] != null && !(x !== 'optmass' && feats[x])) out[x] *= (1 + v); }
-      else if (/res$/.test(k)) continue;
-      else if (typeof out[k] === 'number') {
-        const meth = E.method[k] || 'multiplicative';
-        if (meth === 'additive') out[k] += v; else if (meth === 'overwrite') out[k] = v; else out[k] *= (1 + v);
+    const sp = (eng.ExperimentalEffect && E.sp[lc(eng.ExperimentalEffect)]) || {};
+    const keys = new Set([...Object.keys(bp), ...Object.keys(sp)]);
+    for (const k of keys) {
+      const v = bp[k] || 0, x = sp[k];
+      if (k === 'damagedist' && typeof x === 'object') { out.damagedist = Object.assign({}, x); continue; }
+      if (typeof x === 'object') continue;
+      const meth0 = E.method[k] || 'multiplicative';
+      // Coriolis modifierActions store resistances and additive values in percent, the rest as fractions
+      const s2 = typeof x !== 'number' ? 0 : (/res$/.test(k) || meth0 === 'additive') ? x / 100 : x;
+      if (/res$/.test(k)) { // resistances scale with what is left: r = base + (1-base)·bp, then + exp·(1-r)
+        const base = out[k] || 0; let r = base + (1 - base) * v; if (s2) r = r + s2 * (1 - r); out[k] = r; continue;
       }
+      const meth = E.method[k] || 'multiplicative';
+      const mod = meth === 'multiplicative' ? (1 + v) * (1 + s2) - 1 : v + s2;
+      if (k === 'shieldboost' || k === 'hullboost') { out[k] = (1 + (out[k] || 0)) * (1 + mod) - 1; out['_' + k + 'mod'] = mod; }
+      else if (k === 'rof') { if (out.fireint) out.fireint *= (1 + mod); }
+      else if (k === 'optmul') { for (const y of ['minmul', 'optmul', 'maxmul', 'minmulspeed', 'optmulspeed', 'maxmulspeed', 'minmulrotation', 'optmulrotation', 'maxmulrotation']) if (out[y] != null) out[y] *= (1 + mod); }
+      else if (k === 'optmass') { for (const y of ['optmass', 'minmass', 'maxmass']) if (out[y] != null && !(y !== 'optmass' && keys.has(y))) out[y] *= (1 + mod); }
+      else if (meth === 'overwrite') out[k] = v || s2;
+      else if (meth === 'additive') out[k] = (out[k] || 0) + mod;
+      else if (typeof out[k] === 'number') out[k] *= (1 + mod);
     }
     return out;
   }
@@ -151,7 +161,7 @@
     const has = { scoop: 0, dss: 0, repair: 0, fuelLimpet: 0, collector: 0, prospector: 0, refinery: 0, mining: 0, interdictor: 0, decon: 0 };
     let fighterBays = 0, srvBays = 0, rhinoBays = 0;
     let engCount = 0, engScore = 0, engMax = 0, expCount = 0;
-    const abilities = [], slots = [];
+    const abilities = [], slots = [], parts = [];
 
     for (const mod of mods) {
       const item = lc(mod.Item), eng = mod.Engineering || null;
@@ -167,7 +177,7 @@
           else { m = { grp: 'pci', mass: 0, passengers: 6 * Math.pow(2, size - 3) }; notes.push('Mk II cabin size ' + size + ' class ' + cls + ' capacity is a guess.'); }
         }
         else if (/mkiilargebuggybay/.test(item)) { m = { grp: 'pvr', mass: 16, bays: 2 }; }
-        else if (/_armour_grade(\d)/.test(item)) { const g = +/_armour_grade(\d)/.exec(item)[1]; const b = hull.bulkheads[Math.min(g, hull.bulkheads.length) - 1] || hull.bulkheads[0]; m = { grp: 'bh', mass: b.mass, hullboost: b.hullboost }; }
+        else if (/_armour_grade(\d)/.test(item)) { const g = +/_armour_grade(\d)/.exec(item)[1]; const b = hull.bulkheads[Math.min(g, hull.bulkheads.length) - 1] || hull.bulkheads[0]; m = { grp: 'bh', mass: b.mass, hullboost: b.hullboost, kinres: b.kinres, thermres: b.thermres, explres: b.explres }; }
         else { m = { grp: '?', mass: 0 }; notes.push('Unknown module ' + item + ' counted as empty.'); }
       }
       if (eng && USE_REAL) m = applyEng(m, eng, db.eng);
@@ -209,6 +219,7 @@
         const a = EXP[key] || EXPN[key.replace(/^(weapon|shieldbooster|shield|armour|engine|fsd|powerplant|powerdistributor)_/, '').replace(/_/g, '')] || [key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), 'Special effect.'];
         if (!abilities.find(x => x[0] === a[0])) abilities.push(a);
       }
+      parts.push({ item, g, m, priority: mod.Priority == null ? 1 : +mod.Priority, weapon: WEAPON_GROUPS.has(g) });
       slots.push({ slot: mod.Slot, item, grp: g, eng: eng ? { bp: eng.BlueprintName, grade: eng.Level, q: eng.Quality, exp: eng.ExperimentalEffect || null } : null, filled: !!mod.Filled });
     }
     // fuel in tank counts toward mass
@@ -255,9 +266,69 @@
     return {
       name: titleCase(loadout.ShipName || hull.name), ident: (loadout.ShipIdent || '').toUpperCase(), shipKey, type: hull.name, maker: hull.mfr,
       estimate: !!est, rarity, engScore: Math.round(score * 100), engineered: engCount, experimentals: expCount,
+      combat: combatProfile(parts, hull, unladen, jump),
       stats: { dps: round1(totalDps), dpsSplit: { thermal: round1(dps.T), kinetic: round1(dps.K), explosive: round1(dps.E), absolute: round1(dps.A) }, shield: Math.round(shield), scb: Math.round(scb), hull: Math.round(hullPts), jump: round1(jump), speed: Math.round(speed), mass: Math.round(unladen), cargo, passengers, mines },
       bays: { fighter: fighterBays, srv: srvBays, rhino: rhinoBays },
       roles: roles.map(r => r.id), mainRole: main ? main.id : 'none', abilities, cost, slots, notes: [...new Set(notes)]
+    };
+  }
+  // ---------- combat profile (Coriolis Calculations.js: shieldMetrics, armourMetrics, _weaponSustainedDps) ----------
+  const DR_SH = (genMult, combined) => { const max = genMult * 0.7; return combined < max ? (max / 2) + (max - max / 2) * (combined / max) : combined; };
+  const DR_AR = (...mults) => { const max = Math.min(0.7, ...mults); const comb = mults.reduce((a, v) => a * v, 1); const d = 0.35 + (max - 0.35) * (comb / max); return d < 0.7 ? d : comb; };
+  function combatProfile(parts, hull, mass, jump) {
+    // power: if modules need more than the power plant makes, switch off by priority (5 first), like the game
+    const pp = parts.find(p => p.g === 'pp');
+    const pgen = pp ? (pp.m.pgen || 0) : 0;
+    let draw = parts.reduce((a, p) => a + (p.m.power || 0), 0);
+    const off = new Set(); const powerNotes = [];
+    for (let pr = 5; pr >= 2 && pgen && draw > pgen + 1e-6; pr--) {
+      const grp = parts.filter(p => p.priority === pr && p.g !== 'pp');
+      if (!grp.length) continue;
+      grp.forEach(p => off.add(p)); draw -= grp.reduce((a, p) => a + (p.m.power || 0), 0);
+      powerNotes.push('Priority ' + pr + ' modules power down (' + grp.length + ').');
+    }
+    const on = parts.filter(p => !off.has(p));
+    // shields
+    const sgp = on.find(p => p.g === 'sg' || p.g === 'bsg' || p.g === 'psg');
+    let shield = null;
+    if (sgp) {
+      const sg = sgp.m;
+      const gen = hull.shield * curve(hull.hullMass, sg);
+      let boost = 0; const bDmg = { K: 1, T: 1, E: 1 };
+      for (const p of on.filter(p => p.g === 'sb')) { boost += p.m.shieldboost || 0; bDmg.K *= 1 - (p.m.kinres || 0); bDmg.T *= 1 - (p.m.thermres || 0); bDmg.E *= 1 - (p.m.explres || 0); }
+      const add = on.filter(p => p.g === 'gsrp').reduce((a, p) => a + (p.m.shieldaddition || 0), 0);
+      const mult = { A: 1 };
+      for (const [t, r] of [['K', 'kinres'], ['T', 'thermres'], ['E', 'explres']]) { const g = 1 - (sg[r] || 0); mult[t] = DR_SH(g, g * bDmg[t]); }
+      shield = { max: gen * (1 + boost) + add, regen: sg.regen || 1, brokenregen: sg.brokenregen || 1, distdraw: sg.distdraw || 0.6, mult };
+    }
+    // armour
+    const bh = on.find(p => p.g === 'bh');
+    const hrps = on.filter(p => p.g === 'hr' || p.g === 'ghrp' || p.g === 'mahr');
+    const bhm = bh ? bh.m : { hullboost: 0.8, kinres: 0, thermres: 0, explres: 0 };
+    let armourTotal = hull.armour * (1 + bhm.hullboost);
+    for (const p of hrps) armourTotal += (p.m.hullreinforcement || 0) + hull.armour * (p.m._hullboostmod || 0);
+    const amult = { A: 1 };
+    for (const [t, r] of [['K', 'kinres'], ['T', 'thermres'], ['E', 'explres']]) amult[t] = DR_AR(1 - (bhm[r] || 0), ...hrps.map(p => 1 - (p.m[r] || 0)));
+    // weapons
+    const weapons = on.filter(p => p.weapon && p.m.damage).map(p => {
+      const m = p.m;
+      const burst = m.burst || 1, burstRof = m.burstrof || 1;
+      const rof = m.fireint ? burst / ((burst - 1) / burstRof + m.fireint + (m.charge || 0)) : 1;
+      const dps = m.damage * (m.roundspershot || 1) * rof;
+      let sf = 1;
+      if (m.clip && m.reload && m.fireint) { const clip = Math.ceil(m.clip); const over = (burst - 1) / burstRof; const srof = clip / ((clip - burst) / rof + over + m.reload); sf = srof / rof; }
+      const eps = (m.distdraw || 0) * rof * (m.clip && m.reload && m.fireint ? sf : 1);
+      return { item: p.item, sdps: dps * sf, eps, dist: m.damagedist || { K: 1 }, falloff: m.falloff || null, range: m.range || 3000, piercing: m.piercing || 0 };
+    });
+    const pd = (on.find(p => p.g === 'pd') || { m: {} }).m;
+    const thr = (on.find(p => p.g === 't') || { m: null }).m;
+    const pitchMax = thr ? (hull.pitch || 30) * curve(mass, thr, 'rotation') : (hull.pitch || 30);
+    const speedMax = thr ? hull.speed * curve(mass, thr, 'speed') : hull.speed;
+    return {
+      hardness: hull.hardness || 50, shield, armour: { max: armourTotal, mult: amult }, weapons,
+      pd: { wepcap: pd.wepcap || 10, weprate: pd.weprate || 1, syscap: pd.syscap || 10, sysrate: pd.sysrate || 1 },
+      pitchMax, pipSpeed: hull.pipSpeed || 0.05, speedMax, minthrust: hull.minthrust || 50, jump,
+      power: { gen: Math.round(pgen * 100) / 100, draw: Math.round(draw * 100) / 100, notes: powerNotes }
     };
   }
   function roleWeight(r) { return { combat: r.level / 5, trader: r.level / 40, passenger: r.level / 4, miner: r.level * 4, explorer: r.level / 8, support: r.level * 2, carrier: r.level * 3 }[r.id] || 0; }
