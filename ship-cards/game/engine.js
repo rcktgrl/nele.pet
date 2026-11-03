@@ -154,7 +154,7 @@
       if (g === 'gfsb') jumpBoost += m.jumpboost || 0;
       if (g === 't') { thr = m; thrEng = eng; }
       if (g === 'ft') fuelCap += m.fuel || Math.pow(2, size);
-      if (g === 'cr') cargo += m.cargo || 0;
+      if (g === 'cr' || g === 'crl') cargo += m.cargo || 0; // crl = large cargo rack (Panther Clipper Mk II, Anaconda Mk II)
       if (/^pc/.test(g)) passengers += m.passengers || 0;
       if (g === 'fs') has.scoop++;
       if (g === 'ss') has.dss++;
