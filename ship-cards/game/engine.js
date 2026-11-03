@@ -26,7 +26,7 @@
   };
   const WEAPON_GROUPS = new Set(['pl', 'ul', 'bl', 'mc', 'c', 'fc', 'pa', 'rg', 'mr', 'tp', 'nl', 'axmc', 'axmr', 'ggc', 'gpc', 'gsc', 'rfl', 'rsl', 'pas', 'tbsc', 'tbrfl', 'tbem']);
   const MINING_GROUPS = new Set(['ml', 'mvr', 'abl', 'scl', 'sdm', 'mr_mining']);
-  const ENGINEERABLE = /^(hpt_(?!.*(cargoscanner_|cloudscanner_|crimescanner_)|.*guardian)|int_(shieldgenerator|hullreinforcement|shieldcellbank|powerplant|engine|hyperdrive|lifesupport|powerdistributor|sensors|fsdinterdictor|dronecontrol|detailedsurfacescanner|fueltransfer|refinery)|.*_armour_)/;
+  const ENGINEERABLE = /^(hpt_(?!.*(cargoscanner_|cloudscanner_|crimescanner_)|.*guardian)|int_(cargorack|shieldgenerator|hullreinforcement|shieldcellbank|powerplant|engine|hyperdrive|lifesupport|powerdistributor|sensors|fsdinterdictor|dronecontrol|detailedsurfacescanner|fueltransfer|refinery)|.*_armour_)/;
 
   // Engineering effect at full grade 5 (fraction). Scaled by grade progress. Approximate, fixed table.
   const BP = {
@@ -42,6 +42,7 @@
     weapon_highcapacity: { dps: 0.05 }, weapon_longrange: { dps: 0.0 }, weapon_focused: { dps: 0.0 }, weapon_sturdy: { dps: 0.0 }, weapon_lightweight: { dps: 0.0 },
     fsd_longrange: { optmass: 0.55 }, fsd_fastboot: {}, fsd_shielded: {},
     engine_dirty: { speed: 0.35 }, engine_tuned: { speed: 0.10 }, engine_reinforced: {},
+    cargorack_increasedcapacity: { cargo: 0.344 }, // G5: 64 t → 86 t, 32 t → 43 t (Coriolis, confirmed by Sam)
     shieldcellbank_specialised: { scb: 0.30 }, shieldcellbank_rapid: { scb: 0.10 }
   };
   // Experimental effects → fixed ability text for the card (game effect is defined in the rules).
@@ -154,7 +155,7 @@
       if (g === 'gfsb') jumpBoost += m.jumpboost || 0;
       if (g === 't') { thr = m; thrEng = eng; }
       if (g === 'ft') fuelCap += m.fuel || Math.pow(2, size);
-      if (g === 'cr' || g === 'crl') cargo += m.cargo || 0; // crl = large cargo rack (Panther Clipper Mk II, Anaconda Mk II)
+      if (g === 'cr' || g === 'crl') cargo += Math.floor((m.cargo || 0) * (1 + bpEffect(eng, 'cargo')) + 1e-6); // crl = large cargo rack (Panther Clipper Mk II, Anaconda Mk II)
       if (/^pc/.test(g)) passengers += m.passengers || 0;
       if (g === 'fs') has.scoop++;
       if (g === 'ss') has.dss++;
