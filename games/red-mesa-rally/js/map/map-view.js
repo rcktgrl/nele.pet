@@ -4,7 +4,7 @@
 Object.assign(Game.prototype, {
   toggleMap(on) {
     if (on === undefined) on = this.state !== 'map';
-    if (on) { if (!['free', 'race'].includes(this.state)) return; this.prevState = this.state; this.state = 'map'; $('mapInfo').classList.remove('on'); this.mapSel = null; this.screen('mapScreen', true); this.drawBigMap(); $('btnTravel').hidden = !!this.race; $('btnWaypoint').hidden = !!this.race; }
+    if (on) { if (!['free', 'race'].includes(this.state)) return; this.prevState = this.state; this.state = 'map'; $('mapInfo').classList.remove('on'); this.mapSel = null; this.screen('mapScreen', true); const v = this.mapView; if (v) this.mapViewSet(v.z, mapX(this.player.pos.x), mapZ(this.player.pos.z)); this.drawBigMap(); $('btnTravel').hidden = !!this.race; $('btnWaypoint').hidden = !!this.race; }
     else if (this.state === 'map') { this.state = this.prevState; this.screen('mapScreen', false); this.last = performance.now(); }
   },
   travelTo(spot) {
@@ -50,24 +50,62 @@ Object.assign(Game.prototype, {
     ctx.fillStyle = '#f2e6d3'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = '#120c09'; ctx.stroke();
     ctx.restore();
   },
+  /* big map view: zoom z (1 = whole county) around (cx, cy) in map pixels, kept inside the map */
+  mapViewSet(z, cx, cy) {
+    const v = this.mapView || (this.mapView = { z: 1, cx: MAP_W / 2, cy: MAP_H / 2 });
+    v.z = clamp(z, 1, 8);
+    const hw = MAP_W / 2 / v.z, hh = MAP_H / 2 / v.z;
+    v.cx = clamp(cx, hw, MAP_W - hw); v.cy = clamp(cy, hh, MAP_H - hh);
+    this.mapComp = null; // the cached picture is for the old view
+  },
+  /* zoom by factor f keeping the map point under canvas pixel (px, py) where it is */
+  mapZoomAt(f, px, py) {
+    const v = this.mapView, mx = v.cx + (px - MAP_W / 2) / v.z, my = v.cy + (py - MAP_H / 2) / v.z, z = clamp(v.z * f, 1, 8);
+    this.mapViewSet(z, mx - (px - MAP_W / 2) / z, my - (py - MAP_H / 2) / z);
+  },
+  /* the ground and the lines for the current view, redrawn only when the view changes */
+  mapComposite() {
+    if (this.mapComp) return this.mapComp;
+    const v = this.mapView, c = this.mapCompCanvas || (this.mapCompCanvas = Object.assign(document.createElement('canvas'), { width: MAP_W, height: MAP_H })), g = c.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, MAP_W, MAP_H);
+    if (v.z === 1) g.drawImage(this.mapImg, 0, 0);
+    else {
+      g.setTransform(v.z, 0, 0, v.z, MAP_W / 2 - v.cx * v.z, MAP_H / 2 - v.cy * v.z);
+      g.imageSmoothingEnabled = true; g.drawImage(this.mapImg.base, 0, 0);
+      drawMapVectors(g, this.world, Math.pow(v.z, -0.6)); // lines grow a little as you zoom in, not in proportion
+      g.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    return (this.mapComp = c);
+  },
   drawBigMap() {
     const ctx = this.bigmap, P = this.player;
-    ctx.drawImage(this.mapImg, 0, 0, MAP_W, MAP_H);
+    if (!this.mapView) this.mapViewSet(1, MAP_W / 2, MAP_H / 2);
+    const v = this.mapView, sx = (x) => (mapX(x) - v.cx) * v.z + MAP_W / 2, sy = (z) => (mapZ(z) - v.cy) * v.z + MAP_H / 2;
+    ctx.drawImage(this.mapComposite(), 0, 0);
     ctx.font = '700 20px "Saira Condensed", sans-serif'; ctx.textAlign = 'center'; ctx.strokeStyle = 'rgba(18,12,9,.85)'; ctx.lineWidth = 4;
-    const label = (t, x, z, col) => { ctx.fillStyle = col || '#f2e6d3'; ctx.strokeText(t, mapX(x), mapZ(z)); ctx.fillText(t, mapX(x), mapZ(z)); };
-    for (const r of REGIONS) label(r.name.toUpperCase(), r.lx ?? r.x, r.lz ?? r.z - 160, '#f2e6d3');
-    label('FESTIVAL PADDOCK', HUB.x, HUB.z - 70, '#ffb36b');
+    const label = (t, x, z, col) => { ctx.fillStyle = col || '#f2e6d3'; ctx.strokeText(t, sx(x), sy(z)); ctx.fillText(t, sx(x), sy(z)); };
+    const lz = (dz) => dz / Math.sqrt(v.z); // offsets of labels from what they name shrink in metres as the map zooms in
+    for (const r of REGIONS) label(r.name.toUpperCase(), r.lx ?? r.x, r.lz ?? r.z - lz(160), '#f2e6d3');
+    label('FESTIVAL PADDOCK', HUB.x, HUB.z - lz(70), '#ffb36b');
     ctx.save(); ctx.font = '700 15px "Saira Condensed", sans-serif';
-    for (const d of DISTRICT.districts) { const [x, z, ang] = d.label; ctx.save(); ctx.translate(mapX(x), mapZ(z)); ctx.rotate(ang * Math.PI / 180); ctx.fillStyle = '#f2e6d3'; ctx.strokeText(d.name, 0, 0); ctx.fillText(d.name, 0, 0); ctx.restore(); }
+    for (const d of DISTRICT.districts) { const [x, z, ang] = d.label; ctx.save(); ctx.translate(sx(x), sy(z)); ctx.rotate(ang * Math.PI / 180); ctx.fillStyle = '#f2e6d3'; ctx.strokeText(d.name, 0, 0); ctx.fillText(d.name, 0, 0); ctx.restore(); }
     ctx.restore();
     label('EXIT 5', 3330, -300, '#f2c230');
-    const tun = this.world.route('tunnel'), tm = tun.posAt(tun.length * 0.62, {}); label(this.world.tunnelGateClosed ? 'CALDER TUNNEL · CLOSED' : 'CALDER TUNNEL', tm.x, tm.z - 50, this.world.tunnelGateClosed ? '#ff5a3a' : '#ffd23f');
-    if (this.world.tunnelGateClosed) { const gp = this.world.tunnelGatePose(), x = mapX(gp.x), y = mapZ(gp.z); ctx.save(); ctx.strokeStyle = '#ff3a2a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x - 7, y - 7); ctx.lineTo(x + 7, y + 7); ctx.moveTo(x + 7, y - 7); ctx.lineTo(x - 7, y + 7); ctx.stroke(); ctx.restore(); }
-    for (const T of this.world.trains) for (const c of T.cars) { ctx.fillStyle = '#e8c22a'; ctx.beginPath(); ctx.arc(mapX(c.pose.x), mapZ(c.pose.z), 3.5, 0, TAU); ctx.fill(); }
-    for (const c of this.world.cars) { if (c === P || c.civilian || c.hidden) continue; ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(mapX(c.pos.x), mapZ(c.pos.z), c.remote ? 7 : 4.5, 0, TAU); ctx.fill(); if (c.remote) { ctx.strokeStyle = '#6fb7d9'; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 4; label(c.name, c.pos.x, c.pos.z - 40, '#9fd6ef'); } }
-    for (const D of BOAT_DOCKS) { const x = mapX(D.water.x), y = mapZ(D.water.z); ctx.fillStyle = '#6fb7d9'; ctx.beginPath(); ctx.arc(x, y, 6, 0, TAU); ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 4; label('BOAT LAUNCH', D.water.x, D.water.z + 70, '#9fd6ef'); }
+    const tun = this.world.route('tunnel'), tm = tun.posAt(tun.length * 0.62, {}); label(this.world.tunnelGateClosed ? 'CALDER TUNNEL · CLOSED' : 'CALDER TUNNEL', tm.x, tm.z - lz(50), this.world.tunnelGateClosed ? '#ff5a3a' : '#ffd23f');
+    if (this.world.tunnelGateClosed) { const gp = this.world.tunnelGatePose(), x = sx(gp.x), y = sy(gp.z); ctx.save(); ctx.strokeStyle = '#ff3a2a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x - 7, y - 7); ctx.lineTo(x + 7, y + 7); ctx.moveTo(x + 7, y - 7); ctx.lineTo(x - 7, y + 7); ctx.stroke(); ctx.restore(); }
+    for (const T of this.world.trains) for (const c of T.cars) { ctx.fillStyle = '#e8c22a'; ctx.beginPath(); ctx.arc(sx(c.pose.x), sy(c.pose.z), 3.5, 0, TAU); ctx.fill(); }
+    for (const c of this.world.cars) { if (c === P || c.civilian || c.hidden) continue; ctx.fillStyle = '#' + new THREE.Color(c.color).getHexString(); ctx.beginPath(); ctx.arc(sx(c.pos.x), sy(c.pos.z), c.remote ? 7 : 4.5, 0, TAU); ctx.fill(); if (c.remote) { ctx.strokeStyle = '#6fb7d9'; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 4; label(c.name, c.pos.x, c.pos.z - lz(40), '#9fd6ef'); } }
+    for (const D of BOAT_DOCKS) { const x = sx(D.water.x), y = sy(D.water.z); ctx.fillStyle = '#6fb7d9'; ctx.beginPath(); ctx.arc(x, y, 6, 0, TAU); ctx.fill(); ctx.strokeStyle = '#120c09'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 4; label('BOAT LAUNCH', D.water.x, D.water.z + lz(70), '#9fd6ef'); }
+    // the DOM pins and the player's marker follow the view; whatever is off the edge is hidden (the player's marker sticks to the edge)
+    const put = (el, x, z, keep) => {
+      const px = sx(x), py = sy(z), out = px < 0 || py < 0 || px > MAP_W || py > MAP_H;
+      el.style.display = out && !keep ? 'none' : '';
+      el.style.left = (clamp(px, 0, MAP_W) / MAP_W * 100) + '%'; el.style.top = (clamp(py, 0, MAP_H) / MAP_H * 100) + '%';
+    };
+    for (const s of this.eventSpots) if (s.pin) put(s.pin, s.x, s.z, false);
     const me = this.mapMe, f = P.forward(new THREE.Vector3());
-    me.style.left = (clamp(mapX(P.pos.x), 0, MAP_W) / MAP_W * 100) + '%'; me.style.top = (clamp(mapZ(P.pos.z), 0, MAP_H) / MAP_H * 100) + '%';
+    put(me, P.pos.x, P.pos.z, true);
     me.children[1].style.transform = `rotate(${Math.atan2(f.x, -f.z)}rad)`;
+    const zl = $('mapZoomLevel'); if (zl) zl.textContent = v.z < 1.05 ? '1×' : v.z.toFixed(1).replace(/\.0$/, '') + '×';
   },
 });

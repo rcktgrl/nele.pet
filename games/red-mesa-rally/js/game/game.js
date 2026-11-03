@@ -231,6 +231,26 @@ class Game {
       pin.addEventListener('click', () => { this.mapSel = s; $('miType').textContent = this.typeLabel(s.ev); $('miName').textContent = s.ev.name; const mi = $('mapInfo'); const low = s.z > 0; mi.style.top = low ? '12px' : 'auto'; mi.style.bottom = low ? 'auto' : '12px'; mi.classList.add('on'); });
       wrap.appendChild(pin);
     }
+    // zoom and pan: wheel at the cursor, drag, pinch, the buttons and +/- keys (pins stay clickable on top of the canvas)
+    const cv = $('bigmap'), toCv = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * MAP_W, (e.clientY - r.top) / r.height * MAP_H, MAP_W / r.width]; };
+    this.mapViewSet(1, MAP_W / 2, MAP_H / 2);
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); const [x, y] = toCv(e); this.mapZoomAt(Math.pow(1.0015, -e.deltaY * (e.deltaMode === 1 ? 33 : 1)), x, y); }, { passive: false });
+    const ptrs = new Map(); let pinch = 0;
+    cv.addEventListener('pointerdown', (e) => { try { cv.setPointerCapture(e.pointerId); } catch { /* not a live pointer */ } ptrs.set(e.pointerId, toCv(e)); cv.classList.add('drag'); pinch = 0; });
+    cv.addEventListener('pointermove', (e) => {
+      const old = ptrs.get(e.pointerId); if (!old) return; const now = toCv(e), v = this.mapView;
+      if (ptrs.size === 1) this.mapViewSet(v.z, v.cx - (now[0] - old[0]) / v.z, v.cy - (now[1] - old[1]) / v.z);
+      else if (ptrs.size === 2) {
+        const [a, b] = [...ptrs.entries()].map(([id, p]) => (id === e.pointerId ? now : p)), d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        if (pinch) this.mapZoomAt(d / pinch, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2); pinch = d;
+      }
+      ptrs.set(e.pointerId, now);
+    });
+    const up = (e) => { ptrs.delete(e.pointerId); pinch = 0; if (!ptrs.size) cv.classList.remove('drag'); };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    const step = (f) => this.mapZoomAt(f, MAP_W / 2, MAP_H / 2);
+    $('btnMapIn').addEventListener('click', () => step(1.6)); $('btnMapOut').addEventListener('click', () => step(1 / 1.6));
+    $('btnMapFit').addEventListener('click', () => this.mapViewSet(1, MAP_W / 2, MAP_H / 2));
     // the player's own marker sits above every pin so it can never be hidden
     const me = this.mapMe = document.createElement('div'); me.className = 'mapme';
     me.innerHTML = '<b></b><i></i><span>You</span>'; wrap.appendChild(me);
@@ -358,6 +378,11 @@ class Game {
     // global keys
     if (I.was('Escape') || I.padPressed(9)) { if (this.state === 'map') this.toggleMap(false); else if (this.state === 'event') this.closeEventScreen(); else this.togglePause(); }
     if ((I.was('KeyM') || I.padPressed(8)) && ['free', 'race', 'map'].includes(this.state)) this.toggleMap();
+    if (this.state === 'map') { // zoom: +/- keys or the shoulder buttons, 0 for the whole map
+      if (I.was('Equal') || I.was('NumpadAdd') || I.padPressed(5)) this.mapZoomAt(1.6, MAP_W / 2, MAP_H / 2);
+      if (I.was('Minus') || I.was('NumpadSubtract') || I.padPressed(4)) this.mapZoomAt(1 / 1.6, MAP_W / 2, MAP_H / 2);
+      if (I.was('Digit0') || I.was('Numpad0')) this.mapViewSet(1, MAP_W / 2, MAP_H / 2);
+    }
     if (I.was('KeyC') || I.padPressed(3)) this.rig.mode = (this.rig.mode + 1) % 3;
     if (this.state === 'title' && this.mpOpen) { if (I.was('Escape') || I.padPressed(1)) { I.pressed.clear(); this.showMp(false); } }
     else if (this.state === 'title' && this.savesOpen) {
