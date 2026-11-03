@@ -28,7 +28,7 @@ class Traffic {
       const R = W.route(rid); if (!R) continue;
       for (let k = 0; k < count; k++, n++) {
         const s = R.length * (k + 0.35 + 0.3 * hash2(n, 7)) / count, v = (n % 3 === 1) ? 'van' : 'sedan';
-        const car = g.addCar(VEHICLES[v], { id: 80 + n, color: TRAFFIC_COLORS[n % TRAFFIC_COLORS.length], number: 100 + n, livery: v === 'van' ? ['MESA HAULER', 'CALDER POST', 'KRMR 98.7'][n % 3] : 'CALDER COUNTY', helmet: 0x3a3330 });
+        const car = g.addCar(VEHICLES[v], { id: 80 + n, color: TRAFFIC_COLORS[n % TRAFFIC_COLORS.length], number: 100 + n, livery: v === 'van' ? ['MESA HAULER', 'CALDER POST', 'KRMR 98.7'][n % 3] : 'CALDER COUNTY', helmet: 0x3a3330 }, true);
         car.name = v === 'van' ? 'Delivery van' : 'Local driver'; car.civilian = true; car.netId = 't' + this.list.length;
         const a = new AIDriver(car, R, { s, lane, skill: 0.8 + 0.1 * hash2(n, 3), vcap: vcap * (0.85 + 0.25 * hash2(n, 11)), traffic: true, seed: 300 + n });
         a.cruise = a.vcap * 0.9; a.asleepS = s;

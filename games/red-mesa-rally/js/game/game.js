@@ -52,14 +52,14 @@ class Game {
   }
   onResize() { const w = innerWidth, h = innerHeight; this.gfx.resize(w, h); this.gfx.fx.smoke.uScale.value = this.gfx.fx.fire.uScale.value = h * this.gfx.renderer.getPixelRatio() / (2 * Math.tan(THREE.MathUtils.degToRad(31))); }
   /* ----- cars ----- */
-  addCar(spec, opts) {
+  addCar(spec, opts, lazy) {
     const car = new Car(spec, opts);
     this.world.cars.push(car);
-    const view = new CarView(car, this.gfx, opts);
-    this.views.set(car, view);
+    // lazy: the model (~50 ms to build) waits until the car first comes in sight, so a town full of traffic costs nothing at load
+    this.views.set(car, lazy ? { lazy: opts } : new CarView(car, this.gfx, opts));
     return car;
   }
-  removeCar(car) { this.world.cars = this.world.cars.filter((c) => c !== car); const v = this.views.get(car); if (v) v.dispose(); this.views.delete(car); }
+  removeCar(car) { this.world.cars = this.world.cars.filter((c) => c !== car); const v = this.views.get(car); if (v && !v.lazy) v.dispose(); this.views.delete(car); }
   spawnPlayer(vid, at) {
     const old = this.player, W = this.world, boat = !!VEHICLES[vid].boat;
     let x = HUB.x + 18, z = HUB.z + 46, yaw = Math.PI * 0.9, note = null;
@@ -552,8 +552,13 @@ class Game {
     const g = this.gfx, P = this.player, W = this.world;
     const sdt = !this.mp && (this.state === 'pause' || this.state === 'map' || this.state === 'event') ? 0 : dt * this.timeScale;
     // views
-    for (const [car, view] of this.views) {
+    let built = false;
+    for (let [car, view] of this.views) {
       const d = car.pos.distanceTo(g.camera.position);
+      if (view.lazy) { // one model a frame, a little before it can be seen
+        if (built || car.hidden || d > 1100) continue;
+        view = new CarView(car, g, view.lazy); this.views.set(car, view); built = true;
+      }
       view.root.visible = !car.hidden && (d < 900 || car === P);
       if (!view.root.visible) continue;
       view.update(sdt);
