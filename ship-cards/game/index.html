@@ -98,7 +98,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const fmt=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n);
 const BP_NAMES={weapon_efficient:'Efficient',weapon_overcharged:'Overcharged',weapon_longrange:'Long range',weapon_shortrange:'Short range',weapon_rapidfire:'Rapid fire',weapon_highcapacity:'High capacity',weapon_focused:'Focused',weapon_sturdy:'Sturdy',weapon_lightweight:'Lightweight'};
 const bpName=bp=>{const k=String(bp).toLowerCase();const m=/_(overcharged|shortrange|rapidfire|efficient|highcapacity|longrange|focused|sturdy|lightweight)$/.exec(k);if(m&&!/^(shield|armour|hull|fsd|engine|power)/.test(k))return BP_NAMES['weapon_'+m[1]];return k.split('_').slice(1).join(' ').replace(/\b\w/g,c=>c.toUpperCase())||k};
-const modName=it=>it.replace(/^(hpt_|int_)/,'').replace(/_armour_grade(\d)/,' armour G$1').replace(/_size(\d+)_class(\d+)/,(m,s,c)=>' '+s+'ABCDE'[5-c]).replace(/_/g,' ');
+const modName=it=>it.replace(/^int_largecargorack/,'int_mkii cargorack').replace(/^(hpt_|int_)/,'').replace(/_armour_grade(\d)/,' armour G$1').replace(/_size(\d+)_class(\d+)/,(m,s,c)=>' '+s+'ABCDE'[5-c]).replace(/_/g,' ');
 
 function cardHTML(c,max){
   const img=IMG[c.name];const rc=RC[c.rarity]||RC.Common;

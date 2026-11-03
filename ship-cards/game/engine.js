@@ -155,7 +155,7 @@
       if (g === 'gfsb') jumpBoost += m.jumpboost || 0;
       if (g === 't') { thr = m; thrEng = eng; }
       if (g === 'ft') fuelCap += m.fuel || Math.pow(2, size);
-      if (g === 'cr' || g === 'crl') cargo += Math.floor((m.cargo || 0) * (1 + bpEffect(eng, 'cargo')) + 1e-6); // crl = large cargo rack (Panther Clipper Mk II, Anaconda Mk II)
+      if (g === 'cr' || g === 'crl') cargo += Math.floor((m.cargo || 0) * (1 + bpEffect(eng, 'cargo')) + 1e-6); // crl = Mk II cargo rack ("largecargorack" in the journal); normal racks can take Expanded Capacity
       if (/^pc/.test(g)) passengers += m.passengers || 0;
       if (g === 'fs') has.scoop++;
       if (g === 'ss') has.dss++;
