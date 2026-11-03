@@ -52,14 +52,14 @@ class Game {
   }
   onResize() { const w = innerWidth, h = innerHeight; this.gfx.resize(w, h); this.gfx.fx.smoke.uScale.value = this.gfx.fx.fire.uScale.value = h * this.gfx.renderer.getPixelRatio() / (2 * Math.tan(THREE.MathUtils.degToRad(31))); }
   /* ----- cars ----- */
-  addCar(spec, opts) {
+  addCar(spec, opts, lazy) {
     const car = new Car(spec, opts);
     this.world.cars.push(car);
-    const view = new CarView(car, this.gfx, opts);
-    this.views.set(car, view);
+    // lazy: the model (~50 ms to build) waits until the car first comes in sight, so a town full of traffic costs nothing at load
+    this.views.set(car, lazy ? { lazy: opts } : new CarView(car, this.gfx, opts));
     return car;
   }
-  removeCar(car) { this.world.cars = this.world.cars.filter((c) => c !== car); const v = this.views.get(car); if (v) v.dispose(); this.views.delete(car); }
+  removeCar(car) { this.world.cars = this.world.cars.filter((c) => c !== car); const v = this.views.get(car); if (v && !v.lazy) v.dispose(); this.views.delete(car); }
   spawnPlayer(vid, at) {
     const old = this.player, W = this.world, boat = !!VEHICLES[vid].boat;
     let x = HUB.x + 18, z = HUB.z + 46, yaw = Math.PI * 0.9, note = null;
@@ -358,6 +358,21 @@ class Game {
         c.reset(q.x, q.z, Math.atan2(-dx * f, -dz * f), T, lift, q.y); return;
       }
     }
+    // up on the highway viaduct or a slip road: back on its deck in the same lane, not down on the ground beside it (#30)
+    if (!c.spec.boat) {
+      let best = null;
+      for (const R of T.routes) {
+        if (!R.def.viaduct || R.surface === 'rail') continue;
+        const pr = R.project(c.pos.x, c.pos.z, 0, -1); if (pr.dist > R.width / 2 + 4 || (best && pr.dist >= best.d)) continue;
+        const q = R.posAt(pr.s, {}); if (q.y - T.rawH(q.x, q.z) < 3 || Math.abs(q.y - c.pos.y) > 8) continue;
+        best = { R, s: pr.s, q, d: pr.dist };
+      }
+      if (best) {
+        const { R, s, q } = best, [dx, dz] = R.dirAt(s), m = R.width / 2 - 3;
+        const l = clamp(-(c.pos.x - q.x) * dz + (c.pos.z - q.z) * dx, -m, m), f = Math.cos(c.yaw() - Math.atan2(-dx, -dz)) < 0 ? -1 : 1;
+        c.reset(q.x - dz * l, q.z + dx * l, Math.atan2(-dx * f, -dz * f), T, lift, q.y); return;
+      }
+    }
     const p = c.spec.boat ? this.world.findWetSpot(c.pos.x, c.pos.z) : this.world.findDrySpot(c.pos.x, c.pos.z);
     c.reset(p.x, p.z, p.yaw !== null ? p.yaw : c.yaw(), T, lift);
   }
@@ -537,8 +552,13 @@ class Game {
     const g = this.gfx, P = this.player, W = this.world;
     const sdt = !this.mp && (this.state === 'pause' || this.state === 'map' || this.state === 'event') ? 0 : dt * this.timeScale;
     // views
-    for (const [car, view] of this.views) {
+    let built = false;
+    for (let [car, view] of this.views) {
       const d = car.pos.distanceTo(g.camera.position);
+      if (view.lazy) { // one model a frame, a little before it can be seen
+        if (built || car.hidden || d > 1100) continue;
+        view = new CarView(car, g, view.lazy); this.views.set(car, view); built = true;
+      }
       view.root.visible = !car.hidden && (d < 900 || car === P);
       if (!view.root.visible) continue;
       view.update(sdt);

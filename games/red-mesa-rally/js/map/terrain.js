@@ -125,6 +125,8 @@ class Terrain {
     const tdefs = [rev('hwy'), rev('coast'), rev('tunnel'), rev('pass'), rev('lane-valley'), rev('lane-farm'), loop('city-a', hb)];
     tdefs.push({ ...tdefs[6], id: 'city-a-rev', pts: tdefs[6].pts.slice().reverse() });
     tdefs.push(rev('valley-rd'), rev('lane-orchard'), rev('lane-mill'), rev('kingsway'), rev('mesa-blvd'), rev('north-rd'), rev('harbour-dr'));
+    // and the way back along every longer side street in the districts, so everyday traffic can run both ways down them too
+    for (const O of this.routes.filter(isTrafficStreet)) if (!tdefs.some((d) => d.id === O.id + '-rev')) tdefs.push(rev(O.id));
     for (const d of tdefs) {
       const T2 = new Route({ ...d, noCarve: true, trafficOnly: true });
       // a lane the other way asks for the ground at its own road's height, so through a bore it keeps to the bore's floor
@@ -323,12 +325,13 @@ class Terrain {
         }
       }
       // the railway out west: on a viaduct well clear of the desert floor, wherever it is not in a bore
-      const bores = (def.bores || []).map(([a, b]) => { let i = Math.round(R.project(a[0], a[1], 0, -1).s / R.step), j = Math.round(R.project(b[0], b[1], 0, -1).s / R.step); if (i > j) [i, j] = [j, i]; return [Math.max(0, i - 4), Math.min(nS, j + 4)]; });
+      const bores = (def.bores || []).map(([a, b, , low]) => { let i = Math.round(R.project(a[0], a[1], 0, -1).s / R.step), j = Math.round(R.project(b[0], b[1], 0, -1).s / R.step); if (i > j) [i, j] = [j, i]; return [Math.max(0, i - 4), Math.min(nS, j + 4), low]; });
       const inBore = (i) => bores.some(([a, b]) => i >= a && i <= b);
       if (def.lowland) {
         const env = new Float32Array(nS + 1), W = 40;
-        // (the cliff face a portal opens in is not floor to clear: the deck runs into it, so it is left out of the envelope)
-        const nearBore = (i) => bores.some(([a, b]) => i >= a - 30 && i <= b + 30);
+        // (at a 'low' portal the line drops to the desert floor straight out of the cliff, so that cliff face is not floor to clear and is
+        // left out of the envelope; at every other portal the trestle stands clear of the slope as before (#38: they had come down with it))
+        const nearBore = (i) => bores.some(([a, b, low]) => low && i >= a - 30 && i <= b + 30);
         for (let i = 0; i <= nS; i++) if (R.x[i] < def.lowland) { let m = -1e9; for (let k = -W; k <= W; k++) { const j = R.idx(i + k); if (!nearBore(j) || inBore(i)) m = Math.max(m, this.rawH(R.x[j], R.z[j])); } env[i] = m > -1e9 ? m : this.rawH(R.x[i], R.z[i]); }
         // high enough that nothing on the desert floor gets a car up onto the trestles
         for (let i = 0; i <= nS; i++) if (R.x[i] < def.lowland && !inBore(i)) prof[i] = env[i] + 13;

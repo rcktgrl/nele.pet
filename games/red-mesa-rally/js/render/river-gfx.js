@@ -106,6 +106,8 @@ Object.assign(Gfx.prototype, {
   buildChannelWalls() {
     const conc = new THREE.MeshStandardMaterial({ color: 0x9a9388, roughness: 0.92, side: THREE.DoubleSide }), grp = new THREE.Group(), T = this.world.terrain;
     const wall = (run) => {
+      // a stub of a few metres where a side channel's bank pokes out of the main river's water is a slab standing in the river: leave it out
+      let len = 0; for (let k = 1; k < run.length; k++) len += Math.hypot(run[k][0] - run[k - 1][0], run[k][1] - run[k - 1][1]); if (len < 12) return;
       const pos = [], idx = [];
       run.forEach(([x, z, top], k) => { pos.push(x, WATER_Y - 3, z, x, top, z); if (k) { const a = (k - 1) * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); } });
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
@@ -265,18 +267,19 @@ Object.assign(Gfx.prototype, {
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vTU; float gLamp;').replace('#include <color_fragment>', `#include <color_fragment>
 { float u = vTU.x, s = vTU.y;
   diffuseColor.rgb *= mix(0.72, 1.0, step(0.05, fract(s / 4.0)));
-  gLamp = step(0.355, u) * step(u, 0.395) * step(0.85, fract(s / 12.0)); }`)
-        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gLamp * vec3(0.9, 2.6, 3.0) + diffuseColor.rgb * vec3(0.12, 0.2, 0.24);');
+  gLamp = step(0.367, u) * step(u, 0.383) * step(0.9, fract(s / 12.0)); }`)
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gLamp * vec3(2.4, 1.9, 1.2) + diffuseColor.rgb * vec3(0.12, 0.2, 0.24);');
     };
     const tube = new THREE.Mesh(g, m); tube.receiveShadow = true; this.scene.add(tube);
-    // headwalls: a concrete face across each mouth with the opening cut out, filling the river's cut banks right up to the ground as it was
+    // headwalls: a concrete face across each mouth with the opening cut out, only as wide as the lid and as high as the ground over it
     const face = new THREE.MeshStandardMaterial({ color: 0x9d968b, roughness: 0.92 }), M = T.riverTun;
     for (const i of [idx0, idx1]) {
       const a = U.pts[Math.max(0, i - 1)], b = U.pts[Math.min(U.pts.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]), yaw = Math.atan2(b[0] - a[0], b[1] - a[1]), [x, z] = U.pts[i];
       const at = (lx) => [x + lx * (b[1] - a[1]) / L, z - lx * (b[0] - a[0]) / L]; // local +x of the rotated wall, in the world
-      const top = (lx) => { const [px, pz] = at(lx); return Math.max(naturalHeight(px, pz), U.ceil + 1.2) + 0.6; };
-      // out to where the banks are back at the ground's own height
-      const edge = (sg) => { let l = hw + 2; while (l < 70) { const [px, pz] = at(sg * l); if (T.rawH(px, pz) > naturalHeight(px, pz) - 0.4 && l > M.lid) break; l += 2; } return sg * (l + 2); };
+      const inw = (i === idx0 ? 4 : -4) / L; // a few metres back over the lid
+      const top = (lx) => { const [px, pz] = at(Math.max(-M.lid + 1, Math.min(M.lid - 1, lx))), qx = px + (b[0] - a[0]) * inw, qz = pz + (b[1] - a[1]) * inw, k = T.riverTunAt(qx, qz);
+        return (k ? M.top[k - 1] : Math.max(T.rawH(qx, qz), U.ceil + 1.2)) + 0.4; };
+      const edge = (sg) => sg * (M.lid + 1.5);
       const l0 = edge(-1), l1 = edge(1), N = Math.ceil((l1 - l0) / 2), shape = new THREE.Shape();
       shape.moveTo(l0, y0); shape.lineTo(l1, y0);
       for (let k = N; k >= 0; k--) { const lx = l0 + (l1 - l0) * k / N; shape.lineTo(lx, top(lx)); }

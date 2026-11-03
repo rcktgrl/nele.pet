@@ -81,6 +81,28 @@ Object.assign(Gfx.prototype, {
     t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
     return (this.juncTex = t);
   },
+  /* the boat tunnel's concrete-walled open cuts on a 1 m mask: the 4 m ground grid cannot step straight down at a wall, so whatever of the bank
+     pokes out in front of one above the water is cut away in the shader (the boat tunnel's covered lid is left alone) */
+  channelMask() {
+    if (this.chanMask) return this.chanMask;
+    const T = this.world.terrain, reaches = RIVER.reaches.filter((R) => R.id === 'tunnel'), pts = reaches.flatMap((R) => R.pts), G = 1;
+    const x0 = Math.floor(Math.min(...pts.map((q) => q.x)) - 30), z0 = Math.floor(Math.min(...pts.map((q) => q.z)) - 30);
+    const W = Math.ceil(Math.max(...pts.map((q) => q.x)) + 30 - x0), H = Math.ceil(Math.max(...pts.map((q) => q.z)) + 30 - z0), m = new Uint8Array(W * H);
+    for (const R of reaches) for (let i = 0; i < R.pts.length - 1; i++) {
+      const a = R.pts[i], b = R.pts[i + 1];
+      const vx = b.x - a.x, vz = b.z - a.z, L2 = vx * vx + vz * vz || 1, r = Math.max(a.hw, b.hw) + 1.4;
+      for (let gz = Math.floor(Math.min(a.z, b.z) - r - z0); gz <= Math.ceil(Math.max(a.z, b.z) + r - z0); gz++)
+        for (let gx = Math.floor(Math.min(a.x, b.x) - r - x0); gx <= Math.ceil(Math.max(a.x, b.x) + r - x0); gx++) {
+          if (gx < 0 || gz < 0 || gx >= W || gz >= H) continue;
+          const px = x0 + gx * G + 0.5, pz = z0 + gz * G + 0.5, t = clamp(((px - a.x) * vx + (pz - a.z) * vz) / L2, 0, 1);
+          if (Math.hypot(px - a.x - vx * t, pz - a.z - vz * t) < lerp(a.hw, b.hw, t) + 1.4 && !T.inRiverTunnel(px, pz) && !T.riverTunAt(px, pz)) m[gz * W + gx] = 255;
+        }
+    }
+    const t = new THREE.DataTexture(m, W, H, THREE.RedFormat, THREE.UnsignedByteType);
+    t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.unpackAlignment = 1; t.needsUpdate = true;
+    t.userData = { x0, z0, W, H };
+    return (this.chanMask = t);
+  },
   /* the shader's lookup into the country junction patches: the nearest patch centre wins */
   junctionGLSL() {
     const J = this.world.city.streets.rural, P = JPATCH, half = (P.size / 2).toFixed(1), f = (v) => v.toFixed(1);
@@ -115,6 +137,7 @@ Object.assign(Gfx.prototype, {
       sh.uniforms.uTime = this.time;
       sh.uniforms.uKerb = { value: this.kerbTexture() };
       sh.uniforms.uJunc = { value: this.junctionTexture() };
+      const CM = this.channelMask(); sh.uniforms.uChan = { value: CM };
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\n' + TERRAIN_GLSL_PARS)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -122,7 +145,7 @@ vWPos = (modelMatrix * vec4(position,1.0)).xyz; vWNrm = normal; vA = aA; vB = aB
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
 varying vec4 vA; varying vec4 vB; varying vec4 vC; varying vec3 vD; varying vec3 vWPos; varying vec3 vWNrm;
-uniform sampler2D uKerb; uniform sampler2D uJunc;
+uniform sampler2D uKerb; uniform sampler2D uJunc; uniform sampler2D uChan;
 ${NOISE_GLSL}
 float gWet; float gBump; float gGloss; vec3 gEmis;
 float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smoothstep(w - f, w + f, abs(d)); }`)
@@ -131,6 +154,8 @@ float lineAA(float d, float w) { float f = fwidth(d) + 1e-4; return 1.0 - smooth
   vec3 P = vWPos; vec3 Nw = normalize(vWNrm); float slope = 1.0 - Nw.y;
   ${metroSpurs().map((sp) => `{ vec2 q = P.xz - vec2(${sp.x.toFixed(2)}, ${sp.z.toFixed(2)}); float a = dot(q, vec2(${sp.dx}, ${sp.dz})), l = abs(dot(q, vec2(${-sp.dz}, ${sp.dx}))); if (a > -0.5 && a < ${sp.cover.toFixed(1)} && l < ${(METRO.rampHw + 0.3).toFixed(2)}) discard; } // metro cut`).join('\n  ')}
   ${this.boreGLSL()}
+  { vec2 cu = (P.xz - vec2(${CM.userData.x0.toFixed(1)}, ${CM.userData.z0.toFixed(1)})) / vec2(${CM.userData.W.toFixed(1)}, ${CM.userData.H.toFixed(1)});
+    if (P.y > ${(WATER_Y + 0.05).toFixed(2)} && cu.x > 0.0 && cu.y > 0.0 && cu.x < 1.0 && cu.y < 1.0 && texture2D(uChan, cu).r > 0.5) discard; } // in front of a channel wall
   float vRoad = vA.x, vMud = vA.y, lat = vB.x, hw = vB.y, asph = vB.z, rail = vB.w, jbox = 0.0;
   float green = vC.x, beach = vC.y, city = vC.z, tun = vC.w, rs = vD.x, lanes = vD.y, jfade = 1.0 - vD.z;
   float dist = length(vViewPosition);
