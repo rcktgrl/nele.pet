@@ -31,12 +31,12 @@
 
   // ---------- fighters (DESIGN: Elite fighter stats are not in coriolis-data) ----------
   const FIGHTER_TYPES = {
-    gu97: { name: 'GU-97', hull: 100, shield: 60, atk: 1.0, pitch: 110, speed: 480, dist: { K: 1 }, shotspeed: 1600 },
-    condor: { name: 'F63 Condor', hull: 80, shield: 50, atk: 1.0, pitch: 130, speed: 520, dist: { K: 1 }, shotspeed: 1600 },
-    taipan: { name: 'Taipan', hull: 120, shield: 60, atk: 1.15, pitch: 100, speed: 460, dist: { K: 1 }, shotspeed: 1600 },
-    trident: { name: 'XG7 Trident', hull: 90, shield: 60, atk: 1.3, pitch: 110, speed: 480, dist: { A: 1 }, shotspeed: 1200 },
-    javelin: { name: 'XG8 Javelin', hull: 90, shield: 60, atk: 1.1, pitch: 115, speed: 490, dist: { K: 1 }, shotspeed: 1100 },
-    lance: { name: 'XG9 Lance', hull: 80, shield: 60, atk: 1.2, pitch: 125, speed: 510, dist: { T: 1 }, shotspeed: null }
+    gu97: { name: 'GU-97', hull: 200, shield: 120, atk: 1.0, pitch: 110, speed: 480, dist: { K: 1 }, shotspeed: 1600 },
+    condor: { name: 'F63 Condor', hull: 160, shield: 100, atk: 1.0, pitch: 130, speed: 520, dist: { K: 1 }, shotspeed: 1600 },
+    taipan: { name: 'Taipan', hull: 240, shield: 120, atk: 1.15, pitch: 100, speed: 460, dist: { K: 1 }, shotspeed: 1600 },
+    trident: { name: 'XG7 Trident', hull: 180, shield: 120, atk: 1.3, pitch: 110, speed: 480, dist: { A: 1 }, shotspeed: 1200 },
+    javelin: { name: 'XG8 Javelin', hull: 180, shield: 120, atk: 1.1, pitch: 115, speed: 490, dist: { K: 1 }, shotspeed: 1100 },
+    lance: { name: 'XG9 Lance', hull: 160, shield: 120, atk: 1.2, pitch: 125, speed: 510, dist: { T: 1 }, shotspeed: null }
   };
   let FIGHTER_DPS = 23; // set from data: one unengineered large gimballed multicannon (Sam's "size-3 weapon" rule)
   function fighterProfile(type) {
@@ -81,11 +81,14 @@
     if (!w.falloff && metres > w.range) return 0;
     return 1;
   }
+  const HITSCAN_TRACK = 15; // DESIGN: metres of 'aim error' per unit of target agility for instant weapons
   function hitChance(w, dst, metres) {
-    if (!w.shotspeed) return 1;
-    const t = metres / w.shotspeed, c = dst.c, eng = dst.pips[1];
+    if (w.guided) return 1;
+    const c = dst.c, eng = dst.pips[1];
     const pitch = pitchAt(c, eng), agility = pitch / (pitch + 60);
-    let drift = speedAt(c, eng) * t * agility * 0.5 * (MOUNT_TRACK[w.mount] || 1);
+    let drift = w.shotspeed
+      ? speedAt(c, eng) * (metres / w.shotspeed) * agility * 0.5 * (MOUNT_TRACK[w.mount] || 1)   // projectiles: target moves while the shot flies
+      : HITSCAN_TRACK * agility * (MOUNT_TRACK[w.mount] || 1);                                  // lasers/rails: keeping the aim on an agile target
     if (dst.scannedBy > 0) drift *= 1 - SCAN_HIT;
     const size = HULL_SIZE[c.size] ?? 70;
     return size / (size + drift);
@@ -209,7 +212,7 @@
         if (u.hull <= 0 || u.status === 'jumped') continue;
         if (u.order === 'hold') { u.wepCap = Math.min(u.c.pd.wepcap, u.wepCap + wepRecharge(u.c.pd, u.pips[2]) * DT); continue; } // weapons cold: capacitor refills
         const tg = validTarget(g, u);
-        if (!tg || tg.hull <= 0) continue;
+        if (!tg || tg.hull <= 0 || u.order === 'scan' || u.order === 'repair') { u.wepCap = Math.min(u.c.pd.wepcap, u.wepCap + wepRecharge(u.c.pd, u.pips[2]) * DT); continue; }
         if (u.order === 'attack' || u.order === 'heal') {
           const r = fireStep(u, tg);
           stats.get(u.id).dealt += r.shield + r.hull; stats.get(u.id).healed += r.healed;
@@ -286,7 +289,7 @@
         o.pips = u.broken && u.c.shield ? [4, 1, 1] : [2, 1, 3];
         o.order = 'attack';
         if (foes.length) { // prefer VP earners and weak ships in reach
-          const score = f => (f.c.vp.cargo || f.c.vp.passengers || f.c.vp.mining ? 2 : 1) * weaponDpsAt(u.c, distance(u, f)) / Math.max(50, f.shield + f.hull);
+          const score = f => (f.kind === 'fighter' ? 0.4 : 1) * (f.c.vp.cargo || f.c.vp.passengers || f.c.vp.mining ? 2 : 1) * weaponDpsAt(u.c, distance(u, f)) / Math.max(50, f.shield + f.hull);
           o.target = foes.slice().sort((a, b) => score(b) - score(a))[0].id;
         }
       } else {

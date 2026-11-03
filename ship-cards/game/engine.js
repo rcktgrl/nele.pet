@@ -322,7 +322,7 @@
       const mount = /_turret/.test(p.item) ? 'turret' : /_gimbal/.test(p.item) ? 'gimbal' : 'fixed';
       const guided = /basicmissilerack|advancedtorppylon|_seeker|atmissile/.test(p.item); // seekers and torpedoes track their target
       return { item: p.item, sdps: dps * sf, eps, dist: m.damagedist || { K: 1 }, falloff: m.falloff || null, range: m.range || 3000, piercing: m.piercing || 0,
-        shotspeed: guided ? null : (m.shotspeed || null), mount,
+        shotspeed: guided ? null : (m.shotspeed || null), mount, guided,
         heal: p.exp === 'special_regeneration_sequence' ? 'regen' : p.exp === 'special_concordant_sequence' ? 'concordant' : null };
     });
     const pd = (on.find(p => p.g === 'pd') || { m: {} }).m;
