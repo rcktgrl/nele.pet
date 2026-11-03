@@ -6,7 +6,7 @@
 (function (root) {
   'use strict';
   const ROUND = 5, DT = 0.5;
-  const RANGES = { short: 500, medium: 1500, long: 3000 };
+  const RANGES = { short: 500, medium: 1000, long: 1500 };
   const FSD_ROUNDS = 3;
 
   const sysResistance = sys => Math.pow(sys, 0.85) * 0.6 / Math.pow(4, 0.85);
