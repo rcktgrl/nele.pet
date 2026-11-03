@@ -80,9 +80,10 @@
   // ---------- helpers ----------
   const lc = s => String(s || '').toLowerCase();
   const sizeOf = item => +((/size(\d+)/.exec(item) || [])[1] || 0);
-  function curve(mass, m) { // coriolis mass curve (shields, thrusters)
+  function curve(mass, m, type) { // coriolis mass curve (shields, thrusters)
     const minM = m.minmass ?? m.genminmass, optM = m.optmass ?? m.genoptmass, maxM = m.maxmass ?? m.genmaxmass;
-    const minMul = m.minmul, optMul = m.optmul, maxMul = m.maxmul;
+    const t = type || '';
+    const minMul = m['minmul' + t] ?? m.minmul, optMul = m['optmul' + t] ?? m.optmul, maxMul = m['maxmul' + t] ?? m.maxmul;
     if (minM == null || maxMul == null) return 1;
     const xnorm = Math.min(1, (maxM - mass) / (maxM - minM));
     const exponent = Math.log((optMul - minMul) / (maxMul - minMul)) / Math.log(Math.min(1, (maxM - optM) / (maxM - minM)));
@@ -108,7 +109,8 @@
     for (const [k, v] of Object.entries(feats)) {
       if (k === 'shieldboost' || k === 'hullboost') out[k] = (1 + (out[k] || 0)) * (1 + v) - 1;
       else if (k === 'rof') { if (out.fireint) out.fireint *= (1 + v); }
-      else if (k === 'optmul') { for (const x of ['minmul', 'optmul', 'maxmul']) if (out[x] != null) out[x] *= (1 + v); }
+      else if (k === 'optmul') { for (const x of ['minmul', 'optmul', 'maxmul', 'minmulspeed', 'optmulspeed', 'maxmulspeed']) if (out[x] != null) out[x] *= (1 + v); }
+      else if (k === 'optmass') { for (const x of ['optmass', 'minmass', 'maxmass']) if (out[x] != null && !(x !== 'optmass' && feats[x])) out[x] *= (1 + v); }
       else if (/res$/.test(k)) continue;
       else if (typeof out[k] === 'number') {
         const meth = E.method[k] || 'multiplicative';
@@ -123,16 +125,14 @@
     if (/^weapon_/.test(bp) || !BP[bp]) { const m = /_(overcharged|shortrange|rapidfire|efficient|highcapacity|longrange|focused|sturdy|lightweight)$/.exec(bp); if (m) bp = 'weapon_' + m[1]; }
     return ((BP[bp] || {})[key] || 0) * progress(eng);
   }
-  function weaponDps(m) {
+  function weaponDps(m) { // same as Coriolis Module.getDps: damage × rounds per shot × rate of fire
     if (!m.damage) return 0;
     if (!m.fireint) return m.damage; // beams: damage per second
-    let rof = 1 / m.fireint;
-    if (m.burst > 1 && m.burstrof) rof = m.burst / (m.fireint + (m.burst - 1) / m.burstrof);
-    let dps = m.damage * rof;
-    if (m.clip > 1 && m.reload) { const t = m.clip / rof; dps *= t / (t + m.reload); }
-    else if (m.clip === 1 && m.reload) dps = m.damage / (m.fireint + m.reload);
-    return dps;
+    const burst = m.burst || 1, burstRof = m.burstrof || 1;
+    const rof = burst / ((burst - 1) / burstRof + m.fireint + (m.charge || 0));
+    return m.damage * (m.roundspershot || 1) * rof;
   }
+
 
   // ---------- engine ----------
   function build(loadout, db) {
@@ -218,7 +218,7 @@
     // shields
     let shield = 0;
     if (shieldGen) {
-      const base = hull.shield * curve(unladen, shieldGen) * (1 + bpEffect(shieldGenEng, 'shield'));
+      const base = hull.shield * curve(hull.hullMass, shieldGen) * (1 + bpEffect(shieldGenEng, 'shield'));
       shield = base * (1 + boosts) + shieldAdd;
     }
     // hull
@@ -230,7 +230,7 @@
       jump = opt / unladen * Math.pow((fsd.maxfuel || 1) / (fsd.fuelmul || 0.012), 1 / (fsd.fuelpower || 2.45)) + jumpBoost;
     }
     // speed
-    const speed = thr ? hull.speed * curve(unladen, thr) * (1 + bpEffect(thrEng, 'speed')) : hull.speed;
+    const speed = thr ? hull.speed * curve(unladen, thr, 'speed') * (1 + bpEffect(thrEng, 'speed')) : hull.speed;
     const totalDps = dps.T + dps.K + dps.E + dps.A;
 
     // roles (fixed rules)
