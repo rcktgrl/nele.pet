@@ -313,9 +313,14 @@ vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
     const C = this.world.city, S = C.streets, T = this.world.terrain;
     // paint: flat quads a hair above the ground, bucketed so far-off ones drop out
     const cells = new Map(), quad = (o) => {
+      const px = -o.uz, pz = o.ux, vs = [];
+      for (const [u, l] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const x = o.x + o.ux * u * o.hl + px * l * o.hw, z = o.z + o.uz * u * o.hl + pz * l * o.hw, y = T.rawH(x, z);
+        if (Math.abs(T.height(x, z) - y) > 0.5) return; // the river or the boat tunnel's cut took the ground away: no paint hanging in the air
+        vs.push(x, y + 0.035, z);
+      }
       const k = cellKey(o.x, o.z, 400); let a = cells.get(k); if (!a) cells.set(k, a = []);
-      const px = -o.uz, pz = o.ux;
-      for (const [u, l] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const x = o.x + o.ux * u * o.hl + px * l * o.hw, z = o.z + o.uz * u * o.hl + pz * l * o.hw; a.push(x, T.rawH(x, z) + 0.035, z); }
+      a.push(...vs);
     };
     for (const o of S.paint) quad(o);
     const paintMat = new THREE.MeshStandardMaterial({ color: 0xd8d4ca, roughness: 0.75, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, side: THREE.DoubleSide });
