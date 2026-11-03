@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Ship Card Forge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&family=Saira:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0}img{max-width:100%}
+/* Layout: editor panel beside a live trading card (stacked on phones, card first). Single dark look by choice; card tint follows --hue. */
+:root{
+  --hue:265;
+  --void:#07050d; --card:hsl(var(--hue) 50% 9%); --card-hi:hsl(var(--hue) 52% 17%); --panel:hsl(var(--hue) 47% 13%); --line:hsl(var(--hue) 45% 28%);
+  --accent:hsl(var(--hue) 100% 68%); --accent-soft:hsl(var(--hue) 55% 46%); --gold:#e8c35a; --gold-dim:#a88a3a;
+  --ink:#efe9ff; --muted:#a99cc7;
+  --ui:#120d1c; --ui-line:#2d2340; --ui-field:#0b0812;
+  --f-display:"Saira Condensed","Arial Narrow",sans-serif;
+  --f-body:"Saira",system-ui,sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+body{background:var(--void);color:var(--ink);font-family:var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px;overflow-x:hidden;
+  background-image:radial-gradient(1px 1px at 12% 18%,#fff8 50%,transparent 51%),radial-gradient(1px 1px at 78% 9%,#fff6 50%,transparent 51%),
+  radial-gradient(1.5px 1.5px at 64% 72%,#ffd9a088 50%,transparent 51%),radial-gradient(1px 1px at 30% 88%,#fff5 50%,transparent 51%),radial-gradient(1px 1px at 90% 55%,#fff7 50%,transparent 51%)}
+.wrap{max-width:1040px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:32px;align-items:start}
+.cardcol{position:sticky;top:calc(16px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;align-items:center;gap:12px;grid-column:2;grid-row:1}
+.editor{grid-column:1;grid-row:1;min-width:0;display:flex;flex-direction:column;gap:16px}
+@media (max-width:820px){.wrap{grid-template-columns:minmax(0,1fr)}.cardcol{position:static;grid-column:1;grid-row:1}.editor{grid-row:2}}
+h1{font-family:var(--f-display);font-weight:800;font-size:30px;letter-spacing:.04em;text-transform:uppercase;margin:0;line-height:1}
+h1 span{color:var(--gold)}
+.sub{color:var(--muted);font-size:13px;margin:4px 0 0}
+
+/* editor */
+.bar-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{font:600 13px var(--f-body);color:var(--ink);background:var(--ui);border:1px solid var(--ui-line);border-radius:6px;padding:8px 12px;cursor:pointer}
+.btn:hover{border-color:var(--accent-soft)}.btn:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.btn.primary{background:var(--gold);color:#241800;border-color:var(--gold)}
+.btn.danger{color:#ff9b9b}
+.toast{font-family:var(--f-data);font-size:12px;color:var(--gold)}
+fieldset{border:1px solid var(--ui-line);background:var(--ui);border-radius:10px;padding:14px;margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+legend{font-family:var(--f-display);font-weight:700;letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:var(--accent);padding:0 6px}
+label{display:flex;flex-direction:column;gap:4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);min-width:0}
+.full{grid-column:1/-1}
+input,textarea,select{font:14px var(--f-body);color:var(--ink);background:var(--ui-field);border:1px solid var(--ui-line);border-radius:5px;padding:7px 9px;width:100%;box-sizing:border-box;text-transform:none;letter-spacing:0}
+textarea{resize:vertical;min-height:64px;line-height:1.4}
+textarea.code{font-family:var(--f-data);font-size:12px;min-height:180px}
+input[type=range]{padding:0;accent-color:var(--gold)}
+input[type=file]{font-size:12px}
+.help{font-size:11.5px;color:var(--muted);text-transform:none;letter-spacing:0;line-height:1.45}
+.statrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 90px;gap:8px;align-items:center}
+@media (max-width:480px){fieldset{grid-template-columns:minmax(0,1fr)}.statrow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.statrow input[type=range]{grid-column:1/-1}}
+
+/* card */
+.stage{perspective:1400px;width:min(380px,100%)}
+.card{position:relative;width:100%;aspect-ratio:63/102;transform-style:preserve-3d;transition:transform .7s cubic-bezier(.2,.7,.2,1);cursor:pointer;border:0;padding:0;background:none;color:inherit;font:inherit;text-align:left;display:block}
+.card:focus-visible{outline:2px solid var(--gold);outline-offset:6px;border-radius:18px}
+.face{position:absolute;inset:0;border-radius:16px;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden;
+  background:linear-gradient(160deg,var(--card-hi),var(--card) 45%,#0b0714);
+  box-shadow:0 0 0 1.5px var(--gold-dim),0 0 0 5px var(--card),0 0 0 6px var(--line),0 24px 60px -12px hsl(var(--hue) 100% 60% / .4);
+  display:flex;flex-direction:column;padding:14px 14px 12px;gap:9px}
+.back{transform:rotateY(180deg)}
+.flipped{transform:rotateY(180deg)}
+.foil{position:absolute;inset:0;pointer-events:none;mix-blend-mode:color-dodge;opacity:.2;
+  background:linear-gradient(115deg,transparent 20%,#ff6ad5 35%,#8d5cff 45%,#5ce1ff 55%,#e8c35a 65%,transparent 80%);
+  background-size:250% 250%;background-position:var(--fx,50%) var(--fy,50%)}
+.glare{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at var(--gx,50%) var(--gy,30%),#ffffff2e,transparent 45%)}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.name{font-family:var(--f-display);font-weight:800;font-size:clamp(24px,8vw,32px);line-height:.95;letter-spacing:.02em;text-transform:uppercase;overflow-wrap:anywhere;min-width:0}
+.name small{display:block;font-weight:500;font-size:12px;letter-spacing:.18em;color:var(--gold);margin-top:3px}
+.cost{flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff3c4,var(--gold) 45%,#7d6020);color:#2a1a00;
+  font-family:var(--f-display);font-weight:800;font-size:20px;line-height:1;box-shadow:0 0 0 2px var(--card),0 0 0 3px var(--gold-dim);text-align:center}
+.cost span{font-size:8px;letter-spacing:.1em;display:block}
+.cost span:first-child{font-size:20px;letter-spacing:0}
+.art{position:relative;flex:none;height:31%;border-radius:8px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--gold-dim);background:#000}
+.art img{width:100%;height:100%;object-fit:cover;display:block;transform:scale(1.08)}
+.art .noimg{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-data);font-size:11px;color:var(--muted)}
+.art .ident{position:absolute;right:8px;bottom:6px;font-family:var(--f-data);font-size:10px;color:var(--gold);letter-spacing:.12em;background:#07050dcc;padding:2px 6px;border-radius:3px}
+.typeline{display:flex;justify-content:space-between;align-items:center;font-family:var(--f-display);font-weight:700;font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+  padding:4px 8px;border-radius:4px;background:linear-gradient(90deg,var(--accent-soft),var(--panel));gap:8px}
+.typeline b{color:var(--gold);font-weight:700;white-space:nowrap}
+.stats{margin:0;display:grid;grid-template-columns:auto 1fr auto;gap:4px 8px;align-items:center}
+.stats dt{font-family:var(--f-display);font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-size:11px}
+.meter{height:6px;border-radius:3px;background:var(--panel);overflow:hidden;box-shadow:inset 0 0 0 1px var(--line)}
+.meter i{display:block;height:100%;width:var(--v);background:linear-gradient(90deg,var(--accent),var(--gold))}
+.stats dd{margin:0;font-family:var(--f-data);font-size:11px;text-align:right;font-variant-numeric:tabular-nums;min-width:58px}
+.ability{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:11.5px;line-height:1.38;display:flex;flex-direction:column;gap:4px}
+.ability strong{font-family:var(--f-display);color:var(--gold);letter-spacing:.08em;text-transform:uppercase;font-size:12px}
+.flavour{font-size:10.5px;font-style:italic;color:var(--muted);line-height:1.4;margin:auto 0 0}
+.foot{display:flex;justify-content:space-between;gap:8px;font-family:var(--f-data);font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.back h2{font-family:var(--f-display);font-weight:800;font-size:20px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--gold)}
+.lore{font-size:11px;line-height:1.45;margin:0}
+.lore em{color:var(--gold);font-style:normal}
+.slots{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;flex:1}
+.slots h3{margin:0;font-family:var(--f-display);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.slots ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px}
+.slots li{font-family:var(--f-data);font-size:10px;display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--line);padding-bottom:2px}
+.slots li span:last-child{color:var(--gold);text-align:right}
+.hint{font-family:var(--f-data);font-size:11px;color:var(--muted);letter-spacing:.08em;margin:0}
+[hidden]{display:none!important}
+#anim{width:min(400px,100%);height:auto;display:block}
+.anim-ctl{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+#gifstat{margin:0;min-height:1em;text-align:center}
+@media (prefers-reduced-motion:reduce){.card{transition:none}.foil{display:none}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <div class="cardcol">
+    <div class="stage">
+      <button class="card" id="card" aria-label="Ship card. Tap to flip.">
+        <div class="face front">
+          <div class="top">
+            <div class="name"><span id="c-name"></span><small id="c-type"></small></div>
+            <div class="cost"><div><span id="c-rank"></span><span id="c-ranklbl"></span></div></div>
+          </div>
+          <div class="art"><img id="c-img" alt=""><span class="noimg" id="c-noimg" hidden>Upload a ship image</span><span class="ident" id="c-ident"></span></div>
+          <div class="typeline"><span id="c-role"></span><b id="c-rarity"></b></div>
+          <dl class="stats" id="c-stats"></dl>
+          <div class="ability"><strong id="c-abt"></strong><span id="c-abx"></span></div>
+          <p class="flavour" id="c-flav"></p>
+          <div class="foot"><span id="c-fl"></span><span id="c-fr"></span></div>
+          <div class="foil"></div><div class="glare"></div>
+        </div>
+        <div class="face back">
+          <h2 id="c-bt"></h2>
+          <p class="lore" id="c-lore"></p>
+          <div class="slots" id="c-slots"></div>
+          <div class="foot"><span id="c-bl"></span><span id="c-br"></span></div>
+          <div class="foil"></div><div class="glare"></div>
+        </div>
+      </button>
+    </div>
+    <canvas id="anim" hidden aria-label="Card animation preview"></canvas>
+    <p class="hint" id="hint">TAP TO FLIP · TILT TO SHINE</p>
+    <div class="anim-ctl">
+      <button type="button" class="btn" id="b-play">Play animation</button>
+      <button type="button" class="btn primary" id="b-gif" hidden>Export GIF</button>
+    </div>
+    <p class="toast" id="gifstat" role="status"></p>
+  </div>
+
+  <form class="editor" id="f" autocomplete="off">
+    <div>
+      <h1>Ship Card <span>Forge</span></h1>
+      <p class="sub">Edit any field and the card updates as you type. Saved cards stay in this browser.</p>
+    </div>
+    <div class="bar-top">
+      <select id="pick" aria-label="Saved cards" style="width:auto;min-width:160px"></select>
+      <button type="button" class="btn" id="b-new">New card</button>
+      <button type="button" class="btn primary" id="b-save">Save card</button>
+      <button type="button" class="btn danger" id="b-del">Delete</button>
+      <span class="toast" id="toast" role="status"></span>
+    </div>
+
+    <fieldset>
+      <legend>Ship</legend>
+      <label>Ship name<input id="name"></label>
+      <label>Ship type<input id="type"></label>
+      <label>Ident<input id="ident"></label>
+      <label>Role line<input id="role"></label>
+      <label>Badge (big)<input id="rank" maxlength="4"></label>
+      <label>Badge (small)<input id="ranklbl" maxlength="8"></label>
+      <label>Rarity tag<input id="rarity"></label>
+      <label>Card tint<input type="range" id="hue" min="0" max="359"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Image</legend>
+      <label class="full">Ship screenshot<input type="file" id="img" accept="image/*"></label>
+      <label>Crop left / right<input type="range" id="imgx" min="0" max="100"></label>
+      <label>Crop up / down<input type="range" id="imgy" min="0" max="100"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Stats</legend>
+      <div class="full" id="statrows" style="display:flex;flex-direction:column;gap:8px"></div>
+      <p class="help full">Label, the value shown on the right, and how full the bar is.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Text</legend>
+      <label class="full">Ability name<input id="abt"></label>
+      <label class="full">Ability text<textarea id="abx"></textarea></label>
+      <label class="full">Flavour line<input id="flav"></label>
+      <label>Footer left<input id="fl"></label>
+      <label>Footer right<input id="fr"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Back of card</legend>
+      <label class="full">Back title<input id="bt"></label>
+      <label class="full">Story<textarea id="lore"></textarea><span class="help">Wrap words in *stars* to make them gold.</span></label>
+      <label class="full">Loadout<textarea id="slots" class="code"></textarea>
+        <span class="help">A line ending in a colon starts a section. Use "Module | blueprint grade · experimental" to put the engineering on the right in gold, e.g. "8A Power Plant | Overcharged G5".</span></label>
+      <label>Back footer left<input id="bl"></label>
+      <label>Back footer right<input id="br"></label>
+    </fieldset>
+  </form>
+</div>
+
+<script>
+const VIDAR={id:'vidar',name:'EFS Vidar',type:'Anaconda Mk II',ident:'A05-AA',role:'Multi-role laser frigate',rank:'V',ranklbl:'ELITE',rarity:'✦ Legendary',hue:265,
+ img:'vidar.jpg',imgx:52,imgy:50,
+ stats:[['Jump','54.82 ly',78],['Shields','8C Bi-Weave',96],['Firepower','6× beam',84],['Cargo','96 t',30],['Power','8A O/C',92]],
+ abt:'Thermal Shock Broadside',abx:'Six beam lasers fire at once and heat up every ship they hit. The fast-charging Bi-Weave shields recover after each exchange.',
+ flav:'"Son of Odin. Last one standing."',fl:'CMDR Archadder · ASOG',fr:'02 / Odin line',
+ bt:'The Odin Line',
+ lore:"The commander's first Anaconda was the *EFS Odin*. When the Mk II arrived, its name came from the same myth: *Vidar*, Odin's son and the silent god of vengeance, who avenged his father and lived on into the new world. It is a successor ship with a successor's name.",
+ slots:`Hardpoints:
+4A Beam Laser (fixed) | Efficient G5 · Thermal Shock
+2× 3C Beam Laser (gimballed) | Efficient G5 · Thermal Shock
+2× 3C Beam Laser (gimballed) | Efficient G5 · Thermal Vent
+1F Beam Laser (turreted) | Efficient G5 · Concordant Seq.
+1G Multi-cannon (turreted) | High cap G5 · Corrosive
+Utility:
+4× 0A Shield Booster | Heavy duty G5 · Super Caps
+2× 0A Shield Booster | Resist aug G5 · Super Caps
+0I Point Defence · 0I Heat Sink
+Core:
+8A Power Plant | Overcharged G4
+8A Frame Shift Drive (SCO) | Inc. range G5 · Mass Mgr
+8A Power Distributor | Charge enhanced G5
+7A Thrusters | Dirty G4 · Drive Distrib.
+1I Military Grade Composite | Heavy duty G5
+Optional:
+8C Bi-Weave Shield | Reinforced G5 · Fast Charge
+4× Guardian Shield Reinf. | 5D 5D 5D 4D
+5H Guardian FSD Booster | +range
+7A Fuel Scoop · 5A Collector
+7D Mk II Vessel Hangar
+4F Mk II Planetary Vehicle Hangar
+6D Mk II Cargo Rack | 96 t
+DSS · SC Assist · Adv. Docking`,
+ bl:'Angel Special Operations Group',br:'A05-AA'};
+const BLANK={id:'',name:'New ship',type:'Ship type',ident:'XX-00',role:'Role',rank:'I',ranklbl:'RANK',rarity:'✦ Rare',hue:200,img:'',imgx:50,imgy:50,
+ stats:[['Jump','— ly',50],['Shields','—',50],['Firepower','—',50],['Cargo','— t',50],['Speed','— m/s',50]],
+ abt:'Ability name',abx:'What this ship does best.',flav:'"A line of flavour."',fl:'CMDR —',fr:'01',bt:'Ship history',lore:'Where the *name* comes from.',slots:'Hardpoints:\nModule | engineering',bl:'',br:''};
+
+const $=id=>document.getElementById(id);
+const FIELDS=['name','type','ident','role','rank','ranklbl','rarity','hue','imgx','imgy','abt','abx','flav','fl','fr','bt','lore','slots','bl','br'];
+let cur=structuredClone(VIDAR);
+function load(){try{return JSON.parse(localStorage.getItem('shipcards')||'[]')}catch(e){return []}}
+function store(list){try{localStorage.setItem('shipcards',JSON.stringify(list));return true}catch(e){return false}}
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function render(){
+  const c=cur;
+  document.documentElement.style.setProperty('--hue',c.hue);
+  for(const k of ['name','type','ident','role','rank','ranklbl','rarity','abt','abx','flav','fl','fr','bt','bl','br']) $('c-'+k).textContent=c[k]||'';
+  const img=$('c-img');
+  if(c.img){img.hidden=false;$('c-noimg').hidden=true;if(img.getAttribute('src')!==c.img)img.src=c.img;img.style.objectPosition=`${c.imgx}% ${c.imgy}%`;img.alt=(c.name||'Ship')+' screenshot'}
+  else{img.hidden=true;$('c-noimg').hidden=false}
+  $('c-stats').innerHTML=c.stats.map(([l,v,p])=>`<dt>${esc(l)}</dt><div class="meter" style="--v:${+p||0}%"><i></i></div><dd>${esc(v)}</dd>`).join('');
+  $('c-lore').innerHTML=esc(c.lore).replace(/\*([^*]+)\*/g,'<em>$1</em>');
+  let h='',open=false;
+  for(const raw of (c.slots||'').split('\n')){const line=raw.trim();if(!line)continue;
+    if(line.endsWith(':')){if(open)h+='</ul>';h+=`<h3>${esc(line.slice(0,-1))}</h3><ul>`;open=true;continue}
+    if(!open){h+='<ul>';open=true}
+    const [a,b]=line.split('|').map(s=>s.trim());h+=`<li><span>${esc(a)}</span><span>${esc(b||'')}</span></li>`}
+  if(open)h+='</ul>';$('c-slots').innerHTML=h;
+}
+function fillForm(){
+  for(const k of FIELDS) $(k).value=cur[k]??'';
+  $('statrows').innerHTML=cur.stats.map((s,i)=>`<div class="statrow">
+    <input id="sl${i}" aria-label="Stat ${i+1} label" value="${esc(s[0])}">
+    <input id="sv${i}" aria-label="Stat ${i+1} value" value="${esc(s[1])}">
+    <input id="sp${i}" aria-label="Stat ${i+1} bar" type="range" min="0" max="100" value="${+s[2]||0}"></div>`).join('');
+  $('img').value='';
+}
+function readForm(){
+  for(const k of FIELDS) cur[k]=$(k).value;
+  cur.stats=cur.stats.map((_,i)=>[$('sl'+i).value,$('sv'+i).value,+$('sp'+i).value]);
+}
+function fillPick(sel){
+  const list=load();
+  $('pick').innerHTML=`<option value="vidar">EFS Vidar (example)</option>`+list.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')+(sel===''?`<option value="" selected>Unsaved card</option>`:'');
+  if(sel!=='') $('pick').value=sel;
+}
+let tt;function toast(m){$('toast').textContent=m;clearTimeout(tt);tt=setTimeout(()=>$('toast').textContent='',2600)}
+
+$('f').addEventListener('input',e=>{if(e.target.id==='img'||e.target.id==='pick')return;readForm();render()});
+$('img').addEventListener('change',e=>{
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
+    const s=Math.min(1,1200/im.width),cv=document.createElement('canvas');cv.width=Math.round(im.width*s);cv.height=Math.round(im.height*s);
+    cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);cur.img=cv.toDataURL('image/jpeg',.8);render();toast('Image added')};im.src=r.result};r.readAsDataURL(file)});
+let delArm=false;
+$('pick').addEventListener('change',()=>{const v=$('pick').value;
+  cur=v==='vidar'?structuredClone(VIDAR):structuredClone(load().find(c=>c.id===v)||VIDAR);fillForm();render();delArm=false;$('b-del').textContent='Delete'});
+$('b-new').addEventListener('click',()=>{cur=structuredClone(BLANK);fillForm();render();fillPick('');toast('New card started')});
+$('b-save').addEventListener('click',()=>{
+  readForm();const list=load();
+  if(!cur.id||cur.id==='vidar')cur.id='c'+Date.now().toString(36);
+  const i=list.findIndex(c=>c.id===cur.id);if(i>=0)list[i]=structuredClone(cur);else list.push(structuredClone(cur));
+  if(store(list)){fillPick(cur.id);toast('Saved: '+cur.name)}else toast('Could not save. The browser blocked storage or it is full.')});
+$('b-del').addEventListener('click',()=>{
+  if(!cur.id||cur.id==='vidar'){toast('The example card cannot be deleted');return}
+  if(!delArm){delArm=true;$('b-del').textContent='Tap again to delete';return}
+  delArm=false;$('b-del').textContent='Delete';store(load().filter(c=>c.id!==cur.id));cur=structuredClone(VIDAR);fillForm();render();fillPick('vidar');toast('Card deleted')});
+
+const card=$('card');
+card.addEventListener('click',()=>{card.classList.toggle('flipped');card.style.transition='';card.style.transform=''});
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+card.addEventListener('pointermove',e=>{const r=card.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
+  if(!reduce){card.style.transition='transform .1s';card.style.transform=`rotateX(${(0.5-y)*16}deg) rotateY(${(x-0.5)*20+(card.classList.contains('flipped')?180:0)}deg)`}
+  card.querySelectorAll('.face').forEach(f=>{f.style.setProperty('--fx',x*100+'%');f.style.setProperty('--fy',y*100+'%');f.style.setProperty('--gx',x*100+'%');f.style.setProperty('--gy',y*100+'%')})});
+card.addEventListener('pointerleave',()=>{card.style.transition='';card.style.transform=''});
+
+fillPick('vidar');fillForm();render();
+
+/* ---------- Canvas renderer: same card, drawn for the animation and the GIF ---------- */
+const CW=380,CH=615,M=10,VW=CW+2*M,VH=CH+2*M,P=14,LOOP=9;
+const SC='"Saira Condensed","Arial Narrow",sans-serif',SA='Saira,system-ui,sans-serif',MO='"IBM Plex Mono",ui-monospace,monospace';
+const GOLD='#e8c35a',GOLDD='#a88a3a',INK='#efe9ff',MUTED='#a99cc7';
+const hc=(s,l,a=1)=>`hsla(${+cur.hue},${s}%,${l}%,${a})`;
+let imgEl=null,imgSrc='';
+function getImg(){return new Promise(res=>{if(!cur.img)return res(null);if(imgEl&&imgSrc===cur.img)return res(imgEl);
+  const im=new Image();im.onload=()=>{imgEl=im;imgSrc=cur.img;res(im)};im.onerror=()=>res(null);im.src=cur.img})}
+async function fontsReady(){try{await Promise.all(['800 30px "Saira Condensed"','700 13px "Saira Condensed"','500 12px "Saira Condensed"','400 12px Saira','400 11px "IBM Plex Mono"'].map(f=>document.fonts.load(f)))}catch(e){}}
+function font(c,w,s,f,ls=0,it=''){c.font=`${it} ${w} ${s}px ${f}`;if('letterSpacing' in c)c.letterSpacing=ls+'px'}
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+function wrap(c,t,w){const out=[];for(const para of String(t||'').split('\n')){let line='';for(const word of para.split(/\s+/)){if(!word)continue;const tr=line?line+' '+word:word;if(line&&c.measureText(tr).width>w){out.push(line);line=word}else line=tr}if(line)out.push(line)}return out}
+function wrapRich(c,t,w){ // *gold* spans; punctuation stays attached to its word
+  let g=false;const words=String(t||'').split(/\s+/).filter(Boolean).map(wd=>{const segs=[];wd.split('*').forEach((s,i)=>{if(i>0)g=!g;if(s)segs.push({t:s,g})});return segs}).filter(s=>s.length);
+  const sp=c.measureText(' ').width,lines=[];let line=[],lw=0;
+  for(const segs of words){const ww=segs.reduce((a,s)=>a+c.measureText(s.t).width,0);if(line.length&&lw+sp+ww>w){lines.push(line);line=[];lw=0}
+    let x=line.length?lw+sp:0;for(const s of segs){line.push({t:s.t,g:s.g,x});x+=c.measureText(s.t).width}lw=x}
+  if(line.length)lines.push(line);return lines}
+function base(c){
+  rr(c,0,0,CW,CH,16);c.save();c.clip();
+  const g=c.createLinearGradient(0,0,CW*.6,CH);g.addColorStop(0,hc(52,17));g.addColorStop(.45,hc(50,9));g.addColorStop(1,'#0b0714');c.fillStyle=g;c.fillRect(0,0,CW,CH);
+  const gl=c.createRadialGradient(CW/2,CH*.3,0,CW/2,CH*.3,CW*.8);gl.addColorStop(0,'rgba(255,255,255,.07)');gl.addColorStop(1,'rgba(255,255,255,0)');c.fillStyle=gl;c.fillRect(0,0,CW,CH);
+}
+function frame(c){c.restore();c.lineWidth=1.5;c.strokeStyle=GOLDD;rr(c,.75,.75,CW-1.5,CH-1.5,16);c.stroke();c.lineWidth=1;c.strokeStyle=hc(45,28);rr(c,5.5,5.5,CW-11,CH-11,12);c.stroke()}
+function foot(c,l,r){font(c,400,9,MO,.54);c.fillStyle=MUTED;c.textBaseline='alphabetic';c.textAlign='left';c.fillText(String(l||'').toUpperCase(),P,CH-14);c.textAlign='right';c.fillText(String(r||'').toUpperCase(),CW-P,CH-14);c.textAlign='left';return CH-14-9-9}
+function drawFront(c,img,shine){
+  base(c);c.textBaseline='top';let y=14;
+  const bx=CW-P-22,by=y+22,bg=c.createRadialGradient(bx-7,by-8,1,bx,by,24);bg.addColorStop(0,'#fff3c4');bg.addColorStop(.45,GOLD);bg.addColorStop(1,'#7d6020');
+  c.fillStyle=bg;c.beginPath();c.arc(bx,by,22,0,7);c.fill();c.strokeStyle=GOLDD;c.lineWidth=1;c.beginPath();c.arc(bx,by,24.5,0,7);c.stroke();
+  c.fillStyle='#2a1a00';c.textAlign='center';font(c,800,20,SC);c.fillText(cur.rank||'',bx,by-13);font(c,700,8,SC,.8);c.fillText(String(cur.ranklbl||'').toUpperCase(),bx,by+6);c.textAlign='left';
+  font(c,800,30,SC,.6);c.fillStyle=INK;const nl=wrap(c,String(cur.name||'').toUpperCase(),CW-2*P-56).slice(0,2);nl.forEach((l,i)=>c.fillText(l,P,y+i*28.5));
+  let y2=y+nl.length*28.5+3;font(c,500,12,SC,2.16);c.fillStyle=GOLD;c.fillText(String(cur.type||'').toUpperCase(),P,y2);y=Math.max(y2+14,y+44)+9;
+  const AW=CW-2*P,AH=190;c.save();rr(c,P,y,AW,AH,8);c.clip();c.fillStyle='#000';c.fillRect(P,y,AW,AH);
+  if(img){const s=Math.max(AW/img.width,AH/img.height)*1.08,dw=img.width*s,dh=img.height*s;c.drawImage(img,P+(AW-dw)*(+cur.imgx||0)/100,y+(AH-dh)*(+cur.imgy||0)/100,dw,dh)}
+  font(c,400,10,MO,1.2);const it=cur.ident||'';if(it){const iw=c.measureText(it).width+12;c.fillStyle='rgba(7,5,13,.8)';rr(c,P+AW-8-iw,y+AH-6-17,iw,17,3);c.fill();c.fillStyle=GOLD;c.fillText(it,P+AW-8-iw+6,y+AH-6-14)}
+  c.restore();c.strokeStyle=GOLDD;c.lineWidth=1;rr(c,P+.5,y+.5,AW-1,AH-1,8);c.stroke();y+=AH+9;
+  const tg=c.createLinearGradient(P,0,CW-P,0);tg.addColorStop(0,hc(55,46));tg.addColorStop(1,hc(47,13));c.fillStyle=tg;rr(c,P,y,AW,24,4);c.fill();
+  font(c,700,13,SC,1.56);c.textBaseline='middle';c.fillStyle=INK;c.fillText(String(cur.role||'').toUpperCase(),P+8,y+12.5);c.fillStyle=GOLD;c.textAlign='right';c.fillText(String(cur.rarity||'').toUpperCase(),CW-P-8,y+12.5);c.textAlign='left';y+=24+9;
+  font(c,700,11,SC,1.32);const lw=Math.max(...cur.stats.map(s=>c.measureText(String(s[0]).toUpperCase()).width));font(c,400,11,MO);const vw=Math.max(58,...cur.stats.map(s=>c.measureText(s[1]).width));
+  const bx0=P+lw+8,bw=CW-P-vw-8-bx0;
+  cur.stats.forEach((s,i)=>{const cy=y+i*17+6.5;font(c,700,11,SC,1.32);c.fillStyle=MUTED;c.fillText(String(s[0]).toUpperCase(),P,cy);
+    c.fillStyle=hc(47,13);rr(c,bx0,cy-3,bw,6,3);c.fill();c.strokeStyle=hc(45,28);c.stroke();
+    const fw=bw*Math.max(0,Math.min(100,+s[2]||0))/100;if(fw>0){const fg=c.createLinearGradient(bx0,0,bx0+fw,0);fg.addColorStop(0,hc(100,68));fg.addColorStop(1,GOLD);c.fillStyle=fg;rr(c,bx0,cy-3,fw,6,3);c.fill()}
+    font(c,400,11,MO);c.fillStyle=INK;c.textAlign='right';c.fillText(s[1],CW-P,cy);c.textAlign='left'});
+  y+=cur.stats.length*17-4+9;c.textBaseline='top';
+  font(c,400,11.5,SA);const al=wrap(c,cur.abx,AW-18);const ah=7+14+4+al.length*15.9+7;
+  c.fillStyle=hc(47,13);rr(c,P,y,AW,ah,6);c.fill();c.strokeStyle=hc(45,28);c.stroke();
+  font(c,700,12,SC,.96);c.fillStyle=GOLD;c.fillText(String(cur.abt||'').toUpperCase(),P+9,y+7);font(c,400,11.5,SA);c.fillStyle=INK;al.forEach((l,i)=>c.fillText(l,P+9,y+7+18+i*15.9));
+  const fy=foot(c,cur.fl,cur.fr);c.textBaseline='top';font(c,400,10.5,SA,0,'italic');c.fillStyle=MUTED;const fl=wrap(c,cur.flav,AW);fl.forEach((l,i)=>c.fillText(l,P,fy-fl.length*14.7+i*14.7+4));
+  if(shine>=0){const x=-CW*.6+shine*CW*2.2;const sg=c.createLinearGradient(x-90,0,x+90,CH*.5);
+    sg.addColorStop(0,'rgba(255,255,255,0)');sg.addColorStop(.35,'rgba(255,106,213,.10)');sg.addColorStop(.5,'rgba(255,255,255,.28)');sg.addColorStop(.65,'rgba(92,225,255,.10)');sg.addColorStop(1,'rgba(255,255,255,0)');
+    c.globalCompositeOperation='lighter';c.fillStyle=sg;c.fillRect(0,0,CW,CH);c.globalCompositeOperation='source-over'}
+  frame(c)}
+function slotItems(c,w){const it=[];let first=true;
+  for(const raw of (cur.slots||'').split('\n')){const line=raw.trim();if(!line)continue;
+    if(line.endsWith(':')){it.push({h:line.slice(0,-1).toUpperCase(),gap:first?0:6,ht:14});first=false;continue}
+    const [a,b]=line.split('|').map(s=>s.trim());font(c,400,10,MO);const two=b&&c.measureText(a).width+c.measureText(b).width+8>w;
+    it.push({a,b:b||'',two,gap:first?0:(it.length&&it[it.length-1].h?6:2),ht:two?27:14});first=false}
+  return it}
+function drawBack(c,sp){
+  base(c);c.textBaseline='top';let y=14;font(c,800,20,SC,1.2);c.fillStyle=GOLD;c.fillText(String(cur.bt||'').toUpperCase(),P,y);y+=22+9;
+  const AW=CW-2*P;font(c,400,11,SA);const ll=wrapRich(c,cur.lore,AW);ll.forEach((line,i)=>line.forEach(tk=>{c.fillStyle=tk.g?GOLD:INK;c.fillText(tk.t,P+tk.x,y+i*16)}));y+=ll.length*16+9;
+  const bot=foot(c,cur.bl,cur.br)+9,rh=bot-y,items=slotItems(c,AW);const total=items.reduce((s,i)=>s+i.gap+i.ht,0),max=Math.max(0,total-rh);
+  c.save();c.beginPath();c.rect(0,y,CW,rh);c.clip();c.textBaseline='top';let yy=y-sp*max;
+  for(const i of items){yy+=i.gap;if(i.h!==undefined){font(c,700,11,SC,1.76);c.fillStyle=hc(100,68);c.fillText(i.h,P,yy)}
+    else{font(c,400,10,MO);c.fillStyle=INK;c.fillText(i.a,P,yy);c.fillStyle=GOLD;c.textAlign='right';c.fillText(i.b,CW-P,i.two?yy+13:yy);c.textAlign='left';
+      c.strokeStyle=hc(45,28,.6);c.setLineDash([3,2]);c.beginPath();c.moveTo(P,yy+i.ht-.5);c.lineTo(CW-P,yy+i.ht-.5);c.stroke();c.setLineDash([])}
+    yy+=i.ht}
+  c.restore();frame(c)}
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+let off=null;
+function drawAt(c,S,t,img){
+  if(!off||off.width!==Math.round(CW*S)){off=document.createElement('canvas');off.width=Math.round(CW*S);off.height=Math.round(CH*S)}
+  const o=off.getContext('2d');o.setTransform(1,0,0,1,0,0);o.clearRect(0,0,off.width,off.height);o.setTransform(S,0,0,S,0,0);
+  let ang=0,face='front',shine=-1,sp=0;
+  if(t<3)shine=t<1?t:-1;else if(t<3.5)ang=(t-3)/.5*180;else if(t<8.5){face='back';sp=t<5.5?0:ease((t-5.5)/3)}else ang=180+(t-8.5)/.5*180;
+  if(ang){const a=ang%360;face=(a<90||a>270)?'front':'back';if(face==='back')sp=ang>180?1:0}
+  face==='front'?drawFront(o,img,shine):drawBack(o,sp);
+  c.setTransform(1,0,0,1,0,0);c.fillStyle='#07050d';c.fillRect(0,0,c.canvas.width,c.canvas.height);
+  c.setTransform(S,0,0,S,0,0);const k=Math.abs(Math.cos(ang*Math.PI/180));
+  c.save();c.translate(VW/2,M);c.scale(Math.max(k,.02),1);c.drawImage(off,-CW/2,0,CW,CH);
+  if(ang){c.fillStyle=`rgba(0,0,0,${.45*Math.sin(ang*Math.PI/180)**2})`;rr(c,-CW/2,0,CW,CH,16);c.fill()}c.restore()}
+
+/* preview */
+const anim=$('anim');let playing=false,raf=0,t0=0,pImg=null;
+async function startPlay(){await fontsReady();pImg=await getImg();const S=Math.min(2,window.devicePixelRatio||1);anim.width=Math.round(VW*S);anim.height=Math.round(VH*S);
+  anim.hidden=false;document.querySelector('.stage').hidden=true;$('hint').hidden=true;playing=true;$('b-play').textContent='Show card';t0=performance.now();
+  const ctx=anim.getContext('2d');const step=now=>{if(!playing)return;drawAt(ctx,S,((now-t0)/1000)%LOOP,pImg);raf=requestAnimationFrame(step)};raf=requestAnimationFrame(step)}
+function stopPlay(){playing=false;cancelAnimationFrame(raf);anim.hidden=true;document.querySelector('.stage').hidden=false;$('hint').hidden=false;$('b-play').textContent='Play animation'}
+$('b-play').addEventListener('click',()=>playing?stopPlay():startPlay());
+$('f').addEventListener('input',async e=>{if(playing&&e.target.id!=='img')pImg=await getImg()});
+$('img').addEventListener('change',()=>setTimeout(async()=>{if(playing)pImg=await getImg()},400));
+
+/* GIF encoder (median-cut palette + LZW) */
+function medianCut(hist){
+  const cols=[];for(let i=0;i<32768;i++)if(hist[i])cols.push(i);
+  const ch=[c=>c>>10,c=>(c>>5)&31,c=>c&31];
+  const stat=b=>{const mn=[31,31,31],mx=[0,0,0];let n=0;for(const c of b.c){for(let k=0;k<3;k++){const v=ch[k](c);if(v<mn[k])mn[k]=v;if(v>mx[k])mx[k]=v}n+=hist[c]}b.n=n;b.r=[mx[0]-mn[0],mx[1]-mn[1],mx[2]-mn[2]];b.s=Math.max(...b.r)*Math.sqrt(n);return b};
+  let boxes=[stat({c:cols})];
+  while(boxes.length<255){let bi=-1,bs=0;boxes.forEach((b,i)=>{if(b.c.length>1&&b.s>bs){bs=b.s;bi=i}});if(bi<0)break;
+    const b=boxes[bi],ax=b.r.indexOf(Math.max(...b.r)),f=ch[ax];b.c.sort((p,q)=>f(p)-f(q));
+    let acc=0,cut=1;for(let i=0;i<b.c.length;i++){acc+=hist[b.c[i]];if(acc>=b.n/2){cut=Math.min(Math.max(i,1),b.c.length-1);break}}
+    boxes.splice(bi,1,stat({c:b.c.slice(0,cut)}),stat({c:b.c.slice(cut)}))}
+  const pal=new Uint8Array(768),lut=new Int16Array(32768).fill(-1);
+  boxes.forEach((b,i)=>{let r=0,g=0,bb=0;for(const c of b.c){const w=hist[c];r+=ch[0](c)*w;g+=ch[1](c)*w;bb+=ch[2](c)*w;lut[c]=i}
+    pal[i*3]=Math.min(255,Math.round(r/b.n*8.226));pal[i*3+1]=Math.min(255,Math.round(g/b.n*8.226));pal[i*3+2]=Math.min(255,Math.round(bb/b.n*8.226))});
+  return {pal,lut,n:boxes.length}}
+class Bytes{constructor(){this.a=new Uint8Array(1<<20);this.n=0}grow(k){if(this.n+k>this.a.length){const b=new Uint8Array(Math.max(this.a.length*2,this.n+k));b.set(this.a.subarray(0,this.n));this.a=b}}
+  byte(v){this.grow(1);this.a[this.n++]=v}u16(v){this.byte(v&255);this.byte(v>>8&255)}bytes(arr){this.grow(arr.length);this.a.set(arr,this.n);this.n+=arr.length}str(s){for(const ch of s)this.byte(ch.charCodeAt(0))}}
+const TAB=new Int16Array(4096*256),STAMP=new Int32Array(4096*256);let GEN=0;
+function lzw(buf,idx){
+  buf.byte(8);let cur_=0,shift=0,cs=9,next=258;GEN++;const block=new Uint8Array(255);let bl=0;
+  const ob=v=>{block[bl++]=v;if(bl===255){buf.byte(255);buf.bytes(block);bl=0}};
+  const emit=c=>{cur_|=c<<shift;shift+=cs;while(shift>=8){ob(cur_&255);cur_>>>=8;shift-=8}};
+  emit(256);let pre=idx[0];
+  for(let i=1;i<idx.length;i++){const k=idx[i],key=(pre<<8)|k;if(STAMP[key]===GEN){pre=TAB[key];continue}
+    emit(pre);if(next===4096){emit(256);next=258;cs=9;GEN++}else{if(next>=(1<<cs))cs++;TAB[key]=next++;STAMP[key]=GEN}pre=k}
+  emit(pre);emit(257);if(shift>0)ob(cur_&255);if(bl){buf.byte(bl);buf.bytes(block.subarray(0,bl))}buf.byte(0)}
+const tick=()=>new Promise(r=>setTimeout(r,0));
+async function buildGif(onProgress){
+  await fontsReady();const img=await getImg();const S=1.2,W=Math.round(VW*S),H=Math.round(VH*S);
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d',{willReadFrequently:true});
+  const plan=[],add=(a,b)=>{for(let t=a;t<b-1e-6;t+=.08)plan.push([t,8])};
+  add(0,1);plan.push([1,200]);add(3,3.5);plan.push([3.5,200]);add(5.5,8.5);add(8.5,9);
+  const hist=new Uint32Array(32768);
+  for(let i=0;i<plan.length;i+=3){drawAt(ctx,S,plan[i][0],img);const d=ctx.getImageData(0,0,W,H).data;for(let p=0;p<d.length;p+=12)hist[((d[p]>>3)<<10)|((d[p+1]>>3)<<5)|(d[p+2]>>3)]++;onProgress('Building colours…');await tick()}
+  const {pal,lut,n}=medianCut(hist);
+  const near=bin=>{const r=(bin>>10)*8.226,g=((bin>>5)&31)*8.226,b=(bin&31)*8.226;let bi=0,bd=1e9;for(let i=0;i<n;i++){const dr=pal[i*3]-r,dg=pal[i*3+1]-g,db=pal[i*3+2]-b,dd=dr*dr*2+dg*dg*4+db*db*3;if(dd<bd){bd=dd;bi=i}}return bi};
+  const out=new Bytes();out.str('GIF89a');out.u16(W);out.u16(H);out.byte(0xF7);out.byte(0);out.byte(0);out.bytes(pal);
+  out.byte(0x21);out.byte(0xFF);out.byte(11);out.str('NETSCAPE2.0');out.byte(3);out.byte(1);out.u16(0);out.byte(0);
+  const idx=new Uint8Array(W*H);
+  for(let f=0;f<plan.length;f++){drawAt(ctx,S,plan[f][0],img);const d=ctx.getImageData(0,0,W,H).data;
+    for(let p=0,j=0;j<idx.length;p+=4,j++){const bin=((d[p]>>3)<<10)|((d[p+1]>>3)<<5)|(d[p+2]>>3);let v=lut[bin];if(v<0)v=lut[bin]=near(bin);idx[j]=v}
+    out.byte(0x21);out.byte(0xF9);out.byte(4);out.byte(4);out.u16(plan[f][1]);out.byte(0);out.byte(0);
+    out.byte(0x2C);out.u16(0);out.u16(0);out.u16(W);out.u16(H);out.byte(0);lzw(out,idx);
+    onProgress(`Encoding frame ${f+1} of ${plan.length}…`);await tick()}
+  out.byte(0x3B);return new Blob([out.a.subarray(0,out.n)],{type:'image/gif'})}
+window.buildGif=buildGif;
+
+let dl=null;
+// On nele.pet there is no claude.ai viewer: fall back to a normal browser download.
+const plainSave=({filename,data})=>{const u=URL.createObjectURL(data),a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);return Promise.resolve({status:'saved'})};
+dl={save:plainSave};$('b-gif').hidden=false;
+$('b-gif').addEventListener('click',async()=>{
+  const b=$('b-gif');b.disabled=true;const st=m=>$('gifstat').textContent=m;
+  try{const blob=await buildGif(st);st(`GIF ready (${(blob.size/1048576).toFixed(1)} MB).`);
+    const name=(String(cur.name||'ship').trim().replace(/[^\w\- ]+/g,'').replace(/\s+/g,'-')||'ship')+'-card.gif';
+    await dl.save({filename:name,data:blob});st('Saved '+name)}
+  catch(e){st(e&&e.code==='declined'?'Export cancelled.':e&&e.code==='rate_limited'?'A save prompt is already open. Try again in a moment.':'Export failed: '+(e&&e.message||e))}
+  finally{b.disabled=false}});
+</script>
+
+</body>
+</html>
