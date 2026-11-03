@@ -318,14 +318,17 @@
       let sf = 1;
       if (m.clip && m.reload && m.fireint) { const clip = Math.ceil(m.clip); const over = (burst - 1) / burstRof; const srof = clip / ((clip - burst) / rof + over + m.reload); sf = srof / rof; }
       const eps = (m.distdraw || 0) * rof * (m.clip && m.reload && m.fireint ? sf : 1);
-      return { item: p.item, sdps: dps * sf, eps, dist: m.damagedist || { K: 1 }, falloff: m.falloff || null, range: m.range || 3000, piercing: m.piercing || 0 };
+      const mount = /_turret/.test(p.item) ? 'turret' : /_gimbal/.test(p.item) ? 'gimbal' : 'fixed';
+      const guided = /basicmissilerack|advancedtorppylon|_seeker|atmissile/.test(p.item); // seekers and torpedoes track their target
+      return { item: p.item, sdps: dps * sf, eps, dist: m.damagedist || { K: 1 }, falloff: m.falloff || null, range: m.range || 3000, piercing: m.piercing || 0,
+        shotspeed: guided ? null : (m.shotspeed || null), mount };
     });
     const pd = (on.find(p => p.g === 'pd') || { m: {} }).m;
     const thr = (on.find(p => p.g === 't') || { m: null }).m;
     const pitchMax = thr ? (hull.pitch || 30) * curve(mass, thr, 'rotation') : (hull.pitch || 30);
     const speedMax = thr ? hull.speed * curve(mass, thr, 'speed') : hull.speed;
     return {
-      hardness: hull.hardness || 50, shield, armour: { max: armourTotal, mult: amult }, weapons,
+      hardness: hull.hardness || 50, size: hull.size || 2, shield, armour: { max: armourTotal, mult: amult }, weapons,
       pd: { wepcap: pd.wepcap || 10, weprate: pd.weprate || 1, syscap: pd.syscap || 10, sysrate: pd.sysrate || 1 },
       pitchMax, pipSpeed: hull.pipSpeed || 0.05, speedMax, minthrust: hull.minthrust || 50, jump,
       power: { gen: Math.round(pgen * 100) / 100, draw: Math.round(draw * 100) / 100, notes: powerNotes }

@@ -15,6 +15,21 @@
   const pitchAt = (c, eng) => c.pitchMax * (1 - c.pipSpeed * (4 - eng));
   const speedAt = (c, eng) => c.speedMax * (eng / 4 + (c.minthrust / 100) * (1 - eng / 4));
 
+  /* Projectile hit chance (game rule, not Elite data): while a shot flies (range / projectile speed) the target can
+     slip sideways. How far depends on its speed and turn rate at its ENG pips. Gimbals and turrets track, so they
+     miss less. Bigger hulls are easier to hit. Lasers and railguns are instant; seekers and torpedoes are guided. */
+  const HULL_SIZE = { 1: 40, 2: 70, 3: 130 };           // metres, by landing-pad class
+  const MOUNT_TRACK = { fixed: 1, gimbal: 0.7, turret: 0.7 };
+  function hitChance(w, dst, dstPips, metres) {
+    if (!w.shotspeed) return 1;
+    const t = metres / w.shotspeed;
+    const c = dst.c, eng = dstPips[1];
+    const pitch = pitchAt(c, eng);
+    const agility = pitch / (pitch + 60);
+    const drift = speedAt(c, eng) * t * agility * 0.5 * (MOUNT_TRACK[w.mount] || 1);
+    const size = HULL_SIZE[c.size] || 70;
+    return size / (size + drift);
+  }
   function validPips(p) { return Array.isArray(p) && p.length === 3 && p.every(x => Number.isInteger(x) && x >= 0 && x <= 4) && p[0] + p[1] + p[2] === 6; }
   const ALL_PIPS = []; for (let s = 0; s <= 4; s++) for (let e = 0; e <= 4; e++) { const w = 6 - s - e; if (w >= 0 && w <= 4) ALL_PIPS.push([s, e, w]); }
 
@@ -56,7 +71,7 @@
     } else src.wepCap = Math.min(c.pd.wepcap, src.wepCap + (recharge - eps) * DT);
     const res = { shield: 0, hull: 0 };
     for (const { w, d } of weaponOutput(c, metres).perType) {
-      const raw = d * frac * DT;
+      const raw = d * frac * DT * hitChance(w, dst, dstPips, metres);
       if (!raw) continue;
       if (!dst.broken && dst.shield > 0) {
         let dmg = 0; const sysMul = 1 - sysResistance(dstPips[0]);
@@ -179,6 +194,6 @@
   }
   const pipsUseful = p => p[2] >= 3 || p[0] >= 3;
 
-  const api = { RANGES, ROUND, FSD_ROUNDS, ALL_PIPS, newGame, playRound, alive, validPips, pitchAt, speedAt, weaponOutput, aiAttack, aiDefend, sysResistance };
+  const api = { hitChance, RANGES, ROUND, FSD_ROUNDS, ALL_PIPS, newGame, playRound, alive, validPips, pitchAt, speedAt, weaponOutput, aiAttack, aiDefend, sysResistance };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Battle = api;
 })(typeof window !== 'undefined' ? window : globalThis);
