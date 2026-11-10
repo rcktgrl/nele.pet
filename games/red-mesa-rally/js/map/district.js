@@ -117,6 +117,7 @@ const DISTRICT = (() => {
     { id: 'saltworks-x3', w: 10, pts: [[4622, -78], [4662, -68], [4705, -56]] },
   ];
   const frame = new Index(), streets = [];
+  const LANES = [[-1112, 0], [-1052, 1.3], [-992, 2.6]], laneZ = (z0, ph, x) => z0 + 22 * Math.sin(x / 95 + ph) + (x - 4600) * 0.05; // the Heights lanes
   for (const id of ['north-rd', 'mesa-blvd', 'valley-rd', 'coast']) frame.add(curve(def(id).pts, false), 'art:' + id);
   for (const a of ART) { const pl = curve(a.pts, false); frame.add(pl, 'art:' + a.id); streets.push({ id: a.id, kind: 'art', w: a.w, pts: a.pts, sub: 40 }); }
 
@@ -126,7 +127,7 @@ const DISTRICT = (() => {
       poly: [[3975, -760], [4300, -800], [4600, -770], [4615, -330], [4600, 40], [4380, 90], [4180, 80], [4060, 20], [3995, -150], [3975, -380]] },
     { id: 'sw', name: 'SALTWORKS', paved: 1, w: 11, ang: -12, pitch: 105, org: [4880, -300], drop: 0.14, label: [4900, -560, -12],
       poly: [[4720, -880], [4900, -935], [5080, -905], [5088, -300], [5078, 220], [4950, 370], [4730, 330], [4705, -60], [4705, -400]] },
-    { id: 'ws', name: 'MESA VIEW', paved: 0.6, w: 9, ang: 13, pitch: 112, org: [3700, -400], drop: 0.15, cul: true, label: [3640, -250, 13],
+    { id: 'ws', name: 'MESA VIEW', paved: 0.6, w: 9, ang: 13, pitch: 112, org: [3700, -400], drop: 0.05, cul: true, label: [3640, -250, 13],
       poly: [[3480, -860], [3700, -890], [3830, -850], [3835, -400], [3830, 40], [3700, 100], [3480, 110], [3470, -400]] },
     { id: 'hl', name: 'KESTREL HEIGHTS', paved: 0.6, w: 8, lanes: true, label: [4680, -1030, -8],
       poly: [[4250, -1150], [4600, -1180], [4850, -1120], [5080, -1070], [5090, -935], [4900, -960], [4720, -920], [4500, -880], [4330, -895], [4250, -960]] },
@@ -139,7 +140,16 @@ const DISTRICT = (() => {
   ];
   const STADIUM = { x: 4490, z: 200, rx: 105, rz: 78, lot: [[4320, 100], [4620, 60], [4690, 330], [4320, 335]] };
   const DOCKS = { poly: [[4250, 336], [4720, 340], [4900, 420], [5000, 560], [4930, 740], [4880, 800], [4250, 800]] };
-  const inPark = (x, z) => PARKS.some((p) => pip(x, z, p.poly)) || Math.hypot((x - STADIUM.x) / STADIUM.rx, (z - STADIUM.z) / STADIUM.rz) < 1.15;
+  /* the landmarks, one to a suburb: the mall off Mesa Blvd by the interstate ramps, the skate park at the foot of the Heights,
+     the high school on the Marina's west side. Streets and houses keep out of them; City fills them in */
+  const SITES = [
+    { id: 'mall', name: 'MESA VIEW MALL', paved: 2, x0: 3494, z0: -505, x1: 3826, z1: -350 },
+    { id: 'skate', name: 'KESTREL SKATE PARK', paved: 2, x0: 4324, z0: -884, x1: 4572, z1: -814 },
+    { id: 'school', name: 'MARINA HIGH', paved: 1, ...SCHOOL },
+  ];
+  for (const s of SITES) s.poly = [[s.x0, s.z0], [s.x1, s.z0], [s.x1, s.z1], [s.x0, s.z1]];
+  const siteAt = (x, z, m = 0) => SITES.find((s) => x > s.x0 - m && x < s.x1 + m && z > s.z0 - m && z < s.z1 + m);
+  const inPark = (x, z) => PARKS.some((p) => pip(x, z, p.poly)) || Math.hypot((x - STADIUM.x) / STADIUM.rx, (z - STADIUM.z) / STADIUM.rz) < 1.15 || !!siteAt(x, z, 8);
 
   // a stretch of street is fine where it keeps off the railway and the ramps, does not run along the interstate or the
   // river, stays dry and out of the parks (crossing the interstate or the river is fine: they go over or under)
@@ -163,6 +173,7 @@ const DISTRICT = (() => {
   };
 
   const culs = [];
+  const toLine = (p, pl) => { let b = 1e9; for (let i = 0; i < pl.length - 1; i++) { const a = pl[i], q = pl[i + 1], vx = q[0] - a[0], vz = q[1] - a[1], t = clamp(((p[0] - a[0]) * vx + (p[1] - a[1]) * vz) / (vx * vx + vz * vz || 1), 0, 1); b = Math.min(b, Math.hypot(p[0] - a[0] - vx * t, p[1] - a[1] - vz * t)); } return b; };
   for (const d of D) {
     const poly = curve(d.poly, true, 6), dense = resamplePts(poly, 6);
     d.outline = poly;
@@ -208,10 +219,9 @@ const DISTRICT = (() => {
     if (d.ang !== undefined) {
       const ca = Math.cos(d.ang * Math.PI / 180), sa = Math.sin(d.ang * Math.PI / 180), W = (u, v) => [d.org[0] + u * ca - v * sa, d.org[1] + u * sa + v * ca];
       for (let i = -14; i <= 14; i++) { fam[0].push(resamplePts([W(i * d.pitch, -1600), W(i * d.pitch, 1600)], 8)); fam[1].push(resamplePts([W(-1600, i * d.pitch), W(1600, i * d.pitch)], 8)); }
-    } else if (d.lanes) { // contour lanes across the slope, short cul-de-sacs off them
-      for (const [z0, ph] of [[-1112, 0], [-1052, 1.3], [-992, 2.6]]) {
-        const f = (x) => z0 + 22 * Math.sin(x / 95 + ph) + (x - 4600) * 0.05;
-        const pl = []; for (let x = 4200; x <= 5160; x += 8) pl.push([x, f(x)]);
+    } else if (d.lanes) { // contour lanes across the slope, tied together further down by short streets up and down it
+      for (const [z0, ph] of LANES) {
+        const pl = []; for (let x = 4200; x <= 5160; x += 8) pl.push([x, laneZ(z0, ph, x)]);
         fam[0].push(pl);
       }
     } else if (d.fan) { // arcs round the bay and avenues fanning out from it
@@ -236,16 +246,6 @@ const DISTRICT = (() => {
         }
       }
     }));
-    // the Heights: a cul-de-sac every so often up or down the slope from each lane
-    if (d.lanes) for (const sg of segs.slice()) {
-      const L = plen(sg.pts); if (L < 120) continue;
-      for (let t = 50; t < L - 50; t += 110 + rng() * 60) {
-        const p = slice(sg.pts, t, t + 2), dx = p[1][0] - p[0][0], dz = p[1][1] - p[0][1], l = Math.hypot(dx, dz), sd = rng() < 0.5 ? 1 : -1;
-        const e = [p[0][0] - dz / l * 42 * sd, p[0][1] + dx / l * 42 * sd];
-        if (!pip(e[0], e[1], poly)) continue;
-        segs.push({ f: 2, li: segs.length, s0: 0, pts: [p[0], e], a: { p: p[0], anchor: true }, b: { p: e }, ka: key(p[0]), kb: key(e), on: true, stub: true });
-      }
-    }
     for (const sg of segs) {
       if (!sg.stub && rng() < (d.drop || 0)) sg.on = false;
       else if (!clear(sg.pts, d.w, false)) sg.on = false;
@@ -253,6 +253,16 @@ const DISTRICT = (() => {
         const m = sg.pts[Math.floor(sg.pts.length / 2)], q = sg.pts[Math.min(sg.pts.length - 1, Math.floor(sg.pts.length / 2) + 1)], p = sg.pts[Math.floor(sg.pts.length / 2) - 1] || m;
         const n = frame.nearest(m[0], m[1], 30), L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
         if (n && Math.abs(((q[0] - p[0]) * n.dir[0] + (q[1] - p[1]) * n.dir[1]) / L) > 0.8) sg.on = false;
+      }
+    }
+    // the Heights: every so often a short street climbs from one lane to the next, never two in line, so the lanes make
+    // loops and nobody has to turn round at the end of a stub
+    if (d.lanes) {
+      const lrng = mulberry32(41), on = (p) => segs.some((sg) => sg.on && sg.f === 0 && toLine(p, sg.pts) < 2);
+      for (let k = 0; k < LANES.length - 1; k++) for (let x = 4275 + k * 85 + lrng() * 40; x < 5090; x += 135 + lrng() * 75) {
+        const xb = x + (lrng() - 0.5) * 36, a = [x, laneZ(...LANES[k], x)], b = [xb, laneZ(...LANES[k + 1], xb)], pts = resamplePts([a, b], 8);
+        if (!on(a) || !on(b) || !pts.every((q) => pip(q[0], q[1], poly)) || !clear(pts, d.w, false)) continue;
+        segs.push({ f: 2, li: segs.length, s0: 0, pts, a: { p: a, anchor: true }, b: { p: b, anchor: true }, ka: key(a), kb: key(b), on: true, stub: true });
       }
     }
     // a dead end inside the district: prune it back (suburbs keep it and get a turning circle instead)
@@ -282,10 +292,16 @@ const DISTRICT = (() => {
     }
   }
 
+  /* the school bus loop: a long oval off the Marina's ring street, right in front of the school doors */
+  { const sc = SITES.find((s) => s.id === 'school'), zc = (sc.z0 + sc.z1) / 2, rn = frame.nearest(sc.x0, zc, 60, (t) => t === 'ring:ma');
+    sc.loop = { x: (rn ? rn.p[0] : sc.x0 - 8) + 13, z: zc, rx: 13, rz: 40 }; }
   /* ---------- route definitions ---------- */
   const defs = streets.map((st) => ({ id: st.id, closed: !!st.closed, width: st.w, surface: 'asphalt', lanes: 2, street: true, grade: 0.12, smoothWin: 8, sub: st.sub,
     pts: st.pts.map((p) => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]), keepStart: true, dist: st.dist, art: st.kind === 'art' }));
   culs.forEach((c, k) => { const pts = []; for (let a = 0; a < 8; a++) pts.push([c[0] + 8 * Math.cos(a * Math.PI / 4), c[1] + 8 * Math.sin(a * Math.PI / 4)]); defs.push({ id: 'cul-' + k, closed: true, width: 9, surface: 'asphalt', street: true, sub: 6, keepStart: true, pts }); });
+
+  { const L = SITES.find((s) => s.id === 'school').loop, pts = []; for (let a = 0; a < 16; a++) pts.push([Math.round((L.x + L.rx * Math.cos(a * TAU / 16)) * 10) / 10, Math.round((L.z + L.rz * Math.sin(a * TAU / 16)) * 10) / 10]);
+    defs.push({ id: 'cul-bus', closed: true, width: 7, surface: 'asphalt', street: true, sub: 6, keepStart: true, pts }); }
 
   /* the paving: districts and docks paved or lawn, parks green; rasterised once on a 4 m grid */
   const RX0 = 3250, RZ0 = -1250, RC = 4, RNX = 490, RNZ = 615, ras = new Uint8Array(RNX * RNZ);
@@ -302,10 +318,13 @@ const DISTRICT = (() => {
   fill([[5070, -1000], [5170, -1000], [5170, 800], [4880, 800], [4990, 560], [5070, 300]], 2); // the east quay along Harbour Dr
   { const e = []; for (let a = 0; a < 48; a++) e.push([STADIUM.x + (STADIUM.rx - 18) * Math.cos(a * TAU / 48), STADIUM.z + (STADIUM.rz - 18) * Math.sin(a * TAU / 48)]); fill(e, 1); } // the pitch
   for (const p of PARKS) fill(p.poly, 1);
+  for (const st of SITES) fill(st.poly, st.paved);
+  { const sc = SITES.find((s) => s.id === 'school'), L = sc.loop, box = (x0, z0, x1, z1) => fill([[x0, z0], [x1, z0], [x1, z1], [x0, z1]], 2);
+    box(L.x + L.rx, L.z - 50, L.x + L.rx + 22, L.z + 50); box(sc.x0 + 66, sc.z1 - 26, sc.x1 - 8, sc.z1 - 3); } // the school's forecourt and its car park
   const cell = (x, z) => {
     const i = Math.round((x - RX0) / RC), j = Math.round((z - RZ0) / RC);
     return i < 0 || j < 0 || i >= RNX || j >= RNZ ? 0 : [0, 0.6, 1][ras[j * RNX + i]];
   };
-  return { districts: D, parks: PARKS, stadium: STADIUM, docks: DOCKS, defs, culs, cell, pip, curve, Index, rail, hwy };
+  return { districts: D, parks: PARKS, sites: SITES, siteAt, stadium: STADIUM, docks: DOCKS, defs, culs, cell, pip, curve, Index, rail, hwy };
 })();
 ROUTE_DEFS.splice(ROUTE_DEFS.findIndex((d) => d.ramp), 0, ...DISTRICT.defs);

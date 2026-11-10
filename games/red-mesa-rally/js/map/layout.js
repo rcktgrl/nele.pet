@@ -27,6 +27,8 @@ const CITY = { x0: 3460, z0: -940, pitch: 125, nx: 13, nz: 12, hw: 9, y: 5 };
 CITY.x1 = CITY.x0 + (CITY.nx - 1) * CITY.pitch; CITY.z1 = CITY.z0 + (CITY.nz - 1) * CITY.pitch;
 const DOCKS = { x0: CITY.x0, x1: 5150, z0: CITY.z1 + CITY.hw, z1: 800 };
 const FLAT = { x0: CITY.x0 - 24, x1: 5150, z0: CITY.z0 - 24, z1: 800 };
+/* Marina High stands a little west of the flat: its grounds are levelled to match */
+const SCHOOL = { x0: 3330, z0: 340, x1: 3562, z1: 492 };
 /* the harbour: water dredged deep against the south and east quays, and a slipway down into it */
 const HARBOUR = [{ x0: 4250, x1: 5700, z0: FLAT.z1, z1: 1600 }, { x0: FLAT.x1, x1: 5700, z0: -760, z1: FLAT.z1 }];
 const SLIP = { x: 4650, z0: FLAT.z1 - 6, z1: FLAT.z1 + 62, hw: 8, y1: -4.6 };
@@ -154,7 +156,7 @@ function eastHeight(x, z) {
     h = lerp(mtn, seaH, sea);
   }
   // the port: dead flat, quay drops straight into the harbour
-  const f = boxMask(x, z, FLAT, 90);
+  const f = Math.max(boxMask(x, z, FLAT, 90), boxMask(x, z, SCHOOL, 45));
   if (f > 0) h = lerp(h, CITY.y, f);
   if (z < HEIGHTS.south) h += heightsLift(x, z, sdf.d);
   if (f < 1) for (const b of HARBOUR) { // deep water right up to the quay walls

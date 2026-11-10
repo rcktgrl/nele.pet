@@ -14,6 +14,7 @@ function rampLift(r, x, z) { // height above the street at (x, z), or -1 when of
 }
 /* raised drivable ground laid over the terrain: street kickers, roof decks, car-park ramps, the ship */
 function overlayLift(o, x, z) { // absolute height, or -Infinity off this piece
+  if (o.kind === 'skate') return skateLift(o, x, z);
   if (o.kind === 'deck') return x >= o.x0 && x <= o.x1 && z >= o.z0 && z <= o.z1 ? o.y : -Infinity;
   if (o.kind === 'slope') {
     const rx = x - o.x, rz = z - o.z, a = rx * o.dx + rz * o.dz, l = Math.abs(rx * o.dz - rz * o.dx);
@@ -24,6 +25,7 @@ function overlayLift(o, x, z) { // absolute height, or -Infinity off this piece
 }
 function overlayBox(o) {
   if (o.kind === 'deck') return [o.x0, o.z0, o.x1, o.z1];
+  if (o.kind === 'skate') return o.box;
   const L = o.kind === 'slope' ? o.Lt : o.L, w = o.kind === 'slope' ? o.hw : RAMP.hw, xs = [], zs = [];
   for (const [a, l] of [[0, -w], [0, w], [L, -w], [L, w]]) { xs.push(o.x + o.dx * a + o.dz * l); zs.push(o.z + o.dz * a - o.dx * l); }
   return [Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs)];
@@ -41,6 +43,7 @@ function boxCorners(o) {
   const c = Math.cos(o.yaw), s = Math.sin(o.yaw);
   return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [o.x + a * o.w / 2 * c + b * o.d / 2 * s, o.z - a * o.w / 2 * s + b * o.d / 2 * c]);
 }
+const boxAabb = (o) => { const P = boxCorners(o); o.x0 = Math.min(...P.map((p) => p[0])); o.x1 = Math.max(...P.map((p) => p[0])); o.z0 = Math.min(...P.map((p) => p[1])); o.z1 = Math.max(...P.map((p) => p[1])); return o; };
 /* buildings: {x, z, yaw, w, d, h, base, y0, style, tone, seed, crown} plus their bounding box x0..z1; the top is base + h */
 class City {
   constructor(T) {
@@ -55,7 +58,7 @@ class City {
     const OX = 3250, OZ = -1600, OC = 2, ONX = 1060, ONZ = 1260, occ = new Uint8Array(ONX * ONZ);
     const oi = (x, z) => { const i = Math.floor((x - OX) / OC), j = Math.floor((z - OZ) / OC); return i < 0 || j < 0 || i >= ONX || j >= ONZ ? -1 : j * ONX + i; };
     const S = D.stadium, distAt = (x, z) => D.districts.find((d) => D.pip(x, z, d.outline));
-    const green = (x, z) => D.parks.some((p) => D.pip(x, z, p.poly)) || D.pip(x, z, S.lot) || Math.hypot((x - S.x) / S.rx, (z - S.z) / S.rz) < 1.2;
+    const green = (x, z) => !!D.siteAt(x, z) || D.parks.some((p) => D.pip(x, z, p.poly)) || D.pip(x, z, S.lot) || Math.hypot((x - S.x) / S.rx, (z - S.z) / S.rz) < 1.2;
     // a footprint fits where it is dry, level, off every road by its sidewalk, and on free ground; returns [lo, hi]
     const fits = (x, z, yaw, w, d, walk, m) => {
       let lo = 1e9, hi = -1e9;
@@ -69,7 +72,7 @@ class City {
     // the station halls, and the way in kept clear in front of each
     for (const sp of metroSpurs()) for (let a = -14; a <= sp.cover + 4; a += 1) for (let l = -10; l <= 10; l += 1) { const k = oi(sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l); if (k >= 0) occ[k] = 1; }
     const claim = (x, z, yaw, w, d, m) => footprint(x, z, yaw, w, d, m, (px, pz) => { const k = oi(px, pz); if (k >= 0) occ[k] = 1; });
-    const aabb = (o) => { const P = boxCorners(o); o.x0 = Math.min(...P.map((p) => p[0])); o.x1 = Math.max(...P.map((p) => p[0])); o.z0 = Math.min(...P.map((p) => p[1])); o.z1 = Math.max(...P.map((p) => p[1])); return o; };
+    const aabb = boxAabb;
     const WALLS = [[0.93, 0.9, 0.84], [0.88, 0.82, 0.7], [0.78, 0.84, 0.86], [0.86, 0.74, 0.56], [0.95, 0.94, 0.92], [0.72, 0.8, 0.7], [0.9, 0.72, 0.62]];
     const ROOFS = [[0.32, 0.3, 0.3], [0.5, 0.26, 0.2], [0.38, 0.4, 0.44], [0.55, 0.36, 0.26]];
     const streets = T.routes.filter((R) => R.surface === 'asphalt' && !R.def.viaduct && !R.def.ramp && !R.def.noCarve && !R.id.startsWith('cul-'));
@@ -205,6 +208,7 @@ class City {
           if (q >= 0 && !occ[q] && T.rdist[gi] > T.rhw[gi] + 4 && !vm[gi] && !T.river[gi]) this.parkTrees.push({ x: tx, z: tz, y: T.h[gi], s: 0.7 + rng() * 0.5, rot: rng() * TAU, seed: rng() }); }
       }
     }
+    this.buildLandmarks(T, CAR_COLS);
     // street lights down both sides, staggered, kept clear of the junctions
     for (const R of streets) for (const side of [-1, 1]) for (let s = 12 + (side > 0 ? 21 : 0); s < R.length - 8; s += 42) {
       const p = R.posAt(s, {}), [dx, dz] = R.dirAt(s), nx = -dz * side, nz = dx * side, off = R.width / 2 + 1.6, x = p.x + nx * off, z = p.z + nz * off;
