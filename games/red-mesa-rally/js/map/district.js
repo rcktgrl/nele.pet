@@ -320,7 +320,8 @@ const DISTRICT = (() => {
   for (const p of PARKS) fill(p.poly, 1);
   for (const st of SITES) fill(st.poly, st.paved);
   { const sc = SITES.find((s) => s.id === 'school'), L = sc.loop, box = (x0, z0, x1, z1) => fill([[x0, z0], [x1, z0], [x1, z1], [x0, z1]], 2);
-    box(L.x + L.rx, L.z - 50, L.x + L.rx + 22, L.z + 50); box(sc.x0 + 66, sc.z1 - 26, sc.x1 - 8, sc.z1 - 3); } // the school's forecourt and its car park
+    box(L.x + L.rx, L.z - 50, L.x + L.rx + 22, L.z + 50); box(sc.x0 + 66, sc.z1 - 26, sc.x1 - 8, sc.z1 - 3); // the school's forecourt and its car park
+    const M = SITES.find((s) => s.id === 'mall'), cx = (M.x0 + M.x1) / 2; for (const a of [cx - 83, cx, cx + 83]) box(a - (a === cx ? 8 : 6), M.z1, a + (a === cx ? 8 : 6), M.z1 + 12); } // the mall's driveways off Mesa Blvd
   const cell = (x, z) => {
     const i = Math.round((x - RX0) / RC), j = Math.round((z - RZ0) / RC);
     return i < 0 || j < 0 || i >= RNX || j >= RNZ ? 0 : [0, 0.6, 1][ras[j * RNX + i]];

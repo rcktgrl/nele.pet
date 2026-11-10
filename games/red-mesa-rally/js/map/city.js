@@ -59,15 +59,15 @@ class City {
     const oi = (x, z) => { const i = Math.floor((x - OX) / OC), j = Math.floor((z - OZ) / OC); return i < 0 || j < 0 || i >= ONX || j >= ONZ ? -1 : j * ONX + i; };
     const S = D.stadium, distAt = (x, z) => D.districts.find((d) => D.pip(x, z, d.outline));
     const green = (x, z) => !!D.siteAt(x, z) || D.parks.some((p) => D.pip(x, z, p.poly)) || D.pip(x, z, S.lot) || Math.hypot((x - S.x) / S.rx, (z - S.z) / S.rz) < 1.2;
-    // a footprint fits where it is dry, level, off every road by its sidewalk, and on free ground; returns [lo, hi]
-    const fits = (x, z, yaw, w, d, walk, m) => {
+    // a footprint fits where it is dry, level (to within lim), off every road by its sidewalk, and on free ground; returns [lo, hi]
+    const fits = (x, z, yaw, w, d, walk, m, lim = 3) => {
       let lo = 1e9, hi = -1e9;
       const ok = footprint(x, z, yaw, w, d, m, (px, pz) => {
         const gi = T.gi(px, pz), k = oi(px, pz);
         if (k < 0 || occ[k] || vm[gi] || T.river[gi] || T.riverTunAt(px, pz) || T.rail[gi] > 0 || T.rdist[gi] < T.rhw[gi] + walk - m - 1 || green(px, pz)) return false;
         const y = T.h[gi]; if (y < WATER_Y + 1.2) return false; lo = Math.min(lo, y); hi = Math.max(hi, y);
       });
-      return ok && hi - lo < 3 ? [lo, hi] : null;
+      return ok && hi - lo < lim ? [lo, hi] : null;
     };
     // the station halls, and the way in kept clear in front of each
     for (const sp of metroSpurs()) for (let a = -14; a <= sp.cover + 4; a += 1) for (let l = -10; l <= 10; l += 1) { const k = oi(sp.x + sp.dx * a - sp.dz * l, sp.z + sp.dz * a + sp.dx * l); if (k >= 0) occ[k] = 1; }
@@ -93,7 +93,7 @@ class City {
         const off = hw + walk + (row ? 34 : 0) + d / 2, x = p.x + nx * off, z = p.z + nz * off;
         // buildings line up with the street; houses turn their front door to it
         const yaw = town ? Math.atan2(-dz, dx) : Math.atan2(-nx, -nz);
-        const f = fits(x, z, yaw, w, d, walk, town ? 0.6 : 2);
+        const f = fits(x, z, yaw, w, d, walk, town ? 0.6 : 2, id === 'hl' ? 5 : 3); // up on the Heights the houses stand on the slope, the downhill side on a tall footing
         if (!f || (!town && rng() < 0.12)) { s += 4; continue; }
         claim(x, z, yaw, w, d, town ? 0.6 : 3);
         if (town) {
@@ -199,8 +199,8 @@ class City {
           const w = 26 + rng() * 14, d = 18 + rng() * 8, f = fits(x, z, yaw + Math.PI / 2, w, d, 6, 1);
           if (f) { claim(x, z, yaw + Math.PI / 2, w, d, 4); this.buildings.push(aabb({ x, z, yaw: yaw + Math.PI / 2, w, d, h: 8, base: f[1], y0: f[0] - 0.6, style: rng() < 0.5 ? 'brick' : 'office', tone: rng(), seed: rng() })); continue; }
         }
-        const w = 8 + rng() * 4, d = 9 + rng() * 4, f = fits(x, z, yaw, w, d, 7, 2);
-        if (!f || f[1] - f[0] > 1.6) continue;
+        const w = 8 + rng() * 4, d = 9 + rng() * 4, f = fits(x, z, yaw, w, d, 7, 2, dist.id === 'hl' ? 5 : 3);
+        if (!f || f[1] - f[0] > (dist.id === 'hl' ? 4 : 1.6)) continue;
         claim(x, z, yaw, w, d, 3.5);
         T.village.push({ x, z, yaw, w, d, h: 3 + rng() * 3, y0: f[0] - 1, y1: f[1], kind: 'house', wall: WALLS[(rng() * WALLS.length) | 0], roof: ROOFS[(rng() * ROOFS.length) | 0] });
         footprint(x, z, yaw, w, d, 2, (px, pz) => { T.lot[T.gi(px, pz)] = 1; });
