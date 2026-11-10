@@ -30,11 +30,11 @@ Object.assign(Gfx.prototype, {
   /* ---------- Mesa View Mall: the name over the atrium doors, the stores' names, a pylon sign on the boulevard ---------- */
   buildMall(M) {
     if (!M) return;
-    this.lmSign('MESA VIEW MALL', 30, 4.2, M.x, M.top - 3.2, M.z + 0.2, 0, { fg: '#ffe9c4', glow: 0.7 });
-    for (const s of M.stores) this.lmSign(s.name, 26, 3, s.x, s.y, s.z + 0.2, 0, { fg: '#f4f1e8', glow: 0.5 });
+    this.lmSign('MESA VIEW MALL', 26, 4.4, M.x, M.top - 3.2, M.z + 0.2, 0, { fg: '#ffe9c4', glow: 0.7 });
+    for (const s of M.stores) this.lmSign(s.name, 22, 3.2, s.x, s.y, s.z + 0.2, 0, { fg: '#f4f1e8', glow: 0.5 });
     const P = M.pylon, parts = [], steel = [0.2, 0.2, 0.22];
-    for (const dx of [-2.4, 2.4]) parts.push(tint(new THREE.BoxGeometry(0.9, 17, 0.9).translate(P.x + dx, P.y + 8.5, P.z), ...steel));
-    parts.push(tint(new THREE.BoxGeometry(7.4, 8.4, 1.1).translate(P.x, P.y + 12.6, P.z), 0.62, 0.2, 0.12));
+    for (const dz of [-2.4, 2.4]) parts.push(tint(new THREE.BoxGeometry(0.9, 17, 0.9).translate(P.x, P.y + 8.5, P.z + dz), ...steel));
+    parts.push(tint(new THREE.BoxGeometry(1.1, 8.4, 7.4).translate(P.x, P.y + 12.6, P.z), 0.62, 0.2, 0.12));
     // the canopy over the doors, on four posts
     parts.push(tint(new THREE.BoxGeometry(22, 0.5, 7).translate(M.x, M.y + 5, M.z + 3.4), 0.62, 0.2, 0.12));
     for (const dx of [-10, -3.4, 3.4, 10]) parts.push(tint(new THREE.BoxGeometry(0.4, 5, 0.4).translate(M.x + dx, M.y + 2.5, M.z + 6.4), ...steel));
@@ -44,15 +44,15 @@ Object.assign(Gfx.prototype, {
   /* ---------- Kestrel Skate Park: the slab, the concrete shapes on it, rails and the gate ---------- */
   buildSkatePark(K) {
     if (!K) return;
-    const S = K.site, pos = [], col = [], idx = [], ST = 0.75;
-    const DECK = [[0.7, 0.26, 0.16], [0.16, 0.42, 0.5], [0.8, 0.62, 0.14], [0.36, 0.3, 0.5]];
+    const S = K.site, pos = [], col = [], uv = [], idx = [], ST = 0.75;
+    const DECK = [[0.5, 0.1, 0.05], [0.04, 0.2, 0.26], [0.6, 0.38, 0.03], [0.14, 0.1, 0.26]];
     K.pieces.forEach((o, pk) => {
       const [x0, z0, x1, z1] = o.box, nx = Math.ceil((x1 - x0) / ST), nz = Math.ceil((z1 - z0) / ST), v0 = pos.length / 3, hs = [], top = o.shape === 'roll' ? 9 : o.H, dk = DECK[pk % DECK.length];
       for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
         const x = x0 + (x1 - x0) * i / nx, z = z0 + (z1 - z0) * j / nz, y = skateLift(o, x, z), h = y > -Infinity ? y - o.y : 0;
-        hs.push(h); pos.push(x, o.y + h + 0.05, z);
-        const n = 0.57 + 0.07 * Noise.fbm(x / 3, z / 3, 2), c = h >= top - 0.02 ? dk : h > top - 0.3 ? [0.16, 0.16, 0.17] : o.shape === 'roll' && Math.floor((x - o.x) / 2.5) % 2 ? [n * 0.8, n * 0.8, n * 0.82] : [n, n * 0.99, n * 0.95];
-        col.push(...c);
+        hs.push(h); pos.push(x, o.y + h + 0.05, z); uv.push(x / 6, z / 6);
+        const n = 0.3 + 0.05 * Noise.fbm(x / 3, z / 3, 2) + 0.05 * h / top, q = o.shape === 'roll' ? 0 : smooth(top - 0.45, top - 0.02, h), k = o.shape === 'roll' && Math.floor((x - o.x) / 2.5) % 2 ? 0.7 : 1; // the decks are painted, the paint fading out down the transition
+        col.push(lerp(n * k, dk[0], q), lerp(n * k * 0.98, dk[1], q), lerp(n * k * 0.93, dk[2], q));
       }
       for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
         const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1;
@@ -61,10 +61,18 @@ Object.assign(Gfx.prototype, {
       }
     });
     { const v0 = pos.length / 3, y = K.y + 0.03; // the slab under it all
-      for (const [x, z] of [[S.x0, S.z0], [S.x1, S.z0], [S.x0, S.z1], [S.x1, S.z1]]) { pos.push(x, y, z); col.push(0.6, 0.59, 0.56); }
+      for (const [x, z] of [[S.x0, S.z0], [S.x1, S.z0], [S.x0, S.z1], [S.x1, S.z1]]) { pos.push(x, y, z); col.push(0.3, 0.295, 0.28); uv.push(x / 6, z / 6); }
       idx.push(v0, v0 + 2, v0 + 1, v0 + 1, v0 + 2, v0 + 3); }
-    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setIndex(idx); geo.computeVertexNormals();
-    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })); m.castShadow = true; m.receiveShadow = true; this.lmGroup.add(m);
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals();
+    // poured concrete: mottled, a joint every 6 m, tyre marks
+    const tex = textTex(512, 512, (g, w, h) => {
+      const r = mulberry32(9); g.fillStyle = '#e4e2dc'; g.fillRect(0, 0, w, h);
+      for (let k = 0; k < 900; k++) { g.fillStyle = `rgba(${r() < 0.5 ? '255,255,255' : '60,60,60'},${0.03 + r() * 0.05})`; const s = 4 + r() * 40; g.fillRect(r() * w - s / 2, r() * h - s / 2, s, s * (0.3 + r())); }
+      g.strokeStyle = 'rgba(40,40,40,0.45)'; g.lineWidth = 4; g.strokeRect(0, 0, w, h);
+      g.strokeStyle = 'rgba(20,20,20,0.16)'; g.lineWidth = 5; for (let k = 0; k < 3; k++) { g.beginPath(); const x = r() * w, y = r() * h; g.moveTo(x, y); g.quadraticCurveTo(x + (r() - 0.5) * 300, y + (r() - 0.5) * 300, x + (r() - 0.5) * 500, y + (r() - 0.5) * 500); g.stroke(); }
+    }, { anisotropy: 8 });
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, map: tex, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })); m.castShadow = true; m.receiveShadow = true; this.lmGroup.add(m);
     const parts = [];
     for (const r of K.rails) {
       const L = Math.hypot(r.bx - r.ax, r.bz - r.az), cx = (r.ax + r.bx) / 2, cz = (r.az + r.bz) / 2, yaw = Math.atan2(r.bz - r.az, r.bx - r.ax);
@@ -72,7 +80,7 @@ Object.assign(Gfx.prototype, {
       for (let t = 0.5; t < L; t += Math.max(2, (L - 1) / Math.ceil((L - 1) / 3))) parts.push(tint(new THREE.BoxGeometry(0.08, r.h, 0.08).translate(r.ax + (r.bx - r.ax) * t / L, r.y + r.h / 2, r.az + (r.bz - r.az) * t / L), 0.3, 0.3, 0.32));
     }
     this.lmSolid(parts, { metal: 0.6, rough: 0.4 });
-    const label = textTex(1024, 128, (g, w, h) => { g.fillStyle = '#16100c'; g.fillRect(0, 0, w, h); g.fillStyle = '#ff8a2a'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '400 92px "Saira Stencil One", Impact, sans-serif'; g.fillText(K.name, w / 2, h / 2 + 4); });
+    const label = textTex(1024, 128, (g, w, h) => { g.fillStyle = '#16100c'; g.fillRect(0, 0, w, h); g.fillStyle = '#ff8a2a'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '400 74px "Saira Stencil One", Impact, sans-serif'; g.fillText(K.name, w / 2, h / 2 + 4, w - 60); });
     this.lmGroup.add(this.makeArch(K.gate.x, K.gate.z, 0, label));
   },
   /* ---------- Marina High: tower roof and clock, field and track, grandstand, goals, buses, flag and sign ---------- */
@@ -89,8 +97,8 @@ Object.assign(Gfx.prototype, {
     });
     const cm = new THREE.MeshStandardMaterial({ map: clock, alphaTest: 0.5, roughness: 0.5, emissive: 0xffffff, emissiveMap: clock, emissiveIntensity: 0.3 });
     for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2, f = new THREE.Mesh(new THREE.CircleGeometry(2.3, 24), cm); f.position.set(T.x + Math.sin(a) * (T.w / 2 + 0.06), T.y - 3.4, T.z + Math.cos(a) * (T.w / 2 + 0.06)); f.rotation.y = a; this.lmGroup.add(f); }
-    this.lmSign(S.name, 30, 2.6, S.main.x - 8.1, S.main.base + 6.3, S.main.z - 26, -Math.PI / 2, { fg: '#f4f1e8', glow: 0.35 });
-    this.lmSign(['HOME OF THE MARLINS'], 30, 2.6, S.gym.x, S.gym.base + 8.4, S.gym.z + 13.1, 0, { fg: '#ffd23f', glow: 0.35 });
+    this.lmSign(S.name, 17, 3, S.main.x - 8.1, S.main.base + 6.3, S.main.z - 26, -Math.PI / 2, { fg: '#f4f1e8', glow: 0.35 });
+    this.lmSign(['HOME OF THE MARLINS'], 26, 3, S.gym.x, S.gym.base + 8.4, S.gym.z + 13.1, 0, { fg: '#ffd23f', glow: 0.35 });
     // the field: grass, pitch lines, and the track round it, all one painted sheet
     { const W = 2 * (tr.L + tr.r) + 4, D = 2 * tr.r + 4, px = 2048 / W;
       const tex = textTex(2048, Math.round(D * px / 64) * 64, (g, w, h) => {

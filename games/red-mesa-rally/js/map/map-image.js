@@ -43,6 +43,9 @@ function drawMapVectors(g, world, k) {
   for (const o of T.village) { g.save(); g.translate(mapX(o.x), mapZ(o.z)); g.rotate(-o.yaw); g.fillRect(-o.w / 2 * MAP_W / WORLD.Sx, -o.d / 2 * MAP_H / WORLD.Sz, Math.max(1.5 * k, o.w * MAP_W / WORLD.Sx), Math.max(1.5 * k, o.d * MAP_H / WORLD.Sz)); g.restore(); }
   g.fillStyle = 'rgba(200,196,188,.85)';
   for (const bd of world.city.buildings) { g.beginPath(); boxCorners(bd).forEach(([x, z], k) => (k ? g.lineTo(mapX(x), mapZ(z)) : g.moveTo(mapX(x), mapZ(z)))); g.fill(); }
+  { const tr = world.city.school.track, r = tr.r - tr.w / 2, sx = MAP_W / WORLD.Sx, sz = MAP_H / WORLD.Sz; // the school's running track
+    g.strokeStyle = 'rgba(168,69,46,.95)'; g.lineWidth = Math.max(1.2 * k, tr.w * sx); g.beginPath(); g.moveTo(mapX(tr.x - tr.L), mapZ(tr.z - r)); g.lineTo(mapX(tr.x + tr.L), mapZ(tr.z - r));
+    g.ellipse(mapX(tr.x + tr.L), mapZ(tr.z), r * sx, r * sz, 0, -Math.PI / 2, Math.PI / 2); g.lineTo(mapX(tr.x - tr.L), mapZ(tr.z + r)); g.ellipse(mapX(tr.x - tr.L), mapZ(tr.z), r * sx, r * sz, 0, Math.PI / 2, Math.PI * 1.5); g.stroke(); }
   for (const R of T.routes) {
     if (R.def.noCarve) continue;
     g.beginPath();

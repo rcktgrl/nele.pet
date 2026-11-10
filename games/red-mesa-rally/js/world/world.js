@@ -570,7 +570,7 @@ Object.assign(World.prototype, {
     S.addObstacle(C.school.flag.x, C.school.flag.z, 0.15, C.school.flag.y + 10, 'pole');
     box({ x: C.school.sign.x, z: C.school.sign.z, yaw: 0, w: 1, d: 9 }, C.school.sign.y + 2.4, 'barrier');
     for (const dz of [-4, 4]) S.addObstacle(C.school.board.x, C.school.board.z + dz, 0.25, C.school.board.y + 9, 'pole');
-    for (const dx of [-2.4, 2.4]) S.addObstacle(C.mall.pylon.x + dx, C.mall.pylon.z, 0.5, C.mall.pylon.y + 17, 'pole');
+    for (const dz of [-2.4, 2.4]) S.addObstacle(C.mall.pylon.x, C.mall.pylon.z + dz, 0.5, C.mall.pylon.y + 17, 'pole');
     for (const dx of [-11, 11]) S.addObstacle(C.skate.gate.x + dx, C.skate.gate.z, 0.7, C.skate.y + 9, 'pole');
   },
 });
