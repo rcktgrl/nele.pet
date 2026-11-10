@@ -7,7 +7,6 @@ function engineCurve(f) { // f = rpm/redline → torque fraction
   return lerp(t[i], t[i + 1], x - i);
 }
 
-const _v1 = typeof THREE !== 'undefined' ? null : null;
 let V3, Q4, EU;
 function coreInit(THREE_) { V3 = THREE_.Vector3; Q4 = THREE_.Quaternion; EU = THREE_.Euler; }
 
