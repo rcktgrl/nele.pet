@@ -3,7 +3,11 @@
   "version": "1.0.17",
   "private": true,
   "scripts": {
-    "test:rmr": "node test/rmr-smoke.mjs"
+    "test:rmr": "node test/rmr-smoke.mjs",
+    "test:rmr:world": "node test/rmr/world.mjs",
+    "check:rmr": "eslint games/red-mesa-rally/js test eslint.config.mjs && node test/rmr/codemap.mjs",
+    "rmr:map": "node test/rmr/codemap.mjs",
+    "rmr:probe": "node test/rmr/probe.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
