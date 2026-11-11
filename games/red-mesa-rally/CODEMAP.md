@@ -9,10 +9,10 @@ Maths helpers, seeded random and Perlin noise
 
 - TAU:10 · clamp:11 · lerp:12 · smooth:13 · mulberry32():14 · hash2:15 · Noise:18
 
-## js/map/layout.js (190 lines, 12 KB)
+## js/map/layout.js (192 lines, 13 KB)
 Map layout: world bounds, regions, city grid, harbour, metro, heights and biomes
 
-- WORLD:5 · WATER_Y:8 · BORE_IN:11 · BORE_CROWN:11 · HUB:12 · MESAS:13 · LAKE:24 · CITY:26 · DOCKS:28 · FLAT:29 · HARBOUR:31 · SLIP:32 · SHIP:35 · METRO:42 · metroSpurs():54 · metroSpurEnd:56 · inMetroHall:58 · metroSpurY:59 · metroSpurCeil:60 · BOAT_DOCKS:62 · REGIONS:66 · EAST_POLY:74 · eastSDF():79 · boxMask():92 · desertHeight():98 · hillMask:128 · HEIGHTS:130 · heightsLift():131 · eastLand():136 · eastHeight():142 · eastWeight:168 · naturalHeight():169 · biomeAt():181
+- WORLD:5 · WATER_Y:8 · BORE_IN:11 · BORE_CROWN:11 · HUB:12 · MESAS:13 · LAKE:24 · CITY:26 · DOCKS:28 · FLAT:29 · SCHOOL:31 · HARBOUR:33 · SLIP:34 · SHIP:37 · METRO:44 · metroSpurs():56 · metroSpurEnd:58 · inMetroHall:60 · metroSpurY:61 · metroSpurCeil:62 · BOAT_DOCKS:64 · REGIONS:68 · EAST_POLY:76 · eastSDF():81 · boxMask():94 · desertHeight():100 · hillMask:130 · HEIGHTS:132 · heightsLift():133 · eastLand():138 · eastHeight():144 · eastWeight:170 · naturalHeight():171 · biomeAt():183
 
 ## js/map/river.js (290 lines, 22 KB)
 
@@ -30,16 +30,22 @@ Roads: street paths, every route definition and the Route spline
 - ROUTE_DEFS:5 · TRAFFIC_MAIN:111 · isTrafficStreet:112 · catmull():113
 - **class Route:121** computeCurvature:158 · idx:169 · wrapS:170 · sample:171 · posAt:172 · dirAt:173 · curvAt:174 · project:175 · turns:194 · static compose:210
 
-## js/map/district.js (311 lines, 21 KB)
+## js/map/district.js (331 lines, 23 KB)
 
 
 - DISTRICT:6
 
-## js/map/city.js (306 lines, 24 KB)
+## js/map/city.js (310 lines, 24 KB)
 Port Calder: ramps, raised decks and the deterministic city layout
 
-- RAMP:5 · rampLift():6 · overlayLift():16 · overlayBox():25 · footprint():32 · boxCorners():40
-- **class City:45** yardFences:290
+- RAMP:5 · rampLift():6 · overlayLift():16 · overlayBox():26 · footprint():34 · boxCorners():42 · boxAabb:46
+- **class City:48** yardFences:294
+
+## js/map/landmarks.js (105 lines, 9 KB)
+
+
+- skateLift():9 · skatePiece():24
+- **City (added):38** buildLandmarks:39
 
 ## js/map/streets.js (180 lines, 11 KB)
 Port Calder's street plan: a fine kerb map with rounded corners, the junctions, and the paint and signals at each
@@ -70,11 +76,11 @@ Static obstacles, scenery scatter and knock-over props
 
 - VEHICLES:7 · DRIVEABLE:83
 
-## js/cars/car.js (406 lines, 25 KB)
+## js/cars/car.js (410 lines, 25 KB)
 Car physics
 
-- engineCurve():4 · V3:10 · Q4:10 · EU:10 · coreInit():11
-- **class Car:13** reset:36 · yaw:59 · forward:60 · applyImpulse:61 · invIWorld:66 · wreck:70 · stepBoat:80 · step:154 · hullContacts:360 · spheres:397
+- engineCurve():4 · AIR_PITCH:11 · AIR_ROLL:11 · AIR_RESP:11 · V3:13 · Q4:13 · EU:13 · coreInit():14
+- **class Car:16** reset:39 · yaw:62 · forward:63 · applyImpulse:64 · invIWorld:69 · wreck:73 · stepBoat:83 · step:157 · hullContacts:364 · spheres:401
 
 ## js/world/trains.js (175 lines, 10 KB)
 Coastline Freight and the Calder Metro trains
@@ -83,10 +89,11 @@ Coastline Freight and the Calder Metro trains
 - **class Train:12** ahead:24 · drive:26 · timetable:37 · sync:52 · park:59 · update:60 · collide:73
 - **class MetroTrain:104** place:120 · placeNear:129 · ahead:130 · drive:131 · timetable:145 · sync:159 · update:163 · collide:174
 
-## js/world/world.js (331 lines, 18 KB)
+## js/world/world.js (348 lines, 20 KB)
 World: build order, surface and spawn queries, gates, the physics step and collisions (static setup: world-build.js)
 
 - **class World:5** build:12 · parkTrains:35 · buildSync:36 · metroLane:38 · resetMetro:48 · route:54 · findWetSpot:56 · tunnelGatePose:70 · setTunnelGate:78 · railGates:96 · updateRailGates:104 · playable:111 · obstacleDist:116 · findDrySpot:122 · surface:145 · deckSurface:176 · step:182 · wallImpulse:211 · collideStatic:228 · collideCars:295
+- **World (added):334** addLandmarks:335
 
 ## js/world/world-build.js (233 lines, 16 KB)
 World setup: trains and stations, tunnel, metro and bridge walls, village, stadium, quays, level crossings
@@ -127,11 +134,16 @@ Streamed terrain chunks, sea and horizon
 - TERRAIN_GLSL_PARS:9 · cellKey:12
 - **Gfx (added):14** buildTerrain:16 · refreshSupers:62 · chunkArrays:71 · chunkGeometry:110 · updateTerrain:120 · buildWater:140 · buildFarLand:160
 
-## js/render/east-gfx.js (544 lines, 47 KB)
+## js/render/east-gfx.js (547 lines, 48 KB)
 Port Calder scenery: buildings, docks, harbour, streets, stadium, ship, ramps, roadside
 
 - textTex():9 · signFace():10 · mergeByMaterial():26
-- **Gfx (added):55** buildEast:56 · buildingMaterial:75 · buildCity:122 · buildDocks:187 · buildHarbour:230 · buildDecks:284 · buildStreets:313 · updateSignals:392 · buildStadium:402 · buildShip:424 · buildRamps:464 · buildRoadside:502
+- **Gfx (added):55** buildEast:56 · buildingMaterial:76 · buildCity:124 · buildDocks:190 · buildHarbour:233 · buildDecks:287 · buildStreets:316 · updateSignals:395 · buildStadium:405 · buildShip:427 · buildRamps:467 · buildRoadside:505
+
+## js/render/landmarks-gfx.js (141 lines, 14 KB)
+the suburbs' landmarks: what Mesa View Mall, Kestrel Skate Park and Marina High add to their buildings
+
+- **Gfx (added):4** buildLandmarks:5 · lmSign:11 · lmSolid:25 · buildMall:31 · buildSkatePark:45 · buildSchool:87
 
 ## js/render/river-gfx.js (293 lines, 25 KB)
 Calder River scenery: the mountain stream, bridges, the boat tunnel under the docks
@@ -208,7 +220,7 @@ Chase camera
 
 - **class CameraRig:5** snap:7 · update:8 · follow:36 · setFov:80
 
-## js/map/map-image.js (69 lines, 6 KB)
+## js/map/map-image.js (72 lines, 6 KB)
 Painted map image for the minimap and the big map
 
 - MAP_W:5 · MAP_H:5 · mapX:6 · mapZ:6 · buildMapImage():7 · drawMapVectors():33
@@ -279,7 +291,7 @@ Game: dashboard, race box, waypoint and turn hints
 
 - **Game (added):4** updateHUD:5 · turnHint:104
 
-## js/map/map-view.js (111 lines, 9 KB)
+## js/map/map-view.js (112 lines, 10 KB)
 Game: minimap, big map and fast travel
 
 - **Game (added):4** toggleMap:5 · travelTo:10 · drawMinimap:20 · mapViewSet:54 · mapZoomAt:62 · mapComposite:67 · drawBigMap:80
@@ -289,4 +301,4 @@ Boot
 
 - GAME:5 · startGame:6
 
-Total: 52 files, 10441 lines.
+Total: 54 files, 10741 lines.
