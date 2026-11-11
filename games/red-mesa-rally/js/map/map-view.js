@@ -89,6 +89,7 @@ Object.assign(Game.prototype, {
     label('FESTIVAL PADDOCK', HUB.x, HUB.z - lz(70), '#ffb36b');
     ctx.save(); ctx.font = '700 15px "Saira Condensed", sans-serif';
     for (const d of DISTRICT.districts) { const [x, z, ang] = d.label; ctx.save(); ctx.translate(sx(x), sy(z)); ctx.rotate(ang * Math.PI / 180); ctx.fillStyle = '#f2e6d3'; ctx.strokeText(d.name, 0, 0); ctx.fillText(d.name, 0, 0); ctx.restore(); }
+    if (v.z > 1.6) { ctx.font = '700 12px "Saira Condensed", sans-serif'; for (const s of DISTRICT.sites) label(s.name, (s.x0 + s.x1) / 2, (s.z0 + s.z1) / 2, '#ffd23f'); } // the landmarks, once the map is zoomed in far enough to place them
     ctx.restore();
     label('EXIT 5', 3330, -300, '#f2c230');
     const tun = this.world.route('tunnel'), tm = tun.posAt(tun.length * 0.62, {}); label(this.world.tunnelGateClosed ? 'CALDER TUNNEL · CLOSED' : 'CALDER TUNNEL', tm.x, tm.z - lz(50), this.world.tunnelGateClosed ? '#ff5a3a' : '#ffd23f');

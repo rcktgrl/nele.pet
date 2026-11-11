@@ -61,6 +61,7 @@ Object.assign(Gfx.prototype, {
     this.buildDecks();
     this.buildShip();
     this.buildStadium();
+    this.buildLandmarks();
     this.buildStreets();
     this.buildRoadside();
     this.buildTunnel();
@@ -73,18 +74,18 @@ Object.assign(Gfx.prototype, {
   },
   /* ---------- buildings ---------- */
   buildingMaterial(style) {
-    const P = { glass: { r: 0.55, m: 0.2, ws: 2.2 }, office: { r: 0.85, m: 0.05, ws: 3.0 }, brick: { r: 0.9, m: 0.0, ws: 2.6 }, warehouse: { r: 0.8, m: 0.3, ws: 7.0 } }[style];
+    const P = { glass: { r: 0.55, m: 0.2, ws: 2.2 }, office: { r: 0.85, m: 0.05, ws: 3.0 }, brick: { r: 0.9, m: 0.0, ws: 2.6 }, warehouse: { r: 0.8, m: 0.3, ws: 7.0 }, mall: { r: 0.9, m: 0.0, ws: 5.0 } }[style];
     const m = new THREE.MeshStandardMaterial({ roughness: P.r, metalness: P.m, envMapIntensity: 1.0 });
-    const winRect = { glass: [0.04, 0.96, 0.08, 0.94], office: [0.16, 0.84, 0.26, 0.8], brick: [0.26, 0.74, 0.24, 0.74], warehouse: [0.1, 0.9, 0.62, 0.86] }[style];
+    const winRect = { glass: [0.04, 0.96, 0.08, 0.94], office: [0.16, 0.84, 0.26, 0.8], brick: [0.26, 0.74, 0.24, 0.74], warehouse: [0.1, 0.9, 0.62, 0.86], mall: [0.5, 0.5, 0.5, 0.5] }[style];
     m.onBeforeCompile = (sh) => {
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vBW; varying vec3 vBN;').replace('#include <begin_vertex>', `#include <begin_vertex>
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vBW; varying vec3 vBN; varying float vBY;').replace('#include <begin_vertex>', `#include <begin_vertex>
 mat4 bm = modelMatrix;
 #ifdef USE_INSTANCING
 bm = modelMatrix * instanceMatrix;
 #endif
-vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal);`);
+vBW = (bm * vec4(position, 1.0)).xyz; vBN = normalize(mat3(bm) * normal); vBY = position.y;`);
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-varying vec3 vBW; varying vec3 vBN; float gWin; float gLit;
+varying vec3 vBW; varying vec3 vBN; varying float vBY; float gWin; float gLit;
 ${NOISE_GLSL}`).replace('#include <color_fragment>', `#include <color_fragment>
 {
   vec3 N = normalize(vBN), P = vBW;
@@ -106,6 +107,7 @@ ${NOISE_GLSL}`).replace('#include <color_fragment>', `#include <color_fragment>
   ${style === 'office' ? 'base *= 0.88 + 0.12 * step(0.1, f.y); base *= 0.92 + 0.08 * vnoise(P.xz * 0.3 + P.y);' : ''}
   ${style === 'warehouse' ? 'base *= 0.82 + 0.18 * step(0.5, fract(u * 1.6));' : ''}
   ${style === 'glass' ? 'base = mix(base, base * 0.6, 0.5);' : ''}
+  ${style === 'mall' ? 'base *= 0.94 + 0.06 * step(0.04, fract(u / 5.0)); base = mix(base, vec3(0.62, 0.2, 0.12), step(0.8, vBY) * step(vBY, 0.93)); base = mix(base, vec3(0.9, 0.86, 0.78), step(4.2, v) * step(v, 4.9));' : ''}
   float litF = ${style === 'warehouse' ? '0.04' : '0.1'};
   float lit = mix(step(hash12(id * 1.37 + floor(P.xz / 40.0) * 7.1), litF) * win * step(1.0, id.y), litF * win, aaf);
   vec3 glassC = ${style === 'glass' ? 'mix(vec3(0.16, 0.21, 0.26), vec3(0.24, 0.28, 0.3), hash12(id) * (1.0 - aaf) + 0.5 * aaf)' : 'mix(vec3(0.1, 0.12, 0.14), vec3(0.16, 0.18, 0.2), hash12(id) * (1.0 - aaf) + 0.5 * aaf)'};
@@ -127,8 +129,9 @@ ${NOISE_GLSL}`).replace('#include <color_fragment>', `#include <color_fragment>
       office: [[0.62, 0.58, 0.52], [0.5, 0.5, 0.5], [0.7, 0.66, 0.58], [0.42, 0.44, 0.47]],
       brick: [[0.52, 0.26, 0.18], [0.6, 0.36, 0.24], [0.42, 0.22, 0.16], [0.66, 0.52, 0.38]],
       warehouse: [[0.45, 0.48, 0.5], [0.55, 0.3, 0.22], [0.36, 0.42, 0.38]],
+      mall: [[0.86, 0.8, 0.68], [0.8, 0.72, 0.6], [0.78, 0.74, 0.66]],
     };
-    for (const style of ['glass', 'office', 'brick', 'warehouse']) {
+    for (const style of ['glass', 'office', 'brick', 'warehouse', 'mall']) {
       const list = C.buildings.filter((b) => b.style === style);
       this.cellInstances(box, this.buildingMaterial(style), list, (b, d, col) => {
         d.position.set(b.x, b.y0, b.z); d.rotation.set(0, b.yaw, 0); d.scale.set(b.w, b.base + b.h - b.y0, b.d);

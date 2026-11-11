@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@400;600;800&family=Saira+Stencil+One&display=swap">
 <script>
 // one version for the loading-screen label and the ?v= cache-buster on every file (bump per release: 1.x features, 1.x.y fixes)
-const RMR_VERSION = '1.5.2';
+const RMR_VERSION = '1.6.0';
 document.write('<link rel="stylesheet" href="css/style.css?v=' + RMR_VERSION + '">');
 </script>
 
@@ -238,6 +238,7 @@ document.getElementById('version').textContent = 'v' + RMR_VERSION;
   'js/roads/routes.js',
   'js/map/district.js',
   'js/map/city.js',
+  'js/map/landmarks.js',
   'js/map/streets.js',
   'js/map/junctions.js',
   'js/map/terrain.js',
@@ -254,6 +255,7 @@ document.getElementById('version').textContent = 'v' + RMR_VERSION;
   'js/render/fx.js',
   'js/render/terrain-gfx.js',
   'js/render/east-gfx.js',
+  'js/render/landmarks-gfx.js',
   'js/render/river-gfx.js',
   'js/render/terrain-material.js',
   'js/render/scatter-gfx.js',

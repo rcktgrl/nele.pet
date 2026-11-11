@@ -13,7 +13,7 @@ class World {
     this.terrain = new Terrain();
     yield* this.terrain.build();
     this.city = new City(this.terrain);
-    this.terrain.setOverlays([...this.city.ramps, ...this.city.decks, ...this.terrain.bridges.flatMap((b) => b.pieces)]);
+    this.terrain.setOverlays([...this.city.ramps, ...this.city.decks, ...this.city.skate.pieces, ...this.terrain.bridges.flatMap((b) => b.pieces)]);
     this.scatter = new Scatter(this.terrain, this.city);
     yield* this.scatter.build();
     this.props = new Props(this.terrain);
@@ -21,7 +21,7 @@ class World {
     this.crossings = this.findCrossings();
     this.addTunnelWalls();
     this.addQuays(); this.addStadium();
-    this.addBridgeWalls(); this.addVillage();
+    this.addBridgeWalls(); this.addVillage(); this.addLandmarks();
     this.addMetroWalls();
     // two trains each way on the metro: stoppers with the loop, expresses against it, each pair half a round apart
     this.metroTrains = this.terrain.metro ? [
@@ -329,3 +329,20 @@ class World {
 }
 
 'use strict';
+
+/* what stands solid in the landmarks: skate rails, the school buses, the grandstand, the signs */
+Object.assign(World.prototype, {
+  addLandmarks() {
+    const S = this.scatter, C = this.city;
+    const box = (o, top, kind) => { const P = boxCorners(o); for (let k = 0; k < 4; k++) S.addSegment(...P[k], ...P[(k + 1) % 4], top, kind).r = 0.2; };
+    for (const r of C.skate.rails) S.addSegment(r.ax, r.az, r.bx, r.bz, r.y + r.h + 0.05, 'rail').r = 0.08;
+    for (const b of C.school.buses) box({ x: b.x, z: b.z, yaw: b.yaw, w: 2.6, d: 11 }, b.y + 3.1, 'barrier');
+    { const st = C.school.stand; box({ x: st.x, z: st.z, yaw: 0, w: st.w, d: st.d }, st.y + st.h, 'building'); }
+    for (const g of C.school.goals) for (const dz of [-3.6, 3.6]) S.addObstacle(g.x, g.z + dz, 0.15, C.school.track.y + 6, 'pole');
+    S.addObstacle(C.school.flag.x, C.school.flag.z, 0.15, C.school.flag.y + 10, 'pole');
+    box({ x: C.school.sign.x, z: C.school.sign.z, yaw: 0, w: 1, d: 9 }, C.school.sign.y + 2.4, 'barrier');
+    for (const dz of [-4, 4]) S.addObstacle(C.school.board.x, C.school.board.z + dz, 0.25, C.school.board.y + 9, 'pole');
+    for (const dz of [-2.4, 2.4]) S.addObstacle(C.mall.pylon.x, C.mall.pylon.z + dz, 0.5, C.mall.pylon.y + 17, 'pole');
+    for (const dx of [-11, 11]) S.addObstacle(C.skate.gate.x + dx, C.skate.gate.z, 0.7, C.skate.y + 9, 'pole');
+  },
+});
