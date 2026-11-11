@@ -333,17 +333,16 @@ class Car {
     this.vel.addScaledVector(F, dt / m);
     const dw = this.invIWorld(Tq, t.a);
     this.w.addScaledVector(dw, dt);
-    // airborne: the player steers the chassis (gas = nose up, brake = nose down, left/right = lean that way);
-    // an axis with no input is left to the stabiliser, which damps it and levels the chassis so landings stay on four wheels
+    // airborne: the player steers the chassis (gas = nose up, brake = nose down, left/right = lean that way).
+    // No self-levelling: the car stays exactly where you put it. With no input on an axis its spin just dies away, so a tap turns it a set amount.
     if (!this.onGround && !this.wrecked) {
       const ctl = this.isPlayer && this.airTime > 0.2; // not on a bump or crest, only once properly airborne
       const pIn = ctl ? clamp(inp.throttle - inp.brake, -1, 1) : 0, rIn = ctl ? clamp(inp.steer, -1, 1) : 0;
       const pitchRate = this.w.dot(right), rollRate = this.w.dot(fwd);
-      const lv = up.y > 0.2 ? t.c.set(-up.z, 0, up.x) : null; // up x worldUp: the turn that brings the chassis level
       if (pIn) this.w.addScaledVector(right, (pIn * AIR_PITCH - pitchRate) * (1 - Math.exp(-AIR_RESP * dt)));
-      else { this.w.addScaledVector(right, -pitchRate * (1 - Math.exp(-3 * dt))); if (lv) this.w.addScaledVector(right, lv.dot(right) * 1.2 * dt); }
+      else this.w.addScaledVector(right, -pitchRate * (1 - Math.exp(-3 * dt)));
       if (rIn) this.w.addScaledVector(fwd, (rIn * AIR_ROLL - rollRate) * (1 - Math.exp(-AIR_RESP * dt)));
-      else { this.w.addScaledVector(fwd, -rollRate * (1 - Math.exp(-3.5 * dt))); if (lv) this.w.addScaledVector(fwd, lv.dot(fwd) * 4.5 * dt); }
+      else this.w.addScaledVector(fwd, -rollRate * (1 - Math.exp(-3.5 * dt)));
     }
     this.w.multiplyScalar(1 - (this.onGround ? 0.4 : 0.25) * dt);
     if (this.wallT > 0) { this.wallT -= dt; if (this.onGround) this.w.y *= Math.exp(-2.5 * dt); } // just off a wall: the yaw it picked up dies away

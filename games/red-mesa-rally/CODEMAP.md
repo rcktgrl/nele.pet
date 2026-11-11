@@ -76,11 +76,11 @@ Static obstacles, scenery scatter and knock-over props
 
 - VEHICLES:7 · DRIVEABLE:83
 
-## js/cars/car.js (411 lines, 26 KB)
+## js/cars/car.js (410 lines, 25 KB)
 Car physics
 
 - engineCurve():4 · AIR_PITCH:11 · AIR_ROLL:11 · AIR_RESP:11 · V3:13 · Q4:13 · EU:13 · coreInit():14
-- **class Car:16** reset:39 · yaw:62 · forward:63 · applyImpulse:64 · invIWorld:69 · wreck:73 · stepBoat:83 · step:157 · hullContacts:365 · spheres:402
+- **class Car:16** reset:39 · yaw:62 · forward:63 · applyImpulse:64 · invIWorld:69 · wreck:73 · stepBoat:83 · step:157 · hullContacts:364 · spheres:401
 
 ## js/world/trains.js (175 lines, 10 KB)
 Coastline Freight and the Calder Metro trains
@@ -301,4 +301,4 @@ Boot
 
 - GAME:5 · startGame:6
 
-Total: 54 files, 10742 lines.
+Total: 54 files, 10741 lines.
