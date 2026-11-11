@@ -7,6 +7,9 @@ function engineCurve(f) { // f = rpm/redline → torque fraction
   return lerp(t[i], t[i + 1], x - i);
 }
 
+// air steering: top turn rates in the air (rad/s) and how fast the chassis follows the stick (1/s)
+const AIR_PITCH = 2.0, AIR_ROLL = 3.0, AIR_RESP = 7;
+
 let V3, Q4, EU;
 function coreInit(THREE_) { V3 = THREE_.Vector3; Q4 = THREE_.Quaternion; EU = THREE_.Euler; }
 
@@ -322,23 +325,25 @@ class Car {
     if (boostOn) { F.addScaledVector(fwd, sp.boost.force * m * (this.onGround ? 1 : 0.5)); this.heat += sp.boost.heat * dt; }
     else this.heat = Math.max(0, this.heat - (0.12 + 0.002 * speed + this.inWater * 0.5 + this.surfaceMud * 0.15) * dt);
     if (this.heat >= 1 && !this.wrecked) { this.heat = 1; this.wreck('overheat'); }
-    // air control
+    // air time (the air steering itself is applied after integration, below)
     if (!this.onGround && !this.wrecked) {
       this.airTime += dt;
-      const ac = this.isPlayer ? 0.9 : 0;
-      Tq.addScaledVector(right, (inp.throttle - inp.brake) * -ac * m * 1.2);
-      Tq.addScaledVector(up, -inp.steer * ac * m * 0.9);
     } else { if (this.airTime > 0.6) this.events.push({ type: 'land', air: this.airTime }); this.airTime = 0; }
     // integrate
     this.vel.addScaledVector(F, dt / m);
     const dw = this.invIWorld(Tq, t.a);
     this.w.addScaledVector(dw, dt);
-    // airborne stabiliser: damp roll and level the chassis so landings stay on four wheels
-    if (!this.onGround && !this.wrecked && up.y > 0.2) {
-      const lv = t.c.set(up.z, 0, -up.x); // up x worldUp
-      const rollRate = this.w.dot(fwd), pitchRate = this.w.dot(right);
-      this.w.addScaledVector(fwd, -rollRate * (1 - Math.exp(-3.5 * dt)) + lv.dot(fwd) * 4.5 * dt);
-      this.w.addScaledVector(right, -pitchRate * (1 - Math.exp(-0.8 * dt)) + lv.dot(right) * 0.9 * dt);
+    // airborne: the player steers the chassis (gas = nose up, brake = nose down, left/right = lean that way);
+    // an axis with no input is left to the stabiliser, which damps it and levels the chassis so landings stay on four wheels
+    if (!this.onGround && !this.wrecked) {
+      const ctl = this.isPlayer && this.airTime > 0.2; // not on a bump or crest, only once properly airborne
+      const pIn = ctl ? clamp(inp.throttle - inp.brake, -1, 1) : 0, rIn = ctl ? clamp(inp.steer, -1, 1) : 0;
+      const pitchRate = this.w.dot(right), rollRate = this.w.dot(fwd);
+      const lv = up.y > 0.2 ? t.c.set(-up.z, 0, up.x) : null; // up x worldUp: the turn that brings the chassis level
+      if (pIn) this.w.addScaledVector(right, (pIn * AIR_PITCH - pitchRate) * (1 - Math.exp(-AIR_RESP * dt)));
+      else { this.w.addScaledVector(right, -pitchRate * (1 - Math.exp(-3 * dt))); if (lv) this.w.addScaledVector(right, lv.dot(right) * 1.2 * dt); }
+      if (rIn) this.w.addScaledVector(fwd, (rIn * AIR_ROLL - rollRate) * (1 - Math.exp(-AIR_RESP * dt)));
+      else { this.w.addScaledVector(fwd, -rollRate * (1 - Math.exp(-3.5 * dt))); if (lv) this.w.addScaledVector(fwd, lv.dot(fwd) * 4.5 * dt); }
     }
     this.w.multiplyScalar(1 - (this.onGround ? 0.4 : 0.25) * dt);
     if (this.wallT > 0) { this.wallT -= dt; if (this.onGround) this.w.y *= Math.exp(-2.5 * dt); } // just off a wall: the yaw it picked up dies away
