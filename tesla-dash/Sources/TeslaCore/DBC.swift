@@ -57,7 +57,7 @@ public final class DBC: @unchecked Sendable {
 
     private func parse(_ text: String) {
         var current: UInt32?
-        for rawLine in text.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
+        for rawLine in text.split(whereSeparator: { $0.isNewline }) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("BO_ ") {
                 current = parseMessage(line)
