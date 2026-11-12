@@ -3,7 +3,10 @@ import XCTest
 
 final class TeslaCoreTests: XCTestCase {
     static let dbc: DBC = {
-        let url = Bundle.module.url(forResource: "Model3CAN", withExtension: "dbc")!
+        // the app's copy: tesla-dash/App/Resources/Model3CAN.dbc
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("App/Resources/Model3CAN.dbc")
         return try! DBC(contentsOf: url)
     }()
     var dbc: DBC { Self.dbc }

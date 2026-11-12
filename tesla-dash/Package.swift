@@ -9,7 +9,6 @@ let package = Package(
     products: [.library(name: "TeslaCore", targets: ["TeslaCore"])],
     targets: [
         .target(name: "TeslaCore", path: "Sources/TeslaCore"),
-        .testTarget(name: "TeslaCoreTests", dependencies: ["TeslaCore"], path: "Tests/TeslaCoreTests",
-                    resources: [.copy("Model3CAN.dbc")]),
+        .testTarget(name: "TeslaCoreTests", dependencies: ["TeslaCore"], path: "Tests/TeslaCoreTests"),
     ]
 )
