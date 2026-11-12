@@ -1,0 +1,68 @@
+name: Tesla Dash iOS build
+
+# Builds the unsigned iPhone app (.ipa) for sideloading with SideStore/AltStore.
+on:
+  push:
+    paths:
+      - "tesla-dash/**"
+      - ".github/workflows/tesla-dash.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tesla-dash-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: tesla-dash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unit tests (decoder, protocol, trips)
+        run: swift test
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build app
+        run: |
+          xcodebuild -project TeslaDash.xcodeproj -scheme TeslaDash -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            build | tail -n 80
+          test -d "build/Build/Products/Release-iphoneos/Tesla Dash.app"
+
+      - name: Package .ipa
+        run: |
+          mkdir -p Payload
+          cp -R "build/Build/Products/Release-iphoneos/Tesla Dash.app" Payload/
+          zip -qr TeslaDash.ipa Payload
+          ls -la TeslaDash.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeslaDash-ipa
+          path: tesla-dash/TeslaDash.ipa
+
+      - name: Publish to the "tesla-dash-latest" release (direct download link for the phone)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=tesla-dash-latest
+          NOTES="Build ${{ github.run_number }} from ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Install with SideStore: open this .ipa in SideStore."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" TeslaDash.ipa --clobber
+            gh release edit "$TAG" --notes "$NOTES" --target "$GITHUB_SHA"
+          else
+            gh release create "$TAG" TeslaDash.ipa --title "Tesla Dash (latest build)" --notes "$NOTES" --prerelease --target "$GITHUB_SHA"
+          fi
