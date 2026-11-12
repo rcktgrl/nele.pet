@@ -7,8 +7,8 @@ function engineCurve(f) { // f = rpm/redline → torque fraction
   return lerp(t[i], t[i + 1], x - i);
 }
 
-// air steering: top turn rates in the air (rad/s) and how fast the chassis follows the stick (1/s)
-const AIR_PITCH = 2.0, AIR_ROLL = 3.0, AIR_RESP = 7;
+// air steering torque (x mass): a gentle push that builds up slowly, no self-levelling
+const AIR_PITCH = 1.1, AIR_ROLL = 0.8;
 
 let V3, Q4, EU;
 function coreInit(THREE_) { V3 = THREE_.Vector3; Q4 = THREE_.Quaternion; EU = THREE_.Euler; }
@@ -325,25 +325,19 @@ class Car {
     if (boostOn) { F.addScaledVector(fwd, sp.boost.force * m * (this.onGround ? 1 : 0.5)); this.heat += sp.boost.heat * dt; }
     else this.heat = Math.max(0, this.heat - (0.12 + 0.002 * speed + this.inWater * 0.5 + this.surfaceMud * 0.15) * dt);
     if (this.heat >= 1 && !this.wrecked) { this.heat = 1; this.wreck('overheat'); }
-    // air time (the air steering itself is applied after integration, below)
+    // air control: gas = nose up, brake = nose down, left/right = lean that way. A torque, so it tilts slowly and
+    // keeps turning until you counter it; no delay, no self-levelling.
     if (!this.onGround && !this.wrecked) {
       this.airTime += dt;
+      if (this.isPlayer) {
+        Tq.addScaledVector(right, clamp(inp.throttle - inp.brake, -1, 1) * AIR_PITCH * m);
+        Tq.addScaledVector(fwd, clamp(inp.steer, -1, 1) * AIR_ROLL * m);
+      }
     } else { if (this.airTime > 0.6) this.events.push({ type: 'land', air: this.airTime }); this.airTime = 0; }
     // integrate
     this.vel.addScaledVector(F, dt / m);
     const dw = this.invIWorld(Tq, t.a);
     this.w.addScaledVector(dw, dt);
-    // airborne: the player steers the chassis (gas = nose up, brake = nose down, left/right = lean that way).
-    // No self-levelling: the car stays exactly where you put it. With no input on an axis its spin just dies away, so a tap turns it a set amount.
-    if (!this.onGround && !this.wrecked) {
-      const ctl = this.isPlayer && this.airTime > 0.2; // not on a bump or crest, only once properly airborne
-      const pIn = ctl ? clamp(inp.throttle - inp.brake, -1, 1) : 0, rIn = ctl ? clamp(inp.steer, -1, 1) : 0;
-      const pitchRate = this.w.dot(right), rollRate = this.w.dot(fwd);
-      if (pIn) this.w.addScaledVector(right, (pIn * AIR_PITCH - pitchRate) * (1 - Math.exp(-AIR_RESP * dt)));
-      else this.w.addScaledVector(right, -pitchRate * (1 - Math.exp(-3 * dt)));
-      if (rIn) this.w.addScaledVector(fwd, (rIn * AIR_ROLL - rollRate) * (1 - Math.exp(-AIR_RESP * dt)));
-      else this.w.addScaledVector(fwd, -rollRate * (1 - Math.exp(-3.5 * dt)));
-    }
     this.w.multiplyScalar(1 - (this.onGround ? 0.4 : 0.25) * dt);
     if (this.wallT > 0) { this.wallT -= dt; if (this.onGround) this.w.y *= Math.exp(-2.5 * dt); } // just off a wall: the yaw it picked up dies away
     this.pos.addScaledVector(this.vel, dt);
