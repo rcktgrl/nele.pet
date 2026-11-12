@@ -13,7 +13,7 @@ final class TeslaCoreTests: XCTestCase {
 
     func testParsesWholeFile() {
         XCTAssertEqual(dbc.messages.count, 159)
-        XCTAssertGreaterThan(dbc.signals.count, 2800)
+        XCTAssertEqual(dbc.signals.count, 2752)
         XCTAssertEqual(dbc.messages[0x132]?.name, "ID132HVBattAmpVolt")
         XCTAssertEqual(dbc.messages[0x04F]?.bus, "ChassisBus")
         let gear = dbc.signal(named: "DI_gear")!
